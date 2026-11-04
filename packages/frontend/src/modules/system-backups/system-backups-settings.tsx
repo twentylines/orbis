@@ -39,6 +39,7 @@ import {
   restoreStatusSchema,
   importJobSchema,
   type BackupReview,
+  type BackupSnapshot,
   type ExportJob,
   type ImportJob,
   type RestoreJob,
@@ -119,6 +120,37 @@ export function BackupDownloadReady({
       </Button>
     </div>
   );
+}
+
+export function exportForDisplay(snapshot: BackupSnapshot | undefined, accepted: ExportJob | null): ExportJob | null {
+  return (accepted && snapshot?.exports.jobs.find((job) => job.id === accepted.id)) || accepted;
+}
+
+export function acceptedExportStatusError(error: unknown, job: ExportJob | null | undefined): string | null {
+  if (!error || job?.status !== 'running') return null;
+  const auth = error instanceof BackupApiError && (error.status === 401 || error.status === 403) ? ` ${error.message}` : '';
+  return `Backup started. Waiting for its status.${auth}`;
+}
+
+export function BackupMediaOption({ checked, disabled, onChange }: { checked: boolean; disabled: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <div>
+      <Checkbox checked={checked} disabled={disabled} onCheckedChange={onChange} label="Include media libraries" />
+      <p>Orbis settings, accounts and managed app data are included. Shared media is excluded unless you select this option.</p>
+    </div>
+  );
+}
+
+export function exportStatusPollingInterval(
+  snapshot: BackupSnapshot | undefined,
+  visible: boolean,
+  accepted: ExportJob | null,
+  error?: unknown,
+): number | false {
+  const awaitingList = accepted && !snapshot?.exports.jobs.some((job) => job.id === accepted.id);
+  if (shouldStopBackupStatusPolling(error, snapshot) && !(awaitingList && error instanceof BackupApiError && error.status === 404)) return false;
+  if (visible && awaitingList) return 2500;
+  return backupPollingInterval(snapshot, visible);
 }
 
 export function backupEncryptionPassphrase(values: FormData, kind: 'export' | 'review', useAccountPassword: boolean): string {
@@ -393,6 +425,7 @@ export function SystemBackupsSettings({
     retry: false,
   });
   const visible = useWindowVisible();
+  const [acceptedExport, setAcceptedExport] = useState<ExportJob | null>(null);
   const status = useQuery({
     queryKey: ['orbis-full-backups', user?.id],
     queryFn: ({ signal }) => readBackups(signal),
@@ -400,7 +433,7 @@ export function SystemBackupsSettings({
     retry: false,
     refetchInterval: (query) => {
       const error = query.state.error;
-      return shouldStopBackupStatusPolling(error, query.state.data) ? false : backupPollingInterval(query.state.data, visible);
+      return exportStatusPollingInterval(query.state.data, visible, acceptedExport, error);
     },
     refetchIntervalInBackground: false,
   });
@@ -409,6 +442,7 @@ export function SystemBackupsSettings({
   const [savedBackupId, setSavedBackupId] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [useAccountPassword, setUseAccountPassword] = useState(true);
+  const [includeMedia, setIncludeMedia] = useState(false);
   const [archiveKeyMode, setArchiveKeyMode] = useState<ArchiveKeyMode | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [restoreAttempt, setRestoreAttempt] = useState<RestoreAttempt | null>(null);
@@ -486,6 +520,10 @@ export function SystemBackupsSettings({
     } else if (!removalActive.current && (embedded || !wizardOpen) && actionOpener.current?.isConnected) actionOpener.current.focus();
   }, [action, embedded, wizardOpen]);
   const data = status.data;
+  const trackedExport = exportForDisplay(data, acceptedExport);
+  useEffect(() => {
+    if (acceptedExport && data?.exports.jobs.some((job) => job.id === acceptedExport.id)) setAcceptedExport(null);
+  }, [acceptedExport, data]);
   const savedBackups = (data?.exports.jobs ?? []).filter((job) => savedBackupEligible(job)).sort((a, b) => b.createdAt - a.createdAt);
   const selectedSavedBackup = savedBackups.find((job) => job.id === savedBackupId);
   useEffect(() => {
@@ -578,6 +616,7 @@ export function SystemBackupsSettings({
     restoreActive ||
     terminalChecking ||
     awaitingAcceptedRestore ||
+    Boolean(trackedExport && (trackedExport.status === 'running' || trackedExport.needsRecovery || trackedExport.restartRequired)) ||
     Boolean(data?.exports.jobs.some((job) => job.status === 'running' || job.needsRecovery || job.restartRequired)) ||
     Boolean(data?.imports.jobs.some((job) => ['uploading', 'reviewing', 'preparing'].includes(job.status)));
   const refresh = () => {
@@ -708,9 +747,13 @@ export function SystemBackupsSettings({
           setNotice('Restore accepted. Keep this page open while Orbis reconnects and checks completion.');
         };
         if (selected.kind === 'export') {
-          const job = await startExport(credentials, passphrase, signal);
+          const job = await startExport(credentials, passphrase, signal, includeMedia);
           if (job.creationDownloadAvailable) creationDownloads.current.add(job.id);
-          if (mounted.current) setWizardJob({ kind: 'export', id: job.id });
+          if (mounted.current) {
+            setAcceptedExport(job);
+            setWizardJob({ kind: 'export', id: job.id });
+            setIncludeMedia(false);
+          }
         } else if (selected.kind === 'upload') {
           let uploadedJob: ImportJob;
           if (restoreSource === 'server') {
@@ -912,6 +955,11 @@ export function SystemBackupsSettings({
     });
   const missing = status.error instanceof BackupApiError && status.error.status === 404;
   const reconnectingAcceptedRestore = status.isError && isAcceptedRestoreReconnect(status.error, restore?.status, awaitingRestore.current);
+  const currentExport =
+    wizardJob?.kind === 'export'
+      ? (data?.exports.jobs.find((job) => job.id === wizardJob.id) ?? (trackedExport?.id === wizardJob.id ? trackedExport : null))
+      : null;
+  const exportStatusError = status.isError ? acceptedExportStatusError(status.error, currentExport) : null;
   const unavailable = !data || !data.exports.available || !data.imports.available || status.isError;
   const phraseNeeded =
     action?.kind === 'review' || action?.kind === 'upload' || (action?.kind === 'reuse' && retryArchiveKey.current?.restoreId !== action.job.id);
@@ -959,12 +1007,21 @@ export function SystemBackupsSettings({
   const renderExportJob = (job: ExportJob, inWizard = false) => (
     <article className="system-backups-job" data-ready={(job.status === 'succeeded' && !job.needsRecovery) || undefined} key={job.id}>
       <h4>{new Date(job.createdAt).toLocaleString()}</h4>
-      <p>{job.message}</p>
+      <p role={job.status === 'failed' || job.status === 'interrupted' ? 'alert' : undefined}>
+        {job.status === 'failed'
+          ? 'Backup failed. '
+          : job.status === 'interrupted'
+            ? 'Backup interrupted. '
+            : job.status === 'cancelled'
+              ? 'Backup cancelled. '
+              : ''}
+        {job.message}
+      </p>
       {job.status === 'running' ? (
         <RecoveryProgress label={`Backup · ${stageLabels[job.stage] ?? 'Checking progress'}`} completed={job.completedBytes} total={job.totalBytes} />
       ) : null}
       {job.restartRequired ? <p role="alert">Apps have recovered. Restart Orbis to finish recovery before making further changes.</p> : null}
-      <BackupDownloadReady job={job} disabled={busy || status.isError} onDownload={(opener) => downloadCreated(job, opener)} />
+      <BackupDownloadReady job={job} disabled={busy || status.isError || !data} onDownload={(opener) => downloadCreated(job, opener)} />
       <div className="system-backups-actions">
         {job.status === 'running' ? (
           <Button variant="outline" disabled={busy || status.isError} onClick={() => simpleAction(`/${job.id}/cancel`)}>
@@ -1212,15 +1269,18 @@ export function SystemBackupsSettings({
             </InlineFeedback>
           ) : null}
           {action.kind === 'export' ? (
-            <BackupEncryptionFields
-              id={id}
-              useAccountPassword={useAccountPassword}
-              disabled={busy}
-              onChange={(value) => {
-                setUseAccountPassword(value);
-                setError(null);
-              }}
-            />
+            <>
+              <BackupMediaOption checked={includeMedia} disabled={busy} onChange={setIncludeMedia} />
+              <BackupEncryptionFields
+                id={id}
+                useAccountPassword={useAccountPassword}
+                disabled={busy}
+                onChange={(value) => {
+                  setUseAccountPassword(value);
+                  setError(null);
+                }}
+              />
+            </>
           ) : null}
           <div className="system-backups-actions">
             {embedded && action.kind === 'upload' && !onDismiss ? null : (
@@ -1304,7 +1364,10 @@ export function SystemBackupsSettings({
       ? `${formatBackupBytes(sceneCompleted)} of ${formatBackupBytes(sceneTotal)}`
       : undefined;
   const wizardLocked = busy || stoppingPreparation || restoreActive || awaitingAcceptedRestore || terminalChecking;
-  const wizardExport = wizardJob?.kind === 'export' ? data?.exports.jobs.find((job) => job.id === wizardJob.id) : undefined;
+  const wizardExport =
+    wizardJob?.kind === 'export'
+      ? (data?.exports.jobs.find((job) => job.id === wizardJob.id) ?? (trackedExport?.id === wizardJob.id ? trackedExport : undefined))
+      : undefined;
   const wizardImport = wizardJob?.kind === 'import' ? data?.imports.jobs.find((job) => job.id === wizardJob.id) : undefined;
   const restoringInWizard =
     restoreActive ||
@@ -1404,18 +1467,19 @@ export function SystemBackupsSettings({
           <p>
             {restoreOnly
               ? 'Verify the encrypted archive before replacing this server’s configuration and managed app data.'
-              : 'Orbis configuration, accounts and managed app data are backed up together in an encrypted file. Apps pause while their data is copied to keep it consistent.'}
+              : 'Orbis configuration, accounts and managed app data are backed up together in an encrypted file. Shared media is optional. Apps pause while their data is copied to keep it consistent.'}
           </p>
         )}
         {status.isPending ? <output>Reading backup capabilities…</output> : null}
       </div>
       {status.isError ? (
         <InlineFeedback>
-          {reconnectingAcceptedRestore
-            ? 'Orbis is reconnecting after the accepted restore. The status below shows the last confirmed progress; the new server has not replied yet.'
-            : missing
-              ? 'This server does not provide the full backup and restore API. Update Orbis, then refresh status.'
-              : status.error.message}
+          {exportStatusError ??
+            (reconnectingAcceptedRestore
+              ? 'Orbis is reconnecting after the accepted restore. The status below shows the last confirmed progress; the new server has not replied yet.'
+              : missing
+                ? 'This server does not provide the full backup and restore API. Update Orbis, then refresh status.'
+                : status.error.message)}
           {restoreActive && !reconnectingAcceptedRestore ? ' Reconnecting; the last confirmed restore status remains below.' : ''}
           {status.error instanceof BackupApiError && status.error.status === 401 ? (
             <Button type="button" variant="outline" onClick={() => window.location.reload()}>
@@ -1484,10 +1548,15 @@ export function SystemBackupsSettings({
           </Button>
         </InlineFeedback>
       ) : null}
-      {!restoreOnly && data?.exports.jobs.length ? (
+      {!restoreOnly && (data?.exports.jobs.length || trackedExport) ? (
         <div className="system-backups-jobs">
           <h3>Server backups</h3>
-          {[...data.exports.jobs].sort((a, b) => b.createdAt - a.createdAt).map((job) => renderExportJob(job))}
+          {[
+            ...(data?.exports.jobs ?? []),
+            ...(trackedExport && !data?.exports.jobs.some((job) => job.id === trackedExport.id) ? [trackedExport] : []),
+          ]
+            .sort((a, b) => b.createdAt - a.createdAt)
+            .map((job) => renderExportJob(job))}
         </div>
       ) : null}
       {showImportSummary && visibleImports?.length ? (
@@ -1535,9 +1604,10 @@ export function SystemBackupsSettings({
             <div className="modal-body system-backups-window-body" data-reduced={Boolean(reduced)}>
               {status.isError ? (
                 <InlineFeedback>
-                  {reconnectingAcceptedRestore
-                    ? 'Orbis is reconnecting after the accepted restore. Waiting for confirmed status.'
-                    : status.error.message}
+                  {exportStatusError ??
+                    (reconnectingAcceptedRestore
+                      ? 'Orbis is reconnecting after the accepted restore. Waiting for confirmed status.'
+                      : status.error.message)}
                 </InlineFeedback>
               ) : null}
               {credentialPanel}

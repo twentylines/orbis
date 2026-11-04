@@ -8,6 +8,7 @@ import re
 
 CAPTURE_DOMAIN = b'orbis.controller-capture-capability.v3\n'
 RESTORE_DOMAIN = b'orbis.retained-restore-capability.v2\n'
+ARCHIVE_DOMAIN = b'orbis.backup-archive-capability.v1\n'
 SOURCE_DOMAIN = b'orbis.host-helper-source.v1\n'
 NAMES = re.compile(r'(?:orbis-[a-z-]+|install-orbis|migration-preflight)\.py|orbis-host-maintenance-responder\.mjs')
 REQUIRED = {'orbis-host-service.py', 'orbis-host.py', 'orbis-host-identity.py', 'orbis-host-retained-authority.py',
@@ -65,6 +66,11 @@ def capability(kind, authority, *, directory=None):
                  'normalBootstrapProtocol': 'root-normal-bootstrap.v1',
                  'portsProtocol': 'inet-diag-self-proof.v1', 'sourceSha256': source}
         domain = RESTORE_DOMAIN
+    elif kind == 'archive':
+        value = {'version': 1, 'format': 'orbis-full-backup', 'manifestVersion': 2,
+                 'mediaPolicy': 'explicit-inclusion.v1', 'appDataLinks': 'confined-relative.v1',
+                 'sourceSha256': source}
+        domain = ARCHIVE_DOMAIN
     else:
         raise fail()
     return {**value, 'contractSha256': hashlib.sha256(domain + canonical(value)).hexdigest()}

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { BackupRequirementError, privateBackupDirectory } from './backup-files';
+import { BackupRequirementError, privateBackupDirectory, resolveBackupLinkPath } from './backup-files';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const prefix = '.orbis-restore-';
@@ -269,7 +269,7 @@ export class BackupDirectorySwap {
     this.plan.phase = current.phase;
     this.plan.incoming = current.incoming;
   }
-  async seal(signal: AbortSignal) {
+  async seal(signal: AbortSignal, options: { allowAppDataLinks?: boolean } = {}) {
     signal.throwIfAborted();
     await this.refresh();
     if (this.plan.phase !== 'staging') throw failed();
@@ -286,6 +286,15 @@ export class BackupDirectorySwap {
       pathBytes += Buffer.byteLength(path.relative(this.incomingDirectory, file));
       if (entries > maximumNames || pathBytes > maximumPathBytes) throw failed();
       const stat = await fs.lstat(file, { bigint: true });
+      if (stat.isSymbolicLink() && options.allowAppDataLinks) {
+        if (String(stat.dev) !== (this.plan.version === 2 ? this.plan.staging?.device : this.plan.device)) throw failed();
+        const target = await fs.readlink(file);
+        await resolveBackupLinkPath(this.incomingDirectory, path.dirname(file), target);
+        const after = await fs.lstat(file, { bigint: true });
+        if (after.dev !== stat.dev || after.ino !== stat.ino || after.ctimeNs !== stat.ctimeNs || (await fs.readlink(file)) !== target)
+          throw failed();
+        return;
+      }
       if (
         stat.isSymbolicLink() ||
         String(stat.dev) !== (this.plan.version === 2 ? this.plan.staging?.device : this.plan.device) ||

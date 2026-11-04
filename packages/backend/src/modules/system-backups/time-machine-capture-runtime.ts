@@ -174,7 +174,10 @@ export class TimeMachineCaptureRuntime {
         }
       }
       if (requireV6 && format !== 6) throw new Error('v6 capture capability is required');
-      if (format !== 6) await this.host.requireControllerCaptureAuthoritySupport(signal, format === 4 ? 2 : 1);
+      if (format !== 6) {
+        await this.host.requireBackupArchiveSupport(signal);
+        await this.host.requireControllerCaptureAuthoritySupport(signal, format === 4 ? 2 : 1);
+      }
     } catch {
       throw timeMachineConflict('host-capture-support-required');
     }

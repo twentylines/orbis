@@ -217,6 +217,32 @@ const assertOriginalUntouched = () => {
   }
 };
 
+it('binds preserved media into the staged journal only after authenticating the v2 source manifest', async () => {
+  options.claimReviewedSource = async (journal, accept) => {
+    const source = await makeReviewedBackupFixture(root);
+    source.manifest = { ...source.manifest, version: 2, mediaPolicy: 'preserve-destination' };
+    const bytes = Buffer.from(JSON.stringify(source.manifest));
+    await fs.writeFile(path.join(source.content, 'manifest.json'), bytes);
+    source.seal.manifest = { bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+    await withRestoreLease(path.dirname(journal.directory), async () => {
+      await pinBackupSource({
+        directory: source.directory,
+        destination: path.join(journal.directory, 'source'),
+        expected: source.seal,
+        signal: options.signal,
+      });
+      await accept({ seal: source.seal }, options.signal);
+    });
+  };
+  const result = await prepareRestoreHandoff(options);
+  expect(result.journal.state.phase).toBe('staging');
+  expect(result.journal.state.roots).not.toContain('media');
+  expect(await fs.readdir(path.join(result.journal.directory, 'roots'))).toEqual([]);
+  await expect(readRestoreBootstrap(result.journal)).resolves.toBeDefined();
+  await expect(result.journal.preserveMediaDuringStaging()).rejects.toThrow();
+  assertOriginalUntouched();
+});
+
 it('creates a durable reviewed-source handoff without starting or stopping containers or nesting restore leases', async () => {
   const before = await fs.readFile(path.join(options.directories.data, '.env'));
   const result = await prepareRestoreHandoff(options);

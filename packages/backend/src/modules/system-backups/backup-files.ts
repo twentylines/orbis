@@ -23,6 +23,103 @@ export type BackupFile = {
   inode: number;
 };
 export type BackupProgress = { stage: 'inventory' | 'copying' | 'archiving' | 'encrypting'; completedBytes: number; totalBytes: number | null };
+export type BackupLink = { name: string; target: string; uid: number; gid: number; mtime: number };
+
+export async function resolveBackupLinkPath(root: string, parent: string, target: string) {
+  const invalid = () => new BackupRequirementError('Backup app-data link target is unsafe. No data was changed.');
+  if (
+    !target ||
+    Buffer.byteLength(target) > 4096 ||
+    path.isAbsolute(target) ||
+    target.includes('\\') ||
+    Array.from(target).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127) ||
+    (await fs.realpath(parent)) !== parent ||
+    !(parent === root || parent.startsWith(`${root}${path.sep}`))
+  )
+    throw invalid();
+  let current = parent;
+  const parts = target.split('/');
+  for (let index = 0; index < parts.length; index++) {
+    const part = parts[index];
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      if (current === root) throw invalid();
+      current = path.dirname(current);
+    } else {
+      current = path.join(current, part);
+      const stat = await fs.lstat(current);
+      if (stat.isSymbolicLink() || (index < parts.length - 1 && !stat.isDirectory())) throw invalid();
+    }
+  }
+  if (!current.startsWith(`${root}${path.sep}`) || (await fs.realpath(current)) !== current) throw invalid();
+  const stat = await fs.lstat(current);
+  if (!stat.isFile() && !stat.isDirectory()) throw invalid();
+  if (stat.isDirectory() && (parent === current || parent.startsWith(`${current}${path.sep}`))) throw invalid();
+  return current;
+}
+
+export function validateBackupLinks(
+  links: readonly BackupLink[],
+  sockets: readonly string[],
+  files: readonly { name: string }[],
+  directories: readonly { name: string }[],
+) {
+  const invalid = () => new BackupRequirementError('Backup app-data links or runtime exclusions are unsafe. No data was changed.');
+  const ordinary = new Set([...files, ...directories].map(({ name }) => name));
+  const directoryNames = new Set(directories.map(({ name }) => name));
+  const special = new Set<string>();
+  let bytes = 0;
+  const appName = (name: string) =>
+    name.startsWith('app-data/') &&
+    safeName(name) &&
+    !name.split('/').includes('.') &&
+    !name.split('/')[1]?.startsWith('.orbis-restore-') &&
+    name.split('/').every((part) => Buffer.byteLength(part) <= 255 && !/[\uD800-\uDFFF]/u.test(part)) &&
+    Buffer.byteLength(name) <= 4096;
+  for (const name of [...links.map((link) => link.name), ...sockets]) {
+    if (!appName(name) || ordinary.has(name) || special.has(name) || !directoryNames.has(path.posix.dirname(name))) throw invalid();
+    special.add(name);
+    bytes += Buffer.byteLength(name);
+  }
+  for (const link of links) {
+    const target = link.target;
+    if (
+      typeof target !== 'string' ||
+      !target ||
+      Buffer.byteLength(target) > 4096 ||
+      path.posix.isAbsolute(target) ||
+      target.includes('\\') ||
+      Array.from(target).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)
+    )
+      throw invalid();
+    bytes += Buffer.byteLength(target);
+    const components = path.posix.dirname(link.name).split('/');
+    const parts = target.split('/');
+    for (let index = 0; index < parts.length; index++) {
+      const part = parts[index];
+      if (!part || part === '.') continue;
+      if (part === '..') {
+        if (components.length <= 1) throw invalid();
+        components.pop();
+      } else {
+        components.push(part);
+        if (index < parts.length - 1 && !directoryNames.has(components.join('/'))) throw invalid();
+      }
+    }
+    const resolved = components.join('/');
+    if (!resolved.startsWith('app-data/') || !ordinary.has(resolved)) throw invalid();
+    const parent = path.posix.dirname(link.name);
+    if (directoryNames.has(resolved) && (parent === resolved || parent.startsWith(`${resolved}/`))) throw invalid();
+    for (let parent = path.posix.dirname(resolved); parent !== '.'; parent = path.posix.dirname(parent)) if (special.has(parent)) throw invalid();
+  }
+  for (const name of ordinary)
+    for (let parent = path.posix.dirname(name); parent !== '.'; parent = path.posix.dirname(parent)) if (special.has(parent)) throw invalid();
+  if (
+    files.length + directories.length + links.length + sockets.length > fullBackupLimits.entries ||
+    bytes + [...ordinary].reduce((n, name) => n + Buffer.byteLength(name), 0) > fullBackupLimits.pathBytes
+  )
+    throw invalid();
+}
 
 const inside = (root: string, target: string) => target === root || target.startsWith(`${root}${path.sep}`);
 const safeName = (name: string) =>
@@ -44,9 +141,13 @@ export async function inventoryBackup(
   roots: { name: string; source: string; required?: boolean }[],
   signal: AbortSignal,
   excludedDirectories: readonly string[] = [],
+  options: { allowAppDataLinksAndSockets?: boolean } = {},
 ) {
   const files: BackupFile[] = [];
   const directories: { name: string; mode: number; uid: number; gid: number; mtime: number }[] = [];
+  const symlinks: BackupLink[] = [];
+  const excludedRuntimeSockets: string[] = [];
+  const specialSources: { source: string; device: number; inode: number; ctime: number; mtime: number; target?: string }[] = [];
   const names = new Set<string>();
   let pathBytes = 0;
   const excluded = new Set(excludedDirectories);
@@ -105,6 +206,25 @@ export async function inventoryBackup(
       );
     names.add(name);
     const stat = await fs.lstat(source);
+    if (options.allowAppDataLinksAndSockets && name.startsWith('app-data/') && (stat.isSymbolicLink() || stat.isSocket())) {
+      if ((await fs.realpath(path.dirname(source))) !== path.dirname(source))
+        throw new BackupRequirementError('Backup source changed. Retry after current writes finish.');
+      const target = stat.isSymbolicLink() ? await fs.readlink(source) : undefined;
+      const after = await fs.lstat(source);
+      if (after.dev !== stat.dev || after.ino !== stat.ino || after.ctimeMs !== stat.ctimeMs || after.mtimeMs !== stat.mtimeMs)
+        throw new BackupRequirementError('Backup source changed. Retry after current writes finish.');
+      specialSources.push({
+        source,
+        device: stat.dev,
+        inode: stat.ino,
+        ctime: stat.ctimeMs,
+        mtime: stat.mtimeMs,
+        ...(target === undefined ? {} : { target }),
+      });
+      if (target === undefined) excludedRuntimeSockets.push(name);
+      else symlinks.push({ name, target, uid: stat.uid, gid: stat.gid, mtime: stat.mtimeMs });
+      return;
+    }
     if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile()))
       throw new BackupRequirementError('A data directory contains links or special files that need a separate backup plan.');
     if (stat.isDirectory()) {
@@ -138,9 +258,10 @@ export async function inventoryBackup(
     if (exists) await visit(resolved, root.name, resolved);
   }
   if (observedExclusions.size !== excluded.size) throw new BackupRequirementError('Restore recovery files changed during backup planning.');
+  validateBackupLinks(symlinks, excludedRuntimeSockets, files, directories);
   const totalBytes = files.reduce((total, file) => total + file.bytes, 0);
   if (!Number.isSafeInteger(totalBytes)) throw new BackupRequirementError('Backup source exceeds the supported size.');
-  return { files, directories, totalBytes };
+  return { files, directories, totalBytes, symlinks, excludedRuntimeSockets, specialSources };
 }
 
 export async function copyBackupFiles(
@@ -150,6 +271,31 @@ export async function copyBackupFiles(
   progress: (value: BackupProgress) => void,
 ) {
   let completed = 0;
+  const verifySpecial = async () => {
+    for (const entry of inventory.specialSources) {
+      signal.throwIfAborted();
+      const stat = await fs.lstat(entry.source);
+      if (
+        stat.dev !== entry.device ||
+        stat.ino !== entry.inode ||
+        stat.ctimeMs !== entry.ctime ||
+        stat.mtimeMs !== entry.mtime ||
+        (entry.target === undefined ? !stat.isSocket() : !stat.isSymbolicLink() || (await fs.readlink(entry.source)) !== entry.target) ||
+        (await fs.realpath(path.dirname(entry.source))) !== path.dirname(entry.source)
+      )
+        throw new BackupRequirementError('Backup source changed. Retry after current writes finish.');
+      const after = await fs.lstat(entry.source);
+      if (
+        after.dev !== stat.dev ||
+        after.ino !== stat.ino ||
+        after.ctimeMs !== stat.ctimeMs ||
+        after.mtimeMs !== stat.mtimeMs ||
+        (entry.target !== undefined && (await fs.readlink(entry.source)) !== entry.target)
+      )
+        throw new BackupRequirementError('Backup source changed. Retry after current writes finish.');
+    }
+  };
+  await verifySpecial();
   const manifest: { name: string; bytes: number; sha256: string; mode: number; uid: number; gid: number; mtime: number }[] = [];
   for (const directory of inventory.directories) await fs.mkdir(path.join(destination, directory.name), { recursive: true, mode: 0o700 });
   progress({ stage: 'copying', completedBytes: 0, totalBytes: inventory.totalBytes });
@@ -201,17 +347,22 @@ export async function copyBackupFiles(
       await input.close();
     }
   }
+  await verifySpecial();
   return manifest;
 }
 
 export async function archiveBackup(content: string, archive: string, signal: AbortSignal) {
   signal.throwIfAborted();
   const output = await fs.open(archive, 'wx', 0o600);
-  const child = spawn('tar', ['--format=pax', '--no-xattrs', '-czf', '-', '-C', content, '.'], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-    signal,
-    env: { ...process.env, COPYFILE_DISABLE: '1' },
-  });
+  const child = spawn(
+    'tar',
+    ['--format=pax', '--no-xattrs', ...(process.platform === 'darwin' ? ['--no-fflags'] : []), '-czf', '-', '-C', content, '.'],
+    {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      signal,
+      env: { ...process.env, COPYFILE_DISABLE: '1' },
+    },
+  );
   let hasErrors = false;
   child.stderr.on('data', () => {
     hasErrors = true;

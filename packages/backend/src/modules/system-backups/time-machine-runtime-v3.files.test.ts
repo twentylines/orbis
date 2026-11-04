@@ -1,6 +1,7 @@
+import { stabilizeDarwinFixtureCreation } from './darwin-files.fixture';
 import type { CapturedRuntimeInput } from './time-machine-runtime-payload';
 import { decodeControllerCaptureAuthority } from '../host-updates/host-controller-capture-authority';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,8 +15,14 @@ const required = <T>(value: T | undefined): T => {
   return value;
 };
 const roots: string[] = [];
+let restoreDarwinCreation: () => void = () => undefined;
+beforeEach(() => {
+  restoreDarwinCreation = stabilizeDarwinFixtureCreation(() => roots);
+});
 afterEach(async () => {
   for (const root of roots.splice(0)) await fs.rm(root, { recursive: true, force: true });
+  vi.restoreAllMocks();
+  restoreDarwinCreation();
 });
 async function fixture(version: 3 | 4 | 6 = 3) {
   const { connectedCaptureFixture } = await import('./time-machine-capture.fixture');

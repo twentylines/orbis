@@ -9,7 +9,7 @@ import { BackupRequirementError, privateBackupDirectory } from './backup-files';
 import { rebaseBackupConfiguration } from './backup-restore-configuration';
 import { prepareRestoreDatabase, removeRestoreDatabase, type RestoreDatabaseConnection, type RestoreDatabaseOwner } from './backup-restore-database';
 import { BackupRestoreJournal } from './backup-restore-journal';
-import { materializeBackupSource, restoreTreeNames, type RestoreTreeName } from './backup-restore-materialize';
+import { materializeBackupSource, restoreTreeNames, restoreTreesForManifest, type RestoreTreeName } from './backup-restore-materialize';
 import { writeRestoreOperation, type RestoreOperation } from './backup-restore-runtime';
 import { validateBackupSource, type BackupSourceSeal } from './backup-restore-source';
 import { captureRestoreHostIdentity, verifyRestoreHostIdentity, verifyPreservedTraefik } from './backup-restore-host-identity';
@@ -116,7 +116,8 @@ export async function prepareRestorePayload(options: {
   try {
     signal.throwIfAborted();
     const state = await journal.refresh();
-    const activeRoots = restoreTreeNames.filter((name) => !options.preserveLiveProxy || name !== 'traefik');
+    const source = await validateBackupSource({ directory: options.source.directory, expected: options.source.seal, signal });
+    const activeRoots = restoreTreesForManifest(source.manifest, options.preserveLiveProxy);
     if (
       !['staging', 'preparing'].includes(state.phase) ||
       state.decision !== null ||
@@ -142,7 +143,6 @@ export async function prepareRestorePayload(options: {
     const progress: RestorePreparationProgress = { stage: 'checking', completedBytes: 0, totalBytes: null, records: 0, totalRecords: null };
     options.progress({ ...progress });
     check = 'source';
-    const source = await validateBackupSource({ directory: options.source.directory, expected: options.source.seal, signal });
     check = 'environment';
     const original = await readPrivate(options.environment);
     checkConnection(original, runtime);
@@ -227,7 +227,7 @@ export async function prepareRestorePayload(options: {
     progress.stage = 'sealing';
     check = 'sealing';
     options.progress({ ...progress });
-    for (const swap of swaps.values()) await swap.seal(signal);
+    for (const [name, swap] of swaps) await swap.seal(signal, { allowAppDataLinks: source.manifest.version === 2 && name === 'app-data' });
     const { connection, ...containers } = runtime;
     check = 'runtime';
     const operation = await writeRestoreOperation(journal, {

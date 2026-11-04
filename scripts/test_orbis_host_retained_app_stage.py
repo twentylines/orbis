@@ -84,6 +84,28 @@ class RetainedAppStageTests(unittest.TestCase):
         self.assertTrue(self.value['apps'][0]['pendingRestart'])
         self.assertNotEqual(self.value['containers'][0]['inspect']['Config']['Env'][0], 'MODE=saved-new')
 
+    def test_v2_media_policy_preserves_independently_bound_app_runtime(self):
+        self.manifest.update(version=2, mediaPolicy='preserve-destination', directories=[],
+                             symlinks=[{'name': 'app-data/demo/whoami/app-link', 'target': 'app.env'}],
+                             excludedRuntimeSockets=['app-data/demo/whoami/runtime.sock'])
+        self.assertEqual(self.review(), self.body)
+        self.manifest['mediaPolicy'] = 'included'
+        self.assertEqual(self.review(), self.body)
+
+    def test_app_review_rejects_media_reintroduced_by_a_preserving_manifest(self):
+        self.manifest.update(version=2, mediaPolicy='preserve-destination', directories=[])
+        for change in ({'files': self.manifest['files'] + [{'name': 'data/media/movie.mkv'}]},
+                       {'directories': [{'name': 'data/media'}]},
+                       {'symlinks': [{'name': 'app-data/link', 'target': '../media/movie.mkv'}]},
+                       {'mediaPolicy': 'unknown'}, {'version': 1}):
+            with self.subTest(change=change):
+                manifest = self.manifest
+                try:
+                    self.manifest = {**manifest, **change}
+                    with self.assertRaises(ValueError): self.review()
+                finally:
+                    self.manifest = manifest
+
     def test_rehashed_imported_definition_cannot_replace_root_original(self):
         changed = copy.deepcopy(self.value)
         changed.pop('sha256')

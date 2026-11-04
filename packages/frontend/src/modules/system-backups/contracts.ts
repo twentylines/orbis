@@ -15,7 +15,8 @@ export const exportJobSchema = type({
   'creationDownloadAvailable?': 'true',
 });
 export const reviewSchema = type({
-  formatVersion: '1',
+  formatVersion: '1 | 2',
+  'mediaPolicy?': "'included' | 'preserve-destination'",
   createdAt: 'number > 0',
   orbisVersion: 'string <= 128',
   runtipiVersion: 'string <= 128',
@@ -32,7 +33,7 @@ export const reviewSchema = type({
     blockers: type("'runtipi-version' | 'newer-orbis' | 'unknown-orbis-version'").array(),
     architectureChanged: 'boolean',
   },
-});
+}).narrow((value) => value.formatVersion === 1 || value.mediaPolicy !== undefined);
 export const importJobSchema = type({
   ...base,
   status: "'awaiting-upload' | 'uploading' | 'uploaded' | 'reviewing' | 'reviewed' | 'preparing' | 'failed' | 'cancelled'",

@@ -3,6 +3,8 @@ import { watch, constants } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { BackupDirectorySwap } from './backup-directory-swap';
 import { BackupRequirementError } from './backup-files';
@@ -48,6 +50,14 @@ it.each(['commit', 'rollback', 'discard'] as const)('preserved plans keep live i
   await fs.mkdir(path.join(root, 'tls'), { recursive: true, mode: 0o700 });
   await fs.writeFile(path.join(root, 'dynamic.json'), 'destination routes');
   await fs.writeFile(path.join(root, 'tls', 'cert.pem'), 'destination certificate');
+  if (process.platform === 'darwin') {
+    await promisify(execFile)('python3', [
+      '-c',
+      'import os,sys\nfor p in sys.argv[1:]:\n s=os.lstat(p); os.chflags(p,s.st_flags|0x40|0x8000,follow_symlinks=False)',
+      path.join(root, 'dynamic.json'),
+      path.join(root, 'tls', 'cert.pem'),
+    ]);
+  }
   const before = await watchedIdentity(root);
   const events: { file: string; event: string; name: string | undefined }[] = [];
   const watchers = [root, path.join(root, 'dynamic.json'), path.join(root, 'tls'), path.join(root, 'tls', 'cert.pem')].map((file) =>
@@ -526,6 +536,20 @@ it.each(['symlink', 'hardlink'] as const)('rejects a staged %s and preserves the
   await expect(test.swap.seal(signal())).rejects.toBeInstanceOf(BackupRequirementError);
   expect(hash(await fs.readFile(outside)) === original).toBe(true);
   await recoverTwice(test);
+});
+
+it('seals only explicitly enabled internal links and still rejects escaping targets', async () => {
+  const test = await fixture();
+  await fs.writeFile(path.join(test.incoming, 'target'), 'fixture');
+  await fs.symlink('target', path.join(test.incoming, 'link'));
+  await expect(test.swap.seal(signal())).rejects.toThrow();
+  await test.swap.seal(signal(), { allowAppDataLinks: true });
+});
+
+it('rejects escaping links even when app-data links are enabled', async () => {
+  const test = await fixture();
+  await fs.symlink('../../outside', path.join(test.incoming, 'link'));
+  await expect(test.swap.seal(signal(), { allowAppDataLinks: true })).rejects.toThrow();
 });
 
 it('does not overwrite an external target created after original children were backed up', async () => {

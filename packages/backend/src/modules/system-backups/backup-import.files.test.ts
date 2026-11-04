@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { inspectFullBackup } from './backup-import';
+import { inspectFullBackup, parseFullBackupManifest, backupMediaPolicy } from './backup-import';
 import { readTarArchive } from '@/core/archive/tar-metadata';
 import { fullBackupFixture } from './backup-import.fixture';
 
@@ -18,6 +18,58 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.restoreAllMocks();
   await fs.rm(root, { force: true, recursive: true });
+});
+
+it('reviews explicit v2 media preservation while retaining v1 media semantics and rejecting forged media policies', async () => {
+  const fixture = await fullBackupFixture(root);
+  expect(backupMediaPolicy(parseFullBackupManifest(fixture.manifest))).toBe('included');
+  Object.assign(fixture.manifest, { version: 2, mediaPolicy: 'preserve-destination' });
+  await fixture.write();
+  const result = await inspect(fixture.archive);
+  expect(result.review.formatVersion).toBe(2);
+  expect(result.review.mediaPolicy).toBe('preserve-destination');
+  const directory = { name: 'data/media', mode: 0o700, uid: 0, gid: 0, mtime: 0 };
+  for (const invalid of [
+    { ...fixture.manifest, mediaPolicy: ['included'] },
+    { ...fixture.manifest, mediaPolicy: {} },
+    { ...fixture.manifest, architecture: ['arm64'] },
+    { ...fixture.manifest, architecture: {} },
+    { ...fixture.manifest, mediaPolicy: undefined },
+    { ...fixture.manifest, version: 1 },
+    { ...fixture.manifest, directories: [...fixture.manifest.directories, directory] },
+    { ...fixture.manifest, files: [...fixture.manifest.files, { ...directory, name: 'data/media/movie.mkv', bytes: 1, sha256: 'a'.repeat(64) }] },
+  ])
+    expect(() => parseFullBackupManifest(invalid)).toThrow();
+  expect(backupMediaPolicy(parseFullBackupManifest({ ...fixture.manifest, mediaPolicy: 'included' }))).toBe('included');
+});
+
+it('validates manifest-only app links without allowing archive paths to traverse them', async () => {
+  const fixture = await fullBackupFixture(root);
+  const link = { name: 'app-data/tool-link', target: 'document', uid: 0, gid: 0, mtime: 0 };
+  const manifest = { ...fixture.manifest, version: 2, mediaPolicy: 'included', symlinks: [link], excludedRuntimeSockets: ['app-data/runtime.sock'] };
+  expect(parseFullBackupManifest(manifest)).toMatchObject({ symlinks: [link] });
+  Object.assign(fixture.manifest, manifest);
+  await fixture.write();
+  const inspected = await inspect(fixture.archive);
+  expect(inspected.manifest).toMatchObject({ symlinks: [link], excludedRuntimeSockets: ['app-data/runtime.sock'] });
+  await expect(fs.lstat(path.join(root, 'inspected/app-data/tool-link'))).rejects.toMatchObject({ code: 'ENOENT' });
+  for (const bad of [
+    { ...manifest, version: 1, mediaPolicy: undefined },
+    { ...manifest, symlinks: [{ ...link, target: '/etc/passwd' }] },
+    { ...manifest, symlinks: [{ ...link, target: '../outside' }] },
+    { ...manifest, symlinks: [{ ...link, target: 'missing' }] },
+    { ...manifest, symlinks: [link, { ...link, name: 'app-data/chain', target: 'tool-link' }] },
+    { ...manifest, symlinks: [link, { ...link, name: 'app-data/chain', target: 'tool-link/../document' }] },
+    { ...manifest, symlinks: [{ ...link, name: 'app-data/empty/cycle', target: '.' }] },
+    { ...manifest, symlinks: [{ ...link, name: 'data/state/link' }] },
+    { ...manifest, symlinks: [{ ...link, name: 'app-data/.orbis-restore-user-file' }] },
+    { ...manifest, symlinks: [{ ...link, name: `app-data/${'x'.repeat(256)}` }] },
+    { ...manifest, symlinks: [{ ...link, name: 'app-data/\uD800' }] },
+    { ...manifest, excludedRuntimeSockets: ['app-data/.orbis-restore-runtime.sock'] },
+    { ...manifest, excludedRuntimeSockets: ['app-data/document'] },
+    { ...manifest, files: [...manifest.files, { ...manifest.files[0], name: 'app-data/tool-link/child' }] },
+  ])
+    expect(() => parseFullBackupManifest(bad)).toThrow();
 });
 
 it('stops tiny-file expansion before its allocated-block quota is exhausted', async () => {

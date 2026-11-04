@@ -1,3 +1,4 @@
+import { stabilizeDarwinFixtureCreation } from './darwin-files.fixture';
 import fs from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
@@ -18,6 +19,7 @@ import type { Request } from 'express';
 import { ResetState } from '../system-reset/reset-state';
 
 let root: string;
+let restoreDarwinCreation: () => void = () => undefined;
 let service: BackupImportsService;
 const credentials = { password: 'disposable-operator-password', totpCode: '123456' };
 const auth = {
@@ -36,6 +38,7 @@ const construct = () =>
 beforeEach(async () => {
   vi.clearAllMocks();
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-import-service-')));
+  restoreDarwinCreation = stabilizeDarwinFixtureCreation(() => root);
   await fs.mkdir(path.join(root, 'live'), { mode: 0o700 });
   await fs.writeFile(path.join(root, 'live', 'preserve'), 'live server fixture');
   config = { get: (key) => ({ directories: { dataDir: path.join(root, 'live') }, version: '4.10.1', architecture: 'arm64' })[key] };
@@ -70,6 +73,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await service.onModuleDestroy();
   vi.restoreAllMocks();
+  restoreDarwinCreation();
   vi.useRealTimers();
   vi.unstubAllEnvs();
   await fs.rm(root, { recursive: true, force: true });

@@ -1,3 +1,4 @@
+import { stabilizeDarwinFixtureCreation } from './darwin-files.fixture';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,6 +15,7 @@ import { BackupImportsService } from './backup-imports.service';
 import { fullBackupFixture, fixturePassphrase } from './backup-import.fixture';
 
 let root: string;
+let restoreDarwinCreation: () => void = () => undefined;
 let app: INestApplication;
 let service: BackupImportsService;
 let origin: string;
@@ -23,6 +25,7 @@ const database = { review: vi.fn().mockResolvedValue({ counts: { user: 1, app_st
 beforeEach(async () => {
   vi.clearAllMocks();
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-import-http-')));
+  restoreDarwinCreation = stabilizeDarwinFixtureCreation(() => root);
   const config = { get: (key: string) => ({ directories: { dataDir: path.join(root, 'live') }, version: '4.10.1', architecture: 'arm64' })[key] };
   // The HTTP fixture checks admission and streaming; PostgreSQL execution is covered independently.
   service = new BackupImportsService(...([config, auth, logger, database] as unknown as ConstructorParameters<typeof BackupImportsService>));
@@ -47,6 +50,8 @@ beforeEach(async () => {
 afterEach(async () => {
   await app?.close();
   await fs.rm(root, { recursive: true, force: true });
+  vi.restoreAllMocks();
+  restoreDarwinCreation();
 });
 const api = () => request(app.getHttpServer());
 const base = '/api/system-backups/imports';

@@ -1,4 +1,4 @@
-import { decodeCaptureV6Capability, decodeRestoreV6Capability } from './host-v6-capabilities';
+import { decodeBackupArchiveCapability, decodeCaptureV6Capability, decodeRestoreV6Capability } from './host-v6-capabilities';
 import { decodeProxyHostIdentity, type ProxyHostIdentity } from './host-proxy-identity';
 import { appRuntimeEntryLimit, appRuntimeImageBindings, decodeAppRuntimeCapture } from '../system-backups/time-machine-app-runtime-capture';
 import { pipeline } from 'node:stream/promises';
@@ -235,6 +235,7 @@ export class HostUpdatesService {
       | '/v2/controller-capture-authority/capability'
       | '/v3/controller-capture-authority/capability'
       | '/v1/retained-restore/capability'
+      | '/v1/backup-archive/capability'
       | '/v1/proxy-host-identity'
       | `/v3/controller-capture-authority/${string}/prepare`
       | `/v3/controller-capture-authority/${string}/recover`
@@ -264,6 +265,7 @@ export class HostUpdatesService {
             endpoint.startsWith('/v1/controller-capture-authority/') ||
             endpoint.startsWith('/v2/controller-capture-authority/') ||
             endpoint.startsWith('/v3/controller-capture-authority/') ||
+            endpoint === '/v1/backup-archive/capability' ||
             endpoint === '/v1/proxy-host-identity'
               ? AbortSignal.any([
                   AbortSignal.timeout(endpoint === '/v1/controller-publication/prepare' ? controllerPublicationLimits.deadlineMs : 30_000),
@@ -324,6 +326,7 @@ export class HostUpdatesService {
                 data:
                   endpoint.startsWith('/v1/controller-publication/') ||
                   endpoint === '/v3/controller-capture-authority/capability' ||
+                  endpoint === '/v1/backup-archive/capability' ||
                   endpoint === '/v1/retained-restore/capability'
                     ? parseControllerPublicationResponse(bytes)
                     : JSON.parse(bytes.toString('utf-8')),
@@ -418,6 +421,7 @@ export class HostUpdatesService {
     const before = await controllerCaptureSocketIdentity(socket);
     const result = decodeCaptureV6Capability(await this.call('/v3/controller-capture-authority/capability', undefined, signal));
     if ((await controllerCaptureSocketIdentity(socket)) !== before) throw new ServiceUnavailableException('Protected capture capability changed.');
+    await this.requireBackupArchiveSupport(signal, result.sourceSha256);
     this.captureV6Capabilities.add(result);
     return result;
   }
@@ -427,7 +431,21 @@ export class HostUpdatesService {
     const before = await controllerCaptureSocketIdentity(socket);
     const result = decodeRestoreV6Capability(await this.call('/v1/retained-restore/capability', undefined, signal));
     if ((await controllerCaptureSocketIdentity(socket)) !== before) throw new ServiceUnavailableException('Protected restore capability changed.');
+    await this.requireBackupArchiveSupport(signal, result.sourceSha256);
     return result;
+  }
+
+  async requireBackupArchiveSupport(signal?: AbortSignal, sourceSha256?: string) {
+    try {
+      const socket = this.requireSocket();
+      const before = await controllerCaptureSocketIdentity(socket);
+      const result = decodeBackupArchiveCapability(await this.call('/v1/backup-archive/capability', undefined, signal));
+      if ((await controllerCaptureSocketIdentity(socket)) !== before || (sourceSha256 !== undefined && result.sourceSha256 !== sourceSha256))
+        throw new Error('Backup archive support changed.');
+      return result;
+    } catch {
+      throw new ServiceUnavailableException('Update and verify Orbis host support before using this backup format.');
+    }
   }
 
   async requireProxyHostIdentity(signal?: AbortSignal) {

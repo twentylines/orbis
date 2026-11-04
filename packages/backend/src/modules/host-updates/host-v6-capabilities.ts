@@ -20,6 +20,13 @@ const restore = {
   normalBootstrapProtocol: 'root-normal-bootstrap.v1',
   portsProtocol: 'inet-diag-self-proof.v1',
 } as const;
+const archive = {
+  version: 1,
+  format: 'orbis-full-backup',
+  manifestVersion: 2,
+  mediaPolicy: 'explicit-inclusion.v1',
+  appDataLinks: 'confined-relative.v1',
+} as const;
 
 type Capability<T> = Readonly<T & { sourceSha256: string; contractSha256: string }>;
 function decode<T extends Record<string, string | number>>(value: unknown, expected: T, domain: string): Capability<T> {
@@ -45,3 +52,4 @@ function decode<T extends Record<string, string | number>>(value: unknown, expec
 
 export const decodeCaptureV6Capability = (value: unknown) => decode(value, capture, 'orbis.controller-capture-capability.v3');
 export const decodeRestoreV6Capability = (value: unknown) => decode(value, restore, 'orbis.retained-restore-capability.v2');
+export const decodeBackupArchiveCapability = (value: unknown) => decode(value, archive, 'orbis.backup-archive-capability.v1');

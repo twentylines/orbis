@@ -1,3 +1,4 @@
+import { stabilizeDarwinFixtureCreation, stabilizeExistingDarwinFixtures } from './darwin-files.fixture';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,16 +7,28 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { SystemBackupsService } from './system-backups.service';
 import { BackupRequirementError } from './backup-files';
 import { backupMaintenanceActive, setBackupRecoveryRequired } from '@/common/backup-maintenance';
-import { decryptBackup, encryptBackup } from './backup-crypto';
+import { decryptBackup as decryptBackupFile, encryptBackup } from './backup-crypto';
 import type { Request } from 'express';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { BackupRestoreJournal } from './backup-restore-journal';
 import { BackupDirectorySwap } from './backup-directory-swap';
 import { acquireRestoreLease } from './backup-restore-lease';
 
 let directory: string;
+let restoreDarwinCreation: () => void = () => undefined;
 let service: SystemBackupsService;
+async function decryptBackup(options: Parameters<typeof decryptBackupFile>[0]) {
+  if (process.platform === 'darwin') {
+    // Set initial document flags before the immutable archive read, as in the crypto fixtures.
+    execFileSync('/usr/bin/python3', [
+      '-c',
+      'import os,stat,sys; p=sys.argv[1]; s=os.lstat(p); os.chflags(p,s.st_flags|0x40|0x8000,follow_symlinks=False) if stat.S_ISREG(s.st_mode) else None',
+      options.source,
+    ]);
+  }
+  return decryptBackupFile(options);
+}
 const passphrase = 'disposable-full-backup-passphrase';
 const credentials = { password: 'disposable-test-password' };
 const container = { id: 'a'.repeat(64), project: 'fixture_store', running: true };
@@ -65,6 +78,7 @@ beforeEach(async () => {
   );
   setBackupRecoveryRequired(false);
   directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-export-service-')));
+  restoreDarwinCreation = stabilizeDarwinFixtureCreation(() => directory);
   await fs.mkdir(path.join(directory, 'data', 'state'), { recursive: true });
   await fs.mkdir(path.join(directory, 'app-data'), { mode: 0o700 });
   await fs.writeFile(path.join(directory, 'data', '.env'), 'DISPOSABLE_FIXTURE=true');
@@ -90,6 +104,7 @@ beforeEach(async () => {
     progress(30);
   });
   auth.verifySensitiveAction.mockResolvedValue({ id: 1 });
+  stabilizeExistingDarwinFixtures(directory);
   service = createService();
 });
 
@@ -104,6 +119,7 @@ function creationArchiveFixture(gate = Promise.resolve()) {
     await gate;
     const source = path.join(directory, `${job.id}-download-fixture`);
     await fs.writeFile(source, 'creation download authorization fixture', { mode: 0o600 });
+    stabilizeExistingDarwinFixtures(source);
     await encryptBackup({ source, destination: path.join(directory, 'data/backups/full', job.id, 'backup.orbis'), passphrase: phrase });
     job.status = 'succeeded';
     job.stage = 'complete';
@@ -207,6 +223,7 @@ afterEach(async () => {
   await service.onModuleDestroy();
   setBackupRecoveryRequired(false);
   vi.restoreAllMocks();
+  restoreDarwinCreation();
   await fs.rm(directory, { recursive: true, force: true });
 });
 
@@ -233,6 +250,35 @@ it('creates one encrypted export containing configuration, database and app data
   expect(backupMaintenanceActive()).toBe(false);
   expect((await service.list(2)).jobs).toEqual([]);
   await expect(service.download(started.id, 2, credentials)).rejects.toThrow('not found');
+});
+
+it.each([false, true])('exports shared media only after explicit includeMedia=%s', async (includeMedia) => {
+  const media = path.join(directory, 'data/media');
+  await fs.mkdir(media);
+  await fs.writeFile(path.join(media, 'jellyfin-movie.mkv'), 'shared library fixture');
+  const job = await terminal((await (includeMedia ? service.start(1, credentials, passphrase, true) : service.start(1, credentials, passphrase))).id);
+  expect(job?.status).toBe('succeeded');
+  if (!job) throw new Error('Missing export');
+  const archive = path.join(directory, 'media-policy.tar.gz');
+  await decryptBackup({ source: path.join(directory, 'data/backups/full', job.id, 'backup.orbis'), destination: archive, passphrase });
+  const restored = path.join(directory, 'media-policy-content');
+  await fs.mkdir(restored);
+  await promisify(execFile)('tar', ['-xzf', archive, '-C', restored]);
+  const manifest = JSON.parse(await fs.readFile(path.join(restored, 'manifest.json'), 'utf8'));
+  expect(manifest.version).toBe(2);
+  expect(manifest.mediaPolicy).toBe(includeMedia ? 'included' : 'preserve-destination');
+  expect(manifest.files.some((item: { name: string }) => item.name === 'data/media/jellyfin-movie.mkv')).toBe(includeMedia);
+  expect(await fs.readFile(path.join(restored, 'app-data/content'), 'utf8')).toBe('actual fixture app data');
+  expect(await fs.readFile(path.join(media, 'jellyfin-movie.mkv'), 'utf8')).toBe('shared library fixture');
+  expect(runtime.plan).toHaveBeenCalledWith(['fixture_store'], includeMedia);
+});
+
+it('rejects a linked media root before stopping apps instead of silently using a link exclusion', async () => {
+  await fs.symlink(path.join(directory, 'app-data'), path.join(directory, 'data/media'));
+  const job = await terminal((await service.start(1, credentials, passphrase)).id);
+  expect(job?.status).toBe('failed');
+  expect(job?.message).toContain('link');
+  expect(runtime.stop).not.toHaveBeenCalled();
 });
 
 it('requires successful reauthentication before writing any backup job', async () => {

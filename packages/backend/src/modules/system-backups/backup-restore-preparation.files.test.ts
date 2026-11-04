@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -28,7 +29,7 @@ afterEach(async () => {
   await fs.rm(temporary, { recursive: true, force: true });
 });
 
-async function fixture(preserveLiveProxy = false) {
+async function fixture(preserveLiveProxy = false, preserveMedia = false) {
   const store = path.join(temporary, 'backups', 'restores');
   const journal = await BackupRestoreJournal.create(store, {
     id: randomUUID(),
@@ -37,7 +38,7 @@ async function fixture(preserveLiveProxy = false) {
     candidateController: '1'.repeat(64),
     verifierController: '3'.repeat(64),
     worker: '4'.repeat(64),
-    roots: restoreTreeNames.filter((name) => !preserveLiveProxy || name !== 'traefik'),
+    roots: restoreTreeNames.filter((name) => (!preserveLiveProxy || name !== 'traefik') && (!preserveMedia || name !== 'media')),
   });
   const source = await makeReviewedBackupFixture(temporary, { dbStatus: 'running' });
   for (const name of ['app-data', 'data/repos', 'data/media', 'data/user-config', 'data/traefik']) {
@@ -51,6 +52,15 @@ async function fixture(preserveLiveProxy = false) {
   ]) {
     await fs.writeFile(path.join(source.content, name as string), bytes as string, { mode: 0o600 });
     source.manifest.files.push(await fileMetadata(source.content, name as string));
+  }
+  if (preserveMedia) {
+    await fs.rm(path.join(source.content, 'data/media'), { recursive: true });
+    source.manifest = {
+      ...source.manifest,
+      version: 2,
+      mediaPolicy: 'preserve-destination',
+      directories: source.manifest.directories.filter((entry) => entry.name !== 'data/media'),
+    };
   }
   const manifest = Buffer.from(JSON.stringify(source.manifest));
   await fs.writeFile(path.join(source.content, 'manifest.json'), manifest);
@@ -134,11 +144,31 @@ async function fixture(preserveLiveProxy = false) {
   });
   return { options, owner, store };
 }
-const prepare = (test: Awaited<ReturnType<typeof fixture>>) => withRestoreLease(test.store, () => prepareRestorePayload(test.options));
+const prepare = (test: Awaited<ReturnType<typeof fixture>>) => {
+  if (process.platform === 'darwin') {
+    // Initialize document flags before sealing fixture identity; later changes must still fail the production check.
+    execFileSync('/usr/bin/python3', [
+      '-c',
+      'import json,os,stat,sys\nfor root in json.loads(sys.argv[1]):\n for directory,_,files in os.walk(root,followlinks=False):\n  for name in files:\n   file=os.path.join(directory,name); s=os.lstat(file)\n   if stat.S_ISREG(s.st_mode): os.chflags(file,s.st_flags|0x40|0x8000,follow_symlinks=False)',
+      JSON.stringify(Object.values(test.options.roots)),
+    ]);
+  }
+  return withRestoreLease(test.store, () => prepareRestorePayload(test.options));
+};
 const discard = (test: Awaited<ReturnType<typeof fixture>>) =>
   withRestoreLease(test.store, () =>
     discardRestorePayload({ journal: test.options.journal, connection: test.options.runtime.connection, signal: signal() }),
   );
+
+it('prepares an authenticated no-media transaction without a media swap or empty incoming directory', async () => {
+  const test = await fixture(true, true);
+  const original = await fs.readFile(path.join(test.options.roots.media, 'original.txt'));
+  await prepare(test);
+  expect(test.options.journal.state.roots).not.toContain('media');
+  expect(await fs.readdir(path.join(test.options.journal.directory, 'roots'))).not.toContain('media');
+  expect(await fs.readdir(test.options.roots.media)).toEqual(['original.txt']);
+  expect(await fs.readFile(path.join(test.options.roots.media, 'original.txt'))).toEqual(original);
+});
 
 it('prepares only six authenticated roots and leaves the live proxy tree untouched', async () => {
   const test = await fixture(true);

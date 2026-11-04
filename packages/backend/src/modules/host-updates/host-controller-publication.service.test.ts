@@ -222,6 +222,8 @@ let current: ReturnType<typeof fixture>;
 let payload: unknown;
 let status: number;
 let capability: unknown;
+let archiveCapability: unknown;
+let archiveStatus: number;
 let afterRead: (() => void | Promise<void>) | undefined;
 let rawBody: Buffer | undefined;
 let dropResponse = false;
@@ -256,12 +258,17 @@ beforeAll(async () => {
       response.destroy();
       return;
     }
-    response.statusCode = status;
+    response.statusCode = request.url === '/v1/backup-archive/capability' ? archiveStatus : status;
     if (request.url?.endsWith('/app-runtime')) {
       response.setHeader('Content-Type', 'application/json');
       response.setHeader('Cache-Control', 'no-store');
     }
-    response.end(rawBody ?? JSON.stringify(request.url?.endsWith('/capability') ? capability : payload));
+    response.end(
+      rawBody ??
+        JSON.stringify(
+          request.url === '/v1/backup-archive/capability' ? archiveCapability : request.url?.endsWith('/capability') ? capability : payload,
+        ),
+    );
   });
   await new Promise<void>((resolve) => server.listen(socket, resolve));
   await fs.chmod(socket, 0o600);
@@ -275,8 +282,65 @@ beforeEach(() => {
   rawBody = undefined;
   dropResponse = false;
   capability = { version: 1, capability: 'controller-publication.v1' };
+  archiveStatus = 200;
+  archiveCapability = archiveContract();
   requests.length = 0;
   requestHeaders.length = 0;
+});
+
+function archiveContract(sourceSha256 = 'a'.repeat(64)) {
+  const unsigned = {
+    version: 1,
+    format: 'orbis-full-backup',
+    manifestVersion: 2,
+    mediaPolicy: 'explicit-inclusion.v1',
+    appDataLinks: 'confined-relative.v1',
+    sourceSha256,
+  };
+  return { ...unsigned, contractSha256: sha(`orbis.backup-archive-capability.v1\n${canonical(unsigned)}`) };
+}
+
+it('requires explicit archive support from the same protected helper before capture admission', async () => {
+  const unsigned = {
+    version: 3,
+    runtimeSchema: 'orbis.time-machine-runtime.v6',
+    imageCaptureSchema: 'orbis.time-machine-image-capture.v2',
+    controllerAuthoritySchema: 'orbis.controller-capture-authority.v4',
+    appRuntimeSchema: 'orbis.app-runtime-capture.v1',
+    proxyHostIdentitySchema: 'orbis.proxy-host-identity-policy.v1',
+    coherenceSchema: 'orbis.capture-coherence.v1',
+    sourceSha256: 'a'.repeat(64),
+  };
+  capability = { ...unsigned, contractSha256: sha(`orbis.controller-capture-capability.v3\n${canonical(unsigned)}`) };
+  archiveStatus = 404;
+  await expect(service.requireV6CaptureCapability()).rejects.toMatchObject({ status: 503 });
+  archiveStatus = 200;
+  archiveCapability = archiveContract('b'.repeat(64));
+  await expect(service.requireV6CaptureCapability()).rejects.toMatchObject({ status: 503 });
+  archiveCapability = { ...archiveContract(), manifestVersion: 1 };
+  await expect(service.requireV6CaptureCapability()).rejects.toMatchObject({ status: 503 });
+  archiveCapability = archiveContract();
+  expect((await service.requireV6CaptureCapability()).sourceSha256).toBe('a'.repeat(64));
+  expect(requests.every((request) => !request.path.endsWith('/acquire'))).toBe(true);
+});
+
+it('gates retained restore on explicit archive support without changing the old v6 reply shape', async () => {
+  const unsigned = {
+    version: 2,
+    runtimeSchema: 'orbis.time-machine-runtime.v6',
+    controllerAuthoritySchema: 'orbis.controller-capture-authority.v4',
+    coordinatorProtocol: 'orbis.retained-worker-phase.v1',
+    candidateAppResultProtocol: 'root-candidate-app-result.v1',
+    targetAppCapability: 'orbis.retained-app-engine.v1',
+    normalBootstrapProtocol: 'root-normal-bootstrap.v1',
+    portsProtocol: 'inet-diag-self-proof.v1',
+    sourceSha256: 'a'.repeat(64),
+  };
+  capability = { ...unsigned, contractSha256: sha(`orbis.retained-restore-capability.v2\n${canonical(unsigned)}`) };
+  archiveStatus = 404;
+  await expect(service.requireV6RestoreCapability()).rejects.toMatchObject({ status: 503 });
+  archiveStatus = 200;
+  expect(await service.requireV6RestoreCapability()).toEqual(capability);
 });
 afterEach(async () => {
   vi.restoreAllMocks();

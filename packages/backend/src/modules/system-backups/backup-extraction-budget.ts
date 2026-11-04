@@ -36,13 +36,13 @@ export class BackupExtractionBudget {
       if (!this.directories.has(parent)) directories.push(parent);
       parent = path.posix.dirname(parent);
     }
-    const count = directories.length + (type === '-' ? 1 : 0);
-    const pathBytes = directories.reduce((total, value) => total + Buffer.byteLength(value), 0) + (type === '-' ? Buffer.byteLength(name) : 0);
+    const node = type === '-' || type === 'l';
+    const count = directories.length + (node ? 1 : 0);
+    const pathBytes = directories.reduce((total, value) => total + Buffer.byteLength(value), 0) + (node ? Buffer.byteLength(name) : 0);
     if (this.nodes + count > fullBackupLimits.entries + 10 || this.pathBytes + pathBytes > fullBackupLimits.pathBytes + 4096)
       throw new BackupRequirementError('This backup exceeds the supported inventory size. No server data has been changed.');
     if (this.operations >= 128) await this.refresh();
-    const required = () =>
-      directories.length * this.blockSize * 2 + (type === '-' ? Math.ceil(size / this.blockSize) * this.blockSize + this.blockSize : 0);
+    const required = () => directories.length * this.blockSize * 2 + (node ? Math.ceil(size / this.blockSize) * this.blockSize + this.blockSize : 0);
     if (required() > this.remainingBytes || count > this.remainingInodes) await this.refresh();
     if (required() > this.remainingBytes || count > this.remainingInodes)
       throw new BackupRequirementError('There is not enough free storage or file entries to inspect this backup.');

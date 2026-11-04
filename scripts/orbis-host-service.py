@@ -2086,12 +2086,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except (OSError, ValueError, RuntimeError, TypeError, KeyError):
                 self.send_json(503, {"error": "Core progress is unavailable"})
             return
-        if self.path in {"/v3/controller-capture-authority/capability", "/v1/retained-restore/capability"}:
+        if self.path in {"/v3/controller-capture-authority/capability", "/v1/retained-restore/capability", "/v1/backup-archive/capability"}:
             if not trusted_capture_peer(self.connection):
                 self.send_json(403, {"error": "native helper peer is unavailable"})
                 return
             try:
-                kind = "capture" if self.path.startswith("/v3/") else "restore"
+                kind = "archive" if self.path == "/v1/backup-archive/capability" else "capture" if self.path.startswith("/v3/") else "restore"
                 self.send_json(200, self.server.service.time_machine_capability(kind))
             except (OSError, ValueError, RuntimeError, TypeError):
                 self.send_json(409, {"error": "Native helper contracts require a complete protected installation."})

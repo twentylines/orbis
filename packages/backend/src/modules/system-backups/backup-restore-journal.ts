@@ -243,6 +243,23 @@ export class BackupRestoreJournal {
     await writePrivate(path.join(this.directory, 'restore.json'), next);
     this.current = next;
   }
+  async preserveMediaDuringStaging() {
+    await this.refresh();
+    if (this.current.phase !== 'staging' || this.current.decision !== null) throw failed();
+    for (const name of ['bootstrap.json', 'runtime.json']) {
+      try {
+        await fs.lstat(path.join(this.directory, name));
+        throw failed();
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    }
+    if ((await fs.readdir(path.join(this.directory, 'roots'))).length) throw failed();
+    const next = { ...this.current, roots: this.current.roots.filter((name) => name !== 'media') };
+    validate(next);
+    await writePrivate(path.join(this.directory, 'restore.json'), next);
+    this.current = next;
+  }
   async verifyRootLocations(prepared = false) {
     const root = path.join(this.directory, 'roots');
     await privateBackupDirectory(root);

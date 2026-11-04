@@ -1,3 +1,4 @@
+import { stabilizeExistingDarwinFixtures } from './darwin-files.fixture';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { archiveBackup, copyBackupFiles, inventoryBackup } from './backup-files';
@@ -18,6 +19,7 @@ export async function fullBackupFixture(root: string) {
   await fs.writeFile(path.join(source, 'app-data', 'empty-file'), '');
   await fs.writeFile(path.join(source, 'app-data', '名'.repeat(40)), 'long UTF-8 filename fixture');
   await fs.mkdir(content, { mode: 0o700 });
+  stabilizeExistingDarwinFixtures(source);
   const inventory = await inventoryBackup(
     [
       { name: 'data/state', source: path.join(source, 'state') },
@@ -49,10 +51,12 @@ export async function fullBackupFixture(root: string) {
     await fs.writeFile(path.join(content, 'manifest.json'), JSON.stringify(manifest));
     await fs.rm(archive, { force: true });
     await archiveBackup(content, archive, new AbortController().signal);
+    stabilizeExistingDarwinFixtures(archive);
     return archive;
   };
   await write();
   const encrypted = path.join(root, 'backup.orbis');
   await encryptBackup({ source: archive, destination: encrypted, passphrase: fixturePassphrase });
+  stabilizeExistingDarwinFixtures(encrypted);
   return { source, content, manifest, archive, encrypted, write };
 }

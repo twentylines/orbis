@@ -10,7 +10,12 @@ import { DOCKERODE } from '../docker/docker.module';
 import { BackupRequirementError } from './backup-files';
 
 export type BackupContainer = { id: string; project: string; running: boolean };
-export type BackupRuntimePlan = { databaseId: string; containers: BackupContainer[]; images: { project: string; image: string }[] };
+export type BackupRuntimePlan = {
+  databaseId: string;
+  containers: BackupContainer[];
+  images: { project: string; image: string }[];
+  preservedMedia?: { roots: string[]; bindings: { id: string; source: string; destination: string; rw: boolean }[] };
+};
 const below = (root: string, value: string) => value === root || value.startsWith(`${root}/`);
 
 @Injectable()
@@ -20,7 +25,8 @@ export class BackupRuntimeService {
     @Inject(DOCKERODE) private readonly docker: Dockerode,
   ) {}
 
-  async plan(projects: string[]): Promise<BackupRuntimePlan> {
+  async plan(projects: string[], includeMedia = true): Promise<BackupRuntimePlan> {
+    if (typeof includeMedia !== 'boolean') throw new BackupRequirementError('The media backup policy is invalid.');
     const self = await this.docker.getContainer(os.hostname()).inspect();
     const database = this.config.get('database');
     const networks = new Set(Object.keys(self.NetworkSettings.Networks));
@@ -42,12 +48,23 @@ export class BackupRuntimeService {
           ((socketPaths.includes(own.Destination) && socketPaths.includes(mount.Destination)) ||
             (!mount.RW && ['/etc/localtime', '/etc/timezone'].includes(mount.Destination) && own.Destination === mount.Destination)),
       );
-    const readable = [appDataDir, ...['state', 'apps', 'media', 'repos', 'user-config', 'traefik'].map((part) => path.join(dataDir, part))].flatMap(
-      (root) =>
-        (self.Mounts ?? [])
-          .filter((mount) => mount.Type === 'bind' && below(mount.Destination, root))
-          .map((mount) => path.posix.join(mount.Source, path.posix.relative(mount.Destination, root))),
-    );
+    const physicalRoots = (roots: string[]) =>
+      roots.flatMap((root) => {
+        const mount = (self.Mounts ?? [])
+          .filter((item) => item.Type === 'bind' && below(item.Destination, root))
+          .sort((a, b) => b.Destination.length - a.Destination.length)[0];
+        return mount ? [path.posix.join(mount.Source, path.posix.relative(mount.Destination, root))] : [];
+      });
+    const readable = physicalRoots([
+      appDataDir,
+      ...['state', 'apps', 'media', 'repos', 'user-config', 'traefik']
+        .filter((name) => includeMedia || name !== 'media')
+        .map((part) => path.join(dataDir, part)),
+    ]);
+    const mediaRoots = includeMedia ? [] : physicalRoots([path.join(dataDir, 'media')]);
+    if (mediaRoots.some((media) => readable.some((root) => below(root, media) || below(media, root))))
+      throw new BackupRequirementError('Shared media overlaps application data. Review its storage before creating a backup.');
+    const preservedMedia: NonNullable<BackupRuntimePlan['preservedMedia']> = { roots: [...new Set(mediaRoots)].sort(), bindings: [] };
     for (const info of candidates) {
       const project = info.Labels['com.docker.compose.project'];
       const expectedApp = typeof project === 'string' && projects.includes(project);
@@ -79,6 +96,12 @@ export class BackupRuntimeService {
         // These are the same host runtime endpoints used by this controller,
         // not app data. A read-only socket bind still permits Docker API writes.
         if (runtimeMount(mount)) continue;
+        if (!includeMedia && mount.Type === 'bind' && mediaRoots.some((root) => below(root, mount.Source))) {
+          if (typeof mount.RW !== 'boolean' || !path.posix.isAbsolute(mount.Destination))
+            throw new BackupRequirementError('The shared media mount could not be identified safely.');
+          preservedMedia.bindings.push({ id: inspect.Id, source: mount.Source, destination: mount.Destination, rw: mount.RW });
+          continue;
+        }
         if (mount.Type !== 'bind' || !readable.some((root) => below(root, mount.Source)))
           throw new BackupRequirementError(
             'An app uses a Docker volume or external storage outside Orbis data. Review its storage before creating a full backup.',
@@ -88,12 +111,13 @@ export class BackupRuntimeService {
       images.push({ project, image: inspect.Config.Image });
     }
     if (databases.length !== 1) throw new BackupRequirementError('The configured PostgreSQL container could not be identified safely.');
-    return { databaseId: databases[0] as string, containers, images };
+    preservedMedia.bindings.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+    return { databaseId: databases[0] as string, containers, images, ...(includeMedia ? {} : { preservedMedia }) };
   }
 
   async verifyStopped(plan: BackupRuntimePlan, signal: AbortSignal) {
     signal.throwIfAborted();
-    const current = await this.plan([...new Set(plan.containers.map((item) => item.project))]);
+    const current = await this.plan([...new Set(plan.containers.map((item) => item.project))], plan.preservedMedia === undefined);
     signal.throwIfAborted();
     const identities = (value: BackupRuntimePlan) =>
       JSON.stringify(value.containers.map(({ id, project }) => ({ id, project })).sort((a, b) => a.id.localeCompare(b.id)));
@@ -102,6 +126,7 @@ export class BackupRuntimeService {
       current.databaseId !== plan.databaseId ||
       identities(current) !== identities(plan) ||
       images(current) !== images(plan) ||
+      JSON.stringify(current.preservedMedia) !== JSON.stringify(plan.preservedMedia) ||
       current.containers.some((item) => item.running)
     )
       throw new BackupRequirementError('App, database or writer state changed during the snapshot.');

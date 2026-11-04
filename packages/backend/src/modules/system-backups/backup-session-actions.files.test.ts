@@ -72,7 +72,7 @@ it('creates with the session plus encryption key while the actual archive worker
   Reflect.set(service, 'begin', begin);
   Reflect.set(service, 'transferGrant', vi.fn().mockReturnValue({ ready: new Promise(() => undefined), cancel }));
   await service.startForSession(7, undefined, 'entered encryption key', request);
-  expect(begin).toHaveBeenCalledWith(7, 'entered encryption key');
+  expect(begin).toHaveBeenCalledWith(7, 'entered encryption key', undefined, undefined, false);
   expect(auth.verifySensitiveAction).not.toHaveBeenCalled();
 });
 it('requires opted-in proof and fails closed on policy or session changes before exposing ciphertext', async () => {

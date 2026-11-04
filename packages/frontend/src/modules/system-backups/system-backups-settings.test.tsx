@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
 import { appContextQueryKey } from '@/api-client/@tanstack/react-query.gen';
 import { AppContextProvider } from '@/context/app-context';
-import { startExport } from './backup-api';
+import { BackupApiError, startExport } from './backup-api';
 import { Dialog, retainDialogChildren } from '@/components/ui/Dialog/Dialog';
 import { BackupRetentionSettings } from './backup-retention-settings';
 import { SettingsSaveProvider } from '@/modules/settings/pages/settings-save';
@@ -13,6 +13,10 @@ import { placeBackupRemoval, restoreBackupRemovalFocus } from './backup-removal-
 import type { BackupSnapshot, ExportJob, ImportJob, RestoreJob } from './contracts';
 import {
   BackupDownloadReady,
+  BackupMediaOption,
+  acceptedExportStatusError,
+  exportForDisplay,
+  exportStatusPollingInterval,
   BackupEncryptionFields,
   BackupArchiveKeyFields,
   BackupFormError,
@@ -229,6 +233,14 @@ test('the default encryption choice explains immutable backup passwords and the 
   expect(fallback).toContain('maxLength="1024"');
   expect(fallback).toContain('disabled=""');
 });
+test('media libraries are an explicit unchecked backup choice', () => {
+  const markup = renderToStaticMarkup(<BackupMediaOption checked={false} disabled={false} onChange={() => {}} />);
+  expect(markup).toContain('Include media libraries');
+  expect(markup).toContain('Shared media is excluded unless you select this option.');
+  expect(markup).not.toContain('checked=""');
+  const selected = renderToStaticMarkup(<BackupMediaOption checked disabled={false} onChange={() => {}} />);
+  expect(selected).toContain('checked=""');
+});
 test('new account-encrypted backups use the existing authenticated same-origin export contract without URL or storage changes', async () => {
   const original = globalThis.fetch;
   const calls: { url: unknown; init?: RequestInit }[] = [];
@@ -258,6 +270,8 @@ test('new account-encrypted backups use the existing authenticated same-origin e
     expect(calls[0]?.url).toBe('/api/system-backups/export');
     expect(calls[0]?.init).toMatchObject({ method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error' });
     expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ password, totpCode: '123456', passphrase: password });
+    await startExport({ password, totpCode: '123456' }, password, undefined, true);
+    expect(JSON.parse(String(calls[1]?.init?.body))).toEqual({ password, totpCode: '123456', passphrase: password, includeMedia: true });
   } finally {
     globalThis.fetch = original;
   }
@@ -328,6 +342,42 @@ test('download readiness stays absent for unfinished or failed exports and disab
   expect(markup).toContain('disabled=""');
   expect(markup).toContain('Download');
   expect(markup).not.toContain('password');
+});
+
+test('accepted exports stay visible without a list and authoritative list status takes precedence', () => {
+  const snapshot: BackupSnapshot = {
+    exports: { available: true, retentionHours: 24, jobs: [] },
+    imports: { available: true, retentionHours: 24, jobs: [] },
+    restore: { job: null },
+  };
+  const accepted = { ...completedExport, status: 'running' as const, creationDownloadAvailable: true as const };
+  expect(exportForDisplay(undefined, accepted)).toEqual(accepted);
+  expect(exportForDisplay(snapshot, accepted)).toEqual(accepted);
+  expect(exportStatusPollingInterval(undefined, true, accepted)).toBe(2500);
+  expect(exportStatusPollingInterval(undefined, true, accepted, new BackupApiError(404))).toBe(2500);
+  expect(exportStatusPollingInterval(undefined, true, accepted, new BackupApiError(401))).toBe(false);
+  expect(exportStatusPollingInterval(undefined, false, accepted)).toBe(false);
+  const terminal = { ...snapshot, exports: { ...snapshot.exports, jobs: [{ ...completedExport, status: 'failed' as const }] } };
+  expect(exportForDisplay(terminal, accepted)).toEqual({ ...completedExport, status: 'failed' });
+  expect(exportStatusPollingInterval(terminal, true, accepted)).toBe(30_000);
+  expect(exportForDisplay(undefined, completedExport)).toEqual(completedExport);
+});
+
+test('failed exports explicitly report failure and never offer a download', () => {
+  const failed = { ...completedExport, status: 'failed' as const, message: 'Unsupported app storage.' };
+  const markup = render(null, false, undefined, [], undefined, false, [failed]);
+  expect(markup).toContain('Backup failed. ');
+  expect(markup).toContain('Unsupported app storage.');
+  expect(markup).toContain('role="alert"');
+  expect(markup).not.toContain('>Download</button>');
+});
+
+test('accepted running exports distinguish lost status from backup failure', () => {
+  const running = { ...completedExport, status: 'running' as const };
+  expect(acceptedExportStatusError(new BackupApiError(503), running)).toBe('Backup started. Waiting for its status.');
+  expect(acceptedExportStatusError(new BackupApiError(401), running)).toContain('Sign in again');
+  expect(acceptedExportStatusError(new BackupApiError(503), { ...running, status: 'failed' })).toBeNull();
+  expect(acceptedExportStatusError(new BackupApiError(503), null)).toBeNull();
 });
 
 type SubmitOptions = Parameters<typeof prepareBackupSubmission>[2];

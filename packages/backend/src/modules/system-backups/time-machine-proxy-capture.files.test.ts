@@ -40,6 +40,7 @@ it('defaults to v4 host policy support and pins it inside the capture lease befo
   await expect(runtime.requireSupport(signal, true)).rejects.toMatchObject({ response: { code: 'host-capture-support-required' } });
   expect(host.requireControllerCaptureAuthoritySupport).not.toHaveBeenCalled();
   await runtime.requireSupport(signal);
+  expect(host.requireBackupArchiveSupport).toHaveBeenCalledWith(signal);
   expect(host.requireControllerCaptureAuthoritySupport).toHaveBeenCalledWith(signal, 2);
   expect(host.requireProxyHostIdentity).toHaveBeenCalledWith(signal);
   const operation = runtime.operation('11111111-1111-4111-8111-111111111111', signal, () => undefined);
@@ -53,6 +54,8 @@ it('defaults to v4 host policy support and pins it inside the capture lease befo
   }
   host.requireProxyHostIdentity.mockRejectedValueOnce(new Error('Legacy proxy storage overlaps capture'));
   await expect(runtime.requireSupport(signal)).rejects.toMatchObject({ response: { code: 'proxy-layout-migration-required' } });
+  host.requireBackupArchiveSupport.mockRejectedValueOnce(new HttpException('Helper update required', 503));
+  await expect(runtime.requireSupport(signal)).rejects.toMatchObject({ response: { code: 'host-capture-support-required' } });
 });
 
 it('prepares v6 replica images from the protected runtime before quiescence under the closed support gate', async () => {

@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { type } from 'arktype';
-import { BackupRequirementError } from './backup-files';
+import { BackupRequirementError, resolveBackupLinkPath } from './backup-files';
 import { backupMemberName } from './backup-import';
 import { BackupDatabaseLines } from './backup-docker-exec';
 
@@ -11,13 +11,14 @@ const failed = () => new BackupRequirementError('Restored files no longer match 
 const metadata = type({
   root: 'string',
   name: 'string',
-  kind: "'file' | 'directory'",
+  kind: "'file' | 'directory' | 'symlink'",
   uid: 'number.integer >= 0 & number <= 4294967295',
   gid: 'number.integer >= 0 & number <= 4294967295',
   mode: 'number.integer >= 0 & number <= 511',
   mtime: 'number',
   'bytes?': 'number.integer >= 0',
   'sha256?': type('string').narrow((value) => /^[a-f0-9]{64}$/.test(value)),
+  'target?': 'string',
 }).onUndeclaredKey('reject');
 export type RestoreFileReview = { bytes: number; sha256: string; files: number; directories: number };
 
@@ -49,6 +50,7 @@ async function verifyRestoreFilesInner(options: {
   }
   const source = await fs.open(options.ledger, constants.O_RDONLY | constants.O_NOFOLLOW);
   const names = new Set<string>();
+  const links = new Set<string>();
   let files = 0;
   let directories = 0;
   let pathBytes = 0;
@@ -76,16 +78,18 @@ async function verifyRestoreFilesInner(options: {
       )
         throw failed();
       if (
-        (entry.kind === 'file' && (entry.bytes === undefined || entry.sha256 === undefined)) ||
-        (entry.kind === 'directory' && (entry.bytes !== undefined || entry.sha256 !== undefined))
+        (entry.kind === 'file' && (entry.bytes === undefined || entry.sha256 === undefined || entry.target !== undefined)) ||
+        (entry.kind === 'directory' && (entry.bytes !== undefined || entry.sha256 !== undefined || entry.target !== undefined)) ||
+        (entry.kind === 'symlink' && (entry.root !== 'app-data' || entry.bytes !== undefined || entry.sha256 !== undefined || !entry.target))
       )
         throw failed();
       const key = `${entry.root}/${entry.name}`;
       pathBytes += Buffer.byteLength(key);
       if (names.has(key) || pathBytes > 32 * 1024 * 1024) throw failed();
       names.add(key);
+      if (entry.kind === 'symlink') links.add(key);
       if (selected && !selected.has(key)) {
-        if (entry.kind === 'file') files++;
+        if (entry.kind === 'file' || entry.kind === 'symlink') files++;
         else directories++;
         return;
       }
@@ -94,6 +98,35 @@ async function verifyRestoreFilesInner(options: {
         matched.add(key);
       }
       const target = path.join(options.roots[entry.root] as string, entry.name);
+      if (entry.kind === 'symlink') {
+        const root = options.roots[entry.root] as string;
+        const parent = path.dirname(target);
+        const linkTarget = entry.target as string;
+        const resolved = await resolveBackupLinkPath(root, parent, linkTarget);
+        const stat = await fs.lstat(target);
+        const destination = await fs.lstat(resolved);
+        if (
+          !stat.isSymbolicLink() ||
+          (!destination.isFile() && !destination.isDirectory()) ||
+          stat.uid !== entry.uid ||
+          stat.gid !== entry.gid ||
+          (stat.mode & 0o777) !== entry.mode ||
+          Math.abs(stat.mtimeMs - entry.mtime) > 1 ||
+          (await fs.readlink(target)) !== linkTarget
+        )
+          throw failed();
+        const after = await fs.lstat(target);
+        if (
+          after.dev !== stat.dev ||
+          after.ino !== stat.ino ||
+          after.ctimeMs !== stat.ctimeMs ||
+          after.mtimeMs !== stat.mtimeMs ||
+          (await fs.readlink(target)) !== linkTarget
+        )
+          throw failed();
+        files++;
+        return;
+      }
       if ((await fs.realpath(target)) !== target) throw failed();
       const stat = await fs.lstat(target);
       if (
@@ -167,7 +200,7 @@ async function verifyRestoreFilesInner(options: {
         const relative = name ? `${name}/${child}` : child;
         if (!names.delete(`${root}/${relative}`)) throw failed();
         const stat = await fs.lstat(path.join(directory, child));
-        if (stat.isSymbolicLink() || (!stat.isFile() && !stat.isDirectory())) throw failed();
+        if (stat.isSymbolicLink() ? !links.has(`${root}/${relative}`) : !stat.isFile() && !stat.isDirectory()) throw failed();
         if (stat.isDirectory()) await visit(root, path.join(directory, child), relative);
       }
     };

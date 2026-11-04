@@ -4,7 +4,7 @@ import fs, { type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 import { readTarArchive, type TarEntry } from '@/core/archive/tar-metadata';
 import { gt, valid } from 'semver';
-import { BackupRequirementError, privateBackupDirectory } from './backup-files';
+import { BackupRequirementError, privateBackupDirectory, validateBackupLinks, type BackupLink } from './backup-files';
 import { fullBackupLimits } from './backup-limits';
 import { BackupExtractionBudget } from './backup-extraction-budget';
 
@@ -34,7 +34,6 @@ type FileMetadata = { name: string; bytes: number; sha256: string; mode: number;
 type DirectoryMetadata = Omit<FileMetadata, 'bytes' | 'sha256'>;
 export type FullBackupManifest = {
   format: 'orbis-full-backup';
-  version: 1;
   createdAt: number;
   orbisVersion: string;
   runtipiVersion: string;
@@ -44,10 +43,17 @@ export type FullBackupManifest = {
   containers: { id: string; project: string; running: boolean }[];
   images: { project: string; image: string }[];
   exclusions: string[];
-};
+} & (
+  | { version: 1; mediaPolicy?: never; symlinks?: never; excludedRuntimeSockets?: never }
+  | { version: 2; mediaPolicy: 'included' | 'preserve-destination'; symlinks?: BackupLink[]; excludedRuntimeSockets?: string[] }
+);
+export function backupMediaPolicy(manifest: FullBackupManifest) {
+  return manifest.version === 2 ? manifest.mediaPolicy : 'included';
+}
 export type FullBackupReview = {
   hostIdentityPolicy: 'preserve-destination';
-  formatVersion: 1;
+  formatVersion: 1 | 2;
+  mediaPolicy: 'included' | 'preserve-destination';
   createdAt: number;
   orbisVersion: string;
   runtipiVersion: string;
@@ -96,6 +102,9 @@ export function parseFullBackupManifest(value: unknown): FullBackupManifest {
         ![
           'format',
           'version',
+          'mediaPolicy',
+          'symlinks',
+          'excludedRuntimeSockets',
           'createdAt',
           'orbisVersion',
           'runtipiVersion',
@@ -108,13 +117,22 @@ export function parseFullBackupManifest(value: unknown): FullBackupManifest {
         ].includes(key),
     ) ||
     source.format !== 'orbis-full-backup' ||
-    source.version !== 1 ||
+    ![1, 2].includes(source.version as number) ||
+    (source.version === 1
+      ? ['mediaPolicy', 'symlinks', 'excludedRuntimeSockets'].some((key) => Object.hasOwn(source, key))
+      : typeof source.mediaPolicy !== 'string' || !['included', 'preserve-destination'].includes(source.mediaPolicy)) ||
+    (source.symlinks !== undefined && (!Array.isArray(source.symlinks) || source.symlinks.length > fullBackupLimits.entries)) ||
+    (source.excludedRuntimeSockets !== undefined &&
+      (!Array.isArray(source.excludedRuntimeSockets) ||
+        source.excludedRuntimeSockets.length > fullBackupLimits.entries ||
+        source.excludedRuntimeSockets.some((item) => typeof item !== 'string'))) ||
     !integer(source.createdAt) ||
     !source.createdAt ||
     source.createdAt > 8.64e15 ||
     !boundedString(source.orbisVersion) ||
     !boundedString(source.runtipiVersion) ||
-    !['arm64', 'amd64'].includes(String(source.architecture)) ||
+    typeof source.architecture !== 'string' ||
+    !['arm64', 'amd64'].includes(source.architecture) ||
     !Array.isArray(source.files) ||
     !Array.isArray(source.directories) ||
     source.files.length + source.directories.length > maxEntries ||
@@ -129,6 +147,20 @@ export function parseFullBackupManifest(value: unknown): FullBackupManifest {
     throw invalid();
   for (const item of source.files) metadata(item, true);
   for (const item of source.directories) metadata(item, false);
+  for (const value of (source.symlinks as unknown[] | undefined) ?? []) {
+    const item = record(value);
+    if (
+      Object.keys(item).sort().join(',') !== 'gid,mtime,name,target,uid' ||
+      typeof item.name !== 'string' ||
+      typeof item.target !== 'string' ||
+      !integer(item.uid, 0xffffffff) ||
+      !integer(item.gid, 0xffffffff) ||
+      typeof item.mtime !== 'number' ||
+      !Number.isFinite(item.mtime) ||
+      Math.abs(item.mtime) > 8.64e15
+    )
+      throw invalid();
+  }
   for (const entry of source.containers) {
     const item = record(entry);
     if (
@@ -152,6 +184,13 @@ export function parseFullBackupManifest(value: unknown): FullBackupManifest {
       throw invalid();
   }
   const manifest = source as unknown as FullBackupManifest;
+  if (manifest.version === 2)
+    validateBackupLinks(manifest.symlinks ?? [], manifest.excludedRuntimeSockets ?? [], manifest.files, manifest.directories);
+  if (
+    backupMediaPolicy(manifest) === 'preserve-destination' &&
+    [...manifest.files, ...manifest.directories].some((entry) => entry.name === 'data/media' || entry.name.startsWith('data/media/'))
+  )
+    throw invalid();
   const names = new Set<string>();
   for (const entry of manifest.files) {
     if (names.has(entry.name) || specialFiles.has(entry.name) || !allowedMember(entry.name, '-')) throw invalid();
@@ -306,12 +345,13 @@ export async function inspectFullBackup(options: {
       ) as BackupContentIntegrity,
       review: {
         hostIdentityPolicy: 'preserve-destination',
-        formatVersion: 1,
+        formatVersion: manifest.version,
+        mediaPolicy: backupMediaPolicy(manifest),
         createdAt: manifest.createdAt,
         orbisVersion: manifest.orbisVersion,
         runtipiVersion: manifest.runtipiVersion,
         architecture: manifest.architecture,
-        fileCount: expected.size,
+        fileCount: expected.size + (manifest.symlinks?.length ?? 0),
         appCount: apps.size,
         expandedBytes: completed,
         manifestSha256: members.get('manifest.json')?.sha256 ?? '',

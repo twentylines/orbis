@@ -43,10 +43,11 @@ export class SystemBackupsController {
   start(@Req() request: Request, @Body() body: unknown) {
     const owner = backupOperator(request);
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw new BadRequestException('Enter the backup encryption key.');
-    const { passphrase, ...proof } = body as Record<string, unknown>;
+    const { passphrase, includeMedia = false, ...proof } = body as Record<string, unknown>;
+    if (typeof includeMedia !== 'boolean') throw new BadRequestException('Choose whether to include shared media.');
     if (typeof passphrase !== 'string' || passphrase.length < 8 || !passphrase.trim() || passphrase.length > 1024)
       throw new BadRequestException('Use a backup passphrase between 8 and 1024 characters.');
-    return this.backups.startForSession(owner, optionalBackupCredentials(proof), passphrase, request);
+    return this.backups.startForSession(owner, optionalBackupCredentials(proof), passphrase, request, includeMedia);
   }
   @Post(':id/cancel')
   @HttpCode(200)

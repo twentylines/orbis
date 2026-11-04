@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   materializeBackupSource,
+  restoreTreesForManifest,
   restoreTreeNames,
   type RestoreTreeName,
   type RestoreMaterializeProgress,
@@ -85,6 +86,161 @@ async function run(
     settingsOverride,
   });
 }
+
+it.skipIf(process.platform !== 'linux')('Linux reconstructs a manifest-only link after files and rejects a later link replacement', async () => {
+  const test = await fixture();
+  test.source.manifest = {
+    ...test.source.manifest,
+    version: 2,
+    mediaPolicy: 'included',
+    symlinks: [
+      { name: 'app-data/sub/tool', target: '../document', uid: process.getuid?.() ?? 0, gid: process.getgid?.() ?? 0, mtime: 1_700_000_000_000 },
+    ],
+    excludedRuntimeSockets: ['app-data/service.sock'],
+  };
+  await reseal(test.source);
+  const result = await run(test);
+  const link = path.join(test.roots['app-data'], 'sub/tool');
+  expect(await fs.readlink(link)).toBe('../document');
+  expect(await fs.readFile(link)).toEqual(await fs.readFile(path.join(test.roots['app-data'], 'document')));
+  await expect(fs.lstat(path.join(test.roots['app-data'], 'service.sock'))).rejects.toMatchObject({ code: 'ENOENT' });
+  await verifyRestoreFiles({ roots: test.roots, ledger: test.ledger, expected: result.files, signal: signal() });
+  await fs.unlink(link);
+  await fs.symlink('../empty/zero', link);
+  await expect(verifyRestoreFiles({ roots: test.roots, ledger: test.ledger, expected: result.files, signal: signal() })).rejects.toThrow();
+});
+
+it.skipIf(process.platform !== 'linux')('Linux rejects a replaced parent immediately after creating a staged link', async () => {
+  const test = await fixture();
+  test.source.manifest = {
+    ...test.source.manifest,
+    version: 2,
+    mediaPolicy: 'included',
+    symlinks: [
+      { name: 'app-data/sub/tool', target: '../document', uid: process.getuid?.() ?? 0, gid: process.getgid?.() ?? 0, mtime: 1_700_000_000_000 },
+    ],
+  };
+  await reseal(test.source);
+  const original = fs.symlink.bind(fs);
+  const parent = path.join(test.roots['app-data'], 'sub');
+  vi.spyOn(fs, 'symlink').mockImplementation(async (target, file, type) => {
+    await original(target, file, type);
+    await fs.rename(parent, `${parent}-replaced`);
+    await fs.mkdir(parent, { mode: 0o700 });
+  });
+  await expect(run(test)).rejects.toThrow();
+});
+
+it.skipIf(process.platform !== 'linux').each(['symlink', 'lchown', 'lutimes'] as const)(
+  'Linux keeps outside staging untouched when the parent is replaced before %s',
+  async (operation) => {
+    const test = await fixture();
+    test.source.manifest = {
+      ...test.source.manifest,
+      version: 2,
+      mediaPolicy: 'included',
+      symlinks: [
+        { name: 'app-data/sub/tool', target: '../document', uid: process.getuid?.() ?? 0, gid: process.getgid?.() ?? 0, mtime: 1_700_000_000_000 },
+      ],
+    };
+    await reseal(test.source);
+    const outside = path.join(temporary, 'outside-staging');
+    await fs.mkdir(outside, { mode: 0o700 });
+    await fs.writeFile(path.join(outside, 'keep'), 'outside sentinel');
+    const child = path.join(outside, 'tool');
+    const symlink = fs.symlink.bind(fs);
+    if (operation !== 'symlink') {
+      await symlink('keep', child);
+      await fs.lutimes(child, 10, 10);
+    }
+    const before = operation === 'symlink' ? undefined : await fs.lstat(child);
+    const parent = path.join(test.roots['app-data'], 'sub');
+    const replaceParent = async () => {
+      await fs.rename(parent, `${parent}-held`);
+      await symlink(outside, parent, 'dir');
+    };
+    if (operation === 'symlink') {
+      vi.spyOn(fs, 'symlink').mockImplementation(async (target, file, type) => {
+        await replaceParent();
+        await symlink(target, file, type);
+      });
+    } else if (operation === 'lchown') {
+      const lstat = fs.lstat.bind(fs);
+      let forced = false;
+      vi.spyOn(fs, 'lstat').mockImplementation(async (...args) => {
+        const stat = await lstat(...args);
+        if (!forced && String(args[0]).endsWith('/tool') && String(args[0]) !== child && stat.isSymbolicLink()) {
+          forced = true;
+          return Object.assign(Object.create(Object.getPrototypeOf(stat)), stat, { uid: Number(stat.uid) + 1 });
+        }
+        return stat;
+      });
+      const lchown = fs.lchown.bind(fs);
+      vi.spyOn(fs, 'lchown').mockImplementation(async (...args) => {
+        await replaceParent();
+        await lchown(...args);
+      });
+    } else {
+      const lutimes = fs.lutimes.bind(fs);
+      vi.spyOn(fs, 'lutimes').mockImplementation(async (...args) => {
+        await replaceParent();
+        await lutimes(...args);
+      });
+    }
+    await expect(run(test)).rejects.toThrow();
+    expect(await fs.readFile(path.join(outside, 'keep'), 'utf8')).toBe('outside sentinel');
+    if (before) {
+      const after = await fs.lstat(child);
+      expect({ uid: after.uid, gid: after.gid, mtime: after.mtimeMs, ctime: after.ctimeMs }).toEqual({
+        uid: before.uid,
+        gid: before.gid,
+        mtime: before.mtimeMs,
+        ctime: before.ctimeMs,
+      });
+      expect(await fs.readlink(child)).toBe('keep');
+    } else await expect(fs.lstat(child)).rejects.toMatchObject({ code: 'ENOENT' });
+  },
+);
+
+it.skipIf(process.platform === 'linux')('fails closed for link reconstruction without a Linux descriptor root', async () => {
+  const test = await fixture();
+  test.source.manifest = {
+    ...test.source.manifest,
+    version: 2,
+    mediaPolicy: 'included',
+    symlinks: [
+      { name: 'app-data/sub/tool', target: '../document', uid: process.getuid?.() ?? 0, gid: process.getgid?.() ?? 0, mtime: 1_700_000_000_000 },
+    ],
+  };
+  await reseal(test.source);
+  const create = vi.spyOn(fs, 'symlink');
+  await expect(run(test)).rejects.toThrow();
+  expect(create).not.toHaveBeenCalled();
+  await expect(fs.lstat(path.join(test.roots['app-data'], 'sub/tool'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it('preserves existing destination media without materializing or accounting an empty replacement', async () => {
+  const test = await fixture();
+  expect(restoreTreesForManifest(test.source.manifest)).toContain('media');
+  await fs.rm(path.join(test.source.content, 'data/media'), { recursive: true });
+  test.source.manifest = {
+    ...test.source.manifest,
+    version: 2,
+    mediaPolicy: 'preserve-destination',
+    directories: test.source.manifest.directories.filter((item) => item.name !== 'data/media'),
+  };
+  await reseal(test.source);
+  const library = path.join(test.roots.media, 'destination-movie.mkv');
+  await fs.writeFile(library, 'valuable destination media');
+  const before = await fs.stat(library);
+  const result = await run(test);
+  expect(await fs.readFile(library, 'utf8')).toBe('valuable destination media');
+  expect((await fs.stat(library)).ino).toBe(before.ino);
+  expect(await fs.readdir(test.roots.media)).toEqual(['destination-movie.mkv']);
+  expect(await fs.readFile(test.ledger, 'utf8')).not.toContain('"root":"media"');
+  const roots = Object.fromEntries(restoreTreesForManifest(test.source.manifest).map((name) => [name, test.roots[name]]));
+  await verifyRestoreFiles({ roots, ledger: test.ledger, expected: result.files, signal: signal() });
+});
 
 it('verifies captured proxy bytes without writing into the live proxy tree when preservation is authorized', async () => {
   const test = await fixture();

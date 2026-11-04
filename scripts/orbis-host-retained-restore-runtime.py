@@ -765,8 +765,7 @@ class DockerRestoreRuntime:
                         or identity['platform'] != selected['platform']): raise fail()
             elif identity['kind'] != 'docker' or identity['configId'] != selected['creationReference']:
                 raise fail()
-        if (not isinstance(manifest, dict) or manifest.get('format') != 'orbis-full-backup'
-                or type(manifest.get('version')) is not int or manifest['version'] != 1): raise fail()
+        restore_data_roots(manifest)
         files = manifest.get('files')
         if not isinstance(files, list) or len(files) > 250000: raise fail()
         by_name = {}

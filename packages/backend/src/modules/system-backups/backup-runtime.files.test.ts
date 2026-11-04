@@ -71,7 +71,12 @@ it.each(['stderr', 'exit', 'truncated', 'wrong-format'] as const)('refuses an in
   }
 });
 
-function planFixture(extraMount?: { Type: string; Source: string; Destination: string; RW: boolean }, dbNetwork = 'private', running = true) {
+function planFixture(
+  extraMount?: { Type: string; Source: string; Destination: string; RW: boolean },
+  dbNetwork = 'private',
+  running = true,
+  externalMount?: { Type: string; Source: string; Destination: string; RW: boolean },
+) {
   const self = {
     Id: 'controller',
     Mounts: [
@@ -98,12 +103,18 @@ function planFixture(extraMount?: { Type: string; Source: string; Destination: s
     NetworkSettings: { Networks: { [dbNetwork]: { Aliases: ['database'] } } },
     Mounts: [],
   };
+  const external = { ...app, Id: 'external', Config: { ...app.Config, Labels: { 'com.docker.compose.project': 'other' } }, Mounts: [externalMount] };
   const docker = {
-    getContainer: vi.fn((id: string) => ({ inspect: async () => (id === os.hostname() ? self : id === 'app' ? app : db) })),
-    listContainers: vi.fn().mockResolvedValue([
-      { Id: 'app', Labels: app.Config.Labels },
-      { Id: 'database', Labels: {} },
-    ]),
+    getContainer: vi.fn((id: string) => ({
+      inspect: async () => (id === os.hostname() ? self : id === 'app' ? app : id === 'external' ? external : db),
+    })),
+    listContainers: vi
+      .fn()
+      .mockResolvedValue([
+        { Id: 'app', Labels: app.Config.Labels },
+        { Id: 'database', Labels: {} },
+        ...(externalMount ? [{ Id: 'external', Labels: external.Config.Labels }] : []),
+      ]),
   } as unknown as Dockerode;
   return new BackupRuntimeService(config, docker);
 }
@@ -112,6 +123,34 @@ it('maps only data roots that the export actually includes', async () => {
   await expect(
     planFixture({ Type: 'bind', Source: '/host/runtime/data/backups', Destination: '/data', RW: true }).plan(['fixture_store']),
   ).rejects.toThrow('external storage');
+});
+
+it('pins only explicitly preserved media binds while rejecting other uncaptured storage', async () => {
+  const mount = { Type: 'bind', Source: '/host/runtime/data/media/movies', Destination: '/movies', RW: true };
+  const runtime = planFixture(mount, 'private', false);
+  const plan = await runtime.plan(['fixture_store'], false);
+  expect(plan.preservedMedia).toEqual({
+    roots: ['/host/runtime/data/media'],
+    bindings: [{ id: 'app', source: mount.Source, destination: '/movies', rw: true }],
+  });
+  await expect(runtime.verifyStopped(plan, new AbortController().signal)).resolves.toHaveLength(1);
+  mount.Source = '/host/runtime/data/media/another-library';
+  await expect(runtime.verifyStopped(plan, new AbortController().signal)).rejects.toThrow('changed');
+  await expect(
+    planFixture({ Type: 'bind', Source: '/unrelated/media', Destination: '/movies', RW: true }).plan(['fixture_store'], false),
+  ).rejects.toThrow('external storage');
+  await expect(planFixture({ Type: 'volume', Source: '/volume', Destination: '/movies', RW: true }).plan(['fixture_store'], false)).rejects.toThrow(
+    'Docker volume',
+  );
+});
+
+it('does not classify a media-only writer as captured while retaining the app-data writer guard', async () => {
+  const media = { Type: 'bind', Source: '/host/runtime/data/media', Destination: '/library', RW: true };
+  await expect(planFixture(undefined, 'private', true, media).plan(['fixture_store'], false)).resolves.toBeDefined();
+  await expect(planFixture(undefined, 'private', true, media).plan(['fixture_store'], true)).rejects.toThrow('Another container');
+  await expect(
+    planFixture(undefined, 'private', true, { ...media, Source: '/host/runtime/app-data' }).plan(['fixture_store'], false),
+  ).rejects.toThrow('Another container');
 });
 it('refuses Docker volumes and a database from a different network', async () => {
   await expect(planFixture({ Type: 'volume', Source: '/volume', Destination: '/data', RW: true }).plan(['fixture_store'])).rejects.toThrow(

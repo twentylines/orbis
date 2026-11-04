@@ -8,12 +8,19 @@ import { settingsSchema } from '@/app.dto';
 import { BackupRequirementError } from './backup-files';
 import { BackupExtractionBudget } from './backup-extraction-budget';
 import { fullBackupLimits } from './backup-limits';
+import { createAnchoredBackupLink } from './backup-link-anchor';
 import { validateBackupSource, type BackupSourceSeal } from './backup-restore-source';
 import type { RestoreFileReview } from './backup-restore-files';
 import { preservesRestoreHostPath, readRestoreHostIdentity, type RestoreHostIdentitySeal } from './backup-restore-host-identity';
+import { backupMediaPolicy, type FullBackupManifest } from './backup-import';
 
 export const restoreTreeNames = ['state', 'apps', 'repos', 'media', 'user-config', 'traefik', 'app-data'] as const;
 export type RestoreTreeName = (typeof restoreTreeNames)[number];
+export function restoreTreesForManifest(manifest: FullBackupManifest, preserveLiveProxy = false) {
+  return restoreTreeNames.filter(
+    (name) => (!preserveLiveProxy || name !== 'traefik') && (backupMediaPolicy(manifest) === 'included' || name !== 'media'),
+  );
+}
 export type RestoreSettingsOverride = {
   original: { bytes: number; sha256: string };
   replacement: Uint8Array;
@@ -83,7 +90,7 @@ async function capacity(
   ledger: string,
   files: { name: string; bytes: number }[],
   directories: { name: string }[],
-  preserveLiveProxy = false,
+  activeRoots: readonly RestoreTreeName[],
 ) {
   const volumes = new Map<bigint, { directory: string; bytes: bigint; inodes: bigint; block: bigint }>();
   const volume = async (directory: string) => {
@@ -98,7 +105,7 @@ async function capacity(
     return item;
   };
   const byRoot = new Map<RestoreTreeName, Awaited<ReturnType<typeof volume>>>();
-  for (const name of restoreTreeNames) if (!preserveLiveProxy || name !== 'traefik') byRoot.set(name, await volume(roots[name]));
+  for (const name of activeRoots) byRoot.set(name, await volume(roots[name]));
   for (const entry of files) {
     if (entry.name === 'data/.env') continue;
     const item = byRoot.get(locate(entry.name).root);
@@ -149,6 +156,7 @@ export async function materializeBackupSource(options: {
       ? await readRestoreHostIdentity(options.hostIdentity.directory, options.hostIdentity.id, options.hostIdentity.seal)
       : undefined;
     const source = await validateBackupSource(options);
+    const activeRoots = restoreTreesForManifest(source.manifest, options.preserveLiveProxy);
     const sourceSettings = source.manifest.files.find((entry) => entry.name === settingsName);
     if (override && (!sourceSettings || sourceSettings.bytes !== override.original.bytes || sourceSettings.sha256 !== override.original.sha256))
       throw failed();
@@ -157,19 +165,21 @@ export async function materializeBackupSource(options: {
     if (!path.isAbsolute(options.ledger) || path.resolve(options.ledger) !== options.ledger || inside(source.directory, options.ledger))
       throw failed();
     await privateDirectory(path.dirname(options.ledger));
-    const targets = restoreTreeNames.filter((name) => !options.preserveLiveProxy || name !== 'traefik').map((name) => roots[name]);
+    const targets = activeRoots.map((name) => roots[name]);
+    const preservedRoots = restoreTreeNames.filter((name) => !activeRoots.includes(name)).map((name) => roots[name]);
     for (const directory of targets) {
       await privateDirectory(directory);
       if (
         inside(source.directory, directory) ||
         inside(directory, source.directory) ||
         inside(directory, options.ledger) ||
+        preservedRoots.some((other) => inside(other, directory) || inside(directory, other)) ||
         targets.some((other) => other !== directory && (inside(other, directory) || inside(directory, other))) ||
         (await fs.readdir(directory)).length
       )
         throw failed();
     }
-    if (new Set(targets).size !== restoreTreeNames.length - (options.preserveLiveProxy ? 1 : 0)) throw failed();
+    if (new Set(targets).size !== activeRoots.length) throw failed();
     const environment = source.manifest.files.find((entry) => entry.name === 'data/.env');
     if (!environment || !source.manifest.files.some((entry) => entry.name === 'data/state/seed')) throw failed();
     const pinRoot = 'data/state/time-machine/image-pins';
@@ -215,6 +225,7 @@ export async function materializeBackupSource(options: {
       ),
       ...(preserved?.directories.filter((entry) => !options.preserveLiveProxy || entry.root !== 'traefik') ?? []),
     ];
+    const links = source.manifest.version === 2 ? (source.manifest.symlinks ?? []) : [];
     if (generatedPins?.length) {
       const uid = process.getuid?.() ?? 0;
       const gid = process.getgid?.() ?? 0;
@@ -231,7 +242,7 @@ export async function materializeBackupSource(options: {
     }
     if (
       inputFiles.filter((entry) => !entry.omitOutput && entry.name !== 'data/.env').length +
-        (effectiveDirectories.filter((entry) => locate(entry.name).relative).length + (generatedPins?.length ?? 0)) >
+        (effectiveDirectories.filter((entry) => locate(entry.name).relative).length + (generatedPins?.length ?? 0) + links.length) >
       fullBackupLimits.entries
     )
       throw failed();
@@ -246,21 +257,21 @@ export async function materializeBackupSource(options: {
           name: entry.name,
           bytes: override && entry.name === settingsName ? override.replacement.length : entry.bytes,
         }))
-        .concat((generatedPins ?? []).map((entry) => ({ name: `${pinRoot}/${entry.name}`, bytes: entry.data.length }))),
+        .concat((generatedPins ?? []).map((entry) => ({ name: `${pinRoot}/${entry.name}`, bytes: entry.data.length })))
+        .concat(links.map((entry) => ({ name: entry.name, bytes: Buffer.byteLength(entry.target) }))),
       [...effectiveDirectories],
-      options.preserveLiveProxy,
+      activeRoots,
     );
-    const budgets = Object.fromEntries(
-      restoreTreeNames
-        .filter((name) => !options.preserveLiveProxy || name !== 'traefik')
-        .map((name) => [name, new BackupExtractionBudget(roots[name])]),
-    ) as Record<RestoreTreeName, BackupExtractionBudget>;
+    const budgets = Object.fromEntries(activeRoots.map((name) => [name, new BackupExtractionBudget(roots[name])])) as Record<
+      RestoreTreeName,
+      BackupExtractionBudget
+    >;
     const progress: RestoreMaterializeProgress = {
       stage: 'copying',
       completedBytes: 0,
       totalBytes,
       files: 0,
-      totalFiles: inputFiles.length,
+      totalFiles: inputFiles.length + links.length,
       directories: 0,
       totalDirectories: effectiveDirectories.filter((entry) => locate(entry.name).relative).length,
     };
@@ -399,6 +410,34 @@ export async function materializeBackupSource(options: {
           sha256: createHash('sha256').update(entry.data).digest('hex'),
         });
         review.files++;
+      }
+      for (const entry of links) {
+        signal.throwIfAborted();
+        const destination = locate(entry.name);
+        if (destination.root !== 'app-data' || !destination.relative) throw failed();
+        await budgets[destination.root].reserve(destination.relative, 'l', Buffer.byteLength(entry.target));
+        const after = await createAnchoredBackupLink({
+          root: roots[destination.root],
+          relative: destination.relative,
+          target: entry.target,
+          uid: entry.uid,
+          gid: entry.gid,
+          mtime: entry.mtime,
+          signal,
+        });
+        await writeEntry({
+          root: destination.root,
+          name: destination.relative,
+          kind: 'symlink',
+          uid: entry.uid,
+          gid: entry.gid,
+          mode: after.mode & 0o777,
+          mtime: entry.mtime,
+          target: entry.target,
+        });
+        review.files++;
+        progress.files++;
+        options.progress({ ...progress });
       }
       progress.stage = 'metadata';
       options.progress({ ...progress });

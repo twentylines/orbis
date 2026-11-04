@@ -1,20 +1,27 @@
+import { stabilizeDarwinFixtureCreation, stabilizeExistingDarwinFixtures } from './darwin-files.fixture';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { copyBackupFiles, inventoryBackup, packageBackup, privateBackupDirectory, type BackupProgress } from './backup-files';
 import { decryptBackup } from './backup-crypto';
+import { readTarArchive } from '@/core/archive/tar-metadata';
 import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:net';
 
 let root: string;
+let restoreDarwinCreation: () => void = () => undefined;
 const command = promisify(execFile);
 const signal = () => new AbortController().signal;
 beforeEach(async () => {
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-export-files-')));
+  restoreDarwinCreation = stabilizeDarwinFixtureCreation(() => root);
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
+  restoreDarwinCreation();
   await fs.rm(root, { recursive: true, force: true });
 });
 
@@ -23,6 +30,7 @@ it('round-trips nested app data, an empty directory and private configuration wi
   await fs.mkdir(path.join(source, 'empty'), { recursive: true });
   await fs.writeFile(path.join(source, 'data.bin'), Buffer.alloc(1024 * 1024, 31), { mode: 0o640 });
   await fs.writeFile(path.join(source, '.private-config'), 'disposable fixture configuration', { mode: 0o600 });
+  stabilizeExistingDarwinFixtures(source);
   const inventory = await inventoryBackup([{ name: 'app-data', source, required: true }], signal());
   const content = path.join(root, 'content');
   await fs.mkdir(content, { mode: 0o700 });
@@ -32,6 +40,12 @@ it('round-trips nested app data, an empty directory and private configuration wi
   expect(files.find((file) => file.name.endsWith('data.bin'))?.mode).toBe(0o640);
   expect(progress.at(-1)?.completedBytes).toBe(inventory.totalBytes);
   expect(progress.map((value) => value.completedBytes)).toEqual(progress.map((value) => value.completedBytes).sort((a, b) => a - b));
+  if (process.platform === 'darwin')
+    await command('/usr/bin/python3', [
+      '-c',
+      'import os,sys; p=sys.argv[1]; s=os.lstat(p); os.chflags(p,s.st_flags|0x40|0x8000,follow_symlinks=False)',
+      path.join(content, 'app-data', 'data.bin'),
+    ]);
   const encrypted = await packageBackup({
     directory: root,
     content,
@@ -41,7 +55,14 @@ it('round-trips nested app data, an empty directory and private configuration wi
   });
   expect((await fs.stat(encrypted)).mode & 0o777).toBe(0o600);
   const archive = path.join(root, 'restored.tar.gz');
+  if (process.platform === 'darwin')
+    await command('/usr/bin/python3', [
+      '-c',
+      'import os,sys; s=os.lstat(sys.argv[1]); os.chflags(sys.argv[1],s.st_flags|0x40|0x8000,follow_symlinks=False)',
+      encrypted,
+    ]);
   await decryptBackup({ source: encrypted, destination: archive, passphrase: 'disposable-export-passphrase' });
+  expect((await readTarArchive(archive, true, signal(), { strict: true })).some((entry) => entry.path.endsWith('data.bin'))).toBe(true);
   const restored = path.join(root, 'restored');
   await fs.mkdir(restored);
   await command('tar', ['-xzf', archive, '-C', restored]);
@@ -55,6 +76,41 @@ it('refuses a symbolic link instead of following it into another directory', asy
   await fs.writeFile(path.join(root, 'outside'), 'private fixture');
   await fs.symlink('../outside', path.join(root, 'source', 'link'));
   await expect(inventoryBackup([{ name: 'app-data', source: path.join(root, 'source') }], signal())).rejects.toThrow('links or special files');
+});
+
+it('records safe app-data links and sockets without copying or following them, and refuses replacement', async () => {
+  const source = path.join(root, 'source');
+  await fs.mkdir(path.join(source, 'bin'), { recursive: true });
+  await fs.writeFile(path.join(source, 'tool'), 'fixture');
+  await fs.symlink('../tool', path.join(source, 'bin', 'tool'));
+  const server = createServer();
+  const previous = process.cwd();
+  process.chdir(source);
+  try {
+    await new Promise<void>((resolve, reject) => server.once('error', reject).listen('s', resolve));
+    const inventory = await inventoryBackup([{ name: 'app-data', source }], signal(), [], { allowAppDataLinksAndSockets: true });
+    expect(inventory.symlinks).toMatchObject([{ name: 'app-data/bin/tool', target: '../tool' }]);
+    expect(inventory.excludedRuntimeSockets).toEqual(['app-data/s']);
+    const content = path.join(root, 'content');
+    await fs.mkdir(content);
+    await copyBackupFiles(inventory, content, signal(), () => undefined);
+    await expect(fs.lstat(path.join(content, 'app-data/bin/tool'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await fs.unlink(path.join(source, 'bin', 'tool'));
+    await fs.symlink('../tool', path.join(source, 'bin', 'tool'));
+    await expect(copyBackupFiles(inventory, content, signal(), () => undefined)).rejects.toThrow('source changed');
+  } finally {
+    if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
+    process.chdir(previous);
+  }
+});
+
+it.each(['/etc/passwd', '../../outside', '../missing', '../second'])('rejects unsafe, missing and chained link target %s', async (target) => {
+  const source = path.join(root, 'source');
+  await fs.mkdir(path.join(source, 'bin'), { recursive: true });
+  await fs.writeFile(path.join(source, 'tool'), 'fixture');
+  await fs.symlink('tool', path.join(source, 'second'));
+  await fs.symlink(target, path.join(source, 'bin', 'link'));
+  await expect(inventoryBackup([{ name: 'app-data', source }], signal(), [], { allowAppDataLinksAndSockets: true })).rejects.toThrow();
 });
 
 it('excludes host reset intent and exact preference staging while retaining ordinary app data', async () => {

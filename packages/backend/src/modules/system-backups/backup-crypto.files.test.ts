@@ -6,7 +6,32 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { Readable } from 'node:stream';
-import { backupGcmPlaintextLimit, encryptBackupStream, BackupArchiveError, decryptBackup, encryptBackup, backupMetadataBytes } from './backup-crypto';
+import {
+  backupGcmPlaintextLimit,
+  encryptBackupStream,
+  BackupArchiveError,
+  decryptBackup as decryptBackupFile,
+  encryptBackup as encryptBackupFile,
+  backupMetadataBytes,
+} from './backup-crypto';
+
+function initializeDarwinInput(file: string) {
+  if (process.platform !== 'darwin') return;
+  // Set fixture flags before production seals; macOS otherwise changes ctime during read-only opens.
+  execFileSync('/usr/bin/python3', [
+    '-c',
+    'import os,stat,sys\ntry: s=os.lstat(sys.argv[1])\nexcept FileNotFoundError: sys.exit(0)\nif stat.S_ISREG(s.st_mode): os.chflags(sys.argv[1],s.st_flags|0x40|0x8000,follow_symlinks=False)',
+    file,
+  ]);
+}
+function encryptBackup(options: Parameters<typeof encryptBackupFile>[0]) {
+  initializeDarwinInput(options.source);
+  return encryptBackupFile(options);
+}
+function decryptBackup(options: Parameters<typeof decryptBackupFile>[0]) {
+  initializeDarwinInput(options.source);
+  return decryptBackupFile(options);
+}
 
 const passphrase = 'disposable-backup-passphrase';
 let directory: string;
@@ -133,14 +158,6 @@ it.each(['', 'x'.repeat(7), ' '.repeat(20), 'x'.repeat(1025)])('rejects an unusa
 it.each(['12345678', ' abcdefg', 'existing-long-archive-key'])('round-trips file and metadata with an accepted key', async (key) => {
   const input = await fs.readFile(source);
   await encryptBackup({ source, destination: archive, passphrase: key });
-  if (process.platform === 'darwin') {
-    // Initialize the fixture's macOS tracking flag before the production input seal is taken.
-    execFileSync('/usr/bin/python3', [
-      '-c',
-      'import os,sys; s=os.lstat(sys.argv[1]); os.chflags(sys.argv[1],s.st_flags|64,follow_symlinks=False)',
-      archive,
-    ]);
-  }
   await decryptBackup({ source: archive, destination: restored, passphrase: key });
   expect(await fs.readFile(restored)).toEqual(input);
   const encrypted = await backupMetadataBytes(input, key, false);

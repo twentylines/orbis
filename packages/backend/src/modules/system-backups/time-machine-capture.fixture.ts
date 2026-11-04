@@ -266,6 +266,7 @@ export async function connectedCaptureFixture(data: string, config: unknown) {
   const host = Object.assign(hostRead, {
     requireControllerCaptureFenceSupport: vi.fn(async () => undefined),
     requireControllerCaptureAuthoritySupport: vi.fn(async () => undefined),
+    requireBackupArchiveSupport: vi.fn(async () => undefined),
     requireV6CaptureCapability: vi.fn(async () => {
       throw new HttpException('Unsupported', 404);
     }),

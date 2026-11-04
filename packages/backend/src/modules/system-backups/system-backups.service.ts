@@ -335,15 +335,21 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       return next;
     });
   }
-  async start(ownerId: number, credentials: { password: string; totpCode?: string }, passphrase: string) {
+  async start(ownerId: number, credentials: { password: string; totpCode?: string }, passphrase: string, includeMedia = false) {
     await this.initialize();
     await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
-    return this.begin(ownerId, passphrase);
+    return this.begin(ownerId, passphrase, undefined, undefined, includeMedia);
   }
-  async startForSession(ownerId: number, credentials: { password: string; totpCode?: string } | undefined, passphrase: string, request: Request) {
+  async startForSession(
+    ownerId: number,
+    credentials: { password: string; totpCode?: string } | undefined,
+    passphrase: string,
+    request: Request,
+    includeMedia = false,
+  ) {
     await this.initialize();
     const actor = await authorizeBackupActionSession(this.auth, this.backupSecurity, request, ownerId, credentials);
-    const job = await this.begin(ownerId, passphrase);
+    const job = await this.begin(ownerId, passphrase, undefined, undefined, includeMedia);
     const expiresAt = Date.now() + 60 * 60_000;
     const grant = this.transferGrant(ownerId, job.id, randomUUID(), expiresAt, false);
     const approval: CreationDownload = { actor, policyRevision: actor.revision, grant, ready: false, expiresAt };
@@ -382,8 +388,15 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private async begin(ownerId: number, passphrase: string, snapshot?: (value: LocalBackupSnapshot) => Promise<void>, hooks?: LocalCaptureHooks) {
+  private async begin(
+    ownerId: number,
+    passphrase: string,
+    snapshot?: (value: LocalBackupSnapshot) => Promise<void>,
+    hooks?: LocalCaptureHooks,
+    includeMedia = false,
+  ) {
     this.assertAvailable();
+    if (typeof includeMedia !== 'boolean') throw new BadRequestException('Choose whether to include shared media.');
     if (typeof passphrase !== 'string' || passphrase.length < 8 || !passphrase.trim() || passphrase.length > 1024)
       throw new BadRequestException(new BackupArchiveError('passphrase').message);
     if (this.active || [...this.jobs.values()].some((job) => job.resumePending.length || job.restartRequired))
@@ -418,7 +431,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       } finally {
         await parent.close();
       }
-      this.active.done = this.export(job, passphrase, abort.signal, snapshot, hooks).finally(() => {
+      this.active.done = this.export(job, passphrase, abort.signal, snapshot, hooks, includeMedia).finally(() => {
         this.active = undefined;
       });
       return safeJob(job);
@@ -433,6 +446,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
     signal: AbortSignal,
     snapshot?: (value: LocalBackupSnapshot) => Promise<void>,
     hooks?: LocalCaptureHooks,
+    includeMedia = false,
   ) {
     let release: (() => void) | undefined;
     let releaseDisk: (() => void) | undefined;
@@ -456,7 +470,19 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       const restore = await BackupRestoreJournal.active(restoreStore);
       const expectedRoots = Object.fromEntries(dataRoots.map((name) => [name, path.join(this.config.get('directories').dataDir, name)]));
       expectedRoots['app-data'] = this.config.get('directories').appDataDir;
-      const excludedDirectories = restore ? await restore.backupExclusions(expectedRoots) : [];
+      const selectedDataRoots = dataRoots.filter((name) => includeMedia || name !== 'media');
+      if (!includeMedia) {
+        try {
+          const media = await fs.lstat(expectedRoots.media as string);
+          if (!media.isDirectory() || media.isSymbolicLink() || (await fs.realpath(expectedRoots.media as string)) !== expectedRoots.media)
+            throw new BackupRequirementError('Shared media uses a link or unsupported path. Review its storage before creating a backup.');
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
+      }
+      const excludedDirectories = (restore ? await restore.backupExclusions(expectedRoots) : []).filter(
+        (directory) => includeMedia || path.dirname(directory) !== expectedRoots.media,
+      );
       if ((await this.tasks.read()).tasks.some((task) => ['queued', 'running', 'unconfirmed'].includes(task.status)))
         throw new BackupRequirementError('Wait for app tasks to finish before creating a full backup.');
       if (hooks) await hooks.hostPreflight(signal);
@@ -469,7 +495,10 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       const apps = await this.apps.getApps();
       if (apps.some((app) => !['running', 'stopped', 'missing'].includes(app.status)))
         throw new BackupRequirementError('Wait for apps to reach a stable state before creating a full backup.');
-      const plan = await this.runtime.plan(apps.map((app) => `${app.appName}_${app.appStoreSlug}`));
+      const plan = await this.runtime.plan(
+        apps.map((app) => `${app.appName}_${app.appStoreSlug}`),
+        includeMedia,
+      );
       if (
         apps.some(
           (app) => app.status === 'running' && !plan.containers.some((container) => container.project === `${app.appName}_${app.appStoreSlug}`),
@@ -477,7 +506,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       )
         throw new BackupRequirementError('A running app could not be identified in Docker. Refresh its status before creating a full backup.');
       const roots = [
-        ...dataRoots.map((name) => ({
+        ...selectedDataRoots.map((name) => ({
           name: `data/${name}`,
           source: path.join(this.config.get('directories').dataDir, name),
           required: name === 'state',
@@ -486,7 +515,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
         { name: 'app-data', source: this.config.get('directories').appDataDir, required: apps.length > 0 },
       ];
       stage('inventory', 'Checking files and available storage.');
-      const estimate = await inventoryBackup(roots, signal, excludedDirectories);
+      const estimate = await inventoryBackup(roots, signal, excludedDirectories, { allowAppDataLinksAndSockets: true });
       const size = await this.database.execute(sql`select pg_database_size(current_database())::text as bytes`);
       const databaseBytes = Number(size.rows[0]?.bytes);
       if (!Number.isSafeInteger(databaseBytes) || databaseBytes < 0) throw new BackupRequirementError('Database backup size could not be checked.');
@@ -516,7 +545,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       });
       const databaseSeal = hooks ? await hashCaptureSnapshotFile(path.join(content, 'database.dump'), signal) : undefined;
       stage('inventory', 'Checking the stopped apps’ data.');
-      const inventory = await inventoryBackup(roots, signal, excludedDirectories);
+      const inventory = await inventoryBackup(roots, signal, excludedDirectories, { allowAppDataLinksAndSockets: true });
       const files = await copyBackupFiles(inventory, content, signal, (value) => Object.assign(job, value));
       await fs.writeFile(
         path.join(content, 'recovery.json'),
@@ -525,13 +554,16 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       );
       const manifest = JSON.stringify({
         format: 'orbis-full-backup',
-        version: 1,
+        version: 2,
+        mediaPolicy: includeMedia ? 'included' : 'preserve-destination',
         createdAt: job.createdAt,
         orbisVersion: process.env.ORBIS_VERSION ?? 'development',
         runtipiVersion: this.config.get('version'),
         architecture: this.config.get('architecture'),
         files,
         directories: inventory.directories,
+        symlinks: inventory.symlinks,
+        excludedRuntimeSockets: inventory.excludedRuntimeSockets,
         containers: plan.containers,
         images: plan.images,
         exclusions: ['logs', 'cache', 'previous-backups', 'container-images', 'restore-recovery-files'],

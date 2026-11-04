@@ -176,10 +176,15 @@ export async function readBackups(signal?: AbortSignal): Promise<BackupSnapshot>
     restore: parseBackupResponse(restoreStatusSchema, restore),
   };
 }
-export async function startExport(credentials: BackupCredentials, passphrase: string, signal?: AbortSignal) {
+export async function startExport(credentials: BackupCredentials, passphrase: string, signal?: AbortSignal, includeMedia = false) {
   return parseBackupResponse(
     exportJobSchema,
-    await backupRequest('/export', 'POST', { ...(credentials.password ? credentials : {}), passphrase }, signal),
+    await backupRequest(
+      '/export',
+      'POST',
+      { ...(credentials.password ? credentials : {}), passphrase, ...(includeMedia ? { includeMedia: true } : {}) },
+      signal,
+    ),
   );
 }
 export async function createImport(signal?: AbortSignal) {

@@ -15,7 +15,8 @@ import { writeRestoreBootstrap } from './backup-restore-bootstrap';
 import { BackupRestoreDockerRuntime, snapshotRestoreContainer, type RestoreRuntimeIdentity } from './backup-restore-runtime';
 import { restoreTargetEnvironmentDigest, type RestorePreparationRuntime } from './backup-restore-preparation';
 import { restoreTreeNames } from './backup-restore-materialize';
-import type { BackupSourceSeal } from './backup-restore-source';
+import { validateBackupSource, type BackupSourceSeal } from './backup-restore-source';
+import { backupMediaPolicy } from './backup-import';
 
 const failed = () => new BackupRequirementError('Restore preparation could not finish. Your server data and backup have been preserved.');
 const neverStarted = (value: Dockerode.ContainerInspectInfo) =>
@@ -179,6 +180,12 @@ export async function prepareRestoreHandoff(options: RestoreHandoffOptions) {
       claimedSignal.throwIfAborted();
       signal.throwIfAborted();
       if ((await restoreTargetEnvironmentDigest(environment, options)) !== environmentSha256) throw failed();
+      const approved = await validateBackupSource({
+        directory: path.join((journal as BackupRestoreJournal).directory, 'source', 'payload'),
+        expected: source.seal,
+        signal: claimedSignal,
+      });
+      if (backupMediaPolicy(approved.manifest) === 'preserve-destination') await (journal as BackupRestoreJournal).preserveMediaDuringStaging();
       await writeRestoreBootstrap(journal as BackupRestoreJournal, {
         version: 1,
         ownerId: options.ownerId,

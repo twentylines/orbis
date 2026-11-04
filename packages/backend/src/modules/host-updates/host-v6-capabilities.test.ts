@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { canonicalPublicationJson } from './host-controller-publication';
-import { decodeCaptureV6Capability, decodeRestoreV6Capability } from './host-v6-capabilities';
+import { decodeBackupArchiveCapability, decodeCaptureV6Capability, decodeRestoreV6Capability } from './host-v6-capabilities';
 
 const sourceSha256 = 'a'.repeat(64);
 const capture = {
@@ -36,6 +36,18 @@ describe('protected v6 capability contracts', () => {
   it.each([
     [capture, 'orbis.controller-capture-capability.v3', decodeCaptureV6Capability],
     [restore, 'orbis.retained-restore-capability.v2', decodeRestoreV6Capability],
+    [
+      {
+        version: 1,
+        format: 'orbis-full-backup',
+        manifestVersion: 2,
+        mediaPolicy: 'explicit-inclusion.v1',
+        appDataLinks: 'confined-relative.v1',
+        sourceSha256,
+      },
+      'orbis.backup-archive-capability.v1',
+      decodeBackupArchiveCapability,
+    ],
   ] as const)('requires an exact, domain-bound contract', (value, domain, decode) => {
     const signed = sign(value, domain);
     expect(Object.isFrozen(decode(signed))).toBe(true);

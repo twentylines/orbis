@@ -1,3 +1,4 @@
+import { stabilizeDarwinFixtureCreation, stabilizeExistingDarwinFixtures } from './darwin-files.fixture';
 import { CaptureFenceJournal } from './time-machine-capture-fence';
 import { controllerPublicationSource } from './time-machine-capture-runtime';
 import fs from 'node:fs/promises';
@@ -31,6 +32,7 @@ import { ResetState } from '../system-reset/reset-state';
 import { GUARDS_METADATA, HEADERS_METADATA } from '@nestjs/common/constants';
 
 let directory: string;
+let restoreDarwinCreation: () => void = () => undefined;
 let data: string;
 let backups: SystemBackupsService;
 let machine: TimeMachineService;
@@ -287,6 +289,7 @@ beforeEach(async () => {
   setBackupRecoveryRequired(false);
   directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-time-machine-')));
   data = path.join(directory, 'data');
+  restoreDarwinCreation = stabilizeDarwinFixtureCreation(() => directory);
   await fs.mkdir(path.join(data, 'state', 'desktop'), { recursive: true });
   await fs.mkdir(path.join(directory, 'app-data'), { mode: 0o700 });
   await fs.writeFile(path.join(data, '.env'), 'DISPOSABLE_FIXTURE=true', { mode: 0o600 });
@@ -340,6 +343,7 @@ beforeEach(async () => {
     const app = connected.values.get(connected.ids.app);
     if (app) app.running = true;
   });
+  stabilizeExistingDarwinFixtures(directory);
   machine = createMachine();
 });
 afterEach(async () => {
@@ -348,6 +352,7 @@ afterEach(async () => {
   await backups.onModuleDestroy();
   setBackupRecoveryRequired(false);
   vi.restoreAllMocks();
+  restoreDarwinCreation();
   await fs.rm(directory, { recursive: true, force: true });
 });
 

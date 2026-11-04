@@ -112,7 +112,10 @@ it('accepts a session-only export with an explicit encryption key and downloads/
     { receiveServerExport } as unknown as BackupImportsService,
   );
   controller.start(operator, { passphrase: 'disposable encryption key' });
-  expect(startForSession).toHaveBeenCalledWith(7, undefined, 'disposable encryption key', operator);
+  expect(startForSession).toHaveBeenCalledWith(7, undefined, 'disposable encryption key', operator, false);
+  controller.start(operator, { passphrase: 'disposable encryption key', includeMedia: true });
+  expect(startForSession).toHaveBeenLastCalledWith(7, undefined, 'disposable encryption key', operator, true);
+  expect(() => controller.start(operator, { passphrase: 'disposable encryption key', includeMedia: 'true' })).toThrow();
   await controller.download(operator, 'fixture-id', {}, Object.assign(new EventEmitter(), { setHeader: vi.fn() }) as unknown as Response);
   expect(downloadForSession).toHaveBeenCalledWith('fixture-id', 7, operator, undefined);
   await controller.importSaved(operator, 'fixture-id', {});

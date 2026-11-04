@@ -1,3 +1,4 @@
+import { stabilizeDarwinFixtureCreation } from './darwin-files.fixture';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,6 +20,7 @@ import { SystemBackupsService } from './system-backups.service';
 import { fixturePassphrase, fullBackupFixture } from './backup-import.fixture';
 
 let root: string;
+let restoreDarwinCreation: () => void = () => undefined;
 let backupId: string;
 let source: HostTransferService;
 let destination: HostTransferService;
@@ -45,6 +47,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   auth.verifySensitiveAction.mockResolvedValue({ id: 1 });
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-host-transfer-')));
+  restoreDarwinCreation = stabilizeDarwinFixtureCreation(() => root);
   const fixture = await fullBackupFixture(root);
   original = await fs.readFile(fixture.encrypted);
   backupId = randomUUID();
@@ -103,6 +106,8 @@ afterEach(async () => {
   await imports?.onModuleDestroy();
   vi.useRealTimers();
   await fs.rm(root, { recursive: true, force: true });
+  vi.restoreAllMocks();
+  restoreDarwinCreation();
 });
 async function paired() {
   const offer = await source.offer(1, backupId, credentials, true);
