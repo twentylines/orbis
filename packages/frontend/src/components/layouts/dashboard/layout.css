@@ -587,6 +587,7 @@ html[data-orbis-motion="reduced"] .orbis-update-spinning {
   margin-inline: auto;
 }
 .desktop-settings {
+  width: 100%;
   max-width: 1600px;
   margin-inline: auto;
 }
