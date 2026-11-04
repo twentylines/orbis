@@ -2,6 +2,9 @@
 """Read-only source-image proof for bounded cold-bootstrap preservation."""
 import copy
 import hashlib
+import io
+import stat
+import tarfile
 import re
 import time
 from pathlib import Path
@@ -219,6 +222,36 @@ def preserved_networks(updater, record):
     return result
 
 
+def timezone_startup_mount(mount):
+    target, source = mount.get('Destination'), mount.get('Source')
+    if (target not in {'/etc/localtime', '/etc/timezone'} or mount.get('Type') != 'bind'
+            or mount.get('RW') is not False or not isinstance(source, str)
+            or (source != target and not (target == '/etc/localtime' and source.startswith('/usr/share/zoneinfo/')))):
+        raise fail()
+    resolved = Path(source).resolve(strict=True)
+    for path in (*reversed(resolved.parents), resolved):
+        info = path.stat()
+        if info.st_uid != 0 or info.st_mode & 0o022:
+            raise fail()
+    if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= 1024 * 1024:
+        raise fail()
+    return target
+
+
+def require_timezone_parent(updater, source):
+    # Docker materializes missing timezone bind targets, recording /etc as
+    # changed even when only its directory timestamps changed.
+    body = updater.runtime.bounded_output(['docker', '--context', updater.context, 'container', 'cp',
+                                          source['Id'] + ':/etc', '-'], 4 * 1024 * 1024, 10)
+    try:
+        with tarfile.open(fileobj=io.BytesIO(body), mode='r:') as archive:
+            entry = archive.getmember('etc')
+            if not entry.isdir() or entry.uid != 0 or entry.gid != 0 or entry.mode != 0o755:
+                raise fail()
+    except (tarfile.TarError, KeyError, ValueError) as error:
+        raise fail() from error
+
+
 def require_image_startup(updater, record):
     runtime, source = updater.runtime, record['source']
     image = runtime.image(source['Image'])
@@ -230,8 +263,15 @@ def require_image_startup(updater, record):
     actual_env = dict(item.split('=', 1) for item in actual.get('Env', []) if '=' in item)
     if any(actual_env.get(key) != expected_env.get(key) for key in ('NODE_OPTIONS', 'NODE_PATH', 'LD_PRELOAD', 'LD_LIBRARY_PATH')):
         raise fail()
+    timezones = set()
     for mount in source['Mounts']:
         destination = mount.get('Destination', '')
+        if destination in {'/etc/localtime', '/etc/timezone'}:
+            target = timezone_startup_mount(mount)
+            if target in timezones:
+                raise fail()
+            timezones.add(target)
+            continue
         if destination == '/' or any(destination == base or destination.startswith(base + '/') for base in ('/app', '/usr', '/bin', '/lib', '/lib64', '/etc')):
             raise fail()
     body = runtime.engine('GET', '/containers/' + source['Id'] + '/changes', maximum=1024 * 1024)
@@ -240,6 +280,11 @@ def require_image_startup(updater, record):
         raise fail()
     for change in changes:
         path = change.get('Path') if isinstance(change, dict) else None
+        if isinstance(path, str) and path in timezones and type(change.get('Kind')) is int and change['Kind'] in {0, 1}:
+            continue
+        if path == '/etc' and change.get('Kind') == 0 and type(change['Kind']) is int and timezones:
+            require_timezone_parent(updater, source)
+            continue
         if (not isinstance(path, str) or type(change.get('Kind')) is not int or change['Kind'] not in {0, 1, 2}
                 or path == '/' or any(path == base or path.startswith(base + '/') for base in ('/app', '/usr', '/bin', '/lib', '/lib64', '/etc'))):
             raise fail()

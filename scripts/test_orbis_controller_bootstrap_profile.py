@@ -3,6 +3,8 @@ from contextlib import contextmanager
 import tempfile
 import importlib.util
 import json
+import io
+import tarfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -145,6 +147,60 @@ class BootstrapProfileTests(unittest.TestCase):
         changed = copy.deepcopy(record)
         changed['source']['Mounts'] = [{'Destination': '/app/assets'}]
         with self.assertRaises(B.SourceBootstrapError): B.require_image_startup(updater, changed)
+
+
+    def test_timezone_bind_materialization_is_supported_without_admitting_code_or_unsafe_parent(self):
+        publication = SimpleNamespace(metadata=lambda body, **kwargs: json.loads(body))
+        runtime = mock.Mock()
+        updater = SimpleNamespace(runtime=runtime, P=publication, context='fixture')
+        config = {'Entrypoint': None, 'Cmd': ['node', './main.mjs'], 'WorkingDir': '/app', 'Env': []}
+        runtime.image.return_value = {'Id': self.image, 'Config': config}
+        mounts = [{'Type': 'bind', 'Source': target, 'Destination': target, 'RW': False}
+                  for target in ('/etc/localtime', '/etc/timezone')]
+        record = {'source': {'Id': '1' * 64, 'Image': self.image, 'Config': config, 'Mounts': mounts}}
+        changes = [{'Path': '/etc', 'Kind': 0}, {'Path': '/etc/localtime', 'Kind': 1}, {'Path': '/etc/timezone', 'Kind': 1}]
+        runtime.engine.return_value = json.dumps(changes).encode()
+        def directory(mode=0o755, uid=0):
+            output = io.BytesIO()
+            with tarfile.open(fileobj=output, mode='w') as archive:
+                member = tarfile.TarInfo('etc'); member.type = tarfile.DIRTYPE
+                member.uid, member.gid, member.mode = uid, 0, mode
+                archive.addfile(member)
+            return output.getvalue()
+        runtime.bounded_output.return_value = directory()
+        with mock.patch.object(B, 'timezone_startup_mount', side_effect=lambda mount: mount['Destination']):
+            B.require_image_startup(updater, record)
+            for mode, uid in ((0o777, 0), (0o755, 1000)):
+                runtime.bounded_output.return_value = directory(mode, uid)
+                with self.assertRaises(B.SourceBootstrapError): B.require_image_startup(updater, record)
+            runtime.bounded_output.return_value = directory()
+            for change in ({'Path': '/etc/ld.so.preload', 'Kind': 1}, {'Path': '/etc/passwd', 'Kind': 0},
+                           {'Path': '/app/main.mjs', 'Kind': 0}, {'Path': '/etc/timezone', 'Kind': 2},
+                           {'Path': [], 'Kind': 0}):
+                runtime.engine.return_value = json.dumps([*changes, change]).encode()
+                with self.assertRaises(B.SourceBootstrapError): B.require_image_startup(updater, record)
+        for mount in ({**mounts[0], 'RW': True}, {**mounts[0], 'Type': 'volume'},
+                      {**mounts[0], 'Source': '/etc/passwd'}):
+            with self.assertRaises(B.SourceBootstrapError): B.timezone_startup_mount(mount)
+
+    def test_timezone_sources_require_protected_ancestry_and_bounded_regular_files(self):
+        import stat
+        mount = {'Type': 'bind', 'Source': '/etc/localtime', 'Destination': '/etc/localtime', 'RW': False}
+        resolved, parent = mock.Mock(), mock.Mock()
+        resolved.parents = [parent]
+        parent.stat.return_value = SimpleNamespace(st_uid=0, st_mode=stat.S_IFDIR | 0o755)
+        good = dict(st_uid=0, st_mode=stat.S_IFREG | 0o644, st_size=128)
+        resolved.stat.return_value = SimpleNamespace(**good)
+        with mock.patch.object(B, 'Path') as paths:
+            paths.return_value.resolve.return_value = resolved
+            self.assertEqual(B.timezone_startup_mount(mount), '/etc/localtime')
+            for field, value in (('st_uid', 1000), ('st_mode', stat.S_IFREG | 0o666),
+                                 ('st_mode', stat.S_IFDIR | 0o755), ('st_size', 0), ('st_size', 1024 * 1024 + 1)):
+                resolved.stat.return_value = SimpleNamespace(**{**good, field: value})
+                with self.assertRaises(B.SourceBootstrapError): B.timezone_startup_mount(mount)
+            resolved.stat.return_value = SimpleNamespace(**good)
+            parent.stat.return_value = SimpleNamespace(st_uid=0, st_mode=stat.S_IFDIR | 0o777)
+            with self.assertRaises(B.SourceBootstrapError): B.timezone_startup_mount(mount)
 
 
 if __name__ == '__main__': unittest.main()
