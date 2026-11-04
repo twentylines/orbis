@@ -45,6 +45,7 @@ JOURNAL_SCHEMA = "orbis.update.v1"
 TERMINAL_STAGES = {"complete", "rolled-back", "aborted"}
 FAILURE_MESSAGES = {**SNAPSHOT.FAILURE_MESSAGES, "source-bootstrap-preservation-unsupported": "The source controller cannot safely restart with its current network, cache and TLS state. Review the source bootstrap before updating.", "controller-preservation-unsupported": "This Orbis version cannot be installed with the current updater. Choose a newer version."}
 FAILURE_STAGES = {"preparing", "downloading", "pulled", "stopping", "stopped", "snapshotting", "snapshot-ready", "staged"}
+PROGRESS_PHASES = {"restarting", "verifying"}
 DOWNLOAD_SCHEMA = "orbis.download-progress.v1"
 DOWNLOAD_LIMIT = 2**53 - 1
 PULL_TIMEOUT = 30 * 60
@@ -790,10 +791,17 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
                 HOST.STAGE.stage(root, target)
             record["stage"] = "staged"
             write_journal(snapshot, record)
+            def publish_progress(phase):
+                if record["stage"] != "staged" or phase not in PROGRESS_PHASES:
+                    raise ValueError("update progress does not match the staged target")
+                record["progressPhase"] = phase
+                write_journal(snapshot, record)
+            publish_progress("restarting")
             if record.get("backupScope") == CONTROLLER.SCOPE:
-                scoped_runtime.start_target()
+                scoped_runtime.start_target(progress=publish_progress)
             else:
                 start_core(root, context)
+                publish_progress("verifying")
             core = HOST.current_core(root, context)
             if core.get("image") != f"{target['image']}@{target['digest']}" or core.get("state") != "running" or core.get("health") != "healthy":
                 raise RuntimeError("new Orbis core did not reach the verified image and healthy state")

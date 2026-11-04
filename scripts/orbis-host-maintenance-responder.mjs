@@ -5,6 +5,100 @@ import path from 'node:path';
 const socketPath = '/run/orbis/host.sock';
 const assets = '/app/assets/frontend';
 const states = new Set(['idle', 'restoring', 'updating', 'downgrading', 'recovery', 'checking']);
+const progressStates = new Set(['queued', 'running', 'recovering', 'complete', 'failed', 'interrupted']);
+const progressPhases = new Set([null, 'downloading', 'installing', 'restarting', 'verifying', 'recovering']);
+
+export function validateCoreUpdateProgress(value) {
+  const object = (item) => item && typeof item === 'object' && !Array.isArray(item);
+  const count = (item) => Number.isSafeInteger(item) && item >= 0;
+  if (!object(value) || value.version !== 1 || Object.keys(value).sort().join() !== 'job,version') throw new Error('Unavailable');
+  const job = value.job;
+  if (job === null) return value;
+  if (
+    !object(job) ||
+    Object.keys(job).some((key) => !['id', 'state', 'targetTag', 'phase', 'download'].includes(key)) ||
+    typeof job.id !== 'string' ||
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(job.id) ||
+    typeof job.targetTag !== 'string' ||
+    job.targetTag.length > 100 ||
+    !/^v\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?$/.test(job.targetTag) ||
+    !progressStates.has(job.state) ||
+    !progressPhases.has(job.phase)
+  )
+    throw new Error('Unavailable');
+  const item = job.download;
+  if (
+    item !== undefined &&
+    (!object(item) ||
+      Object.keys(item).sort().join() !== 'alreadyCached,currentBytes,layersComplete,layersTotal,phase,schema,totalBytes,totalKnown,updatedAt' ||
+      item.schema !== 'orbis.download-progress.v1' ||
+      !['downloading', 'extracting', 'complete'].includes(item.phase) ||
+      !count(item.currentBytes) ||
+      !(item.totalBytes === null || count(item.totalBytes)) ||
+      typeof item.totalKnown !== 'boolean' ||
+      item.totalKnown !== (item.totalBytes !== null) ||
+      (item.totalBytes !== null && item.currentBytes > item.totalBytes) ||
+      typeof item.alreadyCached !== 'boolean' ||
+      (item.alreadyCached && (item.phase !== 'complete' || item.currentBytes !== 0 || item.totalBytes !== 0)) ||
+      !count(item.layersComplete) ||
+      !count(item.layersTotal) ||
+      item.layersComplete > item.layersTotal ||
+      typeof item.updatedAt !== 'number' ||
+      !Number.isFinite(item.updatedAt) ||
+      item.updatedAt <= 0)
+  )
+    throw new Error('Unavailable');
+  return value;
+}
+
+export async function coreProgressSocketIdentity(socket) {
+  const parent = path.dirname(socket);
+  if (path.resolve(socket) !== socket || (await fs.realpath(parent)) !== parent) throw new Error('Unavailable');
+  const directory = await fs.lstat(parent, { bigint: true });
+  const endpoint = await fs.lstat(socket, { bigint: true });
+  if (
+    !directory.isDirectory() ||
+    directory.uid !== 0n ||
+    directory.mode & 0o022n ||
+    !endpoint.isSocket() ||
+    endpoint.uid !== 0n ||
+    endpoint.nlink !== 1n ||
+    endpoint.mode & 0o077n
+  )
+    throw new Error('Unavailable');
+  return [directory, endpoint].map((stat) => [stat.dev, stat.ino, stat.uid, stat.gid, stat.mode, stat.ctimeNs].join(':')).join('/');
+}
+
+export async function readRootCoreProgress(options = {}) {
+  const socket = options.socket ?? socketPath;
+  const identity = options.identity ?? coreProgressSocketIdentity;
+  const before = await identity(socket);
+  const bytes = await new Promise((resolve, reject) => {
+    const request = http.get(
+      { socketPath: socket, path: '/v1/core-operation/progress', signal: AbortSignal.timeout(options.deadlineMs ?? 2000) },
+      (response) => {
+        if (response.statusCode !== 200) {
+          response.resume();
+          reject(new Error('Unavailable'));
+          return;
+        }
+        let size = 0;
+        const chunks = [];
+        response.on('data', (chunk) => {
+          size += chunk.length;
+          if (size > 16384) response.destroy(new Error('Unavailable'));
+          else chunks.push(Buffer.from(chunk));
+        });
+        response.on('error', reject);
+        response.on('aborted', () => reject(new Error('Unavailable')));
+        response.on('end', () => resolve(Buffer.concat(chunks)));
+      },
+    );
+    request.on('error', reject);
+  });
+  if ((await identity(socket)) !== before) throw new Error('Unavailable');
+  return validateCoreUpdateProgress(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
+}
 const types = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -149,6 +243,14 @@ export function createMaintenanceServer(options = {}) {
   return http.createServer(async (request, response) => {
     try {
       const pathname = new URL(request.url, 'http://localhost').pathname;
+      if (/^\/api\/system\/core-update-progress\/?$/.test(pathname)) {
+        if (request.method !== 'GET') return json(response, 405, { code: 'CORE_UPDATE_PROGRESS_UNAVAILABLE' });
+        try {
+          return json(response, 200, validateCoreUpdateProgress(await (options.readProgress ?? readRootCoreProgress)()));
+        } catch {
+          return json(response, 503, { code: 'CORE_UPDATE_PROGRESS_UNAVAILABLE' });
+        }
+      }
       const state = await read();
       if (['GET', 'HEAD'].includes(request.method) && /^\/api\/system\/(?:restoration-status|operation-status)\/?$/.test(pathname))
         return json(response, 200, state);

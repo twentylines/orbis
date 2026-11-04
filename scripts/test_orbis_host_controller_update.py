@@ -372,7 +372,15 @@ class ControllerUpdateTests(unittest.TestCase):
 
     def test_target_start_preserves_proxy_and_reuses_database_and_queue_ids(self):
         proxy_before = copy.deepcopy(self.objects['3' * 64])
-        self.updater.start_target()
+        progress = []
+        def observe(phase):
+            self.assertEqual(self.record['phase'], 'replacing')
+            self.assertEqual(self.objects['2' * 64]['State']['Running'], phase == 'verifying')
+            progress.append(phase)
+        with mock.patch.object(self.updater, 'healthy', wraps=self.updater.healthy) as healthy:
+            self.updater.start_target(progress=observe)
+        self.assertEqual(progress, ['restarting', 'verifying'])
+        healthy.assert_called_once()
         self.assertEqual(self.objects['1' * 64]['Name'], '/original')
         self.assertEqual(self.objects['2' * 64]['Name'], '/runtipi')
         self.assertEqual(self.calls, [['rename', '1' * 64, 'original'], ['rename', '2' * 64, 'runtipi'],

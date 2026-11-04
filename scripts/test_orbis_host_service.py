@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 import socket
 import subprocess
 import tempfile
@@ -7,7 +8,7 @@ import threading
 import time
 import unittest
 import uuid
-from contextlib import ExitStack, nullcontext
+from contextlib import ExitStack, nullcontext, contextmanager
 from pathlib import Path
 from unittest import mock
 
@@ -739,6 +740,138 @@ class HostServiceTests(unittest.TestCase):
                 self.assertEqual(SERVICE.UPDATE.safe_failure(failure), {})
                 self.assertEqual(SERVICE.UPDATE.failure_message(failure), "")
 
+    def test_read_only_core_progress_uses_protected_files_without_docker_or_health_queries(self):
+        @contextmanager
+        def private_fixture_directory(path):
+            descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                yield descriptor
+            finally:
+                os.close(descriptor)
+        identifier = str(uuid.uuid4())
+        snapshot = self.snapshots / f"orbis-{TARGET['tag']}-{identifier}"
+        job = {'schema': 'orbis.host-service-job.v1', 'id': identifier, 'state': 'running',
+               'snapshot': str(snapshot), 'targetTag': TARGET['tag'], 'current': CURRENT, 'target': TARGET,
+               'message': 'PRIVATE_FIXTURE', 'credentials': 'PRIVATE_FIXTURE'}
+        journal = {'schema': SERVICE.UPDATE.JOURNAL_SCHEMA, 'root': str(self.root), 'snapshot': str(snapshot),
+                   'dockerContext': 'test-daemon', 'previousDigest': CURRENT['digest'], 'targetDigest': TARGET['digest'],
+                   'stage': 'staged', 'progressPhase': 'verifying'}
+        with mock.patch.object(SERVICE.HOST.AUTHORITY, 'protected_directory', side_effect=private_fixture_directory), \
+                mock.patch.object(SERVICE.HOST.AUTHORITY, 'OWNER', os.geteuid()), \
+                mock.patch.object(SERVICE.HOST, 'docker', side_effect=AssertionError('No Docker query permitted')), \
+                mock.patch.object(SERVICE.HOST, 'current_core', side_effect=AssertionError('No health query permitted')):
+            self.assertEqual(self.service.core_operation_progress(), {'version': 1, 'job': None})
+            SERVICE.write_private(self.service.job_file, job)
+            for stage, explicit, phase in [('staged', 'restarting', 'restarting'), ('staged', 'verifying', 'verifying'),
+                                          ('downloading', None, 'downloading'), ('snapshot-ready', None, 'installing'),
+                                          ('rolling-back', None, 'recovering'), ('complete', None, None)]:
+                journal.update(stage=stage, progressPhase=explicit)
+                SERVICE.UPDATE.write_journal(snapshot, journal)
+                expected = {'version': 1, 'job': {'id': identifier, 'state': 'running', 'targetTag': TARGET['tag'], 'phase': phase}}
+                self.assertEqual(self.service.core_operation_progress(), expected)
+                self.assertEqual(self.service.core_operation_progress(), expected)
+                self.assertNotIn('PRIVATE_FIXTURE', json.dumps(expected))
+            journal['snapshot'] = str(self.snapshots / 'other')
+            SERVICE.UPDATE.write_journal(snapshot, journal)
+            with self.assertRaises(ValueError):
+                self.service.core_operation_progress()
+            SERVICE.write_private(self.service.job_file, {**job, 'id': 'not-a-job'})
+            with self.assertRaises(ValueError):
+                self.service.core_operation_progress()
+            SERVICE.write_private(self.service.job_file, job)
+            self.service.job_file.chmod(0o644)
+            with self.assertRaises(ValueError):
+                self.service.core_operation_progress()
+
+    def test_status_reads_durable_startup_progress_only_for_the_matching_active_transaction(self):
+        identifier = str(uuid.uuid4())
+        snapshot = self.snapshots / f"orbis-{TARGET['tag']}-{identifier}"
+        job = {'id': identifier, 'state': 'running', 'snapshot': str(snapshot), 'targetTag': TARGET['tag'],
+               'current': CURRENT, 'target': TARGET}
+        journal = {'schema': SERVICE.UPDATE.JOURNAL_SCHEMA, 'root': str(self.root), 'snapshot': str(snapshot),
+                   'dockerContext': 'test-daemon', 'previousDigest': CURRENT['digest'], 'targetDigest': TARGET['digest'],
+                   'stage': 'staged', 'progressPhase': 'restarting'}
+        SERVICE.write_private(self.service.job_file, job)
+        with mock.patch.object(SERVICE.HOST, 'saved_state', return_value=None), \
+                mock.patch.object(SERVICE.HOST, 'current_core', return_value={}):
+            for phase in ('restarting', 'verifying'):
+                journal['progressPhase'] = phase
+                SERVICE.UPDATE.write_journal(snapshot, journal)
+                for _ in range(2):
+                    public = self.service.status()['job']
+                    self.assertEqual(public['phase'], phase)
+                    self.assertEqual(json.loads(SERVICE.UPDATE.journal_path(snapshot).read_text())['stage'], 'staged')
+                    self.assertNotIn('snapshot', public)
+                    self.assertNotIn('root', public)
+            for change in ({'progressPhase': 'SECRET_MARKER'}, {'progressPhase': ['verifying']},
+                           {'stage': 'rolling-back'}, {'stage': 'complete'}, {'root': '/other'},
+                           {'snapshot': str(self.snapshots / 'other')}, {'dockerContext': 'other'},
+                           {'previousDigest': TARGET['digest']}, {'targetDigest': CURRENT['digest']},
+                           {'schema': 'other'}):
+                with self.subTest(change=change):
+                    altered = {**journal, **change}
+                    SERVICE.UPDATE.write_journal(snapshot, altered)
+                    public = self.service.status()['job']
+                    self.assertNotIn(public['phase'], ('restarting', 'verifying'))
+                    self.assertNotIn('SECRET_MARKER', json.dumps(public))
+            for change in ({'id': str(uuid.uuid4())}, {'targetTag': CURRENT['tag']}, {'current': None},
+                           {'state': 'complete'}, {'state': 'interrupted'}, {'state': 'recovering'}):
+                with self.subTest(job_change=change):
+                    self.assertIsNone(self.service.update_progress_phase({**job, **change}, journal))
+
+    def test_failed_update_exposes_aborted_only_from_matching_protected_records(self):
+        @contextmanager
+        def private_fixture_directory(path):
+            descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                yield descriptor
+            finally:
+                os.close(descriptor)
+
+        identifier = str(uuid.uuid4())
+        snapshot = self.snapshots / f"orbis-{TARGET['tag']}-{identifier}"
+        job = {'schema': 'orbis.host-service-job.v1', 'id': identifier, 'state': 'failed',
+               'snapshot': str(snapshot), 'targetTag': TARGET['tag'], 'current': CURRENT, 'target': TARGET}
+        journal = {'schema': SERVICE.UPDATE.JOURNAL_SCHEMA, 'root': str(self.root), 'snapshot': str(snapshot),
+                   'dockerContext': 'test-daemon', 'previousDigest': CURRENT['digest'], 'targetDigest': TARGET['digest'],
+                   'stage': 'aborted'}
+        SERVICE.write_private(self.service.job_file, job)
+        SERVICE.UPDATE.write_journal(snapshot, journal)
+        with mock.patch.object(SERVICE.HOST.AUTHORITY, 'protected_directory', side_effect=private_fixture_directory), \
+                mock.patch.object(SERVICE.HOST.AUTHORITY, 'OWNER', os.geteuid()), \
+                mock.patch.object(SERVICE.HOST, 'saved_state', return_value=None), \
+                mock.patch.object(SERVICE.HOST, 'current_core', return_value={}):
+            for _ in range(2):
+                public = self.service.status()['job']
+                self.assertEqual(public['phase'], 'aborted')
+                self.assertEqual(public['state'], 'failed')
+                self.assertNotIn('snapshot', public)
+                self.assertNotIn('root', public)
+            for change in ({'stage': 'staged'}, {'stage': 'rolled-back'}, {'schema': 'other'}, {'root': '/other'},
+                           {'snapshot': str(self.snapshots / 'other')}, {'dockerContext': 'other'},
+                           {'previousDigest': TARGET['digest']}, {'targetDigest': CURRENT['digest']}):
+                with self.subTest(journal_change=change):
+                    SERVICE.UPDATE.write_journal(snapshot, {**journal, **change})
+                    self.assertIsNone(self.service.status()['job']['phase'])
+            SERVICE.UPDATE.write_journal(snapshot, journal)
+            for change in ({'id': str(uuid.uuid4())}, {'schema': 'other'}, {'targetTag': CURRENT['tag']},
+                           {'snapshot': str(self.snapshots / 'other')}, {'current': None},
+                           {'state': 'running'}, {'state': 'complete'}, {'state': 'interrupted'}):
+                with self.subTest(job_change=change):
+                    self.assertIsNone(self.service.aborted_update_phase({**job, **change}))
+            with mock.patch.object(self.service, 'read_core_operation_record', side_effect=[{**job, 'finishedAt': 1}, journal]):
+                self.assertIsNone(self.service.aborted_update_phase(job))
+            for file in (self.service.job_file, SERVICE.UPDATE.journal_path(snapshot)):
+                file.chmod(0o644)
+                try:
+                    self.assertIsNone(self.service.aborted_update_phase(job))
+                finally:
+                    file.chmod(0o600)
+            with mock.patch.object(SERVICE.HOST.AUTHORITY, 'protected_directory', side_effect=ValueError('PRIVATE_FIXTURE')):
+                self.assertIsNone(self.service.status()['job']['phase'])
+            SERVICE.UPDATE.journal_path(snapshot).unlink()
+            self.assertIsNone(self.service.status()['job']['phase'])
+
     def test_interrupted_update_can_recover_the_recorded_transaction(self):
         planned = self.service.plan(TARGET["tag"])
         job = {
@@ -851,6 +984,18 @@ class HostServiceTests(unittest.TestCase):
             return int(header.split(b" ")[1]), json.loads(payload)
 
         self.assertEqual(request("GET", "/v1/unknown")[0], 404)
+        with mock.patch.object(SERVICE, 'trusted_capture_peer', return_value=False):
+            self.assertEqual(request('GET', '/v1/core-operation/progress')[0], 403)
+        with mock.patch.object(SERVICE, 'trusted_capture_peer', return_value=True), \
+                mock.patch.object(self.service, 'core_operation_progress', return_value={'version': 1, 'job': None}) as progress:
+            self.assertEqual(request('GET', '/v1/core-operation/progress'), (200, {'version': 1, 'job': None}))
+            self.assertEqual(request('POST', '/v1/core-operation/progress', {})[0], 404)
+            progress.assert_called_once_with()
+        with mock.patch.object(SERVICE, 'trusted_capture_peer', return_value=True), \
+                mock.patch.object(self.service, 'core_operation_progress', side_effect=ValueError('PRIVATE_FIXTURE')):
+            status, body = request('GET', '/v1/core-operation/progress')
+            self.assertEqual(status, 503)
+            self.assertNotIn('PRIVATE_FIXTURE', json.dumps(body))
         with mock.patch.object(self.service.drives, "read", return_value={"available": False, "reason": "Collecting drive health readings."}) as drives, \
              mock.patch.object(self.service.drives, "start_test", return_value={"accepted": True}) as start_test:
             self.assertEqual(request("GET", "/v1/drives")[1]["reason"], "Collecting drive health readings.")

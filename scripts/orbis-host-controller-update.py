@@ -668,7 +668,7 @@ class ControllerUpdate:
                         or candidate['State'].get('Running') and not set(requested) <= set(dns)):
                     raise ValueError('The controller candidate Docker DNS names changed')
 
-    def start_target(self):
+    def start_target(self, progress=None):
         record = self.read()
         self.preserved(record)
         if record.get('sourceRetirement'):
@@ -709,7 +709,11 @@ class ControllerUpdate:
                 raise ValueError('Candidate controller name changed')
             self.runtime.change(['rename', candidate['Id'], 'runtipi'])
         self.start_peers(record)
+        if progress is not None:
+            progress('restarting')
         self.runtime.change(['start', candidate['Id']])
+        if progress is not None:
+            progress('verifying')
         self.healthy(record, candidate['Id'], record['targetImageId'])
         record['phase'] = 'active'
         self.save(record)

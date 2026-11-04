@@ -10,6 +10,7 @@ import ipaddress
 import json
 import math
 import os
+import posixpath
 import re
 import select
 import socket
@@ -53,6 +54,57 @@ MAX_STAGE = 64 * 1024 ** 3
 
 def fail():
     return ValueError('Retained restore runtime or staged ownership could not be verified')
+
+
+def restore_data_roots(manifest, *, preserve_proxy=False):
+    if (not isinstance(manifest, dict) or manifest.get('format') != 'orbis-full-backup'
+            or type(manifest.get('version')) is not int or manifest['version'] not in {1, 2}):
+        raise fail()
+    roots = ROOTS - {'traefik'} if preserve_proxy else set(ROOTS)
+    if manifest['version'] == 1:
+        if any(field in manifest for field in ('mediaPolicy', 'symlinks', 'excludedRuntimeSockets')):
+            raise fail()
+        return roots
+    if not isinstance(manifest.get('mediaPolicy'), str) or manifest['mediaPolicy'] not in {'included', 'preserve-destination'}:
+        raise fail()
+    entries = []
+    for field in ('files', 'directories'):
+        values = manifest.get(field)
+        if not isinstance(values, list) or len(values) > 250000:
+            raise fail()
+        entries.extend(values)
+    for field in ('symlinks', 'excludedRuntimeSockets'):
+        values = manifest.get(field, [])
+        if not isinstance(values, list) or len(values) > 250000:
+            raise fail()
+        for value in values:
+            entry = {'name': value} if field == 'excludedRuntimeSockets' else value
+            name = entry.get('name') if isinstance(entry, dict) else None
+            if not isinstance(name, str) or not name.startswith('app-data/'):
+                raise fail()
+            if field == 'symlinks':
+                target = entry.get('target')
+                if (not isinstance(target, str) or not target or len(target) > 4096 or target.startswith('/') or '\\' in target
+                        or any(ord(character) < 32 or ord(character) == 127 for character in target)):
+                    raise fail()
+                resolved = posixpath.normpath(posixpath.join(posixpath.dirname(name), target))
+                if resolved != 'app-data' and not resolved.startswith('app-data/'):
+                    raise fail()
+            entries.append(entry)
+    if len(entries) > 250000:
+        raise fail()
+    for entry in entries:
+        name = entry.get('name') if isinstance(entry, dict) else None
+        if (not isinstance(name, str) or not name or len(name) > 4096 or '\\' in name
+                or any(ord(character) < 32 or ord(character) == 127 for character in name)
+                or any(part in {'', '.', '..'} for part in name.split('/'))):
+            raise fail()
+        if (manifest['mediaPolicy'] == 'preserve-destination'
+                and (name == 'data/media' or name.startswith('data/media/'))):
+            raise fail()
+    if manifest['mediaPolicy'] == 'preserve-destination':
+        roots.remove('media')
+    return roots
 
 
 def hashed(body):
@@ -766,9 +818,6 @@ class DockerRestoreRuntime:
                 or metadata.get('configurationSetSha256') != authority['configurationSetSha256']
                 or metadata.get('publicationProofSha256') != authority['publicationProofSha256']):
             raise fail()
-        expected_roots = ROOTS - {'traefik'} if metadata['schema'] in {'orbis.time-machine-runtime.v4', 'orbis.time-machine-runtime.v6'} else ROOTS
-        if len(journal['roots']) != len(expected_roots) or set(journal['roots']) != expected_roots:
-            raise fail()
         if metadata['schema'] in {'orbis.time-machine-runtime.v4', 'orbis.time-machine-runtime.v6'}:
             policy_body = self.read_file(retained / 'proxy-host-identity.json', 16384)
             policy = self.P.metadata(policy_body, byte_limit=16384)
@@ -825,10 +874,11 @@ class DockerRestoreRuntime:
                 and hashed(self.read_file(content / 'data/traefik/traefik.yml', 1024 * 1024)) != policy['configuration']['staticSha256']):
             raise fail()
         manifest_body = self.read_file(content / 'manifest.json')
+        manifest = self.json_bytes(manifest_body)
         database = self.read_hash(content / 'database.dump', 128 * 1024 ** 3)
         if metadata['schema'] == 'orbis.time-machine-runtime.v6':
             self.review_app_runtime(request, authority, metadata, capture, retained, content,
-                                    self.json_bytes(manifest_body))
+                                    manifest)
         seal = bootstrap.get('source') or {}
         if (hashed(manifest_body) != seal.get('manifest', {}).get('sha256') or len(manifest_body) != seal.get('manifest', {}).get('bytes')
                 or hashed(manifest_body) != metadata.get('legacy', {}).get('manifestSha256')
@@ -836,6 +886,9 @@ class DockerRestoreRuntime:
                 or hashed(manifest_body) != admission.get('binding', {}).get('manifestSha256')
                 or metadata.get('legacy', {}).get('cipherSha256') != admission.get('binding', {}).get('archiveSha256')
                 or database != seal.get('database') or database != {key: coherence.get('database', {}).get(key) for key in ('bytes', 'sha256')}):
+            raise fail()
+        expected_roots = restore_data_roots(manifest, preserve_proxy=metadata['schema'] in {'orbis.time-machine-runtime.v4', 'orbis.time-machine-runtime.v6'})
+        if len(journal['roots']) != len(expected_roots) or set(journal['roots']) != expected_roots:
             raise fail()
         app_destination = {}
         if metadata['schema'] == 'orbis.time-machine-runtime.v6':

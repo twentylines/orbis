@@ -1675,6 +1675,104 @@ class HostService:
     def current_manifest(self) -> dict[str, str]:
         return installed_manifest(self.root, self.context)
 
+    def update_journal_matches(self, job, journal):
+        if not isinstance(job, dict) or not isinstance(journal, dict):
+            return False
+        try:
+            identifier = job["id"]
+            if not isinstance(identifier, str) or str(uuid.UUID(identifier)) != identifier:
+                return False
+            current = PLAN.validate_manifest(job["current"])
+            target = PLAN.validate_manifest(job["target"])
+            snapshot = self.snapshots / f"orbis-{target['tag']}-{identifier}"
+            if (job.get("snapshot") != str(snapshot) or job.get("targetTag") != target["tag"]
+                    or journal.get("schema") != UPDATE.JOURNAL_SCHEMA or journal.get("snapshot") != str(snapshot)
+                    or journal.get("root") != str(self.root) or journal.get("dockerContext") != self.context
+                    or journal.get("previousDigest") != current["digest"] or journal.get("targetDigest") != target["digest"]):
+                return False
+        except (KeyError, TypeError, ValueError):
+            return False
+        return True
+
+    def update_progress_phase(self, job, journal):
+        if (not isinstance(job, dict) or job.get("state") != "running" or not isinstance(journal, dict)
+                or journal.get("stage") != "staged" or not isinstance(journal.get("progressPhase"), str)
+                or journal["progressPhase"] not in UPDATE.PROGRESS_PHASES):
+            return None
+        return journal["progressPhase"] if self.update_journal_matches(job, journal) else None
+
+    def read_core_operation_record(self, file, *, optional=False):
+        with HOST.AUTHORITY.protected_directory(file.parent) as directory:
+            try:
+                with HOST.AUTHORITY.protected_file(directory, file.name, 1024 * 1024) as body:
+                    value = json.loads(body, object_pairs_hook=HOST.IDENTITY.PUBLICATION.pairs)
+            except FileNotFoundError:
+                if optional:
+                    return None
+                raise
+        if not isinstance(value, dict):
+            raise ValueError("Core progress is unavailable")
+        return value
+
+    def aborted_update_phase(self, job):
+        if (not isinstance(job, dict) or job.get("schema") != "orbis.host-service-job.v1"
+                or job.get("state") != "failed"):
+            return None
+        try:
+            identifier = job["id"]
+            if not isinstance(identifier, str) or str(uuid.UUID(identifier)) != identifier or uuid.UUID(identifier).version != 4:
+                return None
+            target = PLAN.validate_manifest(job["target"])
+            snapshot = self.snapshots / f"orbis-{target['tag']}-{identifier}"
+            if job.get("snapshot") != str(snapshot):
+                return None
+            protected_job = self.read_core_operation_record(self.job_file)
+            journal = self.read_core_operation_record(UPDATE.journal_path(snapshot))
+            if (protected_job == job and journal.get("stage") == "aborted"
+                    and self.update_journal_matches(protected_job, journal)):
+                return "aborted"
+        except (KeyError, TypeError, ValueError, OSError):
+            return None
+        return None
+
+    def core_operation_progress(self):
+        job = self.read_core_operation_record(self.job_file, optional=True)
+        if job is None:
+            return {"version": 1, "job": None}
+        identifier = job.get("id")
+        if (job.get("schema") != "orbis.host-service-job.v1" or not isinstance(identifier, str)
+                or str(uuid.UUID(identifier)) != identifier or uuid.UUID(identifier).version != 4
+                or job.get("state") not in {"queued", "running", "recovering", "complete", "failed", "interrupted", "rolled-back"}):
+            raise ValueError("Core progress is unavailable")
+        current = PLAN.validate_manifest(job["current"])
+        target = PLAN.validate_manifest(job["target"])
+        if len(target["tag"]) > 100:
+            raise ValueError("Core progress is unavailable")
+        snapshot = self.snapshots / f"orbis-{target['tag']}-{identifier}"
+        if job.get("snapshot") != str(snapshot) or job.get("targetTag") != target["tag"]:
+            raise ValueError("Core progress is unavailable")
+        journal = self.read_core_operation_record(UPDATE.journal_path(snapshot), optional=True)
+        phase = None
+        if journal is not None:
+            if (journal.get("schema") != UPDATE.JOURNAL_SCHEMA or journal.get("root") != str(self.root)
+                    or journal.get("snapshot") != str(snapshot) or journal.get("dockerContext") != self.context
+                    or journal.get("previousDigest") != current["digest"] or journal.get("targetDigest") != target["digest"]):
+                raise ValueError("Core progress is unavailable")
+            phase = journal.get("stage")
+            if not isinstance(phase, str) or phase not in UPDATE.FAILURE_STAGES | UPDATE.TERMINAL_STAGES | {"rolling-back", "rollback-failed"}:
+                raise ValueError("Core progress is unavailable")
+            phase = self.update_progress_phase(job, journal) or phase
+            phase = (phase if phase in {"restarting", "verifying"} else "downloading" if phase == "downloading"
+                     else "recovering" if phase in {"rolling-back", "rollback-failed"}
+                     else None if phase in UPDATE.TERMINAL_STAGES else "installing")
+        if job["state"] == "recovering":
+            phase = "recovering"
+        public = {"id": identifier, "state": "failed" if job["state"] == "rolled-back" else job["state"],
+                  "targetTag": target["tag"], "phase": phase}
+        if journal is not None:
+            public.update(UPDATE.safe_download(journal))
+        return {"version": 1, "job": public}
+
     def status(self) -> dict:
         saved = HOST.saved_state(self.root)
         enrolled = self.state_matches(saved)
@@ -1695,6 +1793,7 @@ class HostService:
             phase = journal.get("stage") if journal else "preparing"
             if phase not in UPDATE.FAILURE_STAGES | UPDATE.TERMINAL_STAGES:
                 phase = "preparing"
+            phase = self.update_progress_phase(job, journal) or phase
         if job and job.get("state") == "interrupted":
             stage = journal.get("stage") if journal else None
             expected_digest = job["target"]["digest"] if stage == "complete" else job["current"]["digest"]
@@ -1731,6 +1830,8 @@ class HostService:
                 job["message"] = "Update stopped before service downtime."
                 job["finishedAt"] = time.time()
                 write_private(self.job_file, job)
+        if job and job.get("state") == "failed":
+            phase = self.aborted_update_phase(job)
         return {
             "available": True,
             "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1", "controller-config.v1"],
@@ -1976,6 +2077,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return data
 
     def do_GET(self) -> None:
+        if self.path == "/v1/core-operation/progress":
+            if not trusted_capture_peer(self.connection):
+                self.send_json(403, {"error": "core operation peer is unavailable"})
+                return
+            try:
+                self.send_json(200, self.server.service.core_operation_progress())
+            except (OSError, ValueError, RuntimeError, TypeError, KeyError):
+                self.send_json(503, {"error": "Core progress is unavailable"})
+            return
         if self.path in {"/v3/controller-capture-authority/capability", "/v1/retained-restore/capability"}:
             if not trusted_capture_peer(self.connection):
                 self.send_json(403, {"error": "native helper peer is unavailable"})

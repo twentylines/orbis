@@ -882,7 +882,7 @@ class RetainedRestoreTests(unittest.TestCase):
         source = {'controllerId': '1' * 64, 'imageId': 'sha256:' + 'a' * 64}
         journal = {'id': identifier, 'phase': 'staging', 'decision': None, 'nonce': 'n',
                    'originalController': source['controllerId'], 'candidateController': source['controllerId'], 'roots': sorted(D.ROOTS)}
-        manifest_body = b'{"version":1}'
+        manifest_body = b'{"format":"orbis-full-backup","version":1}'
         manifest_sha = D.hashed(manifest_body)
         database = {'bytes': 10, 'sha256': 'b' * 64}
         seal = {'manifest': {'sha256': manifest_sha, 'bytes': len(manifest_body)}, 'database': database}
@@ -954,6 +954,22 @@ class RetainedRestoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             runtime.review_stage(self.request, origin, source)
         journal['roots'] = sorted(D.ROOTS - {'traefik'})
+        manifest_body = canon({'format': 'orbis-full-backup', 'version': 2, 'mediaPolicy': 'preserve-destination',
+                               'files': [], 'directories': []})
+        manifest_sha = D.hashed(manifest_body)
+        bodies['manifest.json'] = manifest_body
+        seal['manifest'] = {'sha256': manifest_sha, 'bytes': len(manifest_body)}
+        admission['binding']['manifestSha256'] = manifest_sha
+        coherence['manifestSha256'] = manifest_sha
+        journal['roots'] = sorted(D.ROOTS - {'traefik', 'media'})
+        seal_coherence()
+        stage = runtime.review_stage(self.request, origin, source)
+        self.assertNotIn('media', stage['journal']['roots'])
+        self.assertEqual(stage['sourceBinding']['legacyManifestSha256'], manifest_sha)
+        journal['roots'].append('media')
+        with self.assertRaises(ValueError):
+            runtime.review_stage(self.request, origin, source)
+        journal['roots'].remove('media')
         source['proxyHostIdentity']['mutableIdentity']['ownershipSha256'] = 'b' * 64
         with self.assertRaises(ValueError):
             runtime.review_stage(self.request, origin, source)

@@ -113,8 +113,13 @@ class OrbisHostUpdateTests(unittest.TestCase):
         checkpoint = {'storage': {'backupScope': UPDATE.CONTROLLER.SCOPE}}
         runtime = mock.Mock()
         tools, reader = mock.Mock(), mock.Mock()
-        def start_target():
+        def start_target(*, progress):
+            before = json.loads(UPDATE.journal_path(self.snapshot).read_text())
+            self.assertEqual((before['stage'], before['progressPhase']), ('staged', 'restarting'))
             fake.image = TARGET_IMAGE
+            progress('verifying')
+            after = json.loads(UPDATE.journal_path(self.snapshot).read_text())
+            self.assertEqual((after['stage'], after['progressPhase']), ('staged', 'verifying'))
         runtime.start_target.side_effect = start_target
         runtime.commit.return_value = False
         with mock.patch.object(UPDATE, 'update_plan', return_value={'checkpoint': checkpoint}), \
@@ -132,6 +137,7 @@ class OrbisHostUpdateTests(unittest.TestCase):
         saved = json.loads(UPDATE.journal_path(self.snapshot).read_text())
         self.assertEqual(saved['backupScope'], UPDATE.CONTROLLER.SCOPE)
         self.assertEqual(saved['stage'], 'complete')
+        self.assertEqual(saved['progressPhase'], 'verifying')
 
     def test_incapable_target_has_explicit_failure_before_checkpoint_or_downtime(self):
         fake = FakeDocker(self.root)
@@ -214,9 +220,17 @@ class OrbisHostUpdateTests(unittest.TestCase):
 
     def test_update_keeps_a_verified_previous_release_snapshot(self):
         fake = FakeDocker(self.root)
-        with mock.patch.object(UPDATE.HOST, "docker", side_effect=fake):
+        writes = []
+        write = UPDATE.write_journal
+        def observe(snapshot, record):
+            write(snapshot, record)
+            writes.append(json.loads(UPDATE.journal_path(snapshot).read_text()))
+        with mock.patch.object(UPDATE.HOST, "docker", side_effect=fake), \
+                mock.patch.object(UPDATE, "write_journal", side_effect=observe):
             result = UPDATE.apply_update(self.root, CURRENT, TARGET, "test-daemon", self.snapshot)
         self.assertEqual(result["result"], "healthy")
+        progress = [(record['stage'], record['progressPhase']) for record in writes if record.get('progressPhase') and record['stage'] == 'staged']
+        self.assertEqual(progress, [('staged', 'restarting'), ('staged', 'verifying')])
         self.assertEqual(fake.image, TARGET_IMAGE)
         self.assertEqual(UPDATE.SNAPSHOT.verify(self.snapshot, self.root)["release"], CURRENT["tag"])
         self.assertEqual(UPDATE.journal_path(self.snapshot).read_text().find('"stage": "complete"') >= 0, True)
@@ -386,6 +400,7 @@ class OrbisHostUpdateTests(unittest.TestCase):
             "previousDigest": CURRENT["digest"],
             "targetDigest": TARGET["digest"],
             "stage": "staged",
+            "progressPhase": "verifying",
         }
         UPDATE.write_journal(self.snapshot, record)
 
@@ -393,7 +408,9 @@ class OrbisHostUpdateTests(unittest.TestCase):
             result = UPDATE.recover(self.root, CURRENT, TARGET, "test-daemon", self.snapshot)
         self.assertEqual(result["result"], "rolled-back")
         self.assertEqual(fake.image, CURRENT_IMAGE)
-        self.assertEqual(UPDATE.read_journal(self.snapshot, self.root, "test-daemon", CURRENT, TARGET)["stage"], "rolled-back")
+        recovered = UPDATE.read_journal(self.snapshot, self.root, "test-daemon", CURRENT, TARGET)
+        self.assertEqual(recovered["stage"], "rolled-back")
+        self.assertEqual(recovered["rollbackStartedFrom"], "staged")
 
     def test_recover_before_downtime_leaves_healthy_core_running(self):
         fake = FakeDocker(self.root)
