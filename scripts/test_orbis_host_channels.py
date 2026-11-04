@@ -112,6 +112,16 @@ class ReleaseChannelFileTests(unittest.TestCase):
 
 
 class HostReleaseChannelTests(unittest.TestCase):
+    def finished_job(self):
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            with self.service.lock:
+                job = SERVICE.read_private(self.service.job_file)
+                if job and job['state'] not in {'running', 'recovering'} and not self.service.busy:
+                    return job
+            time.sleep(0.01)
+        self.fail('Update worker did not finish its durable cleanup')
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -240,11 +250,7 @@ class HostReleaseChannelTests(unittest.TestCase):
                 self.assertTrue(started.wait(2))
                 self.assertEqual(SERVICE.read_channel(self.root)["channel"], "nightly")
                 finish.set()
-                for _ in range(100):
-                    job = SERVICE.read_private(self.service.job_file)
-                    if job and job["state"] not in {"running", "recovering"}:
-                        break
-                    time.sleep(0.01)
+                job = self.finished_job()
                 self.assertEqual(job["state"], "complete")
         channel = SERVICE.read_channel(self.root)
         self.assertEqual(channel, {"version": 1, "channel": "stable", "revision": plan["planId"]})
@@ -259,16 +265,32 @@ class HostReleaseChannelTests(unittest.TestCase):
         ), mock.patch.object(SERVICE, "latest_stable_tag", return_value=self.latest_stable["tag"]):
             plan = self.service.plan(self.latest_stable["tag"], return_to_stable=True)
         self._verified_installation(self.current)
+        terminal_written, finish_cleanup = threading.Event(), threading.Event()
+        maintenance = self.service.core_operation_maintenance
+
+        def cleanup():
+            job = SERVICE.read_private(self.service.job_file)
+            if not job or job.get('state') != 'failed':
+                return maintenance()
+            terminal_written.set()
+            if not finish_cleanup.wait(3):
+                raise RuntimeError('Test did not release update cleanup')
+            return maintenance()
+
         with mock.patch.object(self.service, "current_manifest", return_value=self.current), mock.patch.object(
             SERVICE, "latest_stable_tag", return_value=self.latest_stable["tag"]
-        ), mock.patch.object(SERVICE.UPDATE, "apply_update", side_effect=RuntimeError("synthetic update failure")):
+        ), mock.patch.object(SERVICE.UPDATE, "apply_update", side_effect=RuntimeError("synthetic update failure")), mock.patch.object(
+            self.service, 'core_operation_maintenance', side_effect=cleanup
+        ):
             _, launch = self.service.apply(plan["planId"])
             launch()
-            for _ in range(100):
-                job = SERVICE.read_private(self.service.job_file)
-                if job and job["state"] not in {"running", "recovering"}:
-                    break
-                time.sleep(0.01)
+            try:
+                self.assertTrue(terminal_written.wait(3))
+                self.assertEqual(SERVICE.read_private(self.service.job_file)['state'], 'failed')
+                self.assertTrue(self.service.busy)
+            finally:
+                finish_cleanup.set()
+                job = self.finished_job()
         self.assertEqual(job["state"], "failed")
         self.assertEqual(SERVICE.read_channel(self.root)["channel"], "nightly")
 
