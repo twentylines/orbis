@@ -610,6 +610,8 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   background: color-mix(in srgb, var(--desktop-accent) 40%, #e0e7eb);
 }
 .desktop-auth-setup .card {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -618,6 +620,20 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   border: 1px solid var(--desktop-line);
   border-radius: 24px;
   box-shadow: 0 24px 80px rgb(0 0 0 / 18%);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.desktop-auth-setup .card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--desktop-surface);
+  backdrop-filter: var(--desktop-glass-filter);
+  -webkit-backdrop-filter: var(--desktop-glass-filter);
+  pointer-events: none;
 }
 .desktop-auth.desktop-auth-setup .desktop-auth-container {
   transition:

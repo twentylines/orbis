@@ -151,7 +151,7 @@ class OrbisHostUpdateTests(unittest.TestCase):
         saved = json.loads(UPDATE.journal_path(self.snapshot).read_text())
         self.assertEqual(saved['stage'], 'aborted')
         self.assertEqual(saved['failureCode'], 'controller-preservation-unsupported')
-        self.assertIn('preserve the live proxy', UPDATE.failure_message(saved))
+        self.assertEqual(UPDATE.failure_message(saved), 'This Orbis version cannot be installed with the current updater. Choose a newer version.')
 
     def test_dedicated_reconstruction_rollback_dispatch_does_not_replay_old_controller_id_journal(self):
         runtime = mock.Mock()

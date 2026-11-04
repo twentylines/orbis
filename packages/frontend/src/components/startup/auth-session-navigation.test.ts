@@ -16,6 +16,26 @@ const storage = () => {
   };
 };
 
+test('LAN HTTP retains a valid authenticated session without randomUUID', () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  const original = globalThis.crypto;
+  Object.defineProperty(globalThis, 'crypto', {
+    configurable: true,
+    value: { getRandomValues: original.getRandomValues.bind(original) },
+  });
+  try {
+    const store = storage();
+    rememberAuthenticatedSession(store);
+    const id = authenticatedSessionId(store);
+    expect(id).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+    rememberAuthenticatedSession(store);
+    expect(authenticatedSessionId(store)).toBe(id);
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, 'crypto', descriptor);
+    else Reflect.deleteProperty(globalThis, 'crypto');
+  }
+});
+
 test('ordinary sign-in ignores a return target; incidental expiry retains a matching same-tab destination', () => {
   const store = storage();
   rememberAuthenticatedSession(store, () => first);

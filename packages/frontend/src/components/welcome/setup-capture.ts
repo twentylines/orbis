@@ -1,4 +1,5 @@
 import type { TimeMachinePoint } from '@runtipi/common/schemas/time-machine';
+import { createBrowserId } from '@/lib/browser-id';
 import { readOnboardingCapture, startOnboardingCapture, TimeMachineApiError } from '@/modules/time-machine/time-machine-api';
 
 type CaptureStorage = Pick<Storage, 'getItem' | 'setItem'>;
@@ -84,7 +85,7 @@ function writeReceipt(ownerId: number, receipt: SetupCaptureReceipt, storage: Ca
     throw new Error('The setup capture receipt could not be saved. No new attempt was created. Retry to check the existing attempt.');
   }
 }
-export function reserveSetupCapture(ownerId: number, storage = setupCaptureStorage(), createId = () => crypto.randomUUID()): SetupCaptureReceipt {
+export function reserveSetupCapture(ownerId: number, storage = setupCaptureStorage(), createId = createBrowserId): SetupCaptureReceipt {
   const previous = readSetupCapture(ownerId, storage);
   if (previous) return previous;
   const receipt: SetupCaptureReceipt = { version: 1, attemptId: createId(), phase: 'pending' };

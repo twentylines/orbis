@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { historicalPoint } from '@/modules/time-machine/time-machine.test-data';
 import { TimeMachineApiError } from '@/modules/time-machine/time-machine-api';
+import { createBrowserId } from '@/lib/browser-id';
 import {
   acknowledgeSetupCapture,
   readSetupCapture,
@@ -24,6 +25,46 @@ function memoryStorage() {
   const values = new Map<string, string>();
   return { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => void values.set(key, value) };
 }
+test('LAN HTTP can reserve and reuse one capture without randomUUID', () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  const original = globalThis.crypto;
+  let calls = 0;
+  Object.defineProperty(globalThis, 'crypto', {
+    configurable: true,
+    value: {
+      getRandomValues: (bytes: Uint8Array) => {
+        calls++;
+        return original.getRandomValues(bytes);
+      },
+    },
+  });
+  try {
+    const storage = memoryStorage();
+    const receipt = reserveSetupCapture(1, storage);
+    expect(receipt.attemptId).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+    expect(readSetupCapture(1, storage)).toEqual(receipt);
+    expect(reserveSetupCapture(1, storage)).toEqual(receipt);
+    expect(calls).toBe(1);
+    const ids = new Set(Array.from({ length: 100 }, () => createBrowserId()));
+    expect(ids.size).toBe(100);
+    for (const id of ids) expect(id).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, 'crypto', descriptor);
+    else Reflect.deleteProperty(globalThis, 'crypto');
+  }
+});
+test('missing browser randomness fails before storing a capture receipt', () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  Object.defineProperty(globalThis, 'crypto', { configurable: true, value: {} });
+  try {
+    const storage = memoryStorage();
+    expect(() => reserveSetupCapture(1, storage)).toThrow('This browser cannot create a secure request.');
+    expect(readSetupCapture(1, storage)).toBeNull();
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, 'crypto', descriptor);
+    else Reflect.deleteProperty(globalThis, 'crypto');
+  }
+});
 test('a capture attempt is durable before requests, owner scoped and reused after reload without storing credentials', () => {
   const storage = memoryStorage();
   const first = reserveSetupCapture(1, storage, () => attemptId);

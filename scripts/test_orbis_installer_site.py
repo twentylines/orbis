@@ -1,4 +1,5 @@
 import copy
+import fnmatch
 from contextlib import redirect_stdout
 import importlib.util
 import io
@@ -16,6 +17,17 @@ SPEC.loader.exec_module(SITE)
 
 
 class InstallerEndpointTests(unittest.TestCase):
+    def test_packaged_helper_changes_trigger_independent_installer_publication(self):
+        repository = Path(__file__).resolve().parent.parent
+        workflow = (repository / '.github/workflows/installer-site.yml').read_text()
+        paths = [line.strip()[3:-1] for line in workflow.splitlines() if line.startswith("      - '")]
+        commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repository).decode().strip()
+        files = SITE.BUILD.committed_files(repository, commit)
+        self.assertTrue(files)
+        for name in files:
+            with self.subTest(source=name):
+                self.assertTrue(any(fnmatch.fnmatchcase(name, pattern) for pattern in paths), name)
+
     def setUp(self):
         self.release = {"schema": "orbis.release.v1", "image": "ghcr.io/twentylines/orbis", "tag": "v1.0.0", "commit": "a" * 40, "digest": "sha256:" + "b" * 64, "installationProtocol": "orbis.installation-state.v1", "runtipiCompatibility": "4.10.1"}
         self.files = {name: b"# public source\n" for name in SITE.BUILD.REQUIRED}

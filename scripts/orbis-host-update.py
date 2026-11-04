@@ -25,7 +25,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 
 def load_script(name: str, module_name: str):
@@ -43,7 +43,7 @@ CONTROLLER = load_script("orbis-host-controller-update.py", "orbis_controller_up
 CORE_SERVICES = ("runtipi-reverse-proxy", "runtipi", "runtipi-queue", "runtipi-db")
 JOURNAL_SCHEMA = "orbis.update.v1"
 TERMINAL_STAGES = {"complete", "rolled-back", "aborted"}
-FAILURE_MESSAGES = {**SNAPSHOT.FAILURE_MESSAGES, "source-bootstrap-preservation-unsupported": "The source controller cannot safely restart with its current network, cache and TLS state. Review the source bootstrap before updating.", "controller-preservation-unsupported": "This release cannot preserve the live proxy during a controller update. Choose a release with controller preservation support."}
+FAILURE_MESSAGES = {**SNAPSHOT.FAILURE_MESSAGES, "source-bootstrap-preservation-unsupported": "The source controller cannot safely restart with its current network, cache and TLS state. Review the source bootstrap before updating.", "controller-preservation-unsupported": "This Orbis version cannot be installed with the current updater. Choose a newer version."}
 FAILURE_STAGES = {"preparing", "downloading", "pulled", "stopping", "stopped", "snapshotting", "snapshot-ready", "staged"}
 DOWNLOAD_SCHEMA = "orbis.download-progress.v1"
 DOWNLOAD_LIMIT = 2**53 - 1
@@ -51,6 +51,7 @@ PULL_TIMEOUT = 30 * 60
 PULL_LINE_LIMIT = 64 * 1024
 PULL_STREAM_LIMIT = 32 * 1024 * 1024
 PULL_LAYER_LIMIT = 4096
+PULL_INSPECT_LIMIT = 1024 * 1024
 
 
 def safe_download(record: dict | None) -> dict:
@@ -84,6 +85,7 @@ class DownloadProgress:
         self.last_sample = float("-inf")
         self.finished = False
         self.up_to_date = False
+        self.succeeded = False
         self.expected_reference = expected_reference
 
     def emit(self, *, force=False):
@@ -93,7 +95,8 @@ class DownloadProgress:
         self.last_sample = now
         layers = list(self.layers.values())
         current = sum(layer["current"] for layer in layers)
-        known = bool(layers or self.finished) and all(layer["total"] is not None for layer in layers)
+        known = (bool(layers or (self.finished and self.up_to_date)) and all(layer["total"] is not None for layer in layers)
+                 and (not self.finished or all(layer["downloaded"] for layer in layers)))
         total = sum(layer["total"] for layer in layers) if known else None
         if current > DOWNLOAD_LIMIT or (total is not None and total > DOWNLOAD_LIMIT):
             raise ValueError("Docker download counters exceed the supported limit")
@@ -115,6 +118,7 @@ class DownloadProgress:
             if self.expected_reference is not None and status.rsplit(" for ", 1)[-1] != self.expected_reference:
                 raise ValueError("Docker completed a different image download")
             self.up_to_date = status.startswith("Status: Image is up to date for ")
+            self.succeeded = True
             return True
         identifier = value.get("id")
         if status not in {"Pulling fs layer", "Waiting", "Downloading", "Verifying Checksum", "Download complete", "Extracting", "Pull complete", "Already exists"}:
@@ -154,8 +158,10 @@ class DownloadProgress:
         return False
 
     def finish(self):
-        if any(not layer["complete"] for layer in self.layers.values()):
-            raise RuntimeError("Docker download ended before all layers were ready")
+        if not self.succeeded:
+            raise RuntimeError("Docker download ended without a complete result")
+        # Docker's sampled progress may omit layer closure events. Keep their
+        # observed counters; only the final pull result establishes completion.
         self.finished = True
         self.emit(force=True)
 
@@ -229,7 +235,7 @@ def pull_verified_image(context, target, root, publish, *, cancelled=None):
                         try:
                             transport.shutdown(socket.SHUT_RDWR)
                         except OSError:
-                            pass
+                            continue
                         return
         guard = threading.Thread(target=guard_deadline, daemon=True)
         guard.start()
@@ -268,6 +274,37 @@ def pull_verified_image(context, target, root, publish, *, cancelled=None):
                     raise ValueError("Docker download progress exceeds its line limit")
             if pending.strip() or not succeeded:
                 raise RuntimeError("Docker download ended without a complete result")
+            if response.length not in {None, 0}:
+                raise RuntimeError("Docker download ended before the HTTP response was complete")
+            connection.close_transport()
+            if time.monotonic() >= deadline or (cancelled is not None and cancelled()):
+                raise RuntimeError("Orbis image verification was cancelled or timed out")
+            connection = DownloadConnection(endpoint, context, root)
+            reference = f"{target['image']}@{target['digest']}"
+            connection.request("GET", f"/images/{quote(reference, safe='')}/json")
+            transport = connection.sock
+            response = connection.getresponse()
+            if response.status != 200:
+                raise RuntimeError("Docker could not inspect the downloaded Orbis image")
+            metadata = bytearray()
+            while not response.isclosed():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or (cancelled is not None and cancelled()):
+                    raise RuntimeError("Orbis image verification was cancelled or timed out")
+                transport.settimeout(min(30, remaining))
+                block = response.read1(min(65536, PULL_INSPECT_LIMIT + 1 - len(metadata)))
+                if not block:
+                    break
+                metadata.extend(block)
+                if len(metadata) > PULL_INSPECT_LIMIT:
+                    raise ValueError("Docker image inspection exceeds its size limit")
+            if response.length not in {None, 0}:
+                raise RuntimeError("Docker image inspection ended before the HTTP response was complete")
+            image = json.loads(metadata)
+            if (not isinstance(image, dict) or not isinstance(image.get("RepoDigests"), list)
+                    or reference not in image["RepoDigests"]
+                    or not isinstance(image.get("Id"), str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", image["Id"])):
+                raise ValueError("The downloaded Orbis image does not match the verified reference")
             tracker.finish()
         finally:
             finished.set()

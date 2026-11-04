@@ -54,6 +54,7 @@ class DownloadProgressTests(unittest.TestCase):
         self.assertEqual(self.output[-1]["phase"], "extracting")
         self.event(layer("a", "Pull complete"))
         self.event(layer("b", "Pull complete"))
+        self.event(SUCCESS)
         self.tracker.finish()
         final = self.output[-1]
         self.assertEqual((final["phase"], final["currentBytes"], final["totalBytes"]), ("complete", 150, 150))
@@ -64,6 +65,7 @@ class DownloadProgressTests(unittest.TestCase):
     def test_total_remains_unknown_when_a_download_size_is_missing(self):
         self.event(layer("a", "Downloading", 17))
         self.event(layer("a", "Pull complete"))
+        self.event(SUCCESS)
         self.tracker.finish()
         self.assertEqual(self.output[-1]["currentBytes"], 17)
         self.assertIsNone(self.output[-1]["totalBytes"])
@@ -71,6 +73,7 @@ class DownloadProgressTests(unittest.TestCase):
 
     def test_all_cached_and_up_to_date_images_have_zero_transfer(self):
         self.event(layer("a", "Already exists"))
+        self.event(SUCCESS)
         self.tracker.finish()
         self.assertTrue(self.output[-1]["alreadyCached"])
         self.assertEqual(self.output[-1]["totalBytes"], 0)
@@ -91,11 +94,12 @@ class DownloadProgressTests(unittest.TestCase):
         self.tracker.event(layer("a", "Downloading", 1000, 1000))
         self.assertEqual(len(self.output), 2)
         self.tracker.event(layer("a", "Pull complete"))
+        self.tracker.event(SUCCESS)
         self.tracker.finish()
         self.assertEqual(self.output[-1]["currentBytes"], 1000)
         self.assertEqual(len(self.output), 3)
 
-    def test_invalid_counters_errors_incomplete_layers_and_layer_bounds_fail_closed(self):
+    def test_invalid_counters_errors_missing_final_result_and_layer_bounds_fail_closed(self):
         for event in ({"error": "SECRET"}, {"errorDetail": {"message": "SECRET"}},
                       layer("a", "Downloading", True, 20), layer("a", "Downloading", 21, 20),
                       layer("a", "Downloading", -1, 20), layer("a", "Downloading", UPDATE.DOWNLOAD_LIMIT + 1),
@@ -104,13 +108,14 @@ class DownloadProgressTests(unittest.TestCase):
                 self.tracker.event(event)
             self.assertNotIn("SECRET", str(caught.exception))
         self.event(layer("a", "Downloading", 1, 20))
-        with self.assertRaisesRegex(RuntimeError, "all layers"):
+        with self.assertRaisesRegex(RuntimeError, "complete result"):
             self.tracker.finish()
         with mock.patch.object(UPDATE, "PULL_LAYER_LIMIT", 1), self.assertRaises(ValueError):
             self.event(layer("b", "Pulling fs layer"))
 
     def test_only_valid_bounded_public_fields_are_serialized(self):
         self.event(layer("a", "Already exists"))
+        self.event(SUCCESS)
         self.tracker.finish()
         progress = self.output[-1]
         self.assertEqual(UPDATE.safe_download({"download": progress}), {"download": progress})
@@ -118,6 +123,40 @@ class DownloadProgressTests(unittest.TestCase):
                       {**progress, "totalBytes": None}, {**progress, "updatedAt": float("nan")},
                       {**progress, "layersTotal": 5000}, {**progress, "phase": "SECRET"}, {**progress, "phase": []}):
             self.assertEqual(UPDATE.safe_download({"download": value}), {})
+
+    def test_final_success_does_not_require_sampled_layer_closure_or_invent_missing_bytes(self):
+        for index in range(22):
+            self.event({"id": f"{index:012x}", "status": "Pulling fs layer"})
+            if index < 8:
+                self.event({"id": f"{index:012x}", "status": "Already exists"})
+            else:
+                if index == 8:
+                    self.event({"id": f"{index:012x}", "status": "Downloading",
+                                "progressDetail": {"current": 115331279, "total": 115331279}})
+                self.event({"id": f"{index:012x}", "status": "Download complete"})
+        self.event(SUCCESS)
+        self.tracker.finish()
+        final = self.output[-1]
+        self.assertEqual(final["phase"], "complete")
+        self.assertEqual(final["currentBytes"], 115331279)
+        self.assertIsNone(final["totalBytes"])
+        self.assertFalse(final["totalKnown"])
+        self.assertFalse(final["alreadyCached"])
+        self.assertEqual((final["layersComplete"], final["layersTotal"]), (8, 22))
+
+    def test_final_success_with_missing_download_sample_keeps_observed_bytes_and_unknown_total(self):
+        self.event(layer("a", "Downloading", 17, 100))
+        self.event(SUCCESS)
+        self.tracker.finish()
+        self.assertEqual(self.output[-1]["currentBytes"], 17)
+        self.assertIsNone(self.output[-1]["totalBytes"])
+
+    def test_downloaded_image_without_byte_samples_does_not_claim_zero_size(self):
+        self.event(SUCCESS)
+        self.tracker.finish()
+        self.assertEqual(self.output[-1]["currentBytes"], 0)
+        self.assertIsNone(self.output[-1]["totalBytes"])
+        self.assertFalse(self.output[-1]["alreadyCached"])
 
 
 class UnixHTTPServer(HTTPServer):
@@ -129,16 +168,24 @@ class UnixHTTPServer(HTTPServer):
 
 
 class DownloadStreamTests(unittest.TestCase):
-    def stream(self, body, *, cancelled=None, status=200):
+    def stream(self, body, *, cancelled=None, status=200, inspection=None, inspection_status=200, declared_extra=0, inspection_extra=0):
         observed = []
+        if inspection is None:
+            inspection = {"Id": "sha256:" + "b" * 64, "RepoDigests": [TARGET["image"] + "@" + TARGET["digest"]]}
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
                 observed.append(self.path)
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json")
-                self.send_header("Transfer-Encoding", "chunked")
+                if declared_extra:
+                    self.send_header("Content-Length", str(len(body) + declared_extra))
+                else:
+                    self.send_header("Transfer-Encoding", "chunked")
                 self.end_headers()
                 try:
+                    if declared_extra:
+                        self.wfile.write(body)
+                        return
                     for offset in range(0, len(body), 37):
                         block = body[offset:offset + 37]
                         self.wfile.write(f"{len(block):x}\r\n".encode() + block + b"\r\n")
@@ -146,6 +193,14 @@ class DownloadStreamTests(unittest.TestCase):
                     self.wfile.write(b"0\r\n\r\n")
                 except (BrokenPipeError, ConnectionResetError):
                     pass
+
+            def do_GET(self):
+                observed.append(self.path)
+                metadata = json.dumps(inspection).encode()
+                self.send_response(inspection_status)
+                self.send_header("Content-Length", str(len(metadata) + inspection_extra))
+                self.end_headers()
+                self.wfile.write(metadata)
 
             def log_message(self, *_args):
                 pass
@@ -173,16 +228,53 @@ class DownloadStreamTests(unittest.TestCase):
                                               layer("a", "Pull complete"), SUCCESS))
         self.assertEqual(output[-1]["currentBytes"], 100)
         self.assertEqual(output[-1]["phase"], "complete")
-        self.assertEqual(paths, ["/images/create?fromImage=ghcr.io%2Ftwentylines%2Forbis&tag=sha256%3A" + "a" * 64])
+        self.assertEqual(paths, ["/images/create?fromImage=ghcr.io%2Ftwentylines%2Forbis&tag=sha256%3A" + "a" * 64,
+                                 "/images/ghcr.io%2Ftwentylines%2Forbis%40sha256%3A" + "a" * 64 + "/json"])
 
     def test_error_http_failure_truncation_and_no_final_confirmation_fail(self):
         for body, status in ((self.body({"error": "SECRET"}), 200), (self.body(SUCCESS), 500),
                              (b'{"status":"incomplete"', 200), (self.body(layer("a", "Already exists")), 200),
-                             (self.body(layer("a", "Downloading", 1, 2), SUCCESS), 200),
                              (self.body({"status": "Status: Image is up to date for another-image"}), 200)):
             with self.subTest(body=body, status=status), self.assertRaises((ValueError, RuntimeError)) as caught:
                 self.stream(body, status=status)
             self.assertNotIn("SECRET", str(caught.exception))
+
+    def test_sampled_incomplete_layers_succeed_only_after_exact_reference_inspection(self):
+        output, paths = self.stream(self.body(layer("a", "Downloading", 1, 2), SUCCESS))
+        self.assertEqual(output[-1]["phase"], "complete")
+        self.assertEqual(output[-1]["currentBytes"], 1)
+        self.assertIsNone(output[-1]["totalBytes"])
+        self.assertEqual(len(paths), 2)
+        for metadata in ({"Id": "sha256:" + "b" * 64, "RepoDigests": []},
+                         {"Id": "not-an-image", "RepoDigests": [TARGET["image"] + "@" + TARGET["digest"]]},
+                         {"Id": TARGET["digest"], "RepoDigests": ["other@" + TARGET["digest"]]}):
+            with self.subTest(metadata=metadata), self.assertRaisesRegex(ValueError, "verified reference"):
+                self.stream(self.body(SUCCESS), inspection=metadata)
+        with self.assertRaisesRegex(RuntimeError, "inspect"):
+            self.stream(self.body(SUCCESS), inspection_status=404)
+        with mock.patch.object(UPDATE, "PULL_INSPECT_LIMIT", 5), self.assertRaisesRegex(ValueError, "inspection exceeds"):
+            self.stream(self.body(SUCCESS))
+
+    def test_valid_final_result_does_not_allow_truncated_http_framing(self):
+        with self.assertRaisesRegex(RuntimeError, "HTTP response"):
+            self.stream(self.body(SUCCESS), declared_extra=1)
+        with self.assertRaisesRegex(RuntimeError, "inspection ended"):
+            self.stream(self.body(SUCCESS), inspection_extra=1)
+
+    def test_docker29_cached_index_three_event_sequence_completes_with_zero_transfer(self):
+        reference = TARGET["image"] + "@" + TARGET["digest"]
+        output, _ = self.stream(self.body({"status": "Pulling from twentylines/orbis", "id": reference},
+                                         {"status": "Digest: " + TARGET["digest"]},
+                                         {"status": "Status: Image is up to date for " + reference}),
+                                inspection={"Id": TARGET["digest"], "RepoDigests": [reference]})
+        self.assertEqual(output[-1]["phase"], "complete")
+        self.assertTrue(output[-1]["alreadyCached"])
+        self.assertEqual((output[-1]["currentBytes"], output[-1]["totalBytes"]), (0, 0))
+
+    def test_errors_or_malformed_json_after_valid_final_result_still_fail(self):
+        for ending in (self.body({"error": "SECRET"}), b'{"status":', b'not-json\n'):
+            with self.subTest(ending=ending), self.assertRaises((ValueError, RuntimeError)):
+                self.stream(self.body(SUCCESS) + ending)
 
     def test_cancellation_timeout_and_stream_limits_never_report_completion(self):
         with self.assertRaisesRegex(RuntimeError, "cancelled"):
@@ -238,7 +330,8 @@ class DownloadStreamTests(unittest.TestCase):
         processes = []
         def proxy(command, **kwargs):
             self.assertEqual(command, ["docker", "--context", "remote-exact", "system", "dial-stdio"])
-            process = launch([sys.executable, "-c", script], **kwargs)
+            reply = body if not processes else json.dumps({"Id": TARGET["digest"], "RepoDigests": [TARGET["image"] + "@" + TARGET["digest"]]}).encode()
+            process = launch([sys.executable, "-c", script.replace(f"body={body!r}", f"body={reply!r}")], **kwargs)
             processes.append(process)
             return process
         output = []
@@ -247,7 +340,7 @@ class DownloadStreamTests(unittest.TestCase):
             UPDATE.pull_verified_image("remote-exact", TARGET, Path.cwd(), output.append)
         self.assertEqual(output[-1]["phase"], "complete")
         self.assertTrue(output[-1]["alreadyCached"])
-        self.assertEqual([process.poll() for process in processes], [0])
+        self.assertEqual([process.poll() for process in processes], [0, 0])
 
     def test_remote_transport_is_terminated_and_reaped_when_it_does_not_exit(self):
         connection = UPDATE.DownloadConnection("tcp://other", "tls-context", Path.cwd())
