@@ -321,19 +321,26 @@ export async function acquireAuthorityLease(authority: DedicatedResetAuthority) 
   try {
     await handle.writeFile(`${JSON.stringify({ version: 1, pid: process.pid, nonce: randomUUID() })}\n`);
     await handle.sync();
-  } finally {
+    await syncDirectory(directory);
+  } catch (error) {
     await handle.close();
+    throw error;
   }
-  await syncDirectory(directory);
   let released = false;
   return async () => {
     if (released) return;
     released = true;
-    const current = await fs.lstat(file);
-    if (!current.isFile() || current.isSymbolicLink() || current.dev !== identity.dev || current.ino !== identity.ino)
-      throw new ResetAuthorityError('journal-unsafe', { reason: 'lock-changed' });
-    await fs.unlink(file);
-    await syncDirectory(directory);
+    try {
+      // Keep the original inode open for the lease lifetime so unlink/recreate cannot reuse its number.
+      const current = await fs.lstat(file);
+      const pinned = await handle.stat();
+      if (!current.isFile() || current.isSymbolicLink() || current.dev !== identity.dev || current.ino !== identity.ino || pinned.nlink !== 1)
+        throw new ResetAuthorityError('journal-unsafe', { reason: 'lock-changed' });
+      await fs.unlink(file);
+      await syncDirectory(directory);
+    } finally {
+      await handle.close();
+    }
   };
 }
 

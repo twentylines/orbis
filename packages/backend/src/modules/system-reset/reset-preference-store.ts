@@ -29,7 +29,7 @@ export const STAGE_PREFIX = '.orbis-reset-stage-';
 const MAX_TARGETS = 4096;
 const MAX_ENTRIES = 12_000;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
-const MAX_BINDING_BYTES = 64 * 1024;
+const MAX_BINDING_BYTES = 256 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHARED_STATE_MOUNT = Symbol('verified shared state mount');
 
@@ -189,7 +189,7 @@ export class PinnedDirectory {
 
 const bindingSchema = type({
   '+': 'reject',
-  version: '1',
+  version: '2',
   journal: 'string > 0 & string <= 64',
   stage: { dev: 'number', ino: 'number' },
   parent: { path: 'string > 0', dev: 'number', ino: 'number' },
@@ -200,6 +200,7 @@ const bindingSchema = type({
     type: "'file' | 'directory' | 'absent'",
     dev: 'number',
     ino: 'number',
+    birthtimeMs: 'number >= 0',
   }).array(),
 });
 type Binding = typeof bindingSchema.infer;
@@ -230,7 +231,13 @@ export type ResetPreferenceStoreOptions = {
 const sameBindingTargets = (a: Binding, b: Binding) =>
   a.targets.length === b.targets.length &&
   a.targets.every(
-    (target, index) => target.index === b.targets[index]?.index && target.name === b.targets[index]?.name && target.type === b.targets[index]?.type,
+    (target, index) =>
+      target.index === b.targets[index]?.index &&
+      target.name === b.targets[index]?.name &&
+      target.type === b.targets[index]?.type &&
+      target.dev === b.targets[index]?.dev &&
+      target.ino === b.targets[index]?.ino &&
+      target.birthtimeMs === b.targets[index]?.birthtimeMs,
   );
 
 /**
@@ -349,23 +356,26 @@ export class ResetPreferenceStore {
                   if (missing(error)) return null;
                   throw error;
                 });
-                if (!stat) return { index, name, type: 'absent' as const, dev: 0, ino: 0 };
+                if (!stat) return { index, name, type: 'absent' as const, dev: 0, ino: 0, birthtimeMs: 0 };
                 if (stat.isSymbolicLink() || (this.uid !== undefined && stat.uid !== this.uid))
                   throw new ResetPreferenceError('unsafe', { reason: 'target' });
                 if (!stat.isDirectory() && !stat.isFile()) throw new ResetPreferenceError('unsafe', { reason: 'target' });
                 if (stat.isFile() && (stat.nlink !== 1 || stat.size > MAX_FILE_BYTES)) throw new ResetPreferenceError('unsafe', { reason: 'target' });
                 if (stat.isDirectory()) await this.inspect(pin.child(name));
+                if (!Number.isFinite(stat.birthtimeMs) || stat.birthtimeMs <= 0)
+                  throw new ResetPreferenceError('unsafe', { reason: 'generation-unavailable' });
                 return {
                   index,
                   name,
                   type: stat.isDirectory() ? ('directory' as const) : ('file' as const),
                   dev: stat.dev,
                   ino: stat.ino,
+                  birthtimeMs: stat.birthtimeMs,
                 };
               }),
             );
             binding = {
-              version: 1,
+              version: 2,
               journal: journal.toLowerCase(),
               stage: { dev: pin.identity.dev, ino: pin.identity.ino },
               parent: { path: parent, dev: pin.identity.dev, ino: pin.identity.ino },
@@ -452,7 +462,7 @@ export class ResetPreferenceStore {
         });
         if (staged) {
           if (target.type === 'absent' || live) throw new ResetPreferenceError('stage-conflict', { reason: 'recreated' });
-          if (staged.isSymbolicLink() || staged.dev !== target.dev || staged.ino !== target.ino)
+          if (staged.isSymbolicLink() || staged.dev !== target.dev || staged.ino !== target.ino || staged.birthtimeMs !== target.birthtimeMs)
             throw new ResetPreferenceError('identity-changed', { name: target.name });
           continue;
         }
@@ -462,18 +472,21 @@ export class ResetPreferenceStore {
         if (!live.isDirectory() && !live.isFile()) throw new ResetPreferenceError('unsafe', { reason: 'target' });
         if (live.isFile() && (live.nlink !== 1 || live.size > MAX_FILE_BYTES)) throw new ResetPreferenceError('unsafe', { reason: 'target' });
         const kind = live.isDirectory() ? 'directory' : 'file';
+        if (!Number.isFinite(live.birthtimeMs) || live.birthtimeMs <= 0)
+          throw new ResetPreferenceError('unsafe', { reason: 'generation-unavailable' });
         if (target.type === 'absent') {
           // A preference created after the journal was prepared. Adopt it, durably, before moving it.
           target.type = kind;
           target.dev = live.dev;
           target.ino = live.ino;
+          target.birthtimeMs = live.birthtimeMs;
           await this.writeBinding(stagePin, group.binding);
-        } else if (target.type !== kind || target.dev !== live.dev || target.ino !== live.ino) {
+        } else if (target.type !== kind || target.dev !== live.dev || target.ino !== live.ino || target.birthtimeMs !== live.birthtimeMs) {
           throw new ResetPreferenceError('identity-changed', { name: target.name });
         }
         await group.pin.renameInto(stagePin, target.name, target.name);
         const moved = await stagePin.lstat(target.name);
-        if (moved.isSymbolicLink() || moved.dev !== target.dev || moved.ino !== target.ino)
+        if (moved.isSymbolicLink() || moved.dev !== target.dev || moved.ino !== target.ino || moved.birthtimeMs !== target.birthtimeMs)
           throw new ResetPreferenceError('identity-changed', { name: target.name });
       }
       await group.pin.assertCurrent();
@@ -485,7 +498,7 @@ export class ResetPreferenceStore {
           throw error;
         });
         if (!staged) continue;
-        if (staged.isSymbolicLink() || staged.dev !== target.dev || staged.ino !== target.ino)
+        if (staged.isSymbolicLink() || staged.dev !== target.dev || staged.ino !== target.ino || staged.birthtimeMs !== target.birthtimeMs)
           throw new ResetPreferenceError('identity-changed', { name: target.name });
         await this.inspect(stagePin.child(target.name));
         await fs.rm(stagePin.child(target.name), { recursive: true, force: false }).catch(() => {

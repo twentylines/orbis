@@ -286,6 +286,30 @@ it('detects a target swapped between preflight and the move', async () => {
   expect(await fs.readFile(target, 'utf8')).toBe('swapped');
 });
 
+it('rejects a new file generation even when the filesystem reuses its inode number', async () => {
+  const target = await file('state/desktop/7.json');
+  const selected = store();
+  const plan = await selected.preflight(journal(), [target]);
+  try {
+    await selected.begin(plan);
+    const group = plan.groups[0];
+    const expected = group?.binding.targets[0];
+    if (!group || !expected) throw new Error('Missing target fixture');
+    await fs.unlink(target);
+    await fs.writeFile(target, 'replacement must survive', { mode: 0o600 });
+    const lstat = group.pin.lstat.bind(group.pin);
+    group.pin.lstat = async (name) => {
+      const actual = await lstat(name);
+      if (name !== expected.name) return actual;
+      return Object.assign(Object.create(actual), { dev: expected.dev, ino: expected.ino, birthtimeMs: expected.birthtimeMs + 1 });
+    };
+    expect(await code(selected.commit(plan))).toBe('identity-changed');
+    expect(await fs.readFile(target, 'utf8')).toBe('replacement must survive');
+  } finally {
+    await plan.close();
+  }
+});
+
 it('adopts a preference created after preflight and then erases it', async () => {
   const target = path.join(state, 'desktop/7.json');
   await fs.mkdir(path.dirname(target), { mode: 0o700 });

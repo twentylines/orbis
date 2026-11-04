@@ -138,21 +138,21 @@ describe('authority selection', () => {
   });
 
   it('refuses to hide an unfinished legacy journal when the dedicated authority appears', async () => {
-    await fs.mkdir(authority, { mode: 0o700 });
     const pending = journal({ phase: 'preferences' });
     await new ResetState(root).save(pending);
+    await fs.mkdir(authority, { mode: 0o700 });
     const error = await resolveResetAuthority({ dataDir: root, readMounts: read(mountTable(line(authority))) }).catch((error: unknown) => error);
     expect(error).toBeInstanceOf(ResetAuthorityError);
     expect(error).toMatchObject({ code: 'legacy-journal', detail: { reason: 'preferences', journal: pending.id } });
   });
 
   it('allows migration after a completed legacy journal but not while its recovery lock survives', async () => {
-    await fs.mkdir(authority, { mode: 0o700 });
     await new ResetState(root).save(journal({ phase: 'complete' }));
-    expect(await resolveResetAuthority({ dataDir: root, readMounts: read(mountTable(line(authority))) })).toMatchObject({ mode: 'dedicated' });
     const release = await new ResetState(root).acquireLease();
+    await fs.mkdir(authority, { mode: 0o700 });
     expect(await code(resolveResetAuthority({ dataDir: root, readMounts: read(mountTable(line(authority))) }))).toBe('legacy-journal');
     await release();
+    expect(await resolveResetAuthority({ dataDir: root, readMounts: read(mountTable(line(authority))) })).toMatchObject({ mode: 'dedicated' });
   });
 
   it('fails closed on legacy staging residue, orphan locks and unreadable legacy journals', async () => {
