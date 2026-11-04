@@ -23,7 +23,7 @@ afterEach(() => vi.useRealTimers());
 describe('Docker telemetry', () => {
   it('uses Docker CPU deltas and excludes reclaimable file cache on both cgroup layouts', () => {
     expect(containerUsage(statistics())).toMatchObject({
-      cpuPercent: 10,
+      cpuPercent: 5,
       memoryBytes: 800,
       memoryLimitBytes: 4000,
       receivedBytes: 400,
@@ -38,6 +38,26 @@ describe('Docker telemetry', () => {
     expect(
       containerUsage(first, { ...statistics(), cpu_stats: { cpu_usage: { total_usage: 200 }, system_cpu_usage: 1000 } } as never).cpuPercent,
     ).toBeNull();
+  });
+
+  it('reports a share of total host CPU and rejects invalid or topology-changing intervals', () => {
+    const reading = statistics();
+    reading.cpu_stats = { cpu_usage: { total_usage: 200 }, system_cpu_usage: 1800, online_cpus: 8 } as never;
+    reading.precpu_stats = { cpu_usage: { total_usage: 100 }, system_cpu_usage: 1000, online_cpus: 8 } as never;
+    expect(containerUsage(reading).cpuPercent).toBe(12.5);
+    reading.cpu_stats.cpu_usage.total_usage = 900;
+    expect(containerUsage(reading).cpuPercent).toBe(100);
+    reading.cpu_stats.cpu_usage.total_usage = 901;
+    expect(containerUsage(reading).cpuPercent).toBeNull();
+    reading.cpu_stats.cpu_usage.total_usage = 200;
+    reading.precpu_stats.online_cpus = 4;
+    expect(containerUsage(reading).cpuPercent).toBeNull();
+    reading.precpu_stats = { cpu_usage: { total_usage: 100 }, system_cpu_usage: 1000 } as never;
+    expect(containerUsage(reading).cpuPercent).toBe(12.5);
+    reading.cpu_stats.system_cpu_usage = 1000;
+    expect(containerUsage(reading).cpuPercent).toBeNull();
+    reading.cpu_stats.system_cpu_usage = Number.NaN;
+    expect(containerUsage(reading).cpuPercent).toBeNull();
   });
 
   it('shares samples, joins legacy Compose apps, and only returns selected safe fields', async () => {
@@ -73,7 +93,7 @@ describe('Docker telemetry', () => {
     expect(first.containers[0]).toMatchObject({
       appUrn: 'demo:official',
       health: 'unhealthy',
-      cpuPercent: 10,
+      cpuPercent: 5,
       memoryBytes: 800,
       readiness: {
         failingStreak: 3,

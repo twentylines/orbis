@@ -180,6 +180,11 @@ class ScopedUpdateTests(unittest.TestCase):
     def prepare(self):
         (self.root / 'VERSION').write_text('4.10.1\n')
         (self.root / 'orbis-compose.yml').write_text(UPDATE.HOST.STAGE.staged_content(CURRENT))
+        proxy = self.root / 'traefik'
+        proxy.mkdir()
+        self.docker.services[FIXTURE.identifier('runtipi-reverse-proxy')]['mounts'] = [
+            {'Type': 'bind', 'Source': str(proxy), 'Destination': '/etc/traefik', 'RW': True},
+        ]
         self.old_apps = copy.deepcopy(self.docker.apps)
         for owner, name, value in [
             (UPDATE.HOST.PLAN, 'plan', {'configuredImage': CURRENT['image'] + '@' + CURRENT['digest']}),
@@ -187,6 +192,7 @@ class ScopedUpdateTests(unittest.TestCase):
             (UPDATE, 'core_ownership', set(UPDATE.CORE_SERVICES)),
             (UPDATE.CHECK, 'check', {'image': TARGET['image'] + '@' + TARGET['digest'], 'commit': TARGET['commit'], 'runtipiCompatibility': TARGET['runtipiCompatibility'], 'installationProtocol': TARGET['installationProtocol']}),
             (UPDATE, 'controller_tools', (FIXTURE.TX, self.docker)),
+            (UPDATE, 'pull_verified_image', None),
         ]:
             patch = mock.patch.object(owner, name, return_value=value); patch.start(); self.addCleanup(patch.stop)
         patch = mock.patch.object(UPDATE, 'docker_checked', return_value='owned-daemon'); patch.start(); self.addCleanup(patch.stop)
@@ -198,7 +204,7 @@ class ScopedUpdateTests(unittest.TestCase):
         with mock.patch.object(UPDATE, 'require_quiet_apps', side_effect=AssertionError('apps must remain live')), mock.patch.object(UPDATE.SNAPSHOT, 'preflight', side_effect=AssertionError('whole app data must not be scanned')):
             planned = UPDATE.update_plan(self.root, CURRENT, TARGET, self.docker.context, self.bundle)
         self.assertFalse(planned['runningAppsMustBeStopped'])
-        self.assertEqual(planned['checkpoint']['storage']['resources'][0]['excludedPaths'], ['app-data'])
+        self.assertEqual(planned['checkpoint']['storage']['resources'][0]['excludedPaths'], ['app-data', 'traefik'])
         self.assertEqual(self.docker.apps, self.old_apps)
         self.assertEqual(self.docker.calls, [])
 
@@ -223,15 +229,25 @@ class ScopedUpdateTests(unittest.TestCase):
             return 'pulled'
         def stop(*_args, **_kwargs):
             self.docker.controller_state = 'exited'
-            for service in self.docker.services.values(): service['state'] = 'exited'
+            for service in self.docker.services.values():
+                if service['name'] != '/runtipi-reverse-proxy': service['state'] = 'exited'
         def start(*_args, **_kwargs):
-            if TARGET['digest'] in (self.root / 'orbis-compose.yml').read_text():
-                database.write_bytes(b'failed new control database')
-                data.write_bytes(b'new application writes while updating')
-                raise RuntimeError('synthetic target start failure')
+            database.write_bytes(b'failed new control database')
+            data.write_bytes(b'new application writes while updating')
+            raise RuntimeError('synthetic target start failure')
+        def restart_original():
             self.docker.controller_state = 'running'
-            for service in self.docker.services.values(): service['state'] = 'running'
-        with mock.patch.object(UPDATE, 'docker_checked', side_effect=checked), mock.patch.object(UPDATE, 'start_core', side_effect=start), mock.patch.object(UPDATE, 'stop_core', side_effect=stop):
+            for service in self.docker.services.values():
+                if service['name'] != '/runtipi-reverse-proxy': service['state'] = 'running'
+        runtime = mock.Mock()
+        runtime.start_target.side_effect = start
+        runtime.start_original.side_effect = restart_original
+        runtime.stop_for_rollback.side_effect = stop
+        runtime.restore_reconstructed_checkpoint.return_value = False
+        def prepare_runtime(checkpoint):
+            runtime.read.return_value = {'phase': 'prepared', 'checkpoint': checkpoint}
+        runtime.prepare.side_effect = prepare_runtime
+        with mock.patch.object(UPDATE, 'docker_checked', side_effect=checked), mock.patch.object(UPDATE.CONTROLLER, 'ControllerUpdate', return_value=runtime):
             with self.assertRaisesRegex(RuntimeError, 'previous release was restored'):
                 UPDATE.apply_update(self.root, CURRENT, TARGET, self.docker.context, self.bundle)
         self.assertEqual(database.read_bytes(), b'original control database')
@@ -242,33 +258,44 @@ class ScopedUpdateTests(unittest.TestCase):
 
 
 class ScopedRecoveryTests(unittest.TestCase):
-    def test_checkpoint_recheck_failure_aborts_without_stopping_or_replaying(self):
+    def setUp(self):
+        patch = mock.patch.object(UPDATE, 'pull_verified_image')
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def legacy_record(self, root, snapshot, checkpoint):
+        return {'schema': UPDATE.JOURNAL_SCHEMA, 'root': str(root), 'snapshot': str(snapshot), 'dockerContext': 'owned',
+                'previousDigest': CURRENT['digest'], 'targetDigest': TARGET['digest'], 'stage': 'stopping',
+                'backupScope': 'controller', 'checkpoint': checkpoint}
+
+    def test_legacy_checkpoint_recheck_failure_aborts_without_stopping_or_replaying(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder) / 'root'; root.mkdir()
             snapshot = Path(folder) / 'backup'
             checkpoint = {'storage': {'bundle': str(snapshot), 'resources': []}}
             tools = SimpleNamespace(validate_review=mock.Mock(), checkpoint=mock.Mock(side_effect=ValueError('changed before checkpoint')), recover=mock.Mock())
-            with mock.patch.object(UPDATE, 'update_plan', return_value={'checkpoint': checkpoint}), mock.patch.object(UPDATE, 'controller_tools', return_value=(tools, SimpleNamespace())), mock.patch.object(UPDATE, 'docker_checked', return_value='pulled'), mock.patch.object(UPDATE, 'core_ownership'), mock.patch.object(UPDATE.HOST, 'installation_fingerprint', return_value={}), mock.patch.object(UPDATE.HOST, 'require_current_state'), mock.patch.object(UPDATE.HOST, 'current_core', return_value={'image': CURRENT['image']+'@'+CURRENT['digest'], 'state': 'running', 'health': 'healthy'}), mock.patch.object(UPDATE, 'stop_core') as stop:
-                with self.assertRaisesRegex(RuntimeError, 'before service downtime'):
-                    UPDATE.apply_update(root, CURRENT, TARGET, 'owned', snapshot)
+            record = self.legacy_record(root, snapshot, checkpoint)
+            with mock.patch.object(UPDATE, 'controller_tools', return_value=(tools, SimpleNamespace())), mock.patch.object(UPDATE, 'core_ownership'), mock.patch.object(UPDATE.HOST, 'installation_fingerprint', return_value={}), mock.patch.object(UPDATE.HOST, 'require_current_state'), mock.patch.object(UPDATE.HOST, 'current_core', return_value={'image': CURRENT['image']+'@'+CURRENT['digest'], 'state': 'running', 'health': 'healthy'}), mock.patch.object(UPDATE, 'stop_core') as stop:
+                UPDATE.rollback(root, CURRENT, 'owned', snapshot, record)
             self.assertEqual(UPDATE.read_journal(snapshot, root, 'owned', CURRENT, TARGET)['stage'], 'aborted')
             self.assertFalse(UPDATE.checkpoint_path(snapshot).exists())
             self.assertFalse(snapshot.exists())
             stop.assert_not_called()
             tools.recover.assert_not_called()
 
-    def test_recovery_keeps_pre_checkpoint_origin_after_a_transient_health_probe_error(self):
+    def test_legacy_recovery_keeps_pre_checkpoint_origin_after_a_transient_health_probe_error(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder) / 'root'; root.mkdir()
             snapshot = Path(folder) / 'backup'
             checkpoint = {'storage': {'bundle': str(snapshot), 'resources': []}}
             tools = SimpleNamespace(validate_review=mock.Mock(), checkpoint=mock.Mock(side_effect=ValueError('changed before checkpoint')), recover=mock.Mock())
             healthy = {'image': CURRENT['image']+'@'+CURRENT['digest'], 'state': 'running', 'health': 'healthy'}
-            with mock.patch.object(UPDATE, 'update_plan', return_value={'checkpoint': checkpoint}), mock.patch.object(UPDATE, 'controller_tools', return_value=(tools, SimpleNamespace())), mock.patch.object(UPDATE, 'docker_checked', return_value='pulled'), mock.patch.object(UPDATE, 'core_ownership'), mock.patch.object(UPDATE.HOST, 'installation_fingerprint', return_value={}), mock.patch.object(UPDATE.HOST, 'require_current_state'), mock.patch.object(UPDATE.HOST, 'current_core', side_effect=[OSError('temporary inspection failure'), healthy]), mock.patch.object(UPDATE, 'stop_core') as stop:
-                with self.assertRaisesRegex(RuntimeError, 'automatic rollback failed'):
-                    UPDATE.apply_update(root, CURRENT, TARGET, 'owned', snapshot)
+            record = self.legacy_record(root, snapshot, checkpoint)
+            with mock.patch.object(UPDATE, 'controller_tools', return_value=(tools, SimpleNamespace())), mock.patch.object(UPDATE, 'core_ownership'), mock.patch.object(UPDATE.HOST, 'installation_fingerprint', return_value={}), mock.patch.object(UPDATE.HOST, 'require_current_state'), mock.patch.object(UPDATE.HOST, 'current_core', side_effect=[OSError('temporary inspection failure'), healthy]), mock.patch.object(UPDATE, 'stop_core') as stop:
+                with self.assertRaisesRegex(OSError, 'temporary inspection failure'):
+                    UPDATE.rollback(root, CURRENT, 'owned', snapshot, record)
                 failed = UPDATE.read_journal(snapshot, root, 'owned', CURRENT, TARGET)
-                self.assertEqual((failed['stage'], failed['rollbackStartedFrom']), ('rollback-failed', 'stopping'))
+                self.assertEqual((failed['stage'], failed['rollbackStartedFrom']), ('rolling-back', 'stopping'))
                 result = UPDATE.recover(root, CURRENT, TARGET, 'owned', snapshot)
             self.assertEqual(result['result'], 'aborted-before-downtime')
             self.assertEqual(UPDATE.read_journal(snapshot, root, 'owned', CURRENT, TARGET)['stage'], 'aborted')

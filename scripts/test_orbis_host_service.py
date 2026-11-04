@@ -598,7 +598,8 @@ class HostServiceTests(unittest.TestCase):
     def test_failed_transaction_reports_verified_rollback(self):
         planned = self.service.plan(TARGET["tag"])
 
-        def fail_after_rollback(root, current, target, context, snapshot):
+        def fail_after_rollback(root, current, target, context, snapshot, *, controller_state_dir, **kwargs):
+            self.assertEqual(controller_state_dir, self.service.state_dir)
             SERVICE.write_private(SERVICE.UPDATE.journal_path(snapshot), {"stage": "rolled-back"})
             raise RuntimeError("synthetic start failure")
 
@@ -656,7 +657,8 @@ class HostServiceTests(unittest.TestCase):
         planned = self.service.plan(TARGET["tag"])
         failure = {"failureStage": "snapshotting", "failureCode": "snapshot-source-changed", "failureType": "SnapshotError"}
 
-        def fail_after_rollback(root, current, target, context, snapshot):
+        def fail_after_rollback(root, current, target, context, snapshot, *, controller_state_dir, **kwargs):
+            self.assertEqual(controller_state_dir, self.service.state_dir)
             SERVICE.write_private(SERVICE.UPDATE.journal_path(snapshot), {"stage": "rolled-back", **failure})
             raise RuntimeError("SECRET_MARKER /private/password.env")
 
@@ -673,6 +675,26 @@ class HostServiceTests(unittest.TestCase):
         self.assertEqual({key: public[key] for key in failure}, failure)
         self.assertNotIn("snapshot", public)
         self.assertNotIn("SECRET_MARKER", json.dumps(public))
+
+    def test_status_exposes_only_valid_download_progress_from_the_journal(self):
+        snapshot = self.snapshots / 'download-status'
+        job = {'id': str(uuid.uuid4()), 'state': 'running', 'snapshot': str(snapshot)}
+        SERVICE.write_private(self.service.job_file, job)
+        progress = {'schema': SERVICE.UPDATE.DOWNLOAD_SCHEMA, 'phase': 'downloading', 'currentBytes': 5,
+                    'totalBytes': 10, 'totalKnown': True, 'alreadyCached': False,
+                    'layersComplete': 0, 'layersTotal': 1, 'updatedAt': time.time()}
+        with mock.patch.object(SERVICE.HOST, 'saved_state', return_value=None), mock.patch.object(SERVICE.HOST, 'current_core', return_value={}):
+            for value, expected in [(progress, progress), ({**progress, 'private': 'secret'}, None),
+                                    ({**progress, 'totalBytes': 1}, None), (None, None)]:
+                with self.subTest(value=value):
+                    journal = {'stage': 'downloading'}
+                    if value is not None:
+                        journal['download'] = value
+                    SERVICE.write_private(SERVICE.UPDATE.journal_path(snapshot), journal)
+                    public = self.service.status()['job']
+                    self.assertEqual(public.get('download'), expected)
+                    self.assertEqual(public['phase'], 'downloading')
+                    self.assertNotIn('secret', json.dumps(public))
 
     def test_malformed_failure_metadata_is_not_returned_to_the_browser(self):
         cases = (

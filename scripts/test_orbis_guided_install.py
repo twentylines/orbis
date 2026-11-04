@@ -351,6 +351,24 @@ class GuidedTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Multiple controllers"):
             GUIDE.select_installation(report, Path("/opt/a"))
 
+    def test_internal_data_artifacts_require_protected_recovery_instead_of_install_selection(self):
+        report = {'installations': [], 'recoveryTargets': [{'root': '/opt/a', 'role': 'candidate'}]}
+        with self.assertRaisesRegex(ValueError, 'Protected controller recovery'):
+            GUIDE.select_installation(report)
+        with self.assertRaisesRegex(ValueError, 'Protected controller recovery'):
+            GUIDE.select_installation(report, Path('/opt/a'))
+        self.assertIsNone(GUIDE.select_installation(report, Path('/opt/b')))
+        report['installations'] = [{'installRoot': '/opt/a', 'product': 'orbis'}]
+        with self.assertRaisesRegex(ValueError, 'Protected controller recovery'):
+            GUIDE.select_installation(report, Path('/opt/a'))
+
+    def test_non_data_internal_probe_never_becomes_a_numbered_install_choice(self):
+        installation = {'installRoot': '/opt/a', 'product': 'orbis'}
+        report = {'installations': [installation], 'internalContainers': [{'role': 'probe'}], 'recoveryTargets': []}
+        ask = mock.Mock()
+        self.assertIs(GUIDE.select_installation(report, ask=ask), installation)
+        ask.assert_not_called()
+
     def test_review_refresh_ignores_only_derived_size_and_hash_fields(self):
         value = {"reviewId": "old", "mode": "keep", "checkpoint": {"reviewId": "old", "roles": {"core": "controller"}, "storage": {"reviewId": "old", "estimatedBytes": 50, "resources": [{"source": "/opt/data", "inode": 1}]}}}
         original = copy.deepcopy(value)

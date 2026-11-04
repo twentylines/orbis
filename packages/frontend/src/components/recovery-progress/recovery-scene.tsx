@@ -26,6 +26,7 @@ export function RecoveryScene({
   status,
   detail,
   progress,
+  progressContent,
   active,
   departing = false,
   variant = 'restore',
@@ -39,6 +40,7 @@ export function RecoveryScene({
   status?: string;
   detail?: string;
   progress?: number;
+  progressContent?: ReactNode;
   active: boolean;
   departing?: boolean;
   variant?: 'restore' | 'update' | 'downgrade' | 'onboarding';
@@ -74,13 +76,14 @@ export function RecoveryScene({
           <DialogDescription className="visually-hidden">Recovery status</DialogDescription>
           {status ? <output aria-live="polite">{status}</output> : null}
           {detail ? <p>{detail}</p> : null}
-          {indicator === 'restart' && progress === undefined ? (
-            <div className="recovery-restart-glint" role="progressbar" aria-label={status ?? title}>
-              <i />
-            </div>
-          ) : (
-            <RecoveryProgressBar label={`${status ?? title} progress`} percentage={progress} />
-          )}
+          {progressContent ??
+            (indicator === 'restart' && progress === undefined ? (
+              <div className="recovery-restart-glint" role="progressbar" aria-label={status ?? title}>
+                <i />
+              </div>
+            ) : (
+              <RecoveryProgressBar label={`${status ?? title} progress`} percentage={progress} />
+            ))}
           {actions ? <div className="recovery-scene-actions">{actions}</div> : null}
         </div>
         {footer ? <p className="recovery-scene-footer">{footer}</p> : null}

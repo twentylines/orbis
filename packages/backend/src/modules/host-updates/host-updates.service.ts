@@ -70,6 +70,18 @@ const PACKAGE_NAME = /^[a-z0-9][a-z0-9+.-]*(?::[a-z0-9][a-z0-9-]*)?$/;
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const PACKAGE_PLAN_TTL_SECONDS = 15 * 60;
 
+export type HostDownloadProgress = {
+  schema: 'orbis.download-progress.v1';
+  phase: 'downloading' | 'extracting' | 'complete';
+  currentBytes: number;
+  totalBytes: number | null;
+  totalKnown: boolean;
+  alreadyCached: boolean;
+  layersComplete: number;
+  layersTotal: number;
+  updatedAt: number;
+};
+
 export type HostUpdateStatus = {
   available: boolean;
   capabilities?: string[];
@@ -80,7 +92,16 @@ export type HostUpdateStatus = {
   coreHealth?: string;
   imageMatches?: boolean;
   reason?: string;
-  job?: { id: string; state: string; targetTag: string; startedAt: number; finishedAt?: number; message?: string } | null;
+  job?: {
+    id: string;
+    state: string;
+    targetTag: string;
+    startedAt: number;
+    finishedAt?: number;
+    message?: string;
+    phase?: string | null;
+    download?: HostDownloadProgress;
+  } | null;
 };
 
 export type HostUpdatePlan = {

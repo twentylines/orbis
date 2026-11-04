@@ -1,3 +1,5 @@
+import { UpdateDownloadProgress } from '@/components/recovery-progress/update-download-progress';
+import type { DownloadProgress } from '@/desktop/download-progress';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
@@ -16,7 +18,7 @@ import { useCluster } from '@/desktop/cluster';
 import { ClusterUpdates } from '@/desktop/cluster-updates';
 import { UpdateAllButton } from '@/modules/app/components/update-all-button/update-all-button';
 import { UpdateTerminal } from './update-terminal';
-import { OrbisDowngrade, compatibilityReviewTime, useCompatibilityResult } from './orbis-downgrade';
+import { compatibilityReviewTime, useCompatibilityResult } from './orbis-downgrade';
 import {
   rememberAcceptedCoreUpdate,
   prepareDesktopForCoreUpdate,
@@ -30,7 +32,16 @@ import { useReviewExpired } from '@/desktop/use-review-expired';
 import { orbisReleaseChannelsOptions, releaseChannelErrorMessage } from '@/desktop/release-channels';
 import { formatOrbisVersion } from '@/desktop/orbis-version';
 
-type HostJob = { id: string; state: string; targetTag: string; startedAt: number; finishedAt?: number; message?: string; phase?: string | null };
+type HostJob = {
+  id: string;
+  state: string;
+  targetTag: string;
+  startedAt: number;
+  finishedAt?: number;
+  message?: string;
+  phase?: string | null;
+  download?: DownloadProgress;
+};
 type HostStatus = {
   available: boolean;
   capabilities?: string[];
@@ -647,6 +658,29 @@ function LocalUpdates() {
             </DialogContent>
           </Dialog>
           {lastCoreReview?.status === 'error' ? <p role="alert">{lastCoreReview.error?.message}</p> : null}
+          {latest ? (
+            <section className="desktop-orbis-update-target" aria-label="Available Orbis release">
+              <div>
+                <p>{newerOrbisRelease(latest, build.data?.version) ? 'Update available' : 'Latest release'}</p>
+                <h3>{formatOrbisVersion(latest.tag)}</h3>
+                <span>{channels.data?.current === 'nightly' ? 'Nightly channel' : 'Stable channel'}</span>
+              </div>
+              {newerOrbisRelease(latest, build.data?.version) ? (
+                <button
+                  className="desktop-update-action"
+                  type="button"
+                  disabled={!canPlan || checkingCore || updateCore.isPending}
+                  onClick={(event) => {
+                    updateCore.reset();
+                    coreReviewButton.current = event.currentTarget;
+                    reviewCore.mutate(latest.tag);
+                  }}
+                >
+                  {checkingCore ? 'Preparing update…' : updateCore.isPending ? 'Starting update…' : `Update to ${formatOrbisVersion(latest.tag)}`}
+                </button>
+              ) : null}
+            </section>
+          ) : null}
           <div className="desktop-orbis-release-layout">
             <div className="desktop-orbis-release-notes">
               <div className="desktop-orbis-release-state" aria-live="polite" aria-busy={channels.isFetching || releases.isFetching}>
@@ -707,11 +741,23 @@ function LocalUpdates() {
                 ) : null}
               </div>
             </div>
-            <aside className="desktop-orbis-release-summary" aria-label="Installed versions and update">
+            <aside className="desktop-orbis-release-summary" aria-label="Installed versions">
               <h3>Installed on this server</h3>
               <div className="desktop-update-build">
                 {build.isPending ? 'Reading installed Orbis build…' : null}
-                {build.isError ? 'Installed Orbis build metadata is unavailable.' : null}
+                {build.isError ? (
+                  <div role="alert">
+                    <p>The installed version could not be loaded.</p>
+                    <button
+                      type="button"
+                      className="desktop-update-action secondary"
+                      disabled={build.isFetching}
+                      onClick={() => void build.refetch()}
+                    >
+                      {build.isFetching ? 'Loading installed version…' : 'Reload installed version'}
+                    </button>
+                  </div>
+                ) : null}
                 {build.data ? (
                   <>
                     <InstalledVersions
@@ -739,47 +785,12 @@ function LocalUpdates() {
                   </>
                 ) : null}
               </div>
-              {canPlan && latest ? (
-                <button
-                  className="desktop-update-action"
-                  type="button"
-                  disabled={checkingCore || updateCore.isPending}
-                  onClick={(event) => {
-                    updateCore.reset();
-                    coreReviewButton.current = event.currentTarget;
-                    reviewCore.mutate(latest.tag);
-                  }}
-                >
-                  {checkingCore ? 'Checking compatibility…' : updateCore.isPending ? 'Updating…' : 'Update'}
-                </button>
-              ) : null}
             </aside>
           </div>
-          {user?.operator === true && build.data ? (
-            <OrbisDowngrade
-              channel={channels.data?.current}
-              installed={build.data.version}
-              active={section === 'orbis'}
-              enabled={Boolean(
-                host.data?.available &&
-                  host.data.enrolled &&
-                  host.data.imageMatches &&
-                  host.data.coreState === 'running' &&
-                  host.data.coreHealth === 'healthy' &&
-                  !jobBusy &&
-                  job?.state !== 'interrupted' &&
-                  !updateCore.isPending &&
-                  !checkingCore,
-              )}
-              request={hostRequest}
-            />
-          ) : null}
-          {user?.operator !== true ? <p className="desktop-update-note">Core updates require an operator account.</p> : null}
+          {user?.operator !== true ? <p className="desktop-update-note">Sign in with an administrator account to update Orbis.</p> : null}
           {user?.operator === true && host.isPending ? <p className="desktop-update-note">Checking the local host service…</p> : null}
           {host.isError ? (
-            <output className="desktop-update-note">
-              {restarting ? watch.message : 'The host service could not be reached. Checking again shortly.'}
-            </output>
+            <output className="desktop-update-note">{restarting ? watch.message : 'Waiting for the update service to respond.'}</output>
           ) : null}
           {host.data && !host.data.available ? (
             <p className="desktop-update-note">
@@ -798,15 +809,16 @@ function LocalUpdates() {
             <p className="desktop-update-note">This server is on the latest published Orbis release.</p>
           ) : null}
           {job ? (
-            <output className={`desktop-update-job ${jobBusy ? 'is-busy' : ''}`} aria-live="polite">
+            <section className={`desktop-update-job ${jobBusy ? 'is-busy' : ''}`} aria-label="Orbis update status" aria-live="polite">
               <strong>{job.state === 'running' ? 'Installing Orbis' : job.state === 'recovering' ? 'Recovering Orbis' : 'Last update'}</strong>
               <span>{job.message || corePhase || (jobBusy ? 'The page will reload automatically when the server is ready.' : job.state)}</span>
+              {jobBusy && job.download ? <UpdateDownloadProgress value={job.download} /> : null}
               {job.state === 'interrupted' ? (
                 <button type="button" disabled={recover.isPending} onClick={() => recover.mutate(job.id)}>
                   {recover.isPending ? 'Starting recovery…' : 'Restore previous release'}
                 </button>
               ) : null}
-            </output>
+            </section>
           ) : null}
           {coreRequestStage ? (
             <output className="desktop-update-note" aria-live="polite">

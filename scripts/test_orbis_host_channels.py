@@ -224,7 +224,8 @@ class HostReleaseChannelTests(unittest.TestCase):
         self.assertEqual(SERVICE.read_channel(self.root)["channel"], "nightly")
         started, finish = threading.Event(), threading.Event()
 
-        def apply_update(*_args):
+        def apply_update(*_args, controller_state_dir, **_kwargs):
+            self.assertEqual(controller_state_dir, self.service.state_dir)
             started.set()
             if not finish.wait(2):
                 raise RuntimeError("test update timed out")

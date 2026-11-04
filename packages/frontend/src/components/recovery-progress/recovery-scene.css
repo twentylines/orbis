@@ -69,12 +69,6 @@
   flex: 0 1 auto;
   min-width: min(9rem, 100%);
 }
-.recovery-scene-content:has(.operation-wait-retry) .modal-title {
-  font-size: clamp(1.5rem, 3vw, 2rem);
-}
-.orbis-dialog-content.recovery-scene .operation-wait-retry {
-  border-radius: 999px;
-}
 .orbis-dialog-content.recovery-scene .btn {
   min-height: 44px;
   color: #edf0f3;
@@ -312,4 +306,9 @@
   z-index: 999;
   background: #030508;
   pointer-events: none;
+}
+
+.recovery-scene-content > .update-download-progress {
+  width: min(100%, 360px);
+  text-align: start;
 }

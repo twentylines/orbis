@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Discover Runtipi and Orbis installations on an explicitly selected Docker host.
 
-Only Docker metadata is read. No host files, environment values, images or
-containers are changed. A discovered installation still needs a migration plan.
+Docker metadata and protected supervisor ownership records are read. No
+environment values, images, containers or installation files are changed. A discovered installation still needs a migration plan.
 """
 
 import argparse
 import hashlib
+import importlib.util
+import os
+from pathlib import Path
 import json
 import posixpath
 import re
@@ -35,7 +38,7 @@ LIST_FORMAT = (
     '"managed":{{json (.Label "runtipi.managed")}},"appUrn":{{json (.Label "runtipi.appurn")}},'
     '"state":{{json .State}},"publishedPorts":{{json .Ports}}}'
 )
-CORE_FORMAT = '{"id":{{json .Id}},"imageId":{{json .Image}},"mounts":{{json .Mounts}}}'
+CORE_FORMAT = '{"id":{{json .Id}},"imageId":{{json .Image}},"mounts":{{json .Mounts}},"labels":{{json .Config.Labels}},"restartPolicy":{{json .HostConfig.RestartPolicy}}}'
 IMAGE_FORMAT = '{"version":{{json (index .Config.Labels "org.opencontainers.image.version")}}}'
 PORT_FORMAT = '{"bindings":{{json .NetworkSettings.Ports}}}'
 
@@ -121,6 +124,29 @@ class DockerReader:
 
     def core(self, identifier: str) -> dict:
         return self._object(["container", "inspect", "--format", CORE_FORMAT, identifier])
+
+    def internal_record(self, group: str, identifier: str) -> dict | None:
+        if os.geteuid() != 0 or group not in {'controller-updates', 'core-overlays', 'retained-restores'}:
+            return None
+        pattern = r'[a-f0-9]{64}' if group == 'controller-updates' else r'[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}'
+        if not re.fullmatch(pattern, identifier):
+            return None
+        self.protected_authority_inspected = True
+        if not hasattr(self, '_discovery_authority'):
+            spec = importlib.util.spec_from_file_location('orbis_authority_for_discovery', Path(__file__).with_name('orbis-host-retained-authority.py'))
+            authority = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(authority)
+            self._discovery_authority = authority
+        authority = self._discovery_authority
+        filename = {'controller-updates': 'runtime.json', 'core-overlays': 'overlay.json', 'retained-restores': 'transaction.json'}[group]
+        directory = Path('/var/lib/orbis/state') / group / identifier
+        try:
+            with authority.protected_directory(directory) as descriptor:
+                with authority.protected_file(descriptor, filename, 16 * 1024 * 1024) as body:
+                    return authority.P.metadata(body, byte_limit=16 * 1024 * 1024, string_limit=2 * 1024 * 1024)
+        except (OSError, ValueError):
+            # Missing or untrusted ownership never hides an ordinary installation.
+            return None
 
     def image(self, identifier: str) -> dict:
         return self._object(["image", "inspect", "--format", IMAGE_FORMAT, identifier])
@@ -325,19 +351,101 @@ def app_data_owners(row: dict, installations: list[dict], mounts: list[dict]) ->
     return owners
 
 
+def internal_descriptor(reader, row, core):
+    name = row['name']
+    if name == 'runtipi' or not hasattr(reader, 'internal_record'):
+        return None
+    key = r'([a-f0-9]{64})'
+    uuid = r'([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})'
+    role, record, expected_id, expected_image, labels = None, None, None, None, None
+    match = re.fullmatch(r'orbis-controller-(probe|candidate|original|source-image|reconstructed)-' + key, name)
+    bootstrap = re.fullmatch(r'orbis-bootstrap-(review|rollback)-' + key + r'(?:-[0-9]+)?', name)
+    retained = re.fullmatch(r'orbis-retained-' + uuid + r'-(responder|candidate|coordinator|verifier|previous)', name)
+    if match or bootstrap:
+        kind, identifier = (match or bootstrap).groups()
+        record = reader.internal_record('controller-updates', identifier)
+        if not isinstance(record, dict) or record.get('schema') != 'orbis.controller-update-preserve-live-proxy.v1':
+            return None
+        source = record.get('source') or {}
+        retirement = record.get('sourceRetirement') or {}
+        role = kind if match else 'bootstrap-' + kind
+        if role == 'probe':
+            expected_id, expected_image = record.get('probeId'), record.get('targetImageId')
+            labels = (record.get('probeBody') or {}).get('Labels')
+        elif role == 'candidate':
+            expected_id, expected_image = record.get('candidateId'), record.get('targetImageId')
+            labels = (record.get('body') or {}).get('Labels')
+        elif role == 'original':
+            expected_id, expected_image = source.get('Id'), source.get('Image')
+            labels = (source.get('Config') or {}).get('Labels')
+        elif role == 'source-image':
+            expected_id, expected_image = retirement.get('anchorId'), retirement.get('imageId')
+            labels = (retirement.get('anchorBody') or {}).get('Labels')
+        elif role == 'reconstructed':
+            expected_id, expected_image = retirement.get('reconstructionId'), retirement.get('imageId')
+            labels = (retirement.get('body') or {}).get('Labels')
+        else:
+            entry = (record.get('bootstrapProbes') or {}).get(kind) or {}
+            if entry.get('name') != name:
+                return None
+            expected_id, expected_image = entry.get('id'), source.get('Image')
+            labels = (entry.get('body') or {}).get('Labels')
+    elif retained:
+        identifier, role = retained.groups()
+        groups = ['core-overlays', 'retained-restores'] if role == 'responder' else ['retained-restores']
+        for group in groups:
+            candidate = reader.internal_record(group, identifier)
+            schemas = {'core-overlays': 'orbis.core-maintenance-overlay.v1', 'retained-restores': 'orbis.retained-restore-transaction.v1'}
+            if isinstance(candidate, dict) and candidate.get('schema') == schemas[group] and candidate.get('id') == identifier:
+                record = candidate
+                break
+        if not record:
+            return None
+        source = record.get('source') or {}
+        field = {'responder': 'responderId', 'candidate': 'candidateId', 'coordinator': 'workerId', 'verifier': 'verifierId'}.get(role)
+        if role == 'previous':
+            expected_id, expected_image = source.get('controllerId'), source.get('imageId')
+            labels = (source.get('container', {}).get('Config') or {}).get('Labels')
+        else:
+            expected_id = record.get(field)
+            body = ((record.get('intents') or {}).get(role) or {}).get('body') or {}
+            labels = body.get('Labels')
+            expected_image = source.get('imageId') if role in {'responder', 'coordinator'} else record.get('target', {}).get('creationReference')
+        role = 'retained-' + role
+    else:
+        return None
+    if (record.get('context') != reader.context or path(record.get('root')) is None or expected_id != row['id']
+            or expected_image != core['imageId'] or not isinstance(labels, dict) or not labels
+            or not isinstance(core.get('labels'), dict)
+            or any(core['labels'].get(key) != value for key, value in labels.items())):
+        return None
+    mounts = validate_mounts(core.get('mounts'))
+    data = any(item.get('RW') is True and item.get('Type') in {'bind', 'volume'} for item in mounts)
+    return {'container': {'id': row['id'], 'name': name, 'state': row['state']}, 'role': role,
+            'root': record['root'], 'phase': record.get('phase'), 'protectedOwnership': True,
+            'recoveryRequired': data, 'authority': 'protected-supervisor-record'}
+
+
 def discover(reader: DockerReader, *, resolve_app_owners=None, resolve_registered_app_owners=None) -> dict:
     daemon = reader.daemon()
     rows = reader.containers()
     validate_rows(rows)
-    installations = []
+    installations, internal = [], []
     for row in rows:
         brand = image_brand(row["image"])
+        core = None
+        if row['name'].startswith(('orbis-controller-', 'orbis-bootstrap-', 'orbis-retained-')):
+            core = inspect_container(reader, row)
+            descriptor = internal_descriptor(reader, row, core)
+            if descriptor is not None:
+                internal.append(descriptor)
+                continue
         if brand is None and not (row["project"] == "runtipi" and row["service"] == "runtipi"):
             continue
         # An app can use a control-plane image without being the installed controller.
         if row["service"] and row["service"] != "runtipi":
             continue
-        core = inspect_container(reader, row)
+        core = core or inspect_container(reader, row)
         root, root_status, storage = summarize_mounts(core.get("mounts"), path(row["workingDir"]))
         version = reader.image(core["imageId"]).get("version")
         version = version.removeprefix("v") if isinstance(version, str) and VERSION.fullmatch(version) else None
@@ -374,7 +482,7 @@ def discover(reader: DockerReader, *, resolve_app_owners=None, resolve_registere
         })
     unassigned = []
     host_files_inspected = False
-    controllers = {item["container"]["id"] for item in installations}
+    controllers = {item["container"]["id"] for item in installations} | {item["container"]["id"] for item in internal}
     # Core services can carry runtipi.managed too. They have already been
     # classified by project, service and installation root, not by their name.
     core_ids = {identifier for item in installations for identifier in item["ownedCoreContainers"]}
@@ -451,7 +559,9 @@ def discover(reader: DockerReader, *, resolve_app_owners=None, resolve_registere
         "installations": sorted(installations, key=lambda item: (item["installRoot"] or "", item["id"])),
         "newInstallationConflicts": {"names": names, "ports": ports},
         "unassignedManagedContainers": sorted(unassigned, key=lambda item: item["container"]["id"]),
-        "hostFilesInspected": host_files_inspected, "nativeHostPortsInspected": False, "executionAllowed": False,
+        "internalContainers": sorted(internal, key=lambda item: item["container"]["id"]),
+        "recoveryTargets": sorted([item for item in internal if item["recoveryRequired"]], key=lambda item: item["container"]["id"]),
+        "hostFilesInspected": host_files_inspected or bool(internal) or bool(getattr(reader, "protected_authority_inspected", False)), "nativeHostPortsInspected": False, "executionAllowed": False,
         "requiredNextStep": "review-installation-and-backup-plan",
     }
 

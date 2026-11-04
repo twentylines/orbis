@@ -61,6 +61,83 @@ class Reader:
 
 
 class InstallationDiscoveryTests(unittest.TestCase):
+    def test_protected_capability_probes_are_reported_as_internal_not_installations(self):
+        key = 'b' * 64
+        real = container(image='ghcr.io/twentylines/orbis:v0.6.0-beta.6')
+        probe = container(2, image='ghcr.io/twentylines/orbis:v0.6.1-beta.1', name='orbis-controller-probe-' + key,
+                          service='', project='', root='', state='created')
+        nonce = 'c' * 64
+        record = {'schema': 'orbis.controller-update-preserve-live-proxy.v1', 'context': 'test-only', 'root': '/srv/runtipi',
+                  'phase': 'preparing', 'probeId': probe['id'], 'targetImageId': 'sha256:' + 'a' * 64,
+                  'probeBody': {'Labels': {'io.orbis.controller-probe': nonce}}}
+        reader = Reader([real, probe])
+        reader.core = lambda identifier: {'id': identifier, 'imageId': 'sha256:' + 'a' * 64,
+            'mounts': mounts() if identifier == real['id'] else [],
+            'labels': {} if identifier == real['id'] else {'io.orbis.controller-probe': nonce}}
+        reader.internal_record = lambda group, identifier: record if (group, identifier) == ('controller-updates', key) else None
+        report = DETECT.discover(reader)
+        self.assertEqual([item['container']['id'] for item in report['installations']], [real['id']])
+        self.assertEqual(report['internalContainers'][0]['role'], 'probe')
+        self.assertEqual(report['recoveryTargets'], [])
+        self.assertNotIn(nonce, json.dumps(report))
+        self.assertTrue(report['hostFilesInspected'])
+        for changed in ({**record, 'probeId': 'd' * 64}, {**record, 'context': 'other'}, {**record, 'targetImageId': 'sha256:' + 'e' * 64}):
+            reader.internal_record = lambda group, identifier, value=changed: value
+            self.assertEqual(len(DETECT.discover(reader)['installations']), 2)
+
+    def test_label_or_reserved_name_without_protected_ownership_never_hides_a_real_source(self):
+        row = container(image='ghcr.io/twentylines/orbis:v0.6.1-beta.1', name='orbis-controller-candidate-' + 'b' * 64)
+        reader = Reader([row])
+        reader.internal_record = lambda *args: None
+        reader.core = lambda identifier: {'id': identifier, 'imageId': 'sha256:' + 'a' * 64,
+            'mounts': mounts(), 'labels': {'io.orbis.controller-update': 'b' * 64}}
+        report = DETECT.discover(reader)
+        self.assertEqual(len(report['installations']), 1)
+        self.assertEqual(report['installations'][0]['installRoot'], '/srv/runtipi')
+        self.assertEqual(report['internalContainers'], [])
+
+    def test_canonical_controller_remains_installation_even_with_internal_operation_labels(self):
+        row = container(image='ghcr.io/twentylines/orbis:v0.6.1-beta.2')
+        reader = Reader([row])
+        reader.internal_record = mock.Mock()
+        reader.core = lambda identifier: {'id': identifier, 'imageId': 'sha256:' + 'a' * 64,
+            'mounts': mounts(), 'labels': {'io.orbis.controller-update': 'b' * 64}}
+        report = DETECT.discover(reader)
+        self.assertEqual(len(report['installations']), 1)
+        reader.internal_record.assert_not_called()
+
+    def test_protected_candidate_is_explicit_recovery_target_not_an_installation_choice(self):
+        key = 'b' * 64
+        row = container(image='ghcr.io/twentylines/orbis:v0.6.1-beta.2', name='orbis-controller-candidate-' + key, state='created')
+        record = {'schema': 'orbis.controller-update-preserve-live-proxy.v1', 'context': 'test-only', 'root': '/srv/runtipi',
+                  'phase': 'replacing', 'candidateId': row['id'], 'targetImageId': 'sha256:' + 'a' * 64,
+                  'body': {'Labels': {'io.orbis.controller-update': key}}}
+        reader = Reader([row])
+        reader.internal_record = lambda *args: record
+        reader.core = lambda identifier: {'id': identifier, 'imageId': 'sha256:' + 'a' * 64,
+            'mounts': [{**mount, 'RW': True} for mount in mounts()], 'labels': record['body']['Labels']}
+        report = DETECT.discover(reader)
+        self.assertEqual(report['installations'], [])
+        self.assertEqual(report['recoveryTargets'][0]['root'], '/srv/runtipi')
+        self.assertEqual(report['internalContainers'][0]['role'], 'candidate')
+
+    def test_protected_retained_responder_is_not_an_installation_or_data_recovery_target(self):
+        identifier = '47c71062-aece-4f23-8978-d4d1b7d4b8c0'
+        row = container(image='ghcr.io/twentylines/orbis:v0.6.0-beta.6', name='orbis-retained-' + identifier + '-responder',
+                        service='', project='', root='', state='exited')
+        labels = {'io.orbis.restore': identifier, 'io.orbis.restore.role': 'responder'}
+        record = {'schema': 'orbis.core-maintenance-overlay.v1', 'id': identifier, 'context': 'test-only', 'root': '/srv/runtipi',
+                  'phase': 'rolled-back', 'responderId': row['id'], 'source': {'imageId': 'sha256:' + 'a' * 64},
+                  'intents': {'responder': {'body': {'Labels': labels}}}}
+        reader = Reader([row])
+        reader.internal_record = lambda group, key: record if group == 'core-overlays' else None
+        reader.core = lambda identifier: {'id': identifier, 'imageId': 'sha256:' + 'a' * 64,
+            'mounts': [{'Type': 'bind', 'Source': '/run/orbis', 'Destination': '/run/orbis', 'RW': False}], 'labels': labels}
+        report = DETECT.discover(reader)
+        self.assertEqual(report['installations'], [])
+        self.assertEqual(report['internalContainers'][0]['role'], 'retained-responder')
+        self.assertFalse(report['recoveryTargets'])
+
     def test_local_socket_comes_from_the_explicit_context_and_remote_endpoints_are_not_host_paths(self):
         reader = DETECT.DockerReader("test-only")
         for host, expected in [("unix:///run/custom-docker.sock", "/run/custom-docker.sock"), ("tcp://192.0.2.10:2376", None), ("ssh://example.test", None), ("unix://relative.sock", None)]:

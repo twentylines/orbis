@@ -14,6 +14,7 @@ import { useAppLauncher, useOpenedApps } from './app-launcher';
 import { AppLibraryControls, useLibraryFilters } from './app-library-controls';
 import { selectLibraryApps } from './app-library';
 import { appDockerHealth } from './container-health';
+import { appCpuPercent } from './whole-host-cpu';
 import { clusterRequest, ServerRack, useCluster, type ClusterServer, type ServerReading } from './cluster';
 import { useDesktopPreferences } from './preferences';
 import type { Telemetry } from './telemetry';
@@ -328,10 +329,7 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
           const liveContainers =
             !stale && !containerQuery?.isError && telemetry?.available ? telemetry.containers.filter((item) => item.appUrn === entry.info.urn) : [];
           const health = !stale && !containerQuery?.isError && telemetry?.available ? appDockerHealth(liveContainers) : undefined;
-          const cpu =
-            liveContainers.length && liveContainers.every((item) => item.statsAvailable && item.cpuPercent !== null)
-              ? liveContainers.reduce((sum, item) => sum + (item.cpuPercent ?? 0), 0)
-              : null;
+          const cpu = appCpuPercent(liveContainers);
           const memory =
             liveContainers.length && liveContainers.every((item) => item.statsAvailable && item.memoryBytes !== null)
               ? liveContainers.reduce((sum, item) => sum + (item.memoryBytes ?? 0), 0)

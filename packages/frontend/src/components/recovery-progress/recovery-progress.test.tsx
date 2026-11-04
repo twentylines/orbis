@@ -80,3 +80,34 @@ test('compact progress can omit decorative depth without losing measured or unkn
   expect(decorated).toContain('data:image/svg+xml');
   expect(decorated).not.toContain('<video');
 });
+
+test('update downloads show measured sizes, unknown totals and cached files without an invented percentage', async () => {
+  const { UpdateDownloadProgress } = await import('./update-download-progress');
+  const { readDownloadProgress } = await import('@/desktop/download-progress');
+  const value = {
+    schema: 'orbis.download-progress.v1',
+    phase: 'downloading',
+    currentBytes: 512,
+    totalBytes: 1024,
+    totalKnown: true,
+    alreadyCached: false,
+    layersComplete: 0,
+    layersTotal: 2,
+    updatedAt: 1700000000,
+  };
+  const render = (input: unknown) => renderToStaticMarkup(<UpdateDownloadProgress value={input} />);
+  expect(render(value)).toContain('512 B of 1 KiB');
+  expect(render(value)).toContain('value="50"');
+  const unknown = render({ ...value, totalKnown: false, totalBytes: null });
+  expect(unknown).toContain('512 B downloaded');
+  expect(unknown).not.toContain('value=');
+  const cached = render({ ...value, phase: 'complete', currentBytes: 0, totalBytes: 0, alreadyCached: true });
+  expect(cached).toContain('Update files are already downloaded.');
+  expect(cached).toContain('value="100"');
+  expect(render({ ...value, phase: 'extracting', currentBytes: 1024 })).toContain('Unpacking update');
+  expect(render({ ...value, phase: 'extracting', currentBytes: 1024 })).not.toContain('value=');
+  for (const changed of [{ currentBytes: -1 }, { totalBytes: 10 }, { totalKnown: false }, { layersComplete: 3 }, { updatedAt: Number.NaN }]) {
+    expect(readDownloadProgress({ ...value, ...changed })).toBeUndefined();
+    expect(render({ ...value, ...changed })).toBe('');
+  }
+});

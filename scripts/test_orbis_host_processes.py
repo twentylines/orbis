@@ -30,6 +30,7 @@ class HostProcessesTests(unittest.TestCase):
         self.proc.mkdir()
         self.clock = Clock()
         self.reader = MODULE.HostProcesses(self.proc, clock=self.clock, ticks_per_second=100, page_size=4096)
+        self.reader.host_cpu = lambda: (int(self.clock.now * self.reader.ticks), (0,))
 
     @staticmethod
     def stat(pid, name="worker", utime=100, stime=0, started=42, rss=2, children=0, threads=1):
@@ -76,16 +77,51 @@ class HostProcessesTests(unittest.TestCase):
         self.assert_counts(sample, 1, 1, 0, 0)
         self.assertEqual(sample["byMemory"], [{"pid": 123, "name": "queue ) worker (nested)", "cpuPercent": None, "memoryBytes": 7 * 4096}])
 
-    def test_cpu_uses_user_plus_system_and_allows_more_than_one_core(self):
+    def test_cpu_uses_user_plus_system_as_share_of_all_cores(self):
+        self.reader.host_cpu = lambda: (int(self.clock.now * self.reader.ticks * 8), tuple(range(8)))
         self.put(3, utime=100, stime=40)
         self.collect(10)
         self.put(3, utime=700, stime=340)
         sample = self.collect(13)
-        self.assertEqual(sample["byCpu"][0]["cpuPercent"], 300)
+        self.assertEqual(sample["byCpu"][0]["cpuPercent"], 37.5)
         self.assert_counts(sample, 1, 1, 0, 1)
+
+    def test_eight_core_full_host_denominator_and_counter_recovery(self):
+        host = [1000, tuple(range(8))]
+        self.reader.host_cpu = lambda: tuple(host)
+        self.put(4, utime=100)
+        self.collect(10)
+        host[0] = 1800
+        self.put(4, utime=200)
+        self.assertEqual(self.collect(20)['byCpu'][0]['cpuPercent'], 12.5)
+        host[0] = 2600
+        self.put(4, utime=1000)
+        self.assertEqual(self.collect(30)['byCpu'][0]['cpuPercent'], 100)
+        host[0] = 3400
+        self.put(4, utime=1801)
+        self.assertIsNone(self.rows(self.collect(40))[4]['cpuPercent'])
+        host[:] = [4200, tuple(range(4))]
+        self.put(4, utime=1901)
+        self.assertIsNone(self.rows(self.collect(50))[4]['cpuPercent'])
+        host[0] = 5000
+        self.put(4, utime=2001)
+        self.assertEqual(self.collect(60)['byCpu'][0]['cpuPercent'], 12.5)
+        with mock.patch.object(self.reader, 'host_cpu', side_effect=OSError):
+            self.put(4, utime=2101)
+            self.assertIsNone(self.rows(self.collect(70))[4]['cpuPercent'])
+        host[0] = 5800
+        self.put(4, utime=2201)
+        self.assertIsNone(self.rows(self.collect(80))[4]['cpuPercent'])
+
+    def test_proc_stat_total_excludes_guest_and_checks_topology(self):
+        (self.proc / 'stat').write_text('cpu 10 20 30 40 50 60 70 80 1000 2000\ncpu0 1 2 3 4\ncpu1 1 2 3 4\n')
+        self.assertEqual(MODULE.HostProcesses(self.proc).host_cpu(), (360, (0, 1)))
+        (self.proc / 'stat').write_text('cpu 1 2 3 4\ncpu0 1 2 3 4\ncpu0 1 2 3 4\n')
+        with self.assertRaises(ValueError): MODULE.HostProcesses(self.proc).host_cpu()
 
     def test_clock_ticks_and_page_size_are_explicit_host_units(self):
         self.reader = MODULE.HostProcesses(self.proc, clock=self.clock, ticks_per_second=250, page_size=16384)
+        self.reader.host_cpu = lambda: (int(self.clock.now * self.reader.ticks), (0,))
         self.put(4, utime=1000, rss=9)
         self.collect(10)
         self.put(4, utime=1500, rss=11)
@@ -94,7 +130,7 @@ class HostProcessesTests(unittest.TestCase):
         self.assertEqual(row["memoryBytes"], 11 * 16384)
         self.assertIs(type(row["memoryBytes"]), int)
 
-    def test_each_process_uses_its_actual_counter_read_time(self):
+    def test_processes_share_the_same_host_counter_interval(self):
         for pid in (1, 2):
             self.put(pid, utime=100)
         original = self.reader.process
@@ -115,13 +151,13 @@ class HostProcessesTests(unittest.TestCase):
             sample = self.collect(10)
         actual = {row["pid"]: row["cpuPercent"] for row in sample["byCpu"]}
         for pid in (1, 2):
-            self.assertAlmostEqual(actual[pid], 1000 / 100 / (measured[1][pid] - measured[0][pid]) * 100)
-        self.assertNotEqual(actual[1], actual[2])
+            self.assertEqual(actual[pid], 100)
 
     def test_cpu_elapsed_bounds_are_inclusive_and_invalid_intervals_rebaseline(self):
         for elapsed, comparable in ((-1, False), (0, False), (1.999, False), (2, True), (60, True), (60.001, False)):
             with self.subTest(elapsed=elapsed):
                 self.reader = MODULE.HostProcesses(self.proc, clock=self.clock, ticks_per_second=100, page_size=4096)
+                self.reader.host_cpu = lambda: (int(self.clock.now * self.reader.ticks), (0,))
                 self.put(1, utime=100)
                 self.collect(100)
                 self.put(1, utime=300)

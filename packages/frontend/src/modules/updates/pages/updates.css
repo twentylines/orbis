@@ -1106,9 +1106,6 @@ body:has(.orbis-theme) .desktop-update-review-dialog > .modal-body:focus-visible
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 8em), 1fr));
   gap: 3px 12px;
 }
-.desktop-orbis-release-summary > .desktop-update-action {
-  width: 100%;
-}
 @container (max-width: 32rem) {
   .desktop-orbis-release-notes,
   .desktop-orbis-release-summary {
@@ -1171,4 +1168,49 @@ body:has(.orbis-theme) .desktop-update-review-dialog > .modal-body:focus-visible
 .desktop-critical-update p {
   margin: 4px 0 0;
   line-height: 1.5;
+}
+
+.desktop-orbis-update-target {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px 28px;
+  padding: 24px;
+  margin-bottom: 20px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 10%, var(--desktop-surface));
+}
+.desktop-orbis-update-target > div {
+  min-width: 0;
+  flex: 1 1 14rem;
+}
+.desktop-orbis-update-target p {
+  margin: 0 0 6px;
+  color: var(--desktop-muted);
+}
+.desktop-orbis-update-target h3 {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+}
+.desktop-orbis-update-target span {
+  color: var(--desktop-muted);
+}
+.desktop-orbis-update-target > button {
+  margin: 0;
+  max-width: 100%;
+  min-height: 44px;
+  white-space: normal;
+  text-align: center;
+}
+@container (max-width: 32rem) {
+  .desktop-orbis-update-target {
+    padding: 18px;
+  }
+  .desktop-orbis-update-target > button {
+    flex: 1 1 100%;
+  }
 }

@@ -9,16 +9,23 @@ Only the explicit Docker context is used for runtime operations.
 
 import argparse
 import importlib.util
+import http.client
 import json
+import math
 import os
 import re
 import shutil
+import signal
+import socket
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import uuid
 from pathlib import Path
+from urllib.parse import urlencode
 
 
 def load_script(name: str, module_name: str):
@@ -38,6 +45,236 @@ JOURNAL_SCHEMA = "orbis.update.v1"
 TERMINAL_STAGES = {"complete", "rolled-back", "aborted"}
 FAILURE_MESSAGES = {**SNAPSHOT.FAILURE_MESSAGES, "source-bootstrap-preservation-unsupported": "The source controller cannot safely restart with its current network, cache and TLS state. Review the source bootstrap before updating.", "controller-preservation-unsupported": "This release cannot preserve the live proxy during a controller update. Choose a release with controller preservation support."}
 FAILURE_STAGES = {"preparing", "downloading", "pulled", "stopping", "stopped", "snapshotting", "snapshot-ready", "staged"}
+DOWNLOAD_SCHEMA = "orbis.download-progress.v1"
+DOWNLOAD_LIMIT = 2**53 - 1
+PULL_TIMEOUT = 30 * 60
+PULL_LINE_LIMIT = 64 * 1024
+PULL_STREAM_LIMIT = 32 * 1024 * 1024
+PULL_LAYER_LIMIT = 4096
+
+
+def safe_download(record: dict | None) -> dict:
+    value = record.get("download") if isinstance(record, dict) else None
+    keys = {"schema", "phase", "currentBytes", "totalBytes", "totalKnown", "alreadyCached", "layersComplete", "layersTotal", "updatedAt"}
+    if not isinstance(value, dict) or set(value) != keys or value.get("schema") != DOWNLOAD_SCHEMA:
+        return {}
+    if not isinstance(value.get("phase"), str) or value["phase"] not in {"downloading", "extracting", "complete"}:
+        return {}
+    for key in ("currentBytes", "layersComplete", "layersTotal"):
+        if type(value[key]) is not int or not 0 <= value[key] <= DOWNLOAD_LIMIT:
+            return {}
+    total = value["totalBytes"]
+    if total is not None and (type(total) is not int or not value["currentBytes"] <= total <= DOWNLOAD_LIMIT):
+        return {}
+    if (type(value["totalKnown"]) is not bool or value["totalKnown"] != (total is not None)
+            or type(value["alreadyCached"]) is not bool or value["layersComplete"] > value["layersTotal"]
+            or value["layersTotal"] > PULL_LAYER_LIMIT
+            or type(value["updatedAt"]) not in {int, float} or not math.isfinite(value["updatedAt"]) or value["updatedAt"] < 0
+            or (value["alreadyCached"] and (value["phase"] != "complete" or value["currentBytes"] != 0 or total != 0))):
+        return {}
+    return {"download": dict(value)}
+
+
+class DownloadProgress:
+    """Aggregate compressed download counters; extraction counters use different units."""
+    def __init__(self, publish, *, clock=time.monotonic, wall_clock=time.time, expected_reference=None):
+        self.publish, self.clock, self.wall_clock = publish, clock, wall_clock
+        self.layers = {}
+        self.last = None
+        self.last_sample = float("-inf")
+        self.finished = False
+        self.up_to_date = False
+        self.expected_reference = expected_reference
+
+    def emit(self, *, force=False):
+        now = self.clock()
+        if not force and now - self.last_sample < 1:
+            return
+        self.last_sample = now
+        layers = list(self.layers.values())
+        current = sum(layer["current"] for layer in layers)
+        known = bool(layers or self.finished) and all(layer["total"] is not None for layer in layers)
+        total = sum(layer["total"] for layer in layers) if known else None
+        if current > DOWNLOAD_LIMIT or (total is not None and total > DOWNLOAD_LIMIT):
+            raise ValueError("Docker download counters exceed the supported limit")
+        phase = "complete" if self.finished else "extracting" if layers and all(layer["downloaded"] for layer in layers) else "downloading"
+        value = {"schema": DOWNLOAD_SCHEMA, "phase": phase, "currentBytes": current, "totalBytes": total,
+                 "totalKnown": known, "alreadyCached": self.finished and (all(layer["cached"] for layer in layers) if layers else self.up_to_date),
+                 "layersComplete": sum(layer["complete"] for layer in layers), "layersTotal": len(layers)}
+        if value != self.last:
+            self.publish({**value, "updatedAt": self.wall_clock()})
+            self.last = value
+
+    def event(self, value):
+        if not isinstance(value, dict) or value.get("error") or value.get("errorDetail"):
+            raise RuntimeError("Docker could not download the verified Orbis image")
+        status = value.get("status", "")
+        if not isinstance(status, str):
+            raise ValueError("Docker returned invalid download progress")
+        if status.startswith("Status: Downloaded newer image for ") or status.startswith("Status: Image is up to date for "):
+            if self.expected_reference is not None and status.rsplit(" for ", 1)[-1] != self.expected_reference:
+                raise ValueError("Docker completed a different image download")
+            self.up_to_date = status.startswith("Status: Image is up to date for ")
+            return True
+        identifier = value.get("id")
+        if status not in {"Pulling fs layer", "Waiting", "Downloading", "Verifying Checksum", "Download complete", "Extracting", "Pull complete", "Already exists"}:
+            return False
+        if not isinstance(identifier, str) or not re.fullmatch(r"[a-f0-9]{12,64}", identifier):
+            raise ValueError("Docker returned an invalid download layer")
+        if identifier not in self.layers:
+            if len(self.layers) >= PULL_LAYER_LIMIT:
+                raise ValueError("Docker download has too many layers")
+            self.layers[identifier] = {"current": 0, "total": None, "downloaded": False, "complete": False, "cached": False}
+        layer = self.layers[identifier]
+        if status == "Already exists":
+            if layer["current"]:
+                raise ValueError("Docker returned conflicting cached download progress")
+            layer.update(total=0, downloaded=True, complete=True, cached=True)
+        elif status == "Downloading":
+            detail = value.get("progressDetail")
+            if not isinstance(detail, dict):
+                raise ValueError("Docker returned invalid download counters")
+            current, total = detail.get("current"), detail.get("total")
+            if (type(current) is not int or not 0 <= current <= DOWNLOAD_LIMIT
+                    or (total is not None and (type(total) is not int or not current <= total <= DOWNLOAD_LIMIT))
+                    or layer["cached"]):
+                raise ValueError("Docker returned invalid download counters")
+            layer["current"] = max(layer["current"], current)
+            if total is not None:
+                layer["total"] = max(layer["total"] or 0, total, layer["current"])
+            elif layer["total"] is not None and layer["current"] > layer["total"]:
+                raise ValueError("Docker download exceeds its reported layer size")
+        elif status in {"Download complete", "Extracting", "Pull complete"}:
+            layer["downloaded"] = True
+            if layer["total"] is not None:
+                layer["current"] = layer["total"]
+            if status == "Pull complete":
+                layer["complete"] = True
+        self.emit()
+        return False
+
+    def finish(self):
+        if any(not layer["complete"] for layer in self.layers.values()):
+            raise RuntimeError("Docker download ended before all layers were ready")
+        self.finished = True
+        self.emit(force=True)
+
+
+class DownloadConnection(http.client.HTTPConnection):
+    def __init__(self, endpoint, context, root):
+        super().__init__("localhost", timeout=30)
+        self.endpoint, self.context, self.root = endpoint, context, root
+        self.process = None
+        self.transport = None
+
+    def connect(self):
+        if self.endpoint.startswith("unix://"):
+            self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self.transport = self.sock
+            self.sock.settimeout(self.timeout)
+            self.sock.connect(self.endpoint.removeprefix("unix://"))
+            return
+        # Docker's own transport preserves SSH/TLS context authentication. Only
+        # the bounded HTTP progress stream crosses this socket pair.
+        self.sock, child = socket.socketpair()
+        self.transport = self.sock
+        self.sock.settimeout(self.timeout)
+        try:
+            self.process = subprocess.Popen(["docker", "--context", self.context, "system", "dial-stdio"],
+                                            cwd=self.root, stdin=child, stdout=child, stderr=subprocess.DEVNULL,
+                                            start_new_session=True)
+        finally:
+            child.close()
+
+    def close_transport(self):
+        super().close()
+        if self.process is not None:
+            process, self.process = self.process, None
+            try:
+                process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                for signum in (signal.SIGTERM, signal.SIGKILL):
+                    try:
+                        os.killpg(process.pid, signum)
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        process.wait(timeout=2)
+                        break
+                    except subprocess.TimeoutExpired:
+                        continue
+
+
+def pull_verified_image(context, target, root, publish, *, cancelled=None):
+    """Read the Engine JSON stream without buffering the image pull's output."""
+    try:
+        inspected = subprocess.run(["docker", "--context", context, "context", "inspect", context,
+                                    "--format", "{{json .Endpoints.docker.Host}}"], cwd=root,
+                                   capture_output=True, text=True, timeout=20, check=False)
+        if inspected.returncode or len(inspected.stdout) > 4096:
+            raise ValueError("Docker context could not be inspected")
+        endpoint = json.loads(inspected.stdout)
+        if not isinstance(endpoint, str) or not endpoint or len(endpoint) > 4096 or "\0" in endpoint:
+            raise ValueError("Docker returned an invalid context endpoint")
+        connection = DownloadConnection(endpoint, context, root)
+        deadline = time.monotonic() + PULL_TIMEOUT
+        tracker = DownloadProgress(publish, expected_reference=f"{target['image']}@{target['digest']}")
+        tracker.emit(force=True)
+        finished = threading.Event()
+        def guard_deadline():
+            while not finished.wait(0.1):
+                if time.monotonic() >= deadline or (cancelled is not None and cancelled()):
+                    transport = connection.transport
+                    if transport is not None:
+                        try:
+                            transport.shutdown(socket.SHUT_RDWR)
+                        except OSError:
+                            pass
+                        return
+        guard = threading.Thread(target=guard_deadline, daemon=True)
+        guard.start()
+        try:
+            query = urlencode({"fromImage": target["image"], "tag": target["digest"]})
+            connection.request("POST", f"/images/create?{query}", body=b"")
+            transport = connection.sock
+            response = connection.getresponse()
+            if response.status != 200:
+                raise RuntimeError("Docker could not download the verified Orbis image")
+            pending = bytearray()
+            received, events, succeeded = 0, 0, False
+            while True:
+                if response.isclosed():
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or (cancelled is not None and cancelled()):
+                    raise RuntimeError("Orbis image download was cancelled or timed out")
+                transport.settimeout(min(30, remaining))
+                block = response.read1(65536)
+                if not block:
+                    break
+                received += len(block)
+                if received > PULL_STREAM_LIMIT:
+                    raise ValueError("Docker download progress exceeds its size limit")
+                pending.extend(block)
+                while b"\n" in pending:
+                    line, _, rest = pending.partition(b"\n")
+                    pending = bytearray(rest)
+                    events += 1
+                    if len(line) > PULL_LINE_LIMIT or events > 200000:
+                        raise ValueError("Docker download progress exceeds its event limit")
+                    if line.strip():
+                        succeeded = tracker.event(json.loads(line)) or succeeded
+                if len(pending) > PULL_LINE_LIMIT:
+                    raise ValueError("Docker download progress exceeds its line limit")
+            if pending.strip() or not succeeded:
+                raise RuntimeError("Docker download ended without a complete result")
+            tracker.finish()
+        finally:
+            finished.set()
+            connection.close_transport()
+            guard.join(timeout=1)
+    except (OSError, UnicodeError, json.JSONDecodeError, http.client.HTTPException, subprocess.SubprocessError) as error:
+        raise RuntimeError("Docker could not finish downloading the verified Orbis image") from error
 
 
 def failure_details(stage: object, error: Exception) -> dict[str, str]:
@@ -483,7 +720,10 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
         try:
             record["stage"] = "downloading"
             write_journal(snapshot, record)
-            docker_checked(context, ["pull", f"{target['image']}@{target['digest']}"], root, "Docker could not pull the verified Orbis image")
+            def publish_download(progress):
+                record["download"] = progress
+                write_journal(snapshot, record)
+            pull_verified_image(context, target, root, publish_download)
             record["stage"] = "pulled"
             write_journal(snapshot, record)
             if record.get("backupScope") == CONTROLLER.SCOPE:

@@ -74,10 +74,27 @@ export function containerReadiness(inspection: Dockerode.ContainerInspectInfo): 
 export function containerUsage(stats: Dockerode.ContainerStats, previous?: Pick<Dockerode.ContainerStats, 'cpu_stats'>) {
   const current = stats.cpu_stats;
   const prior = previous?.cpu_stats ?? stats.precpu_stats;
-  const delta = current?.cpu_usage?.total_usage - prior?.cpu_usage?.total_usage;
-  const systemDelta = current?.system_cpu_usage - prior?.system_cpu_usage;
-  const cpus = current?.online_cpus || current?.cpu_usage?.percpu_usage?.length;
-  const cpuPercent = prior?.system_cpu_usage > 0 && systemDelta > 0 && delta >= 0 && cpus > 0 ? safe((delta / systemDelta) * cpus * 100) : null;
+  const currentCpu = safe(current?.cpu_usage?.total_usage);
+  const priorCpu = safe(prior?.cpu_usage?.total_usage);
+  const currentHost = safe(current?.system_cpu_usage);
+  const priorHost = safe(prior?.system_cpu_usage);
+  const cpuCount = (sample: typeof current) => safeInteger(sample?.online_cpus, 1) ?? safeInteger(sample?.cpu_usage?.percpu_usage?.length, 1);
+  const currentCount = cpuCount(current);
+  const previousCount = cpuCount(prior);
+  const delta = currentCpu !== null && priorCpu !== null ? currentCpu - priorCpu : null;
+  const systemDelta = currentHost !== null && priorHost !== null ? currentHost - priorHost : null;
+  // system_cpu_usage already aggregates all host logical CPUs, independent of a container's quota.
+  const cpuPercent =
+    priorHost !== null &&
+    priorHost > 0 &&
+    delta !== null &&
+    systemDelta !== null &&
+    delta >= 0 &&
+    systemDelta > 0 &&
+    delta <= systemDelta &&
+    (currentCount === null || previousCount === null || currentCount === previousCount)
+      ? safe((delta / systemDelta) * 100)
+      : null;
   const memory = stats.memory_stats;
   const cache = memory?.stats?.total_inactive_file ?? memory?.stats?.inactive_file ?? memory?.stats?.cache ?? 0;
   const usage = safe(memory?.usage);

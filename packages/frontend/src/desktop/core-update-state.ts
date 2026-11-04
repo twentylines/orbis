@@ -1,4 +1,5 @@
 import { lt, valid } from 'semver';
+import { readDownloadProgress, type DownloadProgress } from './download-progress';
 
 export type CoreUpdateOperation = 'update' | 'downgrade';
 
@@ -9,6 +10,7 @@ export type CoreUpdateJob = {
   startedAt?: number;
   message?: string;
   phase?: string | null;
+  download?: DownloadProgress;
 };
 export type CoreUpdateStatus = {
   available: boolean;
@@ -26,6 +28,7 @@ export type CoreUpdateWatch = {
   phase: 'downloading' | 'updating' | 'offline' | 'checking' | 'failed' | 'ready';
   message: string;
   refreshIssued: boolean;
+  download?: DownloadProgress;
   operation?: CoreUpdateOperation;
 };
 export type CoreUpdateEvent =
@@ -84,6 +87,7 @@ export function advanceCoreUpdate(watch: CoreUpdateWatch | null, event: CoreUpda
   if (!next || next.refreshIssued || next.phase === 'failed') return next;
   if (!status.available) return { ...next, phase: 'offline', message: restartingMessage };
   if (job?.id !== next.id) return next;
+  next = { ...next, download: readDownloadProgress(job.download) };
   if (['failed', 'interrupted', 'rolled-back'].includes(job.state)) {
     return { ...next, phase: 'failed', message: job.message || 'The update needs review in Updates.' };
   }

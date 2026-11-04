@@ -25,6 +25,7 @@ class HostProcesses:
         self.sample = None
         self.failed = False
         self.previous = {}
+        self.previous_host = None
 
     def process(self, pid):
         # Only numeric process directories and stat are read; cmdline/environ/exe are never opened.
@@ -48,6 +49,27 @@ class HostProcesses:
             raise ValueError("process counters exceed limit")
         return name, ticks, started, memory
 
+    def host_cpu(self):
+        # The aggregate is already summed across logical CPUs; guest counters are included in user/nice.
+        with (self.proc / "stat").open("rb") as stream:
+            data = stream.read(1024 * 1024 + 1)
+        if len(data) > 1024 * 1024:
+            raise ValueError("host CPU counters exceed limit")
+        lines = data.splitlines()
+        if not lines:
+            raise ValueError("host CPU counters unavailable")
+        first = lines[0].split()
+        if not first or first[0] != b"cpu" or len(first) < 5 or any(not value.isdigit() for value in first[1:9]):
+            raise ValueError("invalid host CPU counters")
+        cores = []
+        for line in lines[1:]:
+            name = line.split(None, 1)[0] if line else b""
+            if name.startswith(b"cpu") and name[3:].isdigit():
+                cores.append(int(name[3:]))
+        if not cores or len(cores) != len(set(cores)):
+            raise ValueError("host CPU topology unavailable")
+        return sum(int(value) for value in first[1:9]), tuple(sorted(cores))
+
     @staticmethod
     def keep(heap, value, row):
         entry = (value, -row["pid"], row)
@@ -60,6 +82,13 @@ class HostProcesses:
         if not 0 < self.ticks <= 1_000_000 or not 0 < self.page_size <= 1024 * 1024:
             raise ValueError("host units unavailable")
         began = self.clock()
+        try:
+            host = self.host_cpu()
+        except (OSError, ValueError, OverflowError):
+            host = None
+        previous_host = self.previous_host
+        self.previous_host = host
+        host_delta = (host[0] - previous_host[0] if host and previous_host and host[1] == previous_host[1] else None)
         cpu, memory, previous = [], [], {}
         scanned = readable = unreadable = compared = 0
         limited = False
@@ -80,7 +109,9 @@ class HostProcesses:
                     measured = self.clock()
                     old = self.previous.get((pid, started))
                     elapsed = measured - old[0] if old else None
-                    percent = (ticks - old[1]) / self.ticks / elapsed * 100 if old and 2 <= elapsed <= 60 and ticks >= old[1] else None
+                    delta = ticks - old[1] if old else None
+                    percent = (delta / host_delta * 100 if old and 2 <= elapsed <= 60 and delta is not None
+                               and host_delta is not None and host_delta > 0 and 0 <= delta <= host_delta else None)
                     previous[(pid, started)] = (measured, ticks)
                     row = {"pid": pid, "name": name, "cpuPercent": percent, "memoryBytes": resident}
                     readable += 1

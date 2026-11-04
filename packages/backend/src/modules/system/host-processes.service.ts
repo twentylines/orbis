@@ -42,8 +42,7 @@ export function parseHostProcesses(value: unknown, now = Date.now()): HostProces
         !name.length ||
         Array.from(name).length > 64 ||
         Array.from(name).some((character) => character !== ' ' && /[\p{C}\p{Z}]/u.test(character)) ||
-        (cpuPercent !== null &&
-          (typeof cpuPercent !== 'number' || !Number.isFinite(cpuPercent) || cpuPercent < 0 || cpuPercent > Number.MAX_SAFE_INTEGER)) ||
+        (cpuPercent !== null && (typeof cpuPercent !== 'number' || !Number.isFinite(cpuPercent) || cpuPercent < 0 || cpuPercent > 100)) ||
         (metric === 'cpuPercent' && cpuPercent === null)
       )
         throw new Error('Invalid process row');

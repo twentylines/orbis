@@ -7,7 +7,7 @@ import { HostProcessesService, parseHostProcesses } from '../host-processes.serv
 
 function sample() {
   const rows = [
-    { pid: 1, name: 'worker', cpuPercent: 250, memoryBytes: 1024 },
+    { pid: 1, name: 'worker', cpuPercent: 25, memoryBytes: 1024 },
     { pid: 2, name: 'server ) worker', cpuPercent: 10, memoryBytes: 8192 },
     { pid: 3, name: 'new-worker', cpuPercent: null, memoryBytes: 4096 },
   ];
@@ -26,7 +26,7 @@ function sample() {
 }
 
 describe('host process contract', () => {
-  it('selects only process identity and readings, retaining multicore CPU and unknown first samples', () => {
+  it('selects only process identity and readings, retaining whole-host CPU and unknown first samples', () => {
     const value = sample();
     const result = parseHostProcesses({
       ...value,
@@ -54,6 +54,7 @@ describe('host process contract', () => {
       { ...value, byMemory: value.byMemory.map((row) => ({ ...row, memoryBytes: 999 })) },
       { ...value, byCpu: value.byCpu.map((row) => ({ ...row, cpuPercent: null })) },
       { ...value, byCpu: value.byCpu.map((row) => ({ ...row, cpuPercent: Number.NaN })) },
+      { ...value, byCpu: value.byCpu.map((row) => ({ ...row, cpuPercent: 100.1 })) },
       { ...value, byCpu: value.byCpu.map((row) => ({ ...row, name: 'private\nline' })) },
       { ...value, byCpu: value.byCpu.map((row) => ({ ...row, memoryBytes: -1 })) },
       { ...value, byCpu: value.byCpu.map((row) => ({ ...row, pid: 0 })) },

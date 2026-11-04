@@ -10,6 +10,7 @@ import { advanceCoreUpdate, coreJobIsActive, validCoreUpdate, type CoreUpdateSta
 import { OperationStartupContext } from '@/components/startup/operation-startup';
 import { StartupSurface } from '@/components/startup/startup-surface';
 import { RecoveryScene } from './recovery-scene';
+import { UpdateDownloadProgress } from './update-download-progress';
 import {
   armStartedOperation,
   clearMatchingRestoreContinuity,
@@ -267,7 +268,6 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
       !operationJob.needsRecovery &&
       ['succeeded', 'rolled-back'].includes(operationJob.status),
   );
-  const locked = !snapshot || snapshot.state !== 'idle' || snapshot.unavailable === true;
   const showChildren = operationShowsContent(snapshot, authRoute, matchingTerminal, continuity.departing);
   const server = snapshot ?? { state: 'checking' as const, supported: true };
   const waiting = operationIsWaiting(server);
@@ -314,19 +314,13 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
         <div className="reset-scene-backdrop" aria-hidden="true" />
         <RecoveryScene
           open={!resetRecovery}
-          title={waiting ? 'Checking reset status' : server.stage === 'recovering' ? 'Reset needs attention' : 'Resetting Orbis'}
-          status={
-            waiting
-              ? 'Waiting for the server to respond'
-              : server.stage === 'recovering'
-                ? 'Waiting for confirmation'
-                : stageCopy[server.stage ?? 'resetting']
-          }
+          title={waiting ? 'Waiting for the server to respond' : server.stage === 'recovering' ? 'Reset needs attention' : 'Resetting Orbis'}
+          status={waiting ? undefined : server.stage === 'recovering' ? 'Waiting for confirmation' : stageCopy[server.stage ?? 'resetting']}
           active={waiting || server.stage !== 'recovering'}
           variant="onboarding"
           detail={
             waiting
-              ? "We'll keep trying, and this page updates when it's ready."
+              ? 'Orbis will reload automatically.'
               : server.stage === 'recovering'
                 ? 'Confirm the original reset again to continue. Server data stays locked until it finishes.'
                 : undefined
@@ -355,25 +349,26 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
       )}
       <RecoveryScene
         open={!showChildren && snapshot !== null}
-        title={waiting ? 'Checking server' : title}
-        status={waiting ? undefined : status}
+        title={waiting ? 'Waiting for the server to respond' : title}
+        status={waiting || (core?.phase === 'downloading' && core.download) ? undefined : status}
         variant={kind}
         detail={
           waiting
-            ? "We'll keep trying, and this page updates when it's ready."
+            ? 'Orbis will reload automatically.'
             : (actionError ?? (job?.status === 'rolled-back' ? 'The restore did not complete. Your previous state was restored.' : undefined))
         }
         progress={restoration?.progress ?? server.progress}
+        progressContent={
+          !waiting && kind !== 'restore' && core?.phase === 'downloading' && core.download ? (
+            <UpdateDownloadProgress value={core.download} />
+          ) : undefined
+        }
         active={waiting || ['restoring', 'updating', 'downgrading'].includes(server.state)}
         departing={continuity.departing}
         indicator={server.stage === 'restarting' || core?.phase === 'offline' || core?.phase === 'checking' ? 'restart' : 'progress'}
         footer={!waiting && kind !== 'restore' ? 'Applications keep running during this Orbis operation.' : undefined}
         actions={
-          waiting ? (
-            <Button className="operation-wait-retry" onClick={() => window.location.reload()}>
-              Retry
-            </Button>
-          ) : (
+          waiting ? undefined : (
             <>
               {kind === 'restore' && job?.canRecover ? (
                 <Button
@@ -398,11 +393,6 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
               ) : null}
               {server.unavailable || server.state === 'recovery' ? (
                 <Button onClick={() => setAttempt((value) => value + 1)}>Check again</Button>
-              ) : null}
-              {locked ? (
-                <a className="btn" href="/login">
-                  Sign in
-                </a>
               ) : null}
               {matchingTerminal && !continuity.departing ? (
                 job?.status === 'rolled-back' ? (

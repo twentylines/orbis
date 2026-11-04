@@ -1687,13 +1687,13 @@ class HostService:
         expected_reference = retained.controller()["creationReference"] if retained else f"{PLAN.IMAGE}@{(saved or {}).get('digest')}"
         job = read_private(self.job_file)
         phase = None
+        journal = read_private(UPDATE.journal_path(Path(job["snapshot"]))) if job and isinstance(job.get("snapshot"), str) else None
+        download = UPDATE.safe_download(journal)
         if job and job.get("state") == "running":
-            journal = read_private(UPDATE.journal_path(Path(job["snapshot"]))) if isinstance(job.get("snapshot"), str) else None
             phase = journal.get("stage") if journal else "preparing"
             if phase not in UPDATE.FAILURE_STAGES | UPDATE.TERMINAL_STAGES:
                 phase = "preparing"
         if job and job.get("state") == "interrupted":
-            journal = read_private(UPDATE.journal_path(Path(job["snapshot"])))
             stage = journal.get("stage") if journal else None
             expected_digest = job["target"]["digest"] if stage == "complete" else job["current"]["digest"]
             healthy_expected = (
@@ -1738,7 +1738,7 @@ class HostService:
             "coreState": core.get("state"),
             "coreHealth": core.get("health"),
             "imageMatches": bool(enrolled and saved and core.get("image") == expected_reference),
-            "job": {key: job.get(key) for key in ("id", "state", "targetTag", "startedAt", "finishedAt", "message")} | {"phase": phase} | UPDATE.safe_failure(job)
+            "job": {key: job.get(key) for key in ("id", "state", "targetTag", "startedAt", "finishedAt", "message")} | {"phase": phase} | download | UPDATE.safe_failure(job)
             if job
             else None,
         }

@@ -63,6 +63,7 @@ describe('host update Unix socket transport', () => {
     status: vi.fn(),
   };
   let restartSupported = true;
+  let updateJob: Record<string, unknown> | null = null;
   let packageReview: Record<string, unknown> = {
     planId: '00000000-0000-4000-8000-000000000000',
     createdAt: 1_700_000_000,
@@ -106,7 +107,7 @@ describe('host update Unix socket transport', () => {
         response.end(
           JSON.stringify(
             request.url === '/v1/status'
-              ? { available: true, enrolled: true, capabilities: ['release-channels.v1'] }
+              ? { available: true, enrolled: true, capabilities: ['release-channels.v1'], job: updateJob }
               : request.url === '/v1/packages'
                 ? { available: true, packageCount: 1, packages: [] }
                 : request.url === '/v1/packages/job'
@@ -141,6 +142,28 @@ describe('host update Unix socket transport', () => {
     expect(await service.plan('v0.1.0-beta.8')).toMatchObject({ planId: '00000000-0000-4000-8000-000000000000' });
     expect(requests).toContainEqual({ method: 'GET', path: '/v1/status', body: null });
     expect(requests).toContainEqual({ method: 'POST', path: '/v1/plan', body: { tag: 'v0.1.0-beta.8' } });
+  });
+
+  it('passes optional byte progress through the existing status endpoint and tolerates old helpers', async () => {
+    const download = {
+      schema: 'orbis.download-progress.v1',
+      phase: 'downloading',
+      currentBytes: 42,
+      totalBytes: null,
+      totalKnown: false,
+      alreadyCached: false,
+      layersComplete: 1,
+      layersTotal: 3,
+      updatedAt: 1_700_000_000,
+    };
+    try {
+      updateJob = { id: '00000000-0000-4000-8000-000000000000', state: 'running', targetTag: 'v0.1.0-beta.8', startedAt: 1, download };
+      expect((await service.status()).job?.download).toEqual(download);
+      delete updateJob.download;
+      expect((await service.status()).job?.download).toBeUndefined();
+    } finally {
+      updateJob = null;
+    }
   });
 
   it('prevents generic apply from bypassing downgrade revalidation, including after a core restart', async () => {

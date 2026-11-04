@@ -198,6 +198,8 @@ class RetainedAuthorityTests(unittest.TestCase):
                 core.update(image=reference, health='unhealthy' if fail_target and reference == target_ref else 'healthy')
             return subprocess.CompletedProcess(args, 0, '')
         patches = [mock.patch.object(host.AUTHORITY, 'OWNER', os.geteuid()), mock.patch.object(host, 'docker', side_effect=docker),
+                   mock.patch.object(update, 'pull_verified_image', side_effect=lambda context, target, root, publish:
+                                     update.docker_checked(context, ['pull', target['image'] + '@' + target['digest']], root, 'download failed')),
                    mock.patch.object(host, 'current_core', side_effect=lambda *_: dict(core)),
                    mock.patch.object(host.PLAN, 'plan', return_value={'configuredImage': creation}),
                    mock.patch.object(update, 'core_ownership', return_value=set()), mock.patch.object(update, 'require_quiet_apps'),

@@ -102,6 +102,10 @@ class OrbisHostUpdateTests(unittest.TestCase):
         )
         self.release.start()
         self.addCleanup(self.release.stop)
+        self.pull = mock.patch.object(UPDATE, "pull_verified_image", side_effect=lambda context, target, root, publish:
+                                     UPDATE.docker_checked(context, ["pull", f"{target['image']}@{target['digest']}"], root, "download failed"))
+        self.pull.start()
+        self.addCleanup(self.pull.stop)
         UPDATE.HOST.write_state(self.root, UPDATE.HOST.installation_fingerprint(self.root, CURRENT, "test-daemon"))
 
     def test_live_proxy_update_uses_reviewed_runtime_and_never_compose_up(self):

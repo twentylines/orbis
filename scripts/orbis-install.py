@@ -175,6 +175,9 @@ def show_browser_address(root):
 
 def select_installation(report, root=None, ask=None):
     installations = report["installations"]
+    recovery = report.get("recoveryTargets", [])
+    if any(root is None or item.get("root") == str(root) for item in recovery):
+        raise ValueError("Protected controller recovery artifacts need review before installing or updating this root")
     if root is not None:
         matches = [item for item in installations if item.get("installRoot") == str(root)]
         if len(matches) > 1:
@@ -479,6 +482,7 @@ def main():
 
         supplied_root = safe_root(args.root) if args.root else None
         roots = {item["installRoot"] for item in report["installations"] if item.get("installRoot")}
+        roots.update(item["root"] for item in report.get("recoveryTargets", []) if item.get("root"))
         possible_root = supplied_root or (safe_root(Path(next(iter(roots)))) if len(roots) == 1 else None)
         if possible_root:
             recovered = recover_pending(possible_root, reader, args.state_dir.expanduser(), None if args.yes else ask, writers_stopped=args.host_writers_stopped)
