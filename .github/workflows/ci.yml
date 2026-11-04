@@ -31,6 +31,12 @@ jobs:
       - name: Run tests
         run: bun run test
 
+      - name: Verify maintenance proxy streaming
+        run: node --test scripts/test-orbis-maintenance-proxy.mjs
+
+      - name: Verify controller bootstrap probe bundle
+        run: bun packages/backend/scripts/build-controller-bootstrap-profile.ts --check
+
       - name: Check release labels
         run: bun test packages/frontend/src/desktop/orbis-version.test.ts
 

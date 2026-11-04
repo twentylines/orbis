@@ -104,6 +104,70 @@ class OrbisHostUpdateTests(unittest.TestCase):
         self.addCleanup(self.release.stop)
         UPDATE.HOST.write_state(self.root, UPDATE.HOST.installation_fingerprint(self.root, CURRENT, "test-daemon"))
 
+    def test_live_proxy_update_uses_reviewed_runtime_and_never_compose_up(self):
+        fake = FakeDocker(self.root)
+        checkpoint = {'storage': {'backupScope': UPDATE.CONTROLLER.SCOPE}}
+        runtime = mock.Mock()
+        tools, reader = mock.Mock(), mock.Mock()
+        def start_target():
+            fake.image = TARGET_IMAGE
+        runtime.start_target.side_effect = start_target
+        runtime.commit.return_value = False
+        with mock.patch.object(UPDATE, 'update_plan', return_value={'checkpoint': checkpoint}), \
+                mock.patch.object(UPDATE.CONTROLLER, 'ControllerUpdate', return_value=runtime), \
+                mock.patch.object(UPDATE, 'controller_tools', return_value=(tools, reader)), \
+                mock.patch.object(UPDATE.HOST, 'docker', side_effect=fake):
+            result = UPDATE.apply_update(self.root, CURRENT, TARGET, 'test-daemon', self.snapshot)
+        self.assertEqual(result['result'], 'healthy')
+        runtime.prepare.assert_called_once_with(checkpoint)
+        runtime.start_target.assert_called_once()
+        runtime.restore_policies.assert_called_once_with(target=True)
+        runtime.commit.assert_called_once()
+        tools.checkpoint.assert_called_once_with(self.root, reader, checkpoint, host_writers_stopped=True)
+        self.assertFalse(any(call[0] in {'compose', 'stop'} for call in fake.calls))
+        saved = json.loads(UPDATE.journal_path(self.snapshot).read_text())
+        self.assertEqual(saved['backupScope'], UPDATE.CONTROLLER.SCOPE)
+        self.assertEqual(saved['stage'], 'complete')
+
+    def test_incapable_target_has_explicit_failure_before_checkpoint_or_downtime(self):
+        fake = FakeDocker(self.root)
+        runtime = mock.Mock()
+        runtime.prepare.side_effect = UPDATE.CONTROLLER.CapabilityError('unsupported target')
+        runtime.read.return_value = {'phase': 'preparing'}
+        checkpoint = {'storage': {'backupScope': UPDATE.CONTROLLER.SCOPE}}
+        with mock.patch.object(UPDATE, 'update_plan', return_value={'checkpoint': checkpoint}), \
+                mock.patch.object(UPDATE.CONTROLLER, 'ControllerUpdate', return_value=runtime), \
+                mock.patch.object(UPDATE, 'controller_tools') as tools, \
+                mock.patch.object(UPDATE.HOST, 'docker', side_effect=fake):
+            with self.assertRaisesRegex(RuntimeError, 'before service downtime'):
+                UPDATE.apply_update(self.root, CURRENT, TARGET, 'test-daemon', self.snapshot)
+        tools.assert_not_called()
+        runtime.start_target.assert_not_called()
+        self.assertFalse(any(call[0] in {'compose', 'stop'} for call in fake.calls))
+        saved = json.loads(UPDATE.journal_path(self.snapshot).read_text())
+        self.assertEqual(saved['stage'], 'aborted')
+        self.assertEqual(saved['failureCode'], 'controller-preservation-unsupported')
+        self.assertIn('preserve the live proxy', UPDATE.failure_message(saved))
+
+    def test_dedicated_reconstruction_rollback_dispatch_does_not_replay_old_controller_id_journal(self):
+        runtime = mock.Mock()
+        runtime.read.return_value = {'checkpoint': {'storage': {'backupScope': UPDATE.CONTROLLER.SCOPE}}}
+        runtime.restore_reconstructed_checkpoint.return_value = True
+        tools, reader = mock.Mock(), mock.Mock()
+        record = {'schema': UPDATE.JOURNAL_SCHEMA, 'stage': 'staged', 'backupScope': UPDATE.CONTROLLER.SCOPE,
+                  'targetPublication': TARGET}
+        fake = FakeDocker(self.root)
+        with mock.patch.object(UPDATE.CONTROLLER, 'ControllerUpdate', return_value=runtime), \
+                mock.patch.object(UPDATE, 'controller_tools', return_value=(tools, reader)), \
+                mock.patch.object(UPDATE.HOST, 'docker', side_effect=fake):
+            UPDATE.rollback(self.root, CURRENT, 'test-daemon', self.snapshot, record)
+        runtime.stop_for_rollback.assert_called_once()
+        runtime.restore_reconstructed_checkpoint.assert_called_once()
+        tools.recover.assert_not_called()
+        runtime.start_original.assert_called_once()
+        runtime.restore_policies.assert_called_once_with(target=False)
+        self.assertEqual(record['stage'], 'rolled-back')
+
     def test_update_keeps_a_verified_previous_release_snapshot(self):
         fake = FakeDocker(self.root)
         with mock.patch.object(UPDATE.HOST, "docker", side_effect=fake):
@@ -177,7 +241,7 @@ class OrbisHostUpdateTests(unittest.TestCase):
             with self.subTest(code=code):
                 snapshot = self.snapshot.with_name(code)
                 fake = FakeDocker(self.root)
-                secret = "PRIVATE_SNAPSHOT_CAUSE=must-not-be-exposed"
+                secret = "PRIVATE_CAUSE"
 
                 def fail_capture(root, destination, release, context):
                     journal = UPDATE.read_journal(destination, root, context, CURRENT, TARGET)
@@ -216,7 +280,7 @@ class OrbisHostUpdateTests(unittest.TestCase):
 
     def test_unrecognized_failure_code_and_unsafe_exception_type_are_not_copied_to_journal(self):
         fake = FakeDocker(self.root)
-        secret = "PRIVATE_FAILURE=must-not-be-exposed"
+        secret = "PRIVATE_FAILURE"
         unsafe_type = type("Unsafe\nFailure", (RuntimeError,), {})
         failure = unsafe_type(secret)
         failure.code = secret

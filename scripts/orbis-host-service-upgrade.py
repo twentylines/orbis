@@ -162,7 +162,7 @@ def preflight(root: Path, context: str, source: Path) -> dict[str, str]:
 
 def validate_candidate_scripts(source_files):
     for file in source_files:
-        if file.name == "orbis-host-maintenance-responder.mjs":
+        if file.name in {"orbis-host-maintenance-responder.mjs", "orbis-controller-bootstrap-profile.mjs"}:
             continue
         if file.suffix != ".py":
             raise ValueError(f"unsupported candidate helper script: {file.name}")

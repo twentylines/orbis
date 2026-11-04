@@ -252,9 +252,13 @@ class CombinedChannelEndpointTests(unittest.TestCase):
         exec(compile((self.output / "install").read_bytes(), "install", "exec"), namespace)
         self.assertIsNone(namespace["EXPECTED_RELEASE"])
         self.assertEqual(namespace["CHANNEL_CATALOG"]["channels"], result["channels"])
+        self.assertEqual(namespace["INSTALLER"], {"commit": "b" * 40, "manifestSha256": result["installerManifestSha256"]})
+        installer = self.output / "installer" / ("b" * 40)
+        manifest = SITE.BOOT.verify_installer_manifest((installer / SITE.BUILD.MANIFEST).read_bytes(), namespace["INSTALLER"])
+        self.assertEqual(SITE.BOOT.verify_files((installer / SITE.BUILD.ARCHIVE).read_bytes(), manifest), {name: data for name, data in self.files.items() if SITE.BUILD.ALLOWED.fullmatch(name)})
         self.assertEqual((self.output / "stable/install").read_bytes(), self.assets["install-orbis.py"])
         self.assertEqual((self.output / "nightly/install").read_bytes(), self.assets["install-orbis.py"])
-        self.assertEqual({p.name for p in self.output.iterdir()}, {"install", "channels.json", "stable", "nightly", "index.html", ".nojekyll"})
+        self.assertEqual({p.name for p in self.output.iterdir()}, {"install", "channels.json", "stable", "nightly", "installer", "index.html", ".nojekyll"})
 
     def test_bootstrap_uses_committed_head_while_release_assets_use_release_commit(self):
         repository = Path(self.temp.name) / "repository"
@@ -284,6 +288,16 @@ class CombinedChannelEndpointTests(unittest.TestCase):
         root = (self.output / "install").read_bytes()
         self.assertIn(b"# committed bootstrap update", root)
         self.assertNotIn(b"# uncommitted change", root)
+        head = git("rev-parse", "HEAD")
+        installer_folder = self.output / "installer" / head
+        identity = {"commit": head, "manifestSha256": SITE.BUILD.sha((installer_folder / SITE.BUILD.MANIFEST).read_bytes())}
+        manifest = SITE.BOOT.verify_installer_manifest((installer_folder / SITE.BUILD.MANIFEST).read_bytes(), identity)
+        files = SITE.BOOT.verify_files((installer_folder / SITE.BUILD.ARCHIVE).read_bytes(), manifest)
+        self.assertIn(b"# committed bootstrap update", files["scripts/install-orbis.py"])
+        self.assertNotIn(b"# uncommitted change", files["scripts/install-orbis.py"])
+        namespace = {"__name__": "imported_bootstrap"}
+        exec(compile(root, "install", "exec"), namespace)
+        self.assertEqual(namespace["INSTALLER"], identity)
         self.assertEqual((self.output / "stable/install").read_bytes(), self.assets["install-orbis.py"])
         self.assertEqual((self.output / "nightly/install").read_bytes(), self.assets["install-orbis.py"])
 

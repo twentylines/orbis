@@ -239,6 +239,24 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(started, [identifier("runtipi-db"), identifier("runtipi-queue"), identifier("app-0"), self.docker.controller_id, identifier("runtipi-reverse-proxy")])
         self.assertEqual(self.states(), self.original)
 
+    def test_source_bootstrap_gate_runs_after_database_queue_and_before_controller_start(self):
+        self.quiesce()
+        self.docker.calls = []
+        def deny():
+            self.assertEqual(self.docker.services[identifier('runtipi-db')]['state'], 'running')
+            self.assertEqual(self.docker.services[identifier('runtipi-queue')]['state'], 'running')
+            self.assertEqual(self.docker.controller_state, 'exited')
+            raise ValueError('source bootstrap not proven')
+        with self.assertRaisesRegex(ValueError, 'not proven'):
+            TX.recover(self.root, self.docker, self.journal, host_writers_stopped=True, before_controller_start=deny)
+        self.assertNotIn(['start', self.docker.controller_id], [args for args, _ in self.docker.calls])
+        self.assertEqual(self.docker.controller_state, 'exited')
+        called = []
+        TX.recover(self.root, self.docker, self.journal, host_writers_stopped=True,
+                   before_controller_start=lambda: called.append(True))
+        self.assertEqual(called, [True])
+        self.assertEqual(self.states(), self.original)
+
     def test_interrupted_policy_restoration_can_be_recovered_again(self):
         self.quiesce()
         def crash(args):

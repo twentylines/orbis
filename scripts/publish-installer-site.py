@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish the newest source-verified release launcher at a stable Pages URL."""
+"""Publish the HEAD-bound installer and newest verified release launchers at a stable Pages URL."""
 
 import argparse
 import ast
@@ -134,19 +134,38 @@ def channel_site(repository, releases, output, fetch=BOOT.fetch):
         record = catalog["channels"]["nightly"]
         if record is None:
             raise NoPublishedRelease("No published Orbis release is available")
-        source = BUILD.committed_files(repository, head_commit(repository))["scripts/install-orbis.py"]
-        if source.count(b"CHANNEL_CATALOG = None") != 1 or source.count(b"EXPECTED_RELEASE = None") != 1:
-            if source.count(b"CHANNEL_CATALOG = None") == 0 and source.count(b"EXPECTED_RELEASE = None") == 1 and LEGACY_CHANNEL_BOOTSTRAPS.get(record["tag"]) == BUILD.sha(source):
-                raise NoPublishedRelease(f"Verified release {record['tag']} predates channel-aware installation")
-            raise ValueError("The committed installer does not support channel selection")
-        bootstrap = source.replace(b"CHANNEL_CATALOG = None", ("CHANNEL_CATALOG = " + repr(catalog)).encode())
+        head = head_commit(repository)
+        head_files = BUILD.committed_files(repository, head)
+        source = head_files["scripts/install-orbis.py"]
+        installer_identity = None
+        if source.count(b"INSTALLER = None") == 1:
+            if source.count(b"EXPECTED_RELEASE = None") != 1:
+                raise ValueError("The committed installer does not support source-bound installation")
+            assets = BUILD.build_installer(head_files, head)
+            installer_identity = {"commit": head, "manifestSha256": BUILD.sha(assets[BUILD.MANIFEST])}
+            bootstrap = source.replace(b"INSTALLER = None", ("INSTALLER = " + repr(installer_identity)).encode())
+            if bootstrap.count(b"CHANNEL_CATALOG = None") == 1:
+                bootstrap = bootstrap.replace(b"CHANNEL_CATALOG = None", ("CHANNEL_CATALOG = " + repr(catalog)).encode())
+            installer_dir = staged / "installer" / head
+            installer_dir.mkdir(parents=True)
+            for name, data in assets.items():
+                (installer_dir / name).write_bytes(data)
+        else:
+            if source.count(b"CHANNEL_CATALOG = None") != 1 or source.count(b"EXPECTED_RELEASE = None") != 1:
+                if source.count(b"CHANNEL_CATALOG = None") == 0 and source.count(b"EXPECTED_RELEASE = None") == 1 and LEGACY_CHANNEL_BOOTSTRAPS.get(record["tag"]) == BUILD.sha(source):
+                    raise NoPublishedRelease(f"Verified release {record['tag']} predates channel-aware installation")
+                raise ValueError("The committed installer does not support channel selection")
+            bootstrap = source.replace(b"CHANNEL_CATALOG = None", ("CHANNEL_CATALOG = " + repr(catalog)).encode())
         compile(bootstrap, "install", "exec")
         (staged / "install").write_bytes(bootstrap)
         (staged / "channels.json").write_text(json.dumps(catalog, indent=2) + "\n")
         (staged / ".nojekyll").touch()
         (staged / "index.html").write_text('<!doctype html><meta charset="utf-8"><title>Orbis</title><h1>Orbis</h1><p>Run the installer to choose Stable or Nightly.</p>\n')
         shutil.copytree(staged, output)
-    return {"channels": catalog["channels"], "launcherSha256": BUILD.sha(bootstrap)}
+    result = {"channels": catalog["channels"], "launcherSha256": BUILD.sha(bootstrap)}
+    if installer_identity is not None:
+        result.update({"installerCommit": installer_identity["commit"], "installerManifestSha256": installer_identity["manifestSha256"]})
+    return result
 
 
 def main(argv=None):

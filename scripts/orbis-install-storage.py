@@ -24,8 +24,11 @@ APPS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(APPS)
 DETECT = APPS.DETECT
 SNAPSHOT = APPS.load_script("orbis-snapshot.py", "orbis_snapshot_for_storage")
+RESET = APPS.load_script("orbis-reset-authority.py", "orbis_reset_for_controller_storage")
 SCHEMA = "orbis.installation-storage.v1"
 SYSTEM_ROOTS = {"/", "/etc", "/var", "/var/lib", "/var/lib/docker", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/boot", "/root", "/home", "/opt", "/srv", "/mnt", "/media"}
+LIVE_PROXY_SCOPE = "controller-live-proxy.v1"
+CONTROLLER_SCOPES = {"controller", LIVE_PROXY_SCOPE}
 LIVE_CONTROLLER_DATA = {"/app-data", "/data/media", "/data/backups", "/data/logs", "/data/user-config"}
 
 
@@ -150,7 +153,7 @@ def host_mounts(resources: list[dict], mountinfo: Path | None = None) -> list[di
 
 
 def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, existing_bundle: bool = False, scope: str = "full") -> dict:
-    if scope not in {"full", "controller"}:
+    if scope not in {"full", *CONTROLLER_SCOPES}:
         raise StorageError("Choose a full or controller storage backup")
     if root.is_symlink() or root.resolve(strict=True) != root or not root.is_dir():
         raise StorageError("The installation root must be an existing canonical directory")
@@ -168,18 +171,51 @@ def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, exi
     containers = []
     sources = {root}
     live_paths = set()
+    if scope == LIVE_PROXY_SCOPE:
+        # This new scope never captures or stops the live reverse proxy. Existing
+        # controller/full journals keep their original semantics.
+        proxies = [row for row in rows if row['id'] in owned and row['service'] == 'runtipi-reverse-proxy']
+        if len(proxies) != 1:
+            raise StorageError('Exactly one live proxy must be preserved')
+        proxy = proxies[0]
+        owned.remove(proxy['id'])
+        raw_proxy = reader.app(proxy['id'])
+        for mount in DETECT.validate_mounts(raw_proxy.get('mounts')):
+            if mount['Destination'] in {'/etc/traefik', '/shared'}:
+                source = DETECT.path(mount.get('Source'))
+                if not source:
+                    raise StorageError('The preserved proxy storage is invalid')
+                live_paths.add(Path(source))
+                live_paths.add(Path(source).resolve(strict=False))
+        if not live_paths:
+            raise StorageError('The preserved proxy storage is missing')
     for row in rows:
         if row["id"] not in owned:
             continue
         record, mounts = container_record(reader, row)
         containers.append(record)
+        if scope == LIVE_PROXY_SCOPE and row['id'] == installation['container']['id']:
+            reset_mounts = [item for item in mounts if item.get('Destination') == RESET.TARGET
+                            or str(item.get('Destination', '')).startswith(RESET.TARGET + '/')]
+            if reset_mounts:
+                binding = RESET.read_external_enrollment(root, APPS.digest_daemon(reader), reader.context)
+                if binding.get('schema') != RESET.SCHEMA_V4:
+                    raise StorageError('Preserving reset authority requires reviewed v4 enrollment')
+                RESET.verify(root, binding, daemon=APPS.digest_daemon(reader), context=reader.context)
+                RESET.require_runtime(root, mounts, binding)
+                RESET.require_docker_isolation(root, reader, binding, controller_id=row['id'])
+                live_paths.add(RESET.binding_path(root, binding))
         for mount in mounts:
-            if scope == "controller" and row["id"] == installation["container"]["id"] and mount["Destination"] in LIVE_CONTROLLER_DATA:
+            if scope in CONTROLLER_SCOPES and row["id"] == installation["container"]["id"] and mount["Destination"] in LIVE_CONTROLLER_DATA:
                 source = DETECT.path(mount.get("Source"))
                 if source:
                     live_paths.add(Path(source))
                     live_paths.add(Path(source).resolve(strict=False))
                 continue
+            if scope == LIVE_PROXY_SCOPE:
+                source_path = DETECT.path(mount.get('Source'))
+                if source_path and any(Path(source_path).is_relative_to(live) for live in live_paths):
+                    continue
             source = mount_source(reader, mount, controller=row["id"] == installation["container"]["id"])
             if source is not None:
                 source_identity(source)
@@ -188,14 +224,14 @@ def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, exi
     sources = sorted(sources, key=lambda source: (len(source.parts), str(source)))
     resources = []
     for source in sources:
-        if scope == "controller" and any(source.is_relative_to(live) for live in live_paths):
+        if scope in CONTROLLER_SCOPES and any(source.is_relative_to(live) for live in live_paths):
             raise StorageError("Controller metadata and application data share a storage root; review their separation before a controller-only backup")
         if any(source.is_relative_to(Path(item["source"])) for item in resources):
             continue
         if overlaps(source, bundle):
             raise StorageError("The storage backup must be outside every source being copied")
         item = source_identity(source)
-        if scope == "controller":
+        if scope in CONTROLLER_SCOPES:
             excluded = [live.relative_to(source).as_posix() for live in live_paths if live.is_relative_to(source)]
             if excluded:
                 item["excludedPaths"] = list(SNAPSHOT.excluded_paths(excluded))
@@ -244,7 +280,7 @@ def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, exi
         "containers": sorted([{key: value[key] for key in ("id", "name", "definitionHash")} for value in containers], key=lambda value: value["id"]),
         "mountPoints": host_mounts(resources),
     }
-    if scope == "controller":
+    if scope in CONTROLLER_SCOPES:
         identity.update(backupScope=scope, preservedAppContainers=sorted(app_ids))
     result = {
         "schema": SCHEMA, "readOnly": True, **identity, "identityHash": APPS.digest(identity),
@@ -279,13 +315,13 @@ def validate_review(saved: object) -> dict:
     if "mountPoints" in saved:
         identity["mountPoints"] = saved["mountPoints"]
     if "backupScope" in saved:
-        if saved["backupScope"] != "controller" or not isinstance(saved.get("preservedAppContainers"), list) or any(not DETECT.IDENTIFIER.fullmatch(str(value)) for value in saved["preservedAppContainers"]):
+        if saved["backupScope"] not in CONTROLLER_SCOPES or not isinstance(saved.get("preservedAppContainers"), list) or any(not DETECT.IDENTIFIER.fullmatch(str(value)) for value in saved["preservedAppContainers"]):
             raise StorageError("The controller backup scope is invalid")
         identity.update(backupScope=saved["backupScope"], preservedAppContainers=saved["preservedAppContainers"])
     if saved.get("identityHash") != APPS.digest(identity) or not isinstance(saved["resources"], list) or len(saved["resources"]) > 4096:
         raise StorageError("The storage review identity is invalid")
     for item in saved["resources"]:
-        if item.get("excludedPaths") and (saved.get("backupScope") != "controller" or item.get("kind") != "directory" or list(SNAPSHOT.excluded_paths(item["excludedPaths"])) != item["excludedPaths"]):
+        if item.get("excludedPaths") and (saved.get("backupScope") not in CONTROLLER_SCOPES or item.get("kind") != "directory" or list(SNAPSHOT.excluded_paths(item["excludedPaths"])) != item["excludedPaths"]):
             raise StorageError("Storage exclusions do not match the reviewed controller scope")
     return saved
 

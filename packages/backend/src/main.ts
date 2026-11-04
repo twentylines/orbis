@@ -1,3 +1,4 @@
+import './common/controller-overlay-startup';
 import './instrument';
 
 import fs from 'node:fs';

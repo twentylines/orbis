@@ -326,7 +326,7 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
           variant="onboarding"
           detail={
             waiting
-              ? 'Checking will continue automatically.'
+              ? "We'll keep trying, and this page updates when it's ready."
               : server.stage === 'recovering'
                 ? 'Confirm the original reset again to continue. Server data stays locked until it finishes.'
                 : undefined
@@ -360,7 +360,7 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
         variant={kind}
         detail={
           waiting
-            ? 'Waiting for the server to respond. Checking will continue automatically.'
+            ? "We'll keep trying, and this page updates when it's ready."
             : (actionError ?? (job?.status === 'rolled-back' ? 'The restore did not complete. Your previous state was restored.' : undefined))
         }
         progress={restoration?.progress ?? server.progress}

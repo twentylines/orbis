@@ -77,6 +77,8 @@ function planFixture(extraMount?: { Type: string; Source: string; Destination: s
     Mounts: [
       { Type: 'bind', Source: '/host/runtime/data', Destination: '/data' },
       { Type: 'bind', Source: '/host/runtime/app-data', Destination: '/app-data' },
+      { Type: 'bind', Source: '/var/run/docker.sock', Destination: '/var/run/docker.sock', RW: false },
+      { Type: 'bind', Source: '/etc/localtime', Destination: '/etc/localtime', RW: false },
     ],
     NetworkSettings: { Networks: { private: {} } },
   };
@@ -116,6 +118,26 @@ it('refuses Docker volumes and a database from a different network', async () =>
     'Docker volume',
   );
   await expect(planFixture(undefined, 'unrelated').plan(['fixture_store'])).rejects.toThrow('identified safely');
+});
+
+it.each([true, false])('recognizes the controller Docker socket as a runtime dependency with RW=%s', async (RW) => {
+  expect(
+    (await planFixture({ Type: 'bind', Source: '/var/run/docker.sock', Destination: '/run/docker.sock', RW }).plan(['fixture_store'])).containers,
+  ).toHaveLength(1);
+});
+
+it('never treats arbitrary data at a runtime destination as an excluded runtime endpoint', async () => {
+  for (const Destination of ['/var/run/docker.sock', '/etc/localtime']) {
+    await expect(planFixture({ Type: 'bind', Source: '/host/private/app-data', Destination, RW: false }).plan(['fixture_store'])).rejects.toThrow(
+      'external storage',
+    );
+  }
+  await expect(
+    planFixture({ Type: 'volume', Source: '/var/run/docker.sock', Destination: '/var/run/docker.sock', RW: false }).plan(['fixture_store']),
+  ).rejects.toThrow('Docker volume');
+  expect(
+    (await planFixture({ Type: 'bind', Source: '/etc/localtime', Destination: '/etc/localtime', RW: false }).plan(['fixture_store'])).containers,
+  ).toHaveLength(1);
 });
 
 it('re-inspects actual Docker inventory and refuses a still-running app before certifying quiescence', async () => {

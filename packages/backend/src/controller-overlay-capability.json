@@ -1,0 +1,7 @@
+{
+  "schema": "orbis.controller-overlay-startup.v1",
+  "version": 1,
+  "preserveNetworkAccess": true,
+  "preserveRunningApps": true,
+  "environment": "ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1"
+}

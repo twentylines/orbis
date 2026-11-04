@@ -102,13 +102,27 @@ function json(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
-function proxy(request, response) {
+export function proxyToOrbis(request, response, options = {}) {
   const headers = { ...request.headers };
   for (const key of ['connection', 'proxy-connection', 'keep-alive', 'transfer-encoding', 'upgrade', 'te', 'trailer']) delete headers[key];
   headers.connection = 'close';
   const upstream = http.request(
-    { hostname: 'runtipi', port: 3000, path: request.url, method: request.method, headers, timeout: 5000 },
+    {
+      hostname: options.hostname ?? 'runtipi',
+      port: options.port ?? 3000,
+      path: request.url,
+      method: request.method,
+      headers,
+      timeout: options.timeoutMs ?? 180000,
+    },
     (incoming) => {
+      if (
+        request.method === 'GET' &&
+        incoming.statusCode === 200 &&
+        incoming.headers['content-type']?.split(';', 1)[0].trim().toLowerCase() === 'text/event-stream'
+      ) {
+        upstream.setTimeout(0);
+      }
       const resultHeaders = { ...incoming.headers, 'cache-control': 'no-store' };
       for (const key of ['connection', 'keep-alive', 'transfer-encoding', 'upgrade', 'te', 'trailer']) delete resultHeaders[key];
       response.writeHead(incoming.statusCode ?? 503, resultHeaders);
@@ -121,22 +135,17 @@ function proxy(request, response) {
     if (response.headersSent) response.destroy();
     else json(response, 503, { code: 'ORBIS_MAINTENANCE', message: 'The server is reconnecting.' });
   });
-  let count = 0;
-  request.on('data', (chunk) => {
-    count += chunk.length;
-    if (count > 1024 * 1024) {
-      upstream.destroy();
-      request.destroy();
-    }
-  });
+  // Orbis authenticates and bounds its upload routes; proxy streaming keeps their
+  // backpressure and limits instead of imposing a second, smaller archive limit.
   request.on('aborted', () => upstream.destroy());
+  response.once('close', () => upstream.destroy());
   request.pipe(upstream);
 }
 
 export function createMaintenanceServer(options = {}) {
   const read = options.readState ?? maintenanceState;
   const directory = options.assets ?? assets;
-  const forward = options.proxy ?? proxy;
+  const forward = options.proxy ?? proxyToOrbis;
   return http.createServer(async (request, response) => {
     try {
       const pathname = new URL(request.url, 'http://localhost').pathname;
@@ -170,7 +179,7 @@ export function createMaintenanceServer(options = {}) {
 
 if (process.env.ORBIS_MAINTENANCE_RESPONDER === '1') {
   const server = createMaintenanceServer();
-  server.requestTimeout = 10000;
+  server.requestTimeout = 0;
   server.headersTimeout = 5000;
   server.maxHeadersCount = 64;
   server.listen(3000, '0.0.0.0');

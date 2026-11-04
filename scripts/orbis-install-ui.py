@@ -195,12 +195,11 @@ class Presentation:
         if width < 40 or height < 18:
             return []
         field_width = min(96, width - 1)
-        inset = " " * ((width - 1 - field_width) // 2)
         lines = spaceflight(field_width, tick, min(13, height - 12), self.unicode)
         def color_run(match):
             value = match.group(0)
             return self.paint(value, "37" if value[0] in {"*", "•"} else "36" if value[0] == "·" else "90")
-        return [inset + re.sub(r"([.*·•])\1*", color_run, line) for line in lines]
+        return [re.sub(r"([.*·•])\1*", color_run, line) for line in lines]
 
     def set_remaining_steps(self, count):
         if type(count) is not int or not 1 <= count <= 128:

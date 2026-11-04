@@ -7,7 +7,17 @@ on:
       - '.github/workflows/installer-site.yml'
       - 'scripts/publish-installer-site.py'
       - 'scripts/install-orbis.py'
+      - 'scripts/orbis-installer-bundle.py'
+      - 'scripts/orbis-install*.py'
+      - 'scripts/orbis-host-*.py'
+      - 'scripts/orbis-reset-*.py'
+      - 'scripts/orbis-release-*.py'
+      - 'scripts/orbis-proxy-identity.py'
+      - 'scripts/migration-preflight.py'
+      - 'packaging/systemd/orbis-host.service'
       - 'scripts/test_orbis_installer_site.py'
+      - 'scripts/test_orbis_installer_bundle.py'
+      - 'scripts/test_orbis_install_ui.py'
   workflow_run:
     workflows: ['Orbis release']
     types: [completed]

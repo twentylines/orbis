@@ -25,6 +25,7 @@ SPEC.loader.exec_module(REPLACE)
 HOST, APPS = REPLACE.HOST, REPLACE.APPS
 UI = REPLACE.load("orbis-install-ui.py", "orbis_new_ui")
 PROXY = REPLACE.load("orbis-proxy-identity.py", "orbis_new_proxy_identity")
+RESET = REPLACE.load("orbis-reset-authority.py", "orbis_new_reset_authority")
 SCHEMA = "orbis.new-installation.v2"
 IMAGES = {
     "postgres": "postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24",
@@ -53,14 +54,16 @@ def server_ip(value=None):
     return str(address)
 
 
-def compose(root, image, endpoint, http, https):
+def compose(root, image, endpoint, http, https, reset_binding=None):
+    if reset_binding is None:
+        reset_binding = {"schema": RESET.SCHEMA_V3, "path": str(RESET.external_directory(root))}
     def bind(source, target, readonly=False):
         return {"type": "bind", "source": str(source), "target": target, "read_only": readonly, "bind": {"create_host_path": False}}
     common = {"restart": "unless-stopped", "networks": ["tipi_main_network"]}
     core = {**common, "container_name": "runtipi", "image": image, "env_file": [str(root / ".env")], "environment": {"NODE_ENV": "production"}, "depends_on": {"runtipi-db": {"condition": "service_healthy"}, "runtipi-queue": {"condition": "service_started"}}, "healthcheck": {"test": ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/health"], "interval": "3s", "timeout": "3s", "retries": 60, "start_period": "15s"}}
     folders = ["media", "state", "repos", "apps", "logs", "traefik", "user-config", "backups"]
     core["volumes"] = [bind(root / name, "/data/" + name) for name in folders]
-    core["volumes"] += [bind(root / "app-data", "/app-data"), bind(root / "cache", "/cache"), bind(root / ".env", "/data/.env"), bind(root / "docker-compose.yml", "/data/docker-compose.yml", True), bind(endpoint, "/var/run/docker.sock", True)]
+    core["volumes"] += [RESET.compose_mount(root, binding=reset_binding), bind(root / "app-data", "/app-data"), bind(root / "cache", "/cache"), bind(root / ".env", "/data/.env"), bind(root / "docker-compose.yml", "/data/docker-compose.yml", True), bind(endpoint, "/var/run/docker.sock", True)]
     for source, target in [("/proc/meminfo", "/host/proc/meminfo"), ("/proc/stat", "/host/proc/stat"), ("/proc/uptime", "/host/proc/uptime"), ("/etc/localtime", "/etc/localtime")]:
         if Path(source).is_file():
             core["volumes"].append(bind(source, target, True))
@@ -133,6 +136,13 @@ def pointer(root, run, reader):
     APPS.write_journal(root / ".orbis-installation.json", {"schema": "orbis.installer-pointer.v1", "root": str(root), "dockerContext": reader.context, "kind": "new", "journal": str(run / "transaction.json"), "executor": str(script), "executorSha256": hashlib.sha256(script.read_bytes()).hexdigest()})
 
 
+def verify_reset(root, record, reader):
+    binding = record["resetAuthority"]
+    if binding.get("schema") in {RESET.SCHEMA_V2, RESET.SCHEMA_V3}:
+        return RESET.verify(root, binding, daemon=record["daemon"], context=reader.context)
+    return RESET.verify(root, binding)
+
+
 def finish(record, reader, journal):
     root = Path(record["root"])
     if APPS.digest_daemon(reader) != record["daemon"]:
@@ -140,6 +150,12 @@ def finish(record, reader, journal):
     marker = REPLACE.TX.RESTORE.private_json(root / ".orbis-installation.json")
     if marker.get("journal") != str(journal) or marker.get("dockerContext") != reader.context or marker.get("root") != str(root):
         raise ValueError("The installation marker belongs to another transaction")
+    planned = journal.parent / "files" / "docker-compose.yml" if record["stage"] == "prepared" else root / "docker-compose.yml"
+    if hashlib.sha256(planned.read_bytes()).hexdigest() != record["files"]["docker-compose.yml"]:
+        raise ValueError("The private installation compose source changed")
+    dedicated = RESET.require_compose(root, json.loads(planned.read_bytes()), record.get("resetAuthority"))
+    if dedicated:
+        verify_reset(root, record, reader)
     if record["stage"] == "prepared":
         planned = journal.parent / "files" / "docker-compose.yml"
         if (hashlib.sha256(planned.read_bytes()).hexdigest() != record["files"]["docker-compose.yml"]
@@ -187,6 +203,9 @@ def finish(record, reader, journal):
     for name in ("docker-compose.yml", "VERSION", "orbis-compose.yml"):
         if (root / name).is_symlink() or hashlib.sha256((root / name).read_bytes()).hexdigest() != record["files"][name]:
             raise ValueError("Controller configuration changed during startup; preserve the transaction")
+    if dedicated:
+        RESET.require_compose(root, json.loads((root / "docker-compose.yml").read_bytes()), record["resetAuthority"])
+        verify_reset(root, record, reader)
     result = HOST.docker(reader.context, HOST.compose_args(root) + ["up", "--detach", "--pull", "never", "--no-build", "--wait", "--wait-timeout", "240"], root)
     if result.returncode:
         raise RuntimeError(f"Controller startup did not finish. Rerun the installer for {root} to resume; preserve {journal}")
@@ -194,6 +213,14 @@ def finish(record, reader, journal):
     core = HOST.current_core(root, reader.context)
     if core.get("state") != "running" or core.get("health") != "healthy" or core.get("image") != REPLACE.target_image(manifest):
         raise RuntimeError("The new controller did not reach its pinned healthy image")
+    if dedicated:
+        verify_reset(root, record, reader)
+        mounts = HOST.docker(reader.context, ["inspect", "--format", "{{json .Mounts}}", "runtipi"], root)
+        if mounts.returncode:
+            raise ValueError("The running reset authority mount could not be inspected")
+        RESET.require_runtime(root, json.loads(mounts.stdout), record["resetAuthority"])
+        controller = reader.core("runtipi")
+        RESET.require_docker_isolation(root, reader, record["resetAuthority"], controller["id"])
     observed = PROXY.observe_current(root, reader.context)
     if observed["mutableIdentity"]["ownershipSha256"] != record["proxyHostIdentitySha256"]:
         raise ValueError("The running proxy does not match the protected installation layout; existing identity was preserved")
@@ -235,8 +262,11 @@ def install(root, reader, manifest, state, args, confirm, display=None, ask=None
         for name, data in files.items():
             (folder / name).write_bytes(data); (folder / name).chmod(0o600)
         record = {"schema": SCHEMA, "root": str(root), "dockerContext": reader.context, "daemon": APPS.digest_daemon(reader), "manifest": manifest, "files": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()}, "stage": "prepared"}
-        journal = run / "transaction.json"; APPS.write_journal(journal, record)
+        journal = run / "transaction.json"
+        APPS.write_journal(journal, record)
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        record["resetAuthority"] = RESET.prepare_external_durable(root, record["daemon"], reader.context)
+        APPS.write_journal(journal, record)
         pointer(root, run, reader)
         with display.step("Starting Orbis and checking its health") if display else contextlib.nullcontext():
             return finish(record, reader, journal)

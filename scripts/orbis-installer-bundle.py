@@ -13,13 +13,18 @@ from pathlib import Path
 
 
 SCHEMA = "orbis.installer-bundle.v1"
+INSTALLER_SCHEMA = "orbis.installer-bundle.v2"
 ARCHIVE = "orbis-installer.tar.gz"
 MANIFEST = "orbis-installer-manifest.json"
 LAUNCHER = "install-orbis.py"
-ALLOWED = re.compile(r"scripts/(?:orbis-[a-z-]+|install-orbis|migration-preflight)\.py|scripts/orbis-host-maintenance-responder\.mjs|packaging/systemd/orbis-host\.service")
+ALLOWED = re.compile(r"scripts/(?:orbis-[a-z-]+|install-orbis|migration-preflight)\.py|scripts/(?:orbis-host-maintenance-responder|orbis-controller-bootstrap-profile)\.mjs|packaging/systemd/orbis-host\.service")
 REQUIRED = {"scripts/install-orbis.py", "scripts/orbis-install.py", "scripts/orbis-install-prerequisites.py", "scripts/orbis-install-ui.py", "scripts/orbis-install-new.py", "scripts/orbis-install-replace.py", "scripts/orbis-install-fresh.py", "scripts/orbis-host-service-enable.py", "scripts/orbis-host-discovery.py", "scripts/orbis-release-check.py", "scripts/orbis-release-policy.py", "packaging/systemd/orbis-host.service", "scripts/orbis-proxy-identity.py", "scripts/orbis-host-maintenance-responder.mjs"}
 
 REQUIRED |= {
+    "scripts/orbis-host-controller-update.py",
+    "scripts/orbis-controller-bootstrap-profile.py",
+    "scripts/orbis-controller-bootstrap-profile.mjs",
+    "scripts/orbis-reset-authority.py",
     "scripts/orbis-host-app-create-intent.py",
     "scripts/orbis-host-app-inet-diag.py",
     "scripts/orbis-host-app-port-observer.py",
@@ -61,6 +66,34 @@ def release_launcher(template, identity):
     return launcher
 
 
+def sources(files):
+    values = {name: data for name, data in files.items() if ALLOWED.fullmatch(name)}
+    if not REQUIRED.issubset(values) or not 1 <= len(values) <= 64 or any(not isinstance(data, bytes) or len(data) > 1024 * 1024 for data in values.values()):
+        raise ValueError("Installer sources are missing or exceed their limits")
+    if sum(len(data) for data in values.values()) > 8 * 1024 * 1024:
+        raise ValueError("Installer files exceed their total size limit")
+    return values
+
+
+def archive(values):
+    output = io.BytesIO()
+    with gzip.GzipFile(fileobj=output, mode="wb", filename="", mtime=0, compresslevel=9) as compressed:
+        with tarfile.open(fileobj=compressed, mode="w", format=tarfile.USTAR_FORMAT) as tar:
+            for name, data in sorted(values.items()):
+                entry = tarfile.TarInfo(name)
+                entry.size = len(data)
+                entry.mode = 0o600
+                tar.addfile(entry, io.BytesIO(data))
+    data = output.getvalue()
+    if len(data) > 8 * 1024 * 1024:
+        raise ValueError("Installer archive exceeds its limit")
+    return data
+
+
+def file_records(values):
+    return {name: {"sha256": sha(data), "size": len(data)} for name, data in sorted(values.items())}
+
+
 def build(files, release_bytes):
     release = json.loads(release_bytes)
     if not isinstance(release, dict) or release.get("schema") != "orbis.release.v1" or release.get("image") != "ghcr.io/twentylines/orbis":
@@ -69,32 +102,32 @@ def build(files, release_bytes):
         raise ValueError("The release tag or source commit is invalid")
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(release.get("digest", ""))) or release.get("installationProtocol") != "orbis.installation-state.v1":
         raise ValueError("The release must declare a pinned installation image")
-    sources = {name: data for name, data in files.items() if ALLOWED.fullmatch(name)}
-    if not REQUIRED.issubset(sources) or not 1 <= len(sources) <= 64 or any(not isinstance(data, bytes) or len(data) > 1024 * 1024 for data in sources.values()):
-        raise ValueError("Installer sources are missing or exceed their limits")
-    if sum(len(data) for data in sources.values()) > 8 * 1024 * 1024:
-        raise ValueError("Installer files exceed their total size limit")
-    output = io.BytesIO()
-    with gzip.GzipFile(fileobj=output, mode="wb", filename="", mtime=0, compresslevel=9) as compressed:
-        with tarfile.open(fileobj=compressed, mode="w", format=tarfile.USTAR_FORMAT) as archive:
-            for name, data in sorted(sources.items()):
-                entry = tarfile.TarInfo(name)
-                entry.size = len(data)
-                entry.mode = 0o600
-                archive.addfile(entry, io.BytesIO(data))
-    archive_bytes = output.getvalue()
-    if len(archive_bytes) > 8 * 1024 * 1024:
-        raise ValueError("Installer archive exceeds its limit")
+    values = sources(files)
+    archive_bytes = archive(values)
     manifest = {
         "schema": SCHEMA, "tag": release["tag"], "commit": release["commit"],
         "archive": ARCHIVE, "archiveBytes": len(archive_bytes), "archiveSha256": sha(archive_bytes),
         "releaseManifestSha256": sha(release_bytes),
-        "files": {name: {"sha256": sha(data), "size": len(data)} for name, data in sorted(sources.items())},
+        "files": file_records(values),
     }
     manifest_bytes = (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()
     identity = {"tag": release["tag"], "commit": release["commit"], "manifestSha256": sha(manifest_bytes)}
     launcher = release_launcher(files.get("scripts/" + LAUNCHER, b""), identity)
     return {ARCHIVE: archive_bytes, MANIFEST: manifest_bytes, LAUNCHER: launcher}
+
+
+def build_installer(files, installer_commit):
+    if not re.fullmatch(r"[0-9a-f]{40}", str(installer_commit)):
+        raise ValueError("The installer source commit is invalid")
+    values = sources(files)
+    archive_bytes = archive(values)
+    manifest = {
+        "schema": INSTALLER_SCHEMA, "installerCommit": installer_commit,
+        "archive": ARCHIVE, "archiveBytes": len(archive_bytes), "archiveSha256": sha(archive_bytes),
+        "files": file_records(values),
+    }
+    manifest_bytes = (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()
+    return {ARCHIVE: archive_bytes, MANIFEST: manifest_bytes}
 
 
 def main():

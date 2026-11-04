@@ -30,6 +30,63 @@ D = load('orbis-host-retained-restore-runtime.py', 'retained_restore_driver_test
 S = load('orbis-host-service.py', 'retained_restore_service_test')
 
 
+class ResetAuthorityMountTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.runtime = object.__new__(D.DockerRestoreRuntime)
+        self.runtime.root = Path(self.tmp.name).resolve()
+        self.runtime.context = 'fixture'
+        self.runtime.reader = SimpleNamespace(daemon=lambda: 'fixture-daemon')
+        destinations = ['/data/' + name for name in ('state', 'apps', 'repos', 'media', 'user-config', 'traefik', 'backups', 'logs', '.env')]
+        destinations += ['/app-data', '/cache', '/var/run/docker.sock', '/run/orbis']
+        self.mounts = [{'Type': 'bind', 'Source': '/fixture/' + str(index), 'Destination': target,
+                        'RW': target not in {'/var/run/docker.sock', '/run/orbis'}, 'Propagation': 'rprivate'}
+                       for index, target in enumerate(destinations)]
+        next(item for item in self.mounts if item['Destination'] == '/run/orbis')['Source'] = '/run/orbis'
+        path = str(D.RESET.external_directory(self.runtime.root))
+        self.binding = {'schema': D.RESET.SCHEMA_V3, 'path': path}
+        self.mounts.append({'Type': 'bind', 'Source': path, 'Destination': D.RESET.TARGET, 'RW': True, 'Propagation': 'rprivate'})
+        self.record = {'source': {'container': {'Mounts': self.mounts}, 'resetAuthority': self.binding}}
+        self.reader = mock.patch.object(D.RESET, 'read_external_enrollment', return_value=self.binding)
+        self.proof = self.reader.start()
+        self.addCleanup(self.reader.stop)
+
+    def test_control_binding_is_preserved_writable_for_coordinator_and_readonly_for_verifier(self):
+        for role in ('coordinator', 'verifier'):
+            mounts = self.runtime.storage_mounts(self.record, role)
+            authority = next(item for item in mounts if item['Target'] == D.RESET.TARGET)
+            self.assertEqual(authority['Source'], self.binding['path'])
+            self.assertEqual(authority['ReadOnly'], role == 'verifier')
+            self.assertEqual(authority['BindOptions'], {'Propagation': 'rprivate'})
+
+    def test_missing_or_changed_proof_and_source_are_refused(self):
+        del self.record['source']['resetAuthority']
+        with self.assertRaises(ValueError):
+            self.runtime.storage_mounts(self.record, 'coordinator')
+        self.record['source']['resetAuthority'] = self.binding
+        self.mounts[-1]['Source'] += '-replacement'
+        with self.assertRaises(ValueError):
+            self.runtime.storage_mounts(self.record, 'coordinator')
+
+    def test_legacy_layout_remains_without_control_mount_or_enrollment_lookup(self):
+        self.mounts.pop()
+        del self.record['source']['resetAuthority']
+        mounts = self.runtime.storage_mounts(self.record, 'verifier')
+        self.assertFalse(any(item['Target'] == D.RESET.TARGET for item in mounts))
+        self.proof.assert_not_called()
+
+    def test_writable_enrollment_alias_and_nested_authority_shadow_are_refused(self):
+        alias = {'Type': 'bind', 'Source': str(Path(self.binding['path']).parent), 'Destination': '/other', 'RW': True}
+        self.mounts.append(alias)
+        with self.assertRaises(ValueError):
+            self.runtime.storage_mounts(self.record, 'coordinator')
+        self.mounts.pop()
+        self.mounts.append({**alias, 'Destination': D.RESET.TARGET + '/active.json'})
+        with self.assertRaises(ValueError):
+            self.runtime.storage_mounts(self.record, 'verifier')
+
+
 class Runtime:
     def __init__(self):
         self.events, self.fail_at, self.completed = [], None, False
@@ -549,19 +606,32 @@ class RetainedRestoreTests(unittest.TestCase):
         for name, entry in (('dashboard', 'web'), ('dashboard-secure', 'websecure')):
             prefix = 'traefik.http.routers.' + name + '.'
             labels.update({prefix + 'rule': 'PathPrefix(`/`)', prefix + 'entrypoints': entry, prefix + 'service': 'dashboard'})
-            routers[name + '@docker'] = {'status': 'enabled', 'rule': 'PathPrefix(`/`)', 'entryPoints': [entry], 'service': 'dashboard', 'priority': 15}
+            routers[name + '@docker'] = {'status': 'enabled', 'rule': 'PathPrefix(`/`)', 'entryPoints': [entry], 'service': 'dashboard', 'priority': 15 if entry == 'web' else 38}
             if entry == 'websecure':
                 labels[prefix + 'tls'] = 'true'
                 routers[name + '@docker']['tls'] = {}
         original = {'Id': '1' * 64, 'HostConfig': {'PortBindings': {}, 'NetworkMode': 'managed'}, 'Config': {'Labels': labels},
                     'Mounts': [{'Destination': '/run/orbis', 'Type': 'bind', 'Source': '/run/orbis', 'RW': False}],
                     'NetworkSettings': {'Networks': {'managed': {}}}}
-        proxy = {'Id': '9' * 64, 'Config': {'Labels': {'com.docker.compose.project.working_dir': str(self.root), 'com.docker.compose.service': 'runtipi-reverse-proxy'}},
-                 'State': {'Running': True}, 'NetworkSettings': {'Networks': {'managed': {}}}}
+        proxy = {'Id': '9' * 64, 'Config': {'Labels': {'com.docker.compose.project': 'runtipi', 'com.docker.compose.project.working_dir': str(self.root), 'com.docker.compose.service': 'runtipi-reverse-proxy'}},
+                 'State': {'Running': True}, 'NetworkSettings': {'Networks': {'managed': {}}},
+                 'Mounts': [{'Destination': '/etc/traefik', 'Type': 'bind', 'Source': str(folder), 'RW': False}]}
+        archive = io.BytesIO()
+        content = b'owned static proxy fixture'
+        with tarfile.open(fileobj=archive, mode='w:') as output:
+            info = tarfile.TarInfo('traefik.yml')
+            info.size = len(content)
+            output.addfile(info, io.BytesIO(content))
+        runtime.bounded_output = mock.Mock(return_value=archive.getvalue())
         runtime.inspect = mock.Mock(return_value=proxy)
         runtime.definition = mock.Mock(return_value='owned-proxy-definition')
         runtime.proxy_routers = mock.Mock(return_value=routers)
         configuration = runtime.overlay_preflight(original)
+        self.assertEqual(configuration['staticSha256'], D.hashed(content))
+        proxy['Mounts'][0]['Source'] = str(self.base / 'other')
+        with self.assertRaises(ValueError):
+            runtime.overlay_preflight(original)
+        proxy['Mounts'][0]['Source'] = str(folder)
         record = {'id': self.request['restoreId'], 'nonce': 'a' * 64, 'source': {'overlay': configuration, 'imageId': 'sha256:' + 'b' * 64}}
         body = runtime.overlay_body(record)
         self.assertEqual(body['Image'], record['source']['imageId'])
@@ -571,7 +641,46 @@ class RetainedRestoreTests(unittest.TestCase):
         self.assertEqual(body['HostConfig']['PortBindings'], {})
         self.assertEqual(set(body['NetworkingConfig']['EndpointsConfig']), {'managed'})
         priorities = [value for key, value in body['Labels'].items() if key.endswith('.priority')]
-        self.assertEqual(priorities, ['16', '16'])
+        self.assertEqual(priorities, ['16', '39'])
+        labels['traefik.http.routers.dashboard.rule'] = 'PathPrefix("/")'
+        routers['dashboard@docker']['rule'] = 'PathPrefix("/")'
+        labels['traefik.http.routers.dashboard-secure.rule'] = 'Host(`example.com`) && PathPrefix(`/`)'
+        labels.pop('traefik.http.routers.dashboard-secure.tls')
+        labels['traefik.http.routers.dashboard-secure.tls.certresolver'] = 'myresolver'
+        routers['dashboard-secure@docker']['rule'] = labels['traefik.http.routers.dashboard-secure.rule']
+        routers['dashboard-secure@docker']['tls'] = {'certResolver': 'myresolver'}
+        configuration = runtime.overlay_preflight(original)
+        record['source']['overlay'] = configuration
+        body = runtime.overlay_body(record)
+        self.assertFalse(any(key.endswith('.tls.certresolver') for key in body['Labels']))
+        proxy['State']['StartedAt'] = '2026-11-04T00:00:00Z'
+        proxy['Mounts'][0]['RW'] = True
+        proxy['Mounts'].append({'Destination': '/shared', 'Type': 'bind', 'Source': str(folder / 'shared'), 'RW': True})
+        routers['dashboard@docker']['tls'] = None
+        (folder / 'traefik.yml').chmod(0o777)
+        folder.chmod(0o777)
+        legacy = runtime.overlay_preflight(original, policy='controller-overlay.v1')
+        self.assertNotIn('staticSha256', legacy)
+        self.assertEqual(legacy['controllerProxyPolicy']['observedStaticSha256'], D.hashed(content))
+        with self.assertRaises(ValueError):
+            runtime.overlay_preflight(original)  # Full restore still requires protected configuration.
+        folder.chmod(0o700)
+        (folder / 'traefik.yml').chmod(0o600)
+        for target in ('/shared', '/etc/traefik/subdir', '/unreviewed'):
+            changed = copy.deepcopy(proxy)
+            changed['Mounts'].append({'Destination': target, 'Type': 'bind', 'Source': str(self.base), 'RW': True})
+            runtime.inspect.return_value = changed
+            with self.assertRaises(ValueError):
+                runtime.overlay_preflight(original, policy='controller-overlay.v1')
+        runtime.inspect.return_value = proxy
+        routers['dashboard-secure@docker']['tls']['certResolver'] = 'other'
+        with self.assertRaises(ValueError):
+            runtime.overlay_preflight(original, policy='controller-overlay.v1')
+        routers['dashboard-secure@docker']['tls']['certResolver'] = 'myresolver'
+        labels['traefik.http.routers.dashboard.rule'] = 'PathPrefix(`/`) || Host(`evil.example`)'
+        with self.assertRaises(ValueError):
+            runtime.overlay_preflight(original)
+        labels['traefik.http.routers.dashboard.rule'] = 'PathPrefix("/")'
         original['HostConfig']['PortBindings'] = {'3000/tcp': [{'HostPort': '3000'}]}
         with self.assertRaises(ValueError):
             runtime.overlay_preflight(original)
@@ -596,7 +705,15 @@ class RetainedRestoreTests(unittest.TestCase):
             record.update(responderId='b' * 64, definitions={'responder': 'responder-definition'})
             overlay.save(record)
         runtime.prepare_overlay.side_effect = prepare
-        runtime.inspect.return_value = {'Id': 'b' * 64, 'State': {'Running': True}}
+        responder = {'Id': 'b' * 64, 'State': {'Running': True},
+                     'HostConfig': {'RestartPolicy': {'Name': 'unless-stopped', 'MaximumRetryCount': 0}}}
+        runtime.inspect.side_effect = lambda _: copy.deepcopy(responder)
+        def change(arguments):
+            if arguments[0] == 'update':
+                responder['HostConfig']['RestartPolicy']['Name'] = 'no'
+            if arguments[0] == 'stop':
+                responder['State']['Running'] = False
+        runtime.change.side_effect = change
         runtime.definition.return_value = 'responder-definition'
         overlay.runtime = runtime
         identifier = self.request['restoreId']
@@ -609,9 +726,39 @@ class RetainedRestoreTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 overlay.finish(job)
         runtime.change.assert_not_called()
+        # Older enrolled manifests omit this optional protocol field; that must
+        # not strand the higher-priority responder after a healthy update.
+        service.current_manifest.return_value = {'tag': 'target'}
         with mock.patch.object(M.HOST, 'current_core', return_value={'state': 'running', 'health': 'healthy'}):
+            def fail_stop(arguments):
+                if arguments[0] == 'stop':
+                    raise RuntimeError('stop failed')
+                change(arguments)
+            runtime.change.side_effect = fail_stop
+            with self.assertRaises(RuntimeError):
+                overlay.finish(job)
+            self.assertEqual(responder['HostConfig']['RestartPolicy']['Name'], 'no')
+            self.assertTrue(responder['State']['Running'])
+            self.assertEqual(overlay.read(identifier)['phase'], 'active')
+            self.assertFalse(overlay.settled(job))
+            runtime.change.side_effect = lambda arguments: change(arguments) if arguments[0] == 'update' else None
+            with self.assertRaisesRegex(ValueError, 'has not stopped safely'):
+                overlay.finish(job)
+            self.assertEqual(overlay.read(identifier)['phase'], 'active')
+            responder['HostConfig']['RestartPolicy']['Name'] = 'unless-stopped'
+            runtime.change.side_effect = lambda arguments: change(arguments) if arguments[0] == 'stop' else None
+            with self.assertRaisesRegex(ValueError, 'has not stopped safely'):
+                overlay.finish(job)
+            self.assertEqual(overlay.read(identifier)['phase'], 'active')
+            runtime.change.side_effect = change
             overlay.finish(job)
         self.assertEqual(overlay.read(identifier)['phase'], 'complete')
+        self.assertTrue(overlay.settled(job))
+        responder['State']['Running'] = True
+        self.assertFalse(overlay.settled(job))
+        responder['State']['Running'] = False
+        responder['HostConfig']['RestartPolicy']['Name'] = 'unless-stopped'
+        self.assertFalse(overlay.settled(job))
         runtime.change.assert_any_call(['stop', 'b' * 64])
 
     def test_source_revision_ignores_health_log_noise_but_binds_container_restart(self):

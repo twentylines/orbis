@@ -13,6 +13,7 @@ type Props<T> = {
 
 export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, onPreferencesChanged, params }: Props<T>) => {
   const handlers = useRef({ onEvent, onError, onOpen, onPreferencesChanged });
+  const hasConnected = useRef(false);
   const [status, setStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'disconnected'>('connecting');
   const query = params?.toString() ?? '';
   useEffect(() => {
@@ -25,10 +26,22 @@ export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, onPre
     let disposed = false;
     let stream: EventSource | null = null;
     let timer: number | undefined;
+    let reconnectTimer: number | undefined;
     let retries = 0;
     const clearRetry = () => {
       window.clearTimeout(timer);
       timer = undefined;
+    };
+    const clearReconnectTimer = () => {
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = undefined;
+    };
+    const scheduleReconnecting = () => {
+      if (reconnectTimer !== undefined) return;
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = undefined;
+        if (!disposed) setStatus('reconnecting');
+      }, 4000);
     };
     const closeStream = () => {
       if (!stream) return;
@@ -45,7 +58,7 @@ export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, onPre
       url.search = query;
       const source = new EventSource(url);
       stream = source;
-      setStatus(retries ? 'reconnecting' : 'connecting');
+      if (!hasConnected.current) setStatus('connecting');
       source.onmessage = (event) => {
         if (disposed || source !== stream) return;
         try {
@@ -57,6 +70,8 @@ export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, onPre
       source.onopen = () => {
         if (disposed || source !== stream) return;
         retries = 0;
+        hasConnected.current = true;
+        clearReconnectTimer();
         setStatus('connected');
         handlers.current.onOpen?.();
       };
@@ -70,9 +85,10 @@ export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, onPre
         clearRetry();
         if (retries < 5) {
           retries += 1;
-          setStatus('reconnecting');
+          scheduleReconnecting();
           timer = window.setTimeout(connect, 2 ** retries * 1000);
         } else {
+          clearReconnectTimer();
           setStatus('disconnected');
         }
       };
@@ -95,6 +111,7 @@ export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, onPre
     return () => {
       disposed = true;
       clearRetry();
+      clearReconnectTimer();
       closeStream();
       window.removeEventListener('focus', reconnect);
       window.removeEventListener('online', reconnect);

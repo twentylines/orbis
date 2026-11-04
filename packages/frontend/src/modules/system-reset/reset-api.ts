@@ -70,7 +70,9 @@ async function request(path: '' | '/recover' | '/passkey-options', body: unknown
           ? 'Server state changed or needs recovery. Check its status before retrying.'
           : response.status === 401 || response.status === 403
             ? 'Sign in with an operator account before resetting Orbis.'
-            : 'Reset was not confirmed. Check your password and authentication code, then try again.',
+            : response.status === 400
+              ? 'Reset was not confirmed. Check your password and authentication code, then try again.'
+              : 'Reset could not start because the server reported an error. Check server status before retrying.',
     );
   return JSON.parse(text) as unknown;
 }

@@ -81,6 +81,80 @@ class InstallationStorageTests(unittest.TestCase):
             {"Type": "volume", "Name": "app-cache", "Source": str(self.volume), "Destination": "/cache", "RW": True},
         ])
 
+    def test_versioned_controller_scope_excludes_live_proxy_and_its_configuration(self):
+        proxy_id = FIXTURES.identifier('proxy')
+        folder = self.root / 'traefik'
+        (folder / 'shared').mkdir(parents=True)
+        (folder / 'shared' / 'acme.json').write_text('live identity')
+        proxy = {'id': proxy_id, 'name': '/runtipi-reverse-proxy', 'state': 'running',
+                 'image': 'traefik:3', 'imageId': 'sha256:' + 'f' * 64,
+                 'labels': {'com.docker.compose.project': 'runtipi', 'com.docker.compose.service': 'runtipi-reverse-proxy'},
+                 'mounts': [{'Type': 'bind', 'Source': str(folder), 'Destination': '/etc/traefik', 'RW': True},
+                            {'Type': 'bind', 'Source': str(folder / 'shared'), 'Destination': '/shared', 'RW': True}],
+                 'autoRemove': False, 'stopTimeout': 10, 'restartPolicy': {'Name': 'unless-stopped', 'MaximumRetryCount': 0}}
+        rows = self.docker.containers() + [{'id': proxy_id, 'name': 'runtipi-reverse-proxy', 'image': 'traefik:3',
+                'project': 'runtipi', 'service': 'runtipi-reverse-proxy', 'workingDir': str(self.root),
+                'managed': '', 'appUrn': '', 'state': 'running', 'publishedPorts': ''}]
+        report, installation = STORAGE.APPS.selected_installation(self.docker, self.root)
+        app = self.docker.app
+        with mock.patch.object(self.docker, 'containers', return_value=rows), \
+                mock.patch.object(self.docker, 'app', side_effect=lambda identifier: copy.deepcopy(proxy) if identifier == proxy_id else app(identifier)), \
+                mock.patch.object(STORAGE.APPS, 'selected_installation', return_value=(report, installation)):
+            reviewed = STORAGE.review(self.root, self.docker, self.bundle, scope=STORAGE.LIVE_PROXY_SCOPE)
+            self.assertNotIn(proxy_id, [item['id'] for item in reviewed['containers']])
+            root = next(item for item in reviewed['resources'] if item['source'] == str(self.root))
+            self.assertIn('traefik', root['excludedPaths'])
+            self.assertFalse(reviewed['conflictingWriters'])
+            STORAGE.validate_review(reviewed)
+            legacy = STORAGE.review(self.root, self.docker, self.bundle, scope='controller')
+            self.assertIn(proxy_id, [item['id'] for item in legacy['containers']])
+            self.assertNotIn('traefik', next(item for item in legacy['resources'] if item['source'] == str(self.root)).get('excludedPaths', []))
+
+    def test_live_proxy_scope_excludes_only_verified_dedicated_reset_binding(self):
+        proxy_id = FIXTURES.identifier('proxy-reset-scope')
+        proxy_folder = self.root / 'traefik'
+        (proxy_folder / 'shared').mkdir(parents=True)
+        reset = self.parent / 'private-reset-data'
+        reset.mkdir()
+        (reset / 'active.json').write_text('preserved authority fixture')
+        mount = {'Type': 'bind', 'Source': str(reset), 'Destination': STORAGE.RESET.TARGET, 'RW': True, 'Propagation': 'rprivate'}
+        proxy = {'id': proxy_id, 'name': '/runtipi-reverse-proxy', 'state': 'running', 'image': 'traefik:3',
+                 'imageId': 'sha256:' + 'f' * 64, 'labels': {'com.docker.compose.project': 'runtipi', 'com.docker.compose.service': 'runtipi-reverse-proxy'},
+                 'mounts': [{'Type': 'bind', 'Source': str(proxy_folder), 'Destination': '/etc/traefik', 'RW': True},
+                            {'Type': 'bind', 'Source': str(proxy_folder / 'shared'), 'Destination': '/shared', 'RW': True}],
+                 'autoRemove': False, 'stopTimeout': 10, 'restartPolicy': {'Name': 'unless-stopped', 'MaximumRetryCount': 0}}
+        rows = self.docker.containers() + [{'id': proxy_id, 'name': 'runtipi-reverse-proxy', 'image': 'traefik:3',
+            'project': 'runtipi', 'service': 'runtipi-reverse-proxy', 'workingDir': str(self.root), 'managed': '', 'appUrn': '',
+            'state': 'running', 'publishedPorts': ''}]
+        report, installation = STORAGE.APPS.selected_installation(self.docker, self.root)
+        app, core = self.docker.app, self.docker.core
+        def mounted(identifier):
+            value = core(identifier)
+            if identifier == self.docker.controller_id: value['mounts'].append(copy.deepcopy(mount))
+            return value
+        binding = {'schema': STORAGE.RESET.SCHEMA_V4, 'path': str(reset)}
+        with mock.patch.object(self.docker, 'containers', return_value=rows), \
+                mock.patch.object(self.docker, 'core', side_effect=mounted), \
+                mock.patch.object(self.docker, 'app', side_effect=lambda identifier: copy.deepcopy(proxy) if identifier == proxy_id else app(identifier)), \
+                mock.patch.object(STORAGE.APPS, 'selected_installation', return_value=(report, installation)), \
+                mock.patch.object(STORAGE.RESET, 'read_external_enrollment', return_value=binding) as read, \
+                mock.patch.object(STORAGE.RESET, 'verify') as verify, \
+                mock.patch.object(STORAGE.RESET, 'require_runtime') as runtime, \
+                mock.patch.object(STORAGE.RESET, 'require_docker_isolation') as isolation, \
+                mock.patch.object(STORAGE.RESET, 'binding_path', return_value=reset):
+            reviewed = STORAGE.review(self.root, self.docker, self.bundle, scope=STORAGE.LIVE_PROXY_SCOPE)
+            self.assertNotIn(str(reset), [item['source'] for item in reviewed['resources']])
+            read.assert_called_once_with(self.root, STORAGE.APPS.digest_daemon(self.docker), self.docker.context)
+            verify.assert_called_once()
+            runtime.assert_called_once()
+            isolation.assert_called_once_with(self.root, self.docker, binding, controller_id=self.docker.controller_id)
+            with mock.patch.object(STORAGE.RESET, 'read_external_enrollment', side_effect=ValueError('unverified reset binding')):
+                with self.assertRaisesRegex(ValueError, 'unverified'):
+                    STORAGE.review(self.root, self.docker, self.bundle, scope=STORAGE.LIVE_PROXY_SCOPE)
+            legacy = STORAGE.review(self.root, self.docker, self.bundle, scope='controller')
+            self.assertIn(str(reset), [item['source'] for item in legacy['resources']])
+        self.assertEqual((reset / 'active.json').read_text(), 'preserved authority fixture')
+
     def quiet(self):
         self.docker.controller_state = "exited"
         for app in self.docker.apps.values():

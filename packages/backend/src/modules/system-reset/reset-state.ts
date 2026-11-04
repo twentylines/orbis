@@ -1,29 +1,133 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { type } from 'arktype';
+import { resetJournalSchema, resetTargetNames, resetTargetPath, resetTargetPaths, type ResetAccounts, type ResetJournal } from './reset-contract';
+import {
+  acquireAuthorityLease,
+  authorityJournalState,
+  type DedicatedResetAuthority,
+  readAuthorityJournal,
+  resolveResetAuthority,
+  saveAuthorityJournal,
+} from './reset-authority';
+import { type DescriptorRoot, ResetPreferenceStore, type RenameOperation } from './reset-preference-store';
 
-export type ResetAccounts = 'keep' | 'remove';
-export const resetJournalSchema = type({
-  '+': 'reject',
-  version: '1',
-  id: 'string.uuid',
-  controller: 'string > 0 & string <= 253',
-  accounts: "'keep' | 'remove'",
-  users: 'number.integer > 0[]',
-  phase: "'prepared' | 'preferences' | 'accounts' | 'complete' | 'recovery'",
-  createdAt: 'number.integer > 0',
-}).narrow((value) => value.users.length <= 256 && new Set(value.users).size === value.users.length && value.users.every(Number.isSafeInteger));
-export type ResetJournal = typeof resetJournalSchema.infer;
-const scopes = ['desktop', 'onboarding', 'theme-settings', 'theme-packs', 'wallpapers'] as const;
+export { resetJournalSchema };
+export type { ResetAccounts, ResetJournal };
+
+/**
+ * Storage seams for tests and filesystem simulations. Production always constructs the facade with the data
+ * directory only, so authority discovery uses this process's kernel mount table and preference moves use the
+ * descriptor root. Nothing here is read from user configuration.
+ */
+export type ResetStateOptions = {
+  readMounts?: () => Promise<string | null>;
+  uid?: number | undefined;
+  descriptorRoot?: DescriptorRoot;
+  rename?: RenameOperation;
+};
+
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
+/**
+ * Reset storage facade.
+ *
+ * A reset journal is only authoritative when it lives on a verified dedicated mount: an exact kernel mount
+ * point at `<dataDir>/orbis-reset`, private, canonical, persistent and without an unfinished legacy journal.
+ * Every other outcome keeps the strict legacy behavior, which owns `<dataDir>/state/orbis-reset` and rejects
+ * group/world-writable ancestors. A Linux mount lookup that cannot answer fails closed instead of silently
+ * hiding a present authority behind the legacy path.
+ */
 export class ResetState {
-  constructor(private readonly dataDir: string) {}
+  private readonly preferences: ResetPreferenceStore;
+
+  constructor(
+    private readonly dataDir: string,
+    private readonly options: ResetStateOptions = {},
+  ) {
+    this.preferences = new ResetPreferenceStore({
+      dataDir: this.dataDir,
+      uid: options.uid,
+      descriptorRoot: options.descriptorRoot,
+      rename: options.rename,
+      readMounts: options.readMounts,
+    });
+  }
+
+  /**
+   * `null` means the legacy layout. On Linux an unreadable mount table, a present but unmounted directory,
+   * an ephemeral mount or an unsafe mount root all throw: none of them may turn an interrupted reset into
+   * an idle legacy one.
+   */
+  private async authority(): Promise<DedicatedResetAuthority | null> {
+    // Development hosts and existing non-Linux tests have no reset mount namespace; keep their storage strict legacy.
+    if (!this.options.readMounts && process.platform !== 'linux') return null;
+    const resolved = await resolveResetAuthority({ dataDir: this.dataDir, ...this.options });
+    return resolved.mode === 'dedicated' ? resolved : null;
+  }
+
+  async read(): Promise<ResetJournal | null> {
+    const authority = await this.authority();
+    if (authority) return readAuthorityJournal(authority);
+    return this.legacyRead();
+  }
+
+  async active() {
+    const authority = await this.authority();
+    if (authority) return (await authorityJournalState(authority)).journal;
+    return this.legacyActive();
+  }
+
+  async save(value: ResetJournal) {
+    resetJournalSchema.assert(value);
+    const authority = await this.authority();
+    if (authority) return saveAuthorityJournal(authority, value);
+    return this.legacySave(value);
+  }
+
+  async acquireLease() {
+    const authority = await this.authority();
+    if (authority) return acquireAuthorityLease(authority);
+    return this.legacyAcquireLease();
+  }
+
+  async preflight(value: ResetJournal) {
+    resetJournalSchema.assert(value);
+    const authority = await this.authority();
+    if (!authority) return this.legacyPreflight(value);
+    const plan = await this.preferences.preflight(value.id, resetTargetPaths(this.dataDir, value));
+    await plan.close();
+  }
+
+  async erasePreferences(value: ResetJournal) {
+    resetJournalSchema.assert(value);
+    const authority = await this.authority();
+    if (!authority) return this.legacyErasePreferences(value);
+    const stored = await readAuthorityJournal(authority);
+    // Staging may only begin once this journal is durable on the authority mount. A missing or different
+    // journal means no intent has been recorded, so the request fails closed instead of inventing one.
+    if (
+      !stored ||
+      stored.id !== value.id ||
+      stored.controller !== value.controller ||
+      stored.accounts !== value.accounts ||
+      stored.users.length !== value.users.length ||
+      stored.users.some((id, index) => id !== value.users[index]) ||
+      stored.phase === 'complete'
+    )
+      throw new Error('Reset storage needs local review.');
+    return this.preferences.erase(value.id, resetTargetPaths(this.dataDir, value));
+  }
+
+  targets(value: ResetJournal) {
+    return resetTargetNames(value);
+  }
+
   private root() {
     return path.join(path.resolve(this.dataDir), 'state', 'orbis-reset');
   }
-  async acquireLease() {
+
+  private async legacyAcquireLease() {
     await this.directory(this.root(), true);
     const file = path.join(this.root(), 'operation.lock');
     const handle = await fs.open(file, 'wx', 0o600).catch(() => {
@@ -48,6 +152,7 @@ export class ResetState {
       await this.sync(this.root());
     };
   }
+
   private async directory(directory: string, create = false) {
     const base = path.resolve(this.dataDir);
     if (directory !== base && !directory.startsWith(`${base}${path.sep}`)) throw new Error('Reset storage is outside Orbis state.');
@@ -70,7 +175,8 @@ export class ResetState {
         throw new Error('Reset storage needs local review.');
     }
   }
-  async read(): Promise<ResetJournal | null> {
+
+  private async legacyRead(): Promise<ResetJournal | null> {
     try {
       // Existing Runtipi state directories may be writable by other services.
       // With no reset directory there is no reset journal to validate.
@@ -90,8 +196,9 @@ export class ResetState {
       throw error;
     }
   }
-  async active() {
-    const journal = await this.read();
+
+  private async legacyActive() {
+    const journal = await this.legacyRead();
     if (journal?.phase === 'complete') {
       try {
         const lock = await fs.lstat(path.join(this.root(), 'operation.lock'));
@@ -103,7 +210,8 @@ export class ResetState {
     }
     return journal;
   }
-  async save(value: ResetJournal) {
+
+  private async legacySave(value: ResetJournal) {
     resetJournalSchema.assert(value);
     await this.directory(this.root(), true);
     const temporary = path.join(this.root(), `.journal-${randomUUID()}`);
@@ -121,6 +229,7 @@ export class ResetState {
       await fs.rm(temporary, { force: true });
     }
   }
+
   private async sync(directory: string) {
     const handle = await fs.open(directory, 'r');
     try {
@@ -129,22 +238,7 @@ export class ResetState {
       await handle.close();
     }
   }
-  targets(value: ResetJournal) {
-    resetJournalSchema.assert(value);
-    return [
-      ...value.users.flatMap((id) => [
-        ...scopes.map((scope) => `${scope}/${id}${scope === 'theme-packs' ? '' : scope === 'wallpapers' ? '.image' : '.json'}`),
-        `wallpapers/${id}.image.saved`,
-      ]),
-      '.orbis-onboarding-origin.json',
-      ...(value.accounts === 'remove' ? ['password-change-request'] : []),
-    ];
-  }
-  private target(relative: string) {
-    return relative === '.orbis-onboarding-origin.json'
-      ? path.join(path.resolve(this.dataDir), relative)
-      : path.join(path.resolve(this.dataDir), 'state', relative);
-  }
+
   private async inspect(target: string, count = { value: 0 }) {
     const stat = await fs.lstat(target);
     if (++count.value > 12000 || stat.isSymbolicLink() || (process.getuid && stat.uid !== process.getuid()))
@@ -153,10 +247,11 @@ export class ResetState {
       for (const name of await fs.readdir(target)) await this.inspect(path.join(target, name), count);
     } else if (!stat.isFile() || stat.nlink !== 1 || stat.size > 8 * 1024 * 1024) throw new Error('Reset preferences need local review.');
   }
-  async preflight(value: ResetJournal) {
+
+  private async legacyPreflight(value: ResetJournal) {
     await this.directory(path.join(path.resolve(this.dataDir), 'state'));
     for (const relative of this.targets(value)) {
-      const target = this.target(relative);
+      const target = resetTargetPath(this.dataDir, relative);
       try {
         await this.directory(path.dirname(target));
         await this.inspect(target);
@@ -165,12 +260,13 @@ export class ResetState {
       }
     }
   }
-  async erasePreferences(value: ResetJournal) {
-    await this.preflight(value);
+
+  private async legacyErasePreferences(value: ResetJournal) {
+    await this.legacyPreflight(value);
     const staging = path.join(this.root(), value.id);
     await this.directory(staging, true);
     for (const [index, relative] of this.targets(value).entries()) {
-      const target = this.target(relative);
+      const target = resetTargetPath(this.dataDir, relative);
       const staged = path.join(staging, String(index));
       try {
         await this.directory(path.dirname(target));

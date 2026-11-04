@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 import { encryptBackup } from './backup-crypto';
 import { fullBackupLimits } from './backup-limits';
+import { resetScopes } from '../system-reset/reset-contract';
 
 export class BackupRequirementError extends Error {}
 
@@ -66,6 +67,23 @@ export async function inventoryBackup(
   const visit = async (source: string, name: string, root: string): Promise<void> => {
     signal.throwIfAborted();
     if (!safeName(name) || names.has(name) || !inside(root, source)) throw new BackupRequirementError('Backup source contains an unsupported path.');
+    // Reset intent belongs to this host. Replaying its journal or staged preferences from an archive can resume an unrelated reset.
+    const parent = path.posix.dirname(name);
+    const resetStage =
+      (parent === 'data' || resetScopes.some((scope) => parent === `data/state/${scope}`) || parent === 'data/state') &&
+      /^\.orbis-reset-stage-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(path.posix.basename(name));
+    if (name === 'data/state/orbis-reset' || resetStage) {
+      const stat = await fs.lstat(source);
+      if (
+        !stat.isDirectory() ||
+        stat.isSymbolicLink() ||
+        stat.mode & 0o077 ||
+        (process.getuid && stat.uid !== process.getuid()) ||
+        (await fs.realpath(source)) !== source
+      )
+        throw new BackupRequirementError('Reset recovery files need local review before creating a full backup.');
+      return;
+    }
     if (source !== root && path.dirname(source) === root && path.basename(source).startsWith('.orbis-restore-')) {
       if (!excluded.has(source)) throw new BackupRequirementError('Unrecognized restore recovery files need review before creating a full backup.');
       const stat = await fs.lstat(source);

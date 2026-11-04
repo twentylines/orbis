@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { deriveRestoreStorageLayout, verifyRestoreStorageMounts, type RestoreStorageMount } from './backup-restore-storage';
+import {
+  deriveRestoreStorageLayout,
+  verifyRestoreStorageMounts,
+  verifyRetainedRestoreWorkerMounts,
+  type RestoreStorageMount,
+} from './backup-restore-storage';
 
 const mount = (Destination: string, Source: string, RW = true): RestoreStorageMount => ({
   Type: 'bind',
@@ -326,6 +331,109 @@ describe('unsupported layouts', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).not.toContain('/private');
+    }
+  });
+});
+
+const authorityPath = `/var/lib/orbis/reset-authority/${'a'.repeat(64)}/data`;
+const authorityMount = () => mount('/data/orbis-reset', authorityPath);
+const inspectLayout = (original: RestoreStorageMount[], role: 'worker' | 'verifier') =>
+  (role === 'worker' ? deriveRestoreStorageLayout(original).workerMounts : deriveRestoreStorageLayout(original).verifierMounts).map((item) =>
+    mount(item.Target, item.Source, !item.ReadOnly),
+  );
+
+describe('dedicated reset authority', () => {
+  it.each([consolidated, production])('preserves the exact bind for worker and read-only verifier', (fixture) => {
+    const original = [...fixture(), authorityMount()];
+    const layout = deriveRestoreStorageLayout(original);
+    expect(layout.workerMounts.find((item) => item.Target === '/data/orbis-reset')).toMatchObject({
+      Source: authorityPath,
+      ReadOnly: false,
+      BindOptions: { Propagation: 'rprivate' },
+    });
+    expect(layout.verifierMounts.find((item) => item.Target === '/data/orbis-reset')).toMatchObject({
+      Source: authorityPath,
+      ReadOnly: true,
+      BindOptions: { Propagation: 'rprivate' },
+    });
+    for (const role of ['worker', 'verifier'] as const) {
+      const actual = inspectLayout(original, role);
+      expect(() => verifyRestoreStorageMounts(original, actual, role)).not.toThrow();
+      for (const change of ['missing', 'source', 'mode', 'propagation', 'alias'] as const) {
+        const invalid = structuredClone(actual);
+        const entry = target(invalid, '/data/orbis-reset');
+        if (change === 'missing') invalid.splice(invalid.indexOf(entry), 1);
+        if (change === 'source') entry.Source = '/other/authority';
+        if (change === 'mode') entry.RW = !entry.RW;
+        if (change === 'propagation') entry.Propagation = 'private';
+        if (change === 'alias') invalid.push(mount('/elsewhere', authorityPath, false));
+        expect(() => verifyRestoreStorageMounts(original, invalid, role), change).toThrow();
+      }
+    }
+  });
+
+  it('preserves the exact v1 backing without inferring an enrollment namespace', () => {
+    const original = [...production(), mount('/data/orbis-reset', '/srv/orbis/orbis-reset'), mount('/other', '/srv/orbis/other')];
+    const layout = deriveRestoreStorageLayout(original);
+    expect(layout.workerMounts.find((item) => item.Target === '/data/orbis-reset')?.Source).toBe('/srv/orbis/orbis-reset');
+    expect(layout.verifierMounts.find((item) => item.Target === '/data/orbis-reset')?.ReadOnly).toBe(true);
+  });
+
+  it.each(['volume', 'tmpfs', 'readonly', 'propagation', 'duplicate', 'nested', 'noncanonical'])('rejects invalid original %s', (kind) => {
+    const authority = authorityMount();
+    const original = [...consolidated(), authority];
+    if (kind === 'volume' || kind === 'tmpfs') authority.Type = kind;
+    if (kind === 'readonly') authority.RW = false;
+    if (kind === 'propagation') authority.Propagation = 'private';
+    if (kind === 'duplicate') original.push(authorityMount());
+    if (kind === 'nested') original.push(mount('/data/orbis-reset/active.json', '/other/file'));
+    if (kind === 'noncanonical') authority.Source = '/var/lib/orbis/../authority';
+    expect(() => deriveRestoreStorageLayout(original)).toThrow();
+  });
+
+  it.each(['/srv/orbis/data/state', '/srv/orbis/data', '/srv/orbis/app-data/child', '/srv/orbis/cache', '/run/docker.sock'])(
+    'rejects authority overlap with %s',
+    (source) => {
+      expect(() => deriveRestoreStorageLayout([...consolidated(), mount('/data/orbis-reset', source)])).toThrow();
+    },
+  );
+
+  it.each([authorityPath, `${authorityPath}/child`, authorityPath.replace('/data', ''), '/var/lib/orbis/reset-authority'])(
+    'rejects writable original alias %s',
+    (source) => {
+      expect(() => deriveRestoreStorageLayout([...production(), authorityMount(), mount('/unrelated', source)])).toThrow();
+    },
+  );
+
+  it('rejects readonly aliases of the authority itself and accepts an unrelated source', () => {
+    expect(() => deriveRestoreStorageLayout([...production(), authorityMount(), mount('/other', authorityPath, false)])).toThrow();
+    expect(() => deriveRestoreStorageLayout([...production(), authorityMount(), mount('/other', '/unrelated/source')])).not.toThrow();
+    expect(() =>
+      deriveRestoreStorageLayout([...production(), authorityMount(), { ...mount('/other', '/var/lib/orbis/../alias'), Type: 'volume' }]),
+    ).toThrow();
+  });
+
+  it('requires the authority on retained worker inspection with the original exact identity', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const original = [...consolidated(), authorityMount(), mount('/run/orbis', '/run/orbis-private', false)];
+    const actual = [
+      ...inspectLayout(original, 'worker'),
+      mount('/run/orbis', '/run/orbis-private', false),
+      mount(`/data/backups/restores/${id}/retained`, '/var/lib/orbis/verified-migrations', false),
+      mount(`/data/backups/restores/${id}/source/payload`, '/var/lib/orbis/verified-source', false),
+    ];
+    const verify = (value: RestoreStorageMount[]) =>
+      verifyRetainedRestoreWorkerMounts(original, value, id, '/var/lib/orbis/verified-migrations', '/var/lib/orbis/verified-source');
+    expect(() => verify(actual)).not.toThrow();
+    for (const change of ['missing', 'source', 'readonly', 'propagation', 'alias'] as const) {
+      const invalid = structuredClone(actual);
+      const entry = target(invalid, '/data/orbis-reset');
+      if (change === 'missing') invalid.splice(invalid.indexOf(entry), 1);
+      if (change === 'source') entry.Source = '/other/authority';
+      if (change === 'readonly') entry.RW = false;
+      if (change === 'propagation') entry.Propagation = 'private';
+      if (change === 'alias') invalid.push(mount('/elsewhere', authorityPath, false));
+      expect(() => verify(invalid), change).toThrow();
     }
   });
 });

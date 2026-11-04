@@ -43,6 +43,15 @@ class BundleTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 BUILD.build({key: data for key, data in self.files.items() if key != name}, self.release_bytes)
 
+    def test_reset_authority_is_required_by_release_and_independent_installer_bundles(self):
+        name = 'scripts/orbis-reset-authority.py'
+        self.assertIn(name, BUILD.REQUIRED & BOOT.REQUIRED)
+        missing = {key: data for key, data in self.files.items() if key != name}
+        with self.assertRaises(ValueError):
+            BUILD.build(missing, self.release_bytes)
+        with self.assertRaises(ValueError):
+            BUILD.build_installer(missing, 'c' * 40)
+
     def validate_manifest_value(self, value):
         data = json.dumps(value).encode()
         identity = {**self.identity, "manifestSha256": BUILD.sha(data)}
@@ -75,6 +84,19 @@ class BundleTests(unittest.TestCase):
             self.assertEqual(BOOT.display_release(tag),expected)
             self.assertEqual(BOOT.release_channel(tag),"stable" if "-" not in tag else "nightly")
         with self.assertRaises(ValueError): BOOT.display_release("v1.0.0\nprivate")
+
+    def test_head_installer_bundle_is_verified_independently_of_a_release(self):
+        commit = "c" * 40
+        assets = BUILD.build_installer(self.files, commit)
+        self.assertEqual(set(assets), {BUILD.ARCHIVE, BUILD.MANIFEST})
+        identity = {"commit": commit, "manifestSha256": BUILD.sha(assets[BUILD.MANIFEST])}
+        manifest = BOOT.verify_installer_manifest(assets[BUILD.MANIFEST], identity)
+        self.assertEqual(manifest["schema"], BUILD.INSTALLER_SCHEMA)
+        self.assertEqual(manifest["installerCommit"], commit)
+        self.assertNotIn("releaseManifestSha256", manifest)
+        self.assertEqual(BOOT.verify_files(assets[BUILD.ARCHIVE], manifest), {name: self.files[name] for name in BUILD.REQUIRED})
+        with self.assertRaises(ValueError):
+            BUILD.build_installer(self.files, "main")
 
     def test_reproducible_archive_and_pinned_launcher(self):
         self.assertEqual(self.assets, BUILD.build(dict(reversed(list(self.files.items()))), self.release_bytes))
@@ -276,6 +298,26 @@ class ChannelLauncherTests(unittest.TestCase):
             self.assertEqual(args[args.index("--channel") + 1], "nightly")
             self.assertEqual(Path(args[1]).read_bytes(), data)
             self.assertEqual(Path(args[1]).stat().st_mode & 0o777, 0o600)
+
+    def test_published_head_installer_fetches_the_release_manifest_separately(self):
+        release = {"schema": "orbis.release.v1", "image": "ghcr.io/twentylines/orbis", "tag": self.record["tag"], "commit": self.record["commit"], "digest": "sha256:" + "b" * 64, "installationProtocol": "orbis.installation-state.v1", "runtipiCompatibility": "4.10.1"}
+        release_bytes = json.dumps(release).encode()
+        installer_commit = "c" * 40
+        files = {name: b"# bounded test source\n" for name in BUILD.REQUIRED}
+        files["scripts/install-orbis.py"] = Path(BOOT.__file__).read_bytes()
+        assets = BUILD.build_installer(files, installer_commit)
+        identity = {"commit": installer_commit, "manifestSha256": BUILD.sha(assets[BUILD.MANIFEST])}
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(BOOT, "EXPECTED_RELEASE", None), mock.patch.object(BOOT, "INSTALLER", identity), mock.patch.object(BOOT.sys, "platform", "linux"), mock.patch.object(BOOT.os, "geteuid", return_value=0), mock.patch.object(BOOT.sys, "argv", ["install", "--channel", "nightly", "--yes", "--accept-nightly"]), mock.patch.object(BOOT, "fetch", side_effect=[json.dumps(self.catalog).encode(), release_bytes, assets[BUILD.MANIFEST], assets[BUILD.ARCHIVE]]) as fetch, mock.patch.object(BOOT, "private_directory", return_value=Path(folder)), mock.patch.object(BOOT.os, "execv") as execute:
+            with contextlib.redirect_stdout(io.StringIO()): BOOT.main()
+            args = execute.call_args.args[1]
+            self.assertEqual(fetch.call_count, 4)
+            self.assertEqual(fetch.call_args_list[2].args[0], BOOT.INSTALLER_BASE_URL + installer_commit + "/" + BUILD.MANIFEST)
+            self.assertEqual(fetch.call_args_list[3].args[0], BOOT.INSTALLER_BASE_URL + installer_commit + "/" + BUILD.ARCHIVE)
+            self.assertTrue(args[1].endswith("scripts/orbis-install.py"))
+            self.assertEqual(Path(args[1]).read_bytes(), files["scripts/orbis-install.py"])
+            self.assertEqual(args[args.index("--channel") + 1], "nightly")
+            self.assertIn("--accept-nightly", args)
+            self.assertEqual(Path(args[args.index("--manifest") + 1]).read_bytes(), release_bytes)
 
     def test_exact_release_launcher_hands_selected_nightly_to_guided_stable_artifact(self):
         release = {"schema": "orbis.release.v1", "image": "ghcr.io/twentylines/orbis", "tag": "v1.0.0", "commit": "a" * 40, "digest": "sha256:" + "b" * 64, "installationProtocol": "orbis.installation-state.v1", "runtipiCompatibility": "4.10.1"}

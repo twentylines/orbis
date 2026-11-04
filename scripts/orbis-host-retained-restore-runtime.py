@@ -31,6 +31,7 @@ def load(name, key):
 APPS = load('orbis-install-apps.py', 'orbis_apps_for_retained_runtime')
 COMPAT = load('orbis-install-compat.py', 'orbis_compat_for_retained_runtime')
 BOOTSTRAP = load('orbis-host-normal-bootstrap.py', 'orbis_bootstrap_for_retained_runtime')
+RESET = load('orbis-reset-authority.py', 'orbis_reset_for_retained_runtime')
 ROOTS = {'state', 'apps', 'repos', 'media', 'user-config', 'traefik', 'app-data'}
 CAPABILITY = {'schema': 'orbis.retained-worker-phase.v1', 'version': 1,
               'phases': ['prepare', 'promote', 'verify', 'rollback', 'commit'], 'commitStages': ['authorize', 'finish']}
@@ -218,7 +219,9 @@ class DockerRestoreRuntime:
                     or actual != identity and (raw['State'].get('Running') or actual not in {'', None})):
                 raise fail()
 
-    def source_snapshot(self):
+    def source_snapshot(self, *, policy="retained-restore.v1"):
+        if policy not in {"retained-restore.v1", "controller-overlay.v1"}:
+            raise fail()
         endpoint = self.reader.socket()
         if not isinstance(endpoint, str) or not endpoint.startswith('/'):
             raise fail()
@@ -248,12 +251,40 @@ class DockerRestoreRuntime:
         stable['Mounts'] = sorted(mounts, key=lambda item: item['Destination'])
         stable['State'] = {key: state.get(key) for key in ('Running', 'Restarting', 'Paused', 'StartedAt')}
         stable['State']['Health'] = {'Status': state['Health']['Status']}
-        return {'controllerId': raw['Id'], 'imageId': raw['Image'], 'definition': self.definition(raw), 'files': files,
+        reset_authority = self.reset_authority_snapshot(raw)
+        if reset_authority is not None:
+            RESET.require_docker_isolation(self.root, self.reader, reset_authority, raw['Id'])
+        result = {'controllerId': raw['Id'], 'imageId': raw['Image'], 'definition': self.definition(raw), 'files': files,
                 'daemonId': daemon['ID'], 'daemonSocket': endpoint,
                 'coordinatorCapabilitySha256': self.require_capability(raw['Id']),
                 'enrollment': base64.b64encode(self.host.enrollment_bytes(self.root)).decode(), 'publication': manifest,
-                'container': stable, 'imageConfiguration': image.get('Config') or {}, 'overlay': self.overlay_preflight(raw),
-                'proxyHostIdentity': self.manager.service.proxy_host_identity()['descriptor']}
+                'container': stable, 'imageConfiguration': image.get('Config') or {},
+                'overlay': self.overlay_preflight(raw, policy=policy)}
+        if policy == 'retained-restore.v1':
+            result['proxyHostIdentity'] = self.manager.service.proxy_host_identity()['descriptor']
+        else:
+            result['controllerOverlayPolicy'] = 'orbis.controller-overlay-preserve-live-proxy.v1'
+        if reset_authority is not None:
+            result['resetAuthority'] = reset_authority
+        return result
+
+    def reset_authority_snapshot(self, original):
+        mounts = original.get('Mounts') or []
+        selected = [item for item in mounts if item.get('Destination') == RESET.TARGET]
+        if any(str(item.get('Destination', '')).startswith(RESET.TARGET + '/') for item in mounts):
+            raise fail()
+        if not selected:
+            return None
+        binding = RESET.read_external_enrollment(self.root, APPS.digest_daemon(self.reader), self.context)
+        RESET.require_runtime(self.root, mounts, binding)
+        return binding
+
+    def require_reset_authority(self, record):
+        original = record['source']['container']
+        observed = self.reset_authority_snapshot(original)
+        if observed != record['source'].get('resetAuthority'):
+            raise fail()
+        return observed
 
     def proxy_routers(self, container, proxy, network):
         address = proxy['NetworkSettings']['Networks'][network].get('IPAddress')
@@ -278,7 +309,59 @@ class DockerRestoreRuntime:
             raise fail()
         return {item['name']: item for item in result}
 
-    def overlay_preflight(self, original):
+    def proxy_static_digest(self, proxy):
+        mounts = [item for item in proxy.get('Mounts', []) if item.get('Destination') == '/etc/traefik']
+        if (len(mounts) != 1 or mounts[0].get('Type') != 'bind'
+                or mounts[0].get('Source') != str(self.root / 'traefik') or mounts[0].get('RW') is not False):
+            raise fail()
+        with self.a.protected_directory(self.root / 'traefik', private=False) as directory:
+            with self.a.protected_file(directory, 'traefik.yml', 1024 * 1024, private=False) as body:
+                return hashed(body)
+
+    def observed_proxy_static_digest(self, proxy):
+        # This is a drift observation, never configuration authority. The scoped
+        # updater preserves this running proxy and never executes these bytes.
+        mounts = [item for item in proxy.get('Mounts', []) if item.get('Destination') == '/etc/traefik']
+        if (len(mounts) != 1 or mounts[0].get('Type') != 'bind'
+                or mounts[0].get('Source') != str(self.root / 'traefik')):
+            raise fail()
+        output = self.bounded_output(['docker', '--context', self.context, 'container', 'cp',
+                                      proxy['Id'] + ':/etc/traefik/traefik.yml', '-'], 2 * 1024 * 1024, 20)
+        with tarfile.open(fileobj=io.BytesIO(output), mode='r:') as archive:
+            entries = list(archive)
+            if len(entries) != 1 or entries[0].name != 'traefik.yml' or not entries[0].isfile() or not 0 < entries[0].size <= 1024 * 1024:
+                raise fail()
+            body = archive.extractfile(entries[0]).read(1024 * 1024 + 1)
+            if len(body) != entries[0].size:
+                raise fail()
+        return hashed(body)
+
+    def controller_proxy_policy(self, proxy):
+        mounts = proxy.get('Mounts')
+        if not isinstance(mounts, list) or len({m.get('Destination') for m in mounts}) != len(mounts):
+            raise fail()
+        by_target = {m.get('Destination'): m for m in mounts}
+        config, shared = by_target.get('/etc/traefik', {}), by_target.get('/shared', {})
+        if (config.get('Type') != 'bind' or config.get('Source') != str(self.root / 'traefik')
+                or type(config.get('RW')) is not bool or shared.get('Type') != 'bind'
+                or shared.get('Source') not in {str(self.root / 'traefik/shared'), str(self.root.parent / ('.' + self.root.name + '.orbis-proxy-identity'))}
+                or shared.get('RW') is not True):
+            raise fail()
+        for mount in mounts:
+            target = mount.get('Destination')
+            if (not isinstance(target, str) or type(mount.get('RW')) is not bool
+                    or (target not in {'/etc/traefik', '/shared'} and mount.get('RW') is not False)
+                    or any(target.startswith(prefix + '/') for prefix in ('/etc/traefik', '/shared'))):
+                raise fail()
+        state = proxy['State']
+        if (state.get('Running') is not True or state.get('Paused') or state.get('Restarting')
+                or not isinstance(state.get('StartedAt'), str) or not state['StartedAt']):
+            raise fail()
+        return {'schema': 'orbis.controller-overlay-preserve-live-proxy.v1',
+                'startedAt': state['StartedAt'], 'observedStaticSha256': self.observed_proxy_static_digest(proxy),
+                'configuration': 'preserve-live-excluded', 'mutableIdentity': 'preserve-live-excluded'}
+
+    def overlay_preflight(self, original, *, policy='retained-restore.v1'):
         host = original['HostConfig']
         labels = original['Config'].get('Labels') or {}
         sockets = [item for item in original['Mounts'] if item.get('Destination') == '/run/orbis']
@@ -289,7 +372,8 @@ class DockerRestoreRuntime:
         proxy = self.inspect('runtipi-reverse-proxy')
         proxy_labels = proxy['Config'].get('Labels') or {}
         if (proxy_labels.get('com.docker.compose.project.working_dir') != str(self.root)
-                or proxy_labels.get('com.docker.compose.service') != 'runtipi-reverse-proxy' or not proxy['State'].get('Running')):
+                or proxy_labels.get('com.docker.compose.service') != 'runtipi-reverse-proxy'
+                or proxy_labels.get('com.docker.compose.project') != 'runtipi' or not proxy['State'].get('Running')):
             raise fail()
         common = set(original['NetworkSettings']['Networks']) & set(proxy['NetworkSettings']['Networks'])
         selected = labels.get('traefik.docker.network')
@@ -301,26 +385,35 @@ class DockerRestoreRuntime:
         routers = {}
         for name, entrypoint in (('dashboard', 'web'), ('dashboard-secure', 'websecure')):
             prefix = 'traefik.http.routers.' + name + '.'
-            if (labels.get(prefix + 'rule') != 'PathPrefix(`/`)' or labels.get(prefix + 'entrypoints') != entrypoint
+            rule = labels.get(prefix + 'rule')
+            resolver = labels.get(prefix + 'tls.certresolver')
+            if (not isinstance(rule, str) or not re.fullmatch(r'(?:Host\(`[A-Za-z0-9.-]+`\)\s*&&\s*)?PathPrefix\(`/`\)', rule.replace('"', '`'))
+                    or labels.get(prefix + 'entrypoints') != entrypoint
                     or labels.get(prefix + 'service') != 'dashboard'
                     or labels.get('traefik.http.services.dashboard.loadbalancer.server.port') != '3000'
-                    or any(key.startswith(prefix) and key[len(prefix):] not in {'rule', 'entrypoints', 'service', 'tls', 'priority'} for key in labels)):
+                    or (resolver is not None and (entrypoint != 'websecure' or not re.fullmatch(r'[A-Za-z0-9_-]+', resolver)))
+                    or any(key.startswith(prefix) and key[len(prefix):] not in {'rule', 'entrypoints', 'service', 'tls', 'tls.certresolver', 'priority'} for key in labels)):
                 raise fail()
             actual = observed.get(name + '@docker') or {}
             if (actual.get('status') != 'enabled' or actual.get('rule') != labels[prefix + 'rule']
                     or actual.get('entryPoints') != [entrypoint] or actual.get('service') != 'dashboard'
                     or type(actual.get('priority')) is not int or not 0 < actual['priority'] < 1_000_000
-                    or ('tls' in actual) != (entrypoint == 'websecure')
-                    or (entrypoint == 'websecure' and labels.get(prefix + 'tls') != 'true')):
+                    or (isinstance(actual.get('tls'), dict)) != (entrypoint == 'websecure')
+                    or (resolver is not None and (actual.get('tls') or {}).get('certResolver') != resolver)
+                    or (entrypoint == 'websecure' and labels.get(prefix + 'tls') != 'true' and not resolver)):
                 raise fail()
             routers[name] = {'rule': actual['rule'], 'entrypoint': entrypoint, 'priority': actual['priority'] + 1,
                              'tls': entrypoint == 'websecure'}
-        with self.a.protected_directory(self.root / 'traefik', private=False) as directory:
-            with self.a.protected_file(directory, 'traefik.yml', 1024 * 1024, private=False) as body:
-                static_sha = hashed(body)
-        return {'proxyId': proxy['Id'], 'proxyDefinition': self.definition(proxy), 'network': selected,
+        continuity = self.controller_proxy_policy(proxy) if policy == 'controller-overlay.v1' else None
+        static_sha = self.proxy_static_digest(proxy) if continuity is None else None
+        result = {'proxyId': proxy['Id'], 'proxyDefinition': self.definition(proxy), 'network': selected,
                 'proxyNetworks': {name: item.get('NetworkID') for name, item in proxy['NetworkSettings']['Networks'].items()},
-                'routers': routers, 'staticSha256': static_sha}
+                'routers': routers}
+        if continuity is None:
+            result['staticSha256'] = static_sha
+        else:
+            result['controllerProxyPolicy'] = continuity
+        return result
 
     def overlay_body(self, record):
         configuration = record['source']['overlay']
@@ -360,10 +453,11 @@ class DockerRestoreRuntime:
             raise fail()
         self.verify_networks(record, responder)
         self.check_intent(responder, record['intents']['responder']['body'])
-        with self.a.protected_directory(self.root / 'traefik', private=False) as directory:
-            with self.a.protected_file(directory, 'traefik.yml', 1024 * 1024, private=False) as body:
-                if hashed(body) != configuration['staticSha256']:
-                    raise fail()
+        if 'controllerProxyPolicy' in configuration:
+            if self.controller_proxy_policy(proxy) != configuration['controllerProxyPolicy']:
+                raise fail()
+        elif self.proxy_static_digest(proxy) != configuration['staticSha256']:
+            raise fail()
         if routes:
             observed = self.proxy_routers(responder['Id'], proxy, configuration['network'])
             service = 'orbis-maintenance-' + record['id'].replace('-', '')
@@ -372,7 +466,7 @@ class DockerRestoreRuntime:
                 if (actual.get('status') != 'enabled' or actual.get('rule') != router['rule'] or actual.get('priority') != router['priority']
                         or actual.get('entryPoints') != [router['entrypoint']] or actual.get('service') != service):
                     raise fail()
-                if ('tls' in actual) != router['tls']:
+                if isinstance(actual.get('tls'), dict) != router['tls']:
                     raise fail()
 
     def prepare_overlay(self, record):
@@ -1000,7 +1094,10 @@ class DockerRestoreRuntime:
             raise fail()
 
     def storage_mounts(self, record, role):
+        if role not in {'coordinator', 'verifier'}:
+            raise fail()
         original = record['source']['container']
+        authority = self.require_reset_authority(record)
         destinations = ['/data/' + name for name in ('state', 'apps', 'repos', 'media', 'user-config', 'traefik', 'backups', 'logs', '.env')] + ['/app-data', '/cache']
         selected = {}
         for destination in destinations:
@@ -1011,6 +1108,9 @@ class DockerRestoreRuntime:
             if item.get('Type') != 'bind' or item.get('RW') is not True:
                 raise fail()
             selected[item['Destination']] = item
+        if authority is not None:
+            mount = next(item for item in original['Mounts'] if item.get('Destination') == RESET.TARGET)
+            selected[RESET.TARGET] = mount
         for item in original['Mounts']:
             if item['Destination'] not in selected and any(item['Destination'].startswith(parent + '/') for parent in selected):
                 raise fail()

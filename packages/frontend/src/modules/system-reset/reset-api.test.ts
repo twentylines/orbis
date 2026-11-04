@@ -28,6 +28,24 @@ test('acceptance requires a valid server job; arbitrary responses do not confirm
   }
 });
 
+test('server failures do not tell the operator to retry a correct password', async () => {
+  const original = globalThis.fetch;
+  try {
+    for (const status of [500, 502, 503]) {
+      globalThis.fetch = (async () => new Response('Internal server error', { status })) as unknown as typeof fetch;
+      await expect(submitReset('keep', 'RESET ORBIS', proof, new AbortController().signal)).rejects.toThrow(
+        'Reset could not start because the server reported an error.',
+      );
+    }
+    globalThis.fetch = (async () => new Response('Invalid credentials', { status: 400 })) as unknown as typeof fetch;
+    await expect(submitReset('keep', 'RESET ORBIS', proof, new AbortController().signal)).rejects.toThrow(
+      'Check your password and authentication code',
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test('reset uses registered passkeys when available and falls back to password', async () => {
   const { resetProofMethod } = await import('./reset-api');
   let calls = 0;

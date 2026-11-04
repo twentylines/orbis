@@ -387,7 +387,6 @@ function LocalUpdates() {
   const updateCore = useMutation({
     mutationKey: ['orbis-compatibility', 'update', user.id, build.data?.version ?? '', 'apply'],
     gcTime: compatibilityReviewTime,
-    onMutate: () => setCoreReview(null),
     mutationFn: async (tag: string) => {
       setCoreRequestStage('checking');
       const checked = await hostRequest<HostPlan>('plan', { tag });
@@ -642,22 +641,12 @@ function LocalUpdates() {
                     if (coreReview?.hostUpdateSupported && !coreReview.crossesRuntipiBoundary) updateCore.mutate(coreReview.tag);
                   }}
                 >
-                  {updateCore.isPending ? 'Starting update…' : 'Update Orbis'}
+                  {updateCore.isPending ? (coreRequestStage === 'checking' ? 'Checking update…' : 'Starting update…') : 'Update Orbis'}
                 </button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
           {lastCoreReview?.status === 'error' ? <p role="alert">{lastCoreReview.error?.message}</p> : null}
-          {!coreReview && lastCoreReview?.status === 'success' && lastCoreReview.data ? (
-            <button
-              type="button"
-              className="desktop-update-action secondary"
-              disabled={!canPlan || updateCore.isPending}
-              onClick={() => setCoreReview(lastCoreReview.data ?? null)}
-            >
-              Open last update plan
-            </button>
-          ) : null}
           <div className="desktop-orbis-release-layout">
             <div className="desktop-orbis-release-notes">
               <div className="desktop-orbis-release-state" aria-live="polite" aria-busy={channels.isFetching || releases.isFetching}>

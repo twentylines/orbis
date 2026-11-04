@@ -1137,6 +1137,9 @@ html[data-orbis-motion="reduced"] .orbis-update-spinning {
     --desktop-bar-inset: 7px;
     background-attachment: scroll;
   }
+  .desktop-mode-toggle {
+    display: none;
+  }
   .desktop-system-bar {
     height: 56px;
     top: 20px;
@@ -1307,8 +1310,10 @@ html[data-orbis-motion="reduced"] .orbis-update-spinning {
     line-height: 1.5;
   }
   .desktop-connection[data-connection-kind="status"] {
-    flex: 1 0 100%;
-    order: 3;
+    flex: 1 1 32px;
+    order: 1;
+    min-width: 0;
+    gap: 4px;
     white-space: normal;
   }
   .desktop-connection-label {

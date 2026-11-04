@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import os from 'node:os';
-import { BadRequestException, ConflictException, Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, Optional } from '@nestjs/common';
 import type { Request } from 'express';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { DATABASE, type Database } from '@/core/database/database.module';
@@ -54,8 +54,9 @@ export class ResetService {
     private readonly automatic: AutomaticUpdatesService,
     private readonly machine: TimeMachineService,
     private readonly backups: SystemBackupsService,
+    @Optional() store?: ResetState,
   ) {
-    this.store = new ResetState(config.get('directories').dataDir);
+    this.store = store ?? new ResetState(config.get('directories').dataDir);
   }
   async onModuleInit() {
     try {

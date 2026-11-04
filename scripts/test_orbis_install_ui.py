@@ -324,7 +324,7 @@ class SpaceflightTests(unittest.TestCase):
                         self.assertLessEqual(len(re.sub(r"\x1b\[\d+(?:;\d+)*m", "", line)), width - 1)
                         self.assertLessEqual(set(re.findall(r"\x1b\[([0-9;]+)m", line)), {"0", "90", "36", "37"})
 
-    def test_large_field_is_centered_and_colored_output_preserves_cells(self):
+    def test_large_field_starts_at_the_terminal_gutter_and_colored_output_preserves_cells(self):
         plain = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"}, color=False)
         colored = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"})
         for width in (40, 80, 120, 160):
@@ -332,9 +332,8 @@ class SpaceflightTests(unittest.TestCase):
                 rows = plain.scene(20)
                 clean = [re.sub(r"\x1b\[[0-9;]+m", "", row) for row in colored.scene(20)]
                 self.assertEqual(rows, clean)
+                self.assertEqual(rows, UI.spaceflight(min(96, width - 1), 20, 12))
                 self.assertTrue(all(len(row) <= width - 1 for row in rows))
-                if width > 97:
-                    self.assertTrue(all(row.startswith(" " * ((width - 97) // 2)) for row in rows))
 
     def test_reduced_effects_and_short_terminals_never_draw_the_scene(self):
         for env in ({"TERM": "xterm", "ORBIS_NO_ANIMATION": "1"}, {"TERM": "xterm", "NO_COLOR": ""}):

@@ -37,6 +37,8 @@ const rootDestinations: Record<RestoreTreeName, string> = {
 };
 const auxiliaryDestinations = { backups: '/data/backups', logs: '/data/logs', environment: '/data/.env', cache: '/cache' } as const;
 const socketDestination = '/var/run/docker.sock';
+const authorityDestination = '/data/orbis-reset';
+const externalAuthority = /^\/var\/lib\/orbis\/reset-authority\/[a-f0-9]{64}\/data$/;
 const inside = (root: string, target: string) => target === root || target.startsWith(`${root}/`);
 const overlap = (a: string, b: string) => inside(a, b) || inside(b, a);
 const failed = () => new BackupRequirementError('Full restore requires supported writable bind storage. No server data has been changed.');
@@ -82,6 +84,23 @@ export function deriveRestoreStorageLayout(original: readonly RestoreStorageMoun
   for (const root of Object.values(rootDestinations)) {
     if (original.some((mount) => mount.Destination !== root && inside(root, mount.Destination))) throw failed();
   }
+  const authority = original.find((mount) => mount.Destination === authorityDestination);
+  if (authority) {
+    if (original.some((mount) => mount.Destination !== authorityDestination && inside(authorityDestination, mount.Destination))) throw failed();
+    bind(authority);
+    if (!authority.RW || authority.Propagation !== 'rprivate') throw failed();
+    const namespace = externalAuthority.test(authority.Source) ? path.posix.dirname(authority.Source) : undefined;
+    if (
+      original.some(
+        (mount) =>
+          mount !== authority &&
+          ((typeof mount.Source === 'string' && mount.Source.startsWith('/') && !canonical(mount.Source)) ||
+            (canonical(mount.Source) &&
+              (overlap(authority.Source, mount.Source) || (namespace !== undefined && mount.RW && overlap(namespace, mount.Source))))),
+      )
+    )
+      throw failed();
+  }
   const selected = new Map<string, RestoreStorageMount>();
   const resolve = (destination: string) => {
     const covering = original
@@ -105,6 +124,10 @@ export function deriveRestoreStorageLayout(original: readonly RestoreStorageMoun
   >;
   const sources = [...Object.values(roots), ...Object.values(auxiliary)];
   if (sources.some((source, index) => sources.some((other, position) => position !== index && overlap(source, other)))) throw failed();
+  if (authority) {
+    if (sources.some((source) => overlap(source, authority.Source))) throw failed();
+    selected.set(authority.Destination, authority);
+  }
   // Omitting a shadow below a retained parent would expose host contents hidden in the original container.
   if (
     original.some(
@@ -148,6 +171,7 @@ export function verifyRestoreStorageMounts(
     bind(mount);
     const selected = expected.find((item) => item.Target === mount.Destination);
     if (!selected || mount.Source !== selected.Source || mount.RW !== !selected.ReadOnly) throw failed();
+    if (mount.Destination === authorityDestination && mount.Propagation !== 'rprivate') throw failed();
   }
 }
 
@@ -162,7 +186,8 @@ export function verifyRetainedRestoreWorkerMounts(
   if (
     !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(restoreId) ||
     !canonical(rootRetainedSource) ||
-    !canonical(rootPayloadSource)
+    !canonical(rootPayloadSource) ||
+    !Array.isArray(actual)
   )
     throw failed();
   const base = deriveRestoreStorageLayout(original).workerMounts;
@@ -200,5 +225,6 @@ export function verifyRetainedRestoreWorkerMounts(
     bind(mount);
     const match = all.find((item) => item.Target === mount.Destination);
     if (!match || mount.Source !== match.Source || mount.RW !== !match.ReadOnly) throw failed();
+    if (mount.Destination === authorityDestination && mount.Propagation !== 'rprivate') throw failed();
   }
 }

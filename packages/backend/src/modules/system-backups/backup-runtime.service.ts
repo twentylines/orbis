@@ -29,6 +29,19 @@ export class BackupRuntimeService {
     const containers: BackupContainer[] = [];
     const images: BackupRuntimePlan['images'] = [];
     const { dataDir, appDataDir } = this.config.get('directories');
+    const socketPaths = ['/var/run/docker.sock', '/run/docker.sock'];
+    const runtimeMount = (mount: Dockerode.ContainerInspectInfo['Mounts'][number]) =>
+      mount.Type === 'bind' &&
+      typeof mount.Source === 'string' &&
+      path.posix.isAbsolute(mount.Source) &&
+      typeof mount.RW === 'boolean' &&
+      (self.Mounts ?? []).some(
+        (own) =>
+          own.Type === 'bind' &&
+          own.Source === mount.Source &&
+          ((socketPaths.includes(own.Destination) && socketPaths.includes(mount.Destination)) ||
+            (!mount.RW && ['/etc/localtime', '/etc/timezone'].includes(mount.Destination) && own.Destination === mount.Destination)),
+      );
     const readable = [appDataDir, ...['state', 'apps', 'media', 'repos', 'user-config', 'traefik'].map((part) => path.join(dataDir, part))].flatMap(
       (root) =>
         (self.Mounts ?? [])
@@ -63,7 +76,9 @@ export class BackupRuntimeService {
       if (inspect.State.Paused || inspect.State.Restarting)
         throw new BackupRequirementError('Wait for apps to finish starting or resume paused apps before a full backup.');
       for (const mount of inspect.Mounts ?? []) {
-        if (!mount.RW && ['/etc/localtime', '/etc/timezone', '/var/run/docker.sock'].includes(mount.Destination)) continue;
+        // These are the same host runtime endpoints used by this controller,
+        // not app data. A read-only socket bind still permits Docker API writes.
+        if (runtimeMount(mount)) continue;
         if (mount.Type !== 'bind' || !readable.some((root) => below(root, mount.Source)))
           throw new BackupRequirementError(
             'An app uses a Docker volume or external storage outside Orbis data. Review its storage before creating a full backup.',

@@ -50,12 +50,10 @@ export const SSEProvider = ({ children }: PropsWithChildren) => {
   const streamStatus = useSSE({
     topic: 'app',
     onOpen: () => {
-      setConnectionStatus('connected');
       announcePreferences();
       refresh(undefined, true, true);
     },
     onPreferencesChanged: announcePreferences,
-    onError: () => setConnectionStatus('reconnecting'),
     onEvent: ({ event, appUrn, error }) => {
       if (error) {
         console.error(error);
@@ -147,6 +145,10 @@ export const SSEProvider = ({ children }: PropsWithChildren) => {
       }
     },
   });
+
+  useEffect(() => {
+    setConnectionStatus(streamStatus === 'connecting' ? 'connecting' : streamStatus === 'connected' ? 'connected' : 'reconnecting');
+  }, [streamStatus, setConnectionStatus]);
 
   useBrowserPresence(streamStatus !== 'connected');
   return children;

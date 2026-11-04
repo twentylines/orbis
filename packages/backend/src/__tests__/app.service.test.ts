@@ -9,7 +9,7 @@ import { GithubService } from '@/utils/github/github.service';
 import { faker } from '@faker-js/faker';
 import { Test } from '@nestjs/testing';
 import { fromPartial } from '@total-typescript/shoehorn';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { setBackupRecoveryRequired } from '@/common/backup-maintenance';
 import { mock } from 'vitest-mock-extended';
 import { DOCKERODE } from '@/modules/docker/docker.module';
@@ -23,6 +23,7 @@ import * as restoreStartup from '@/modules/system-backups/backup-restore-startup
 import { MarketplaceService } from '@/modules/marketplace/marketplace.service';
 import { RepoEventsQueue } from '@/modules/queue/entities/repo-events';
 import { SystemEventsQueue } from '@/modules/queue/entities/system-events';
+import * as controllerStartup from '@/common/controller-overlay-startup';
 
 const TRAEFIK_CONFIG = `api:
   dashboard: true
@@ -58,13 +59,16 @@ describe('AppService', () => {
   let marketplace = mock<MarketplaceService>();
   let repoQueue = mock<RepoEventsQueue>();
   let systemQueue = mock<SystemEventsQueue>();
+  let controllerPolicy: MockInstance<() => boolean>;
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    controllerPolicy.mockRestore();
     setBackupRecoveryRequired(false);
   });
 
   beforeEach(async () => {
+    controllerPolicy = vi.spyOn(controllerStartup, 'controllerOverlayStartup').mockReturnValue(false);
     pruneNetworks = vi.fn();
     loggerService = mock<LoggerService>();
     const docker = { pruneNetworks };
@@ -263,10 +267,15 @@ describe('AppService', () => {
   });
 
   it.each([
-    ['resume', 'candidate', true],
-    ['resume', 'ordinary', false],
-    ['normal', 'ordinary', false],
-  ] as const)('preserves proxy identity only for verified restore activation (%s/%s)', async (phase, role, preserved) => {
+    ['resume', 'candidate', '', true],
+    ['resume', 'ordinary', '', false],
+    ['normal', 'ordinary', '', false],
+    ['normal', 'ordinary', '1', true],
+    ['normal', 'ordinary', 'true', false],
+    ['normal', 'ordinary', '0', false],
+  ] as const)('preserves proxy identity for restore activation or controller update (%s/%s/%s)', async (phase, role, flag, preserved) => {
+    vi.stubEnv('ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS', flag);
+    controllerPolicy.mockReturnValue(flag === '1');
     if (phase === 'resume') {
       vi.stubEnv('ORBIS_INSTALLER_TRANSACTION', 'f92e8862-38b5-4e81-bc84-f9131944872d');
       vi.stubEnv('ORBIS_INSTALLER_PHASE', 'resume');
@@ -312,6 +321,8 @@ describe('AppService', () => {
         expect(copies).not.toHaveBeenCalled();
         expect(tls).not.toHaveBeenCalled();
         for (const [file, contents] of Object.entries(protectedFiles)) expect(await fs.promises.readFile(file, 'utf8')).toBe(contents);
+        expect(appLifecycleService.restartRunningApps).not.toHaveBeenCalled();
+        expect(pruneNetworks).not.toHaveBeenCalled();
       } else {
         expect(created).toContain(path.join(DATA_DIR, 'traefik', 'tls'));
         expect(textWrites).toHaveBeenCalledWith(path.join(DATA_DIR, 'traefik', 'traefik.yml'), expect.any(String));
@@ -327,6 +338,26 @@ describe('AppService', () => {
       textWrites.mockRestore();
       copies.mockRestore();
     }
+  });
+
+  it('does not advertise a healthy controller update when app status reconciliation fails', async () => {
+    vi.stubEnv('ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS', '1');
+    controllerPolicy.mockReturnValue(true);
+    configurationService.getConfig.mockReturnValue(
+      fromPartial({ version: 'nightly', userSettings: { logLevel: 'info', allowErrorMonitoring: false }, __prod__: true }),
+    );
+    vi.spyOn(appService as unknown as { initializeAssets: () => Promise<void> }, 'initializeAssets').mockResolvedValue();
+    appStatusSyncService.syncAllAppStatuses.mockResolvedValue({
+      success: false,
+      message: 'Unavailable',
+      syncedCount: 0,
+      skippedCount: 0,
+      totalApps: 0,
+    });
+    await expect(appService.bootstrap()).rejects.toThrow('App status reconciliation failed');
+    expect(appLifecycleService.restartRunningApps).not.toHaveBeenCalled();
+    expect(pruneNetworks).not.toHaveBeenCalled();
+    expect(queueFactory.completeInstallationResume).not.toHaveBeenCalled();
   });
 
   it('fails installer resume instead of reporting a healthy partially initialized controller', async () => {

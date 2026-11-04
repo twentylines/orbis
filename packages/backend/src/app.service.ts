@@ -23,6 +23,7 @@ import { QueueFactory } from './modules/queue/queue.factory';
 import { backupMaintenanceActive } from './common/backup-maintenance';
 import { restoreStartupRole } from './modules/system-backups/backup-restore-startup';
 import { ResetService } from './modules/system-reset/reset.service';
+import { controllerOverlayStartup } from './common/controller-overlay-startup';
 
 @Injectable()
 export class AppService {
@@ -48,6 +49,7 @@ export class AppService {
 
   public async bootstrap(prepareRecovery: () => Promise<void> = async () => undefined) {
     const installation = installationMode();
+    const preserveControllerNetwork = controllerOverlayStartup();
     if (!retainedBootstrapStartup() && !retainedSettledStartup()) await this.databaseService.migrate();
     await prepareRecovery();
     if (installation.phase === 'normal' && restoreStartupRole() === 'ordinary') await this.reset.resumePending();
@@ -69,7 +71,8 @@ export class AppService {
       await this.queueFactory.prepareInstallationResume();
     } else await this.appLifecycleService.recoverInterruptedRestores();
     try {
-      if (installation.phase === 'normal') await this.docker.pruneNetworks({ filters: { label: ['orbis.managed=true'] } });
+      if (installation.phase === 'normal' && !preserveControllerNetwork)
+        await this.docker.pruneNetworks({ filters: { label: ['orbis.managed=true'] } });
 
       const { version, userSettings, __prod__, architecture } = this.configuration.getConfig();
       this.logger.info('Log level', userSettings.logLevel);
@@ -100,25 +103,26 @@ export class AppService {
       }
       this.systemEventsQueue.publishRepeatable({ command: 'sync_app_statuses' }, '*/5 * * * *');
 
-      if (installation.phase === 'resume' && restoreStartupRole() === 'candidate') {
+      if ((installation.phase === 'resume' && restoreStartupRole() === 'candidate') || preserveControllerNetwork) {
         await this.initializeAssets(true);
       } else {
         await this.copyAssets();
         await this.generateTlsCertificates({ localDomain: userSettings.localDomain });
       }
 
-      if (installation.phase !== 'resume' && __prod__ && (buster !== version || version === 'nightly')) {
+      if (!preserveControllerNetwork && installation.phase !== 'resume' && __prod__ && (buster !== version || version === 'nightly')) {
         this.appLifecycleService.restartRunningApps();
       }
 
       // Reconcile persisted app states before the dashboard serves its first status list.
       const statuses = await this.appStatusSyncService.syncAllAppStatuses();
-      if (installation.phase === 'resume' && !statuses.success) throw new Error('App status reconciliation failed during installation resume.');
+      if ((installation.phase === 'resume' || preserveControllerNetwork) && !statuses.success)
+        throw new Error('App status reconciliation failed during installation resume.');
       await this.queueFactory.completeInstallationResume();
     } catch (e) {
       this.logger.error(e);
       Sentry.captureException(e, { tags: { source: 'bootstrap' } });
-      if (installation.phase === 'resume') throw e;
+      if (installation.phase === 'resume' || preserveControllerNetwork) throw e;
     }
   }
 

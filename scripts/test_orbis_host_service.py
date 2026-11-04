@@ -240,6 +240,76 @@ class HostServiceTests(unittest.TestCase):
             time.sleep(0.01)
         self.fail("background update did not finish")
 
+    def test_terminal_job_reconciles_a_stale_settled_flag_before_unlocking(self):
+        identifier = str(uuid.uuid4())
+        job = {'schema': 'orbis.host-service-job.v1', 'id': identifier, 'overlayId': identifier,
+               'state': 'complete', 'current': CURRENT, 'target': TARGET, 'maintenanceSettled': True}
+        SERVICE.write_private(self.service.job_file, job)
+        overlay = self.service.core_overlay_manager
+        overlay.settled.side_effect = [False, True]
+        def finish(value):
+            self.assertFalse(SERVICE.read_private(self.service.job_file)['maintenanceSettled'])
+            self.assertEqual(value['id'], identifier)
+        overlay.finish.side_effect = finish
+        with mock.patch.object(self.service, 'current_manifest', return_value=TARGET), \
+             mock.patch.object(SERVICE.HOST, 'current_core', return_value={'state': 'running', 'health': 'healthy'}):
+            self.assertEqual(self.service.core_operation_maintenance(), {'state': 'idle'})
+        overlay.finish.assert_called_once()
+        self.assertTrue(SERVICE.read_private(self.service.job_file)['maintenanceSettled'])
+
+    def test_failed_responder_teardown_keeps_healthy_core_usable_but_blocks_replacement(self):
+        identifier = str(uuid.uuid4())
+        job = {'schema': 'orbis.host-service-job.v1', 'id': identifier, 'overlayId': identifier,
+               'state': 'complete', 'current': CURRENT, 'target': TARGET, 'maintenanceSettled': True}
+        SERVICE.write_private(self.service.job_file, job)
+        overlay = self.service.core_overlay_manager
+        overlay.settled.return_value = False
+        overlay.finish.side_effect = ValueError('responder remains active')
+        with mock.patch.object(self.service, 'current_manifest', return_value=TARGET), \
+             mock.patch.object(SERVICE.HOST, 'current_core', return_value={'state': 'running', 'health': 'healthy'}):
+            self.assertEqual(self.service.core_operation_maintenance(), {'state': 'idle'})
+        self.assertTrue(SERVICE.read_private(self.service.job_file)['maintenanceSettled'])
+        self.assertTrue(SERVICE.read_private(self.service.job_file)['overlayCleanupRequired'])
+        self.assertEqual(SERVICE.read_private(self.service.job_file)['state'], 'complete')
+        for work in [lambda: self.service.plan(TARGET['tag']), lambda: self.service.apply(str(uuid.uuid4()))]:
+            with self.assertRaisesRegex(ValueError, 'maintenance route needs recovery'):
+                work()
+        # An unresolved cleanup is recorded once; normal status polling does not
+        # repeatedly inspect Docker or hold the healthy application's API.
+        overlay.finish.reset_mock()
+        self.assertEqual(self.service.core_operation_maintenance(), {'state': 'idle'})
+        overlay.finish.assert_not_called()
+
+    def test_rollback_and_early_failure_settle_only_against_the_previous_publication(self):
+        for state in ['rolled-back', 'failed']:
+            with self.subTest(state=state):
+                identifier = str(uuid.uuid4())
+                job = {'schema': 'orbis.host-service-job.v1', 'id': identifier, 'overlayId': identifier,
+                       'state': state, 'current': CURRENT, 'target': TARGET}
+                SERVICE.write_private(self.service.job_file, job)
+                overlay = self.service.core_overlay_manager
+                overlay.reset_mock()
+                overlay.settled.return_value = True
+                with mock.patch.object(SERVICE.HOST, 'current_core', return_value={'state': 'running', 'health': 'healthy'}):
+                    self.assertEqual(self.service.core_operation_maintenance(), {'state': 'idle'})
+                overlay.finish.assert_called_once()
+                self.assertTrue(SERVICE.read_private(self.service.job_file)['maintenanceSettled'])
+
+    def test_replaced_terminal_job_is_not_settled_using_an_old_health_observation(self):
+        identifier = str(uuid.uuid4())
+        job = {'schema': 'orbis.host-service-job.v1', 'id': identifier, 'overlayId': identifier,
+               'state': 'complete', 'current': CURRENT, 'target': TARGET}
+        SERVICE.write_private(self.service.job_file, job)
+        replacement = {**job, 'id': str(uuid.uuid4()), 'state': 'running'}
+        def health(*_):
+            SERVICE.write_private(self.service.job_file, replacement)
+            return {'state': 'running', 'health': 'healthy'}
+        with mock.patch.object(self.service, 'current_manifest', return_value=TARGET), \
+             mock.patch.object(SERVICE.HOST, 'current_core', side_effect=health):
+            self.assertEqual(self.service.core_operation_maintenance(), {'state': 'checking'})
+        self.service.core_overlay_manager.finish.assert_not_called()
+        self.assertEqual(SERVICE.read_private(self.service.job_file), replacement)
+
     def restart_host(self):
         stack = ExitStack()
         stack.enter_context(mock.patch.object(SERVICE.Path, "is_dir", return_value=True))
@@ -640,6 +710,32 @@ class HostServiceTests(unittest.TestCase):
             result = self.wait_for_job()
         self.assertEqual(result["state"], "rolled-back")
         self.assertEqual(recover.call_args.args[4], Path(job["snapshot"]))
+        self.assertEqual(recover.call_args.kwargs["controller_state_dir"], self.state)
+
+    def test_interrupted_update_recovery_completes_channel_change_when_healthy(self):
+        planned = self.service.plan(TARGET["tag"])
+        job = {
+            "schema": "orbis.host-service-job.v1",
+            "id": planned["planId"],
+            "state": "interrupted",
+            "targetTag": TARGET["tag"],
+            "startedAt": time.time(),
+            "snapshot": str(self.snapshots / f"orbis-{TARGET['tag']}-{planned['planId']}"),
+            "current": CURRENT,
+            "target": TARGET,
+        }
+        SERVICE.write_private(self.service.job_file, job)
+        with mock.patch.object(SERVICE.UPDATE, "read_journal", return_value={"stage": "staged"}), mock.patch.object(
+            SERVICE.UPDATE, "recover", return_value={"result": "healthy"}
+        ) as recover, mock.patch.object(self.service, "complete_channel_change") as complete_channel_change:
+            accepted, launch = self.service.recover(planned["planId"])
+            self.assertEqual(accepted["state"], "recovering")
+            launch()
+            result = self.wait_for_job()
+        self.assertEqual(result["state"], "complete")
+        self.assertEqual(recover.call_args.args[4], Path(job["snapshot"]))
+        self.assertEqual(recover.call_args.kwargs["controller_state_dir"], self.state)
+        complete_channel_change.assert_called_once()
 
     def test_status_reconciles_completed_transaction_after_service_restart(self):
         planned = self.service.plan(TARGET["tag"])

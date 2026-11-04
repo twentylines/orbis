@@ -176,7 +176,7 @@ def read_record(path: Path, root: Path, reader) -> dict:
     return record
 
 
-def recover(root: Path, reader, path: Path, *, host_writers_stopped: bool) -> dict:
+def recover(root: Path, reader, path: Path, *, host_writers_stopped: bool, before_controller_start=None) -> dict:
     if not host_writers_stopped:
         raise TransactionError("Confirm native host and remote storage writers are stopped before recovery")
     RESTORE.runtime()
@@ -218,6 +218,8 @@ def recover(root: Path, reader, path: Path, *, host_writers_stopped: bool) -> di
     for original in ordered(value, starting=True):
         current = identities(root, reader, value)[original["id"]]
         if original["state"] == "running" and current["state"] != "running":
+            if value["roles"][original["id"]] == "controller" and before_controller_start is not None:
+                before_controller_start()
             reader.change(["start", original["id"]], timeout=180)
         if value["roles"][original["id"]] == "controller":
             require_healthy(reader, original["id"], timeout=180)

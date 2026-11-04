@@ -19,14 +19,20 @@ from urllib.request import Request, urlopen
 
 
 EXPECTED_RELEASE = None
+INSTALLER = None
 CHANNEL_CATALOG = None
 CHANNEL_METADATA_URL = "https://twentylines.github.io/orbis/channels.json"
+INSTALLER_BASE_URL = "https://twentylines.github.io/orbis/installer/"
 ARCHIVE = "orbis-installer.tar.gz"
 MANIFEST = "orbis-installer-manifest.json"
-ALLOWED = re.compile(r"scripts/(?:orbis-[a-z-]+|install-orbis|migration-preflight)\.py|scripts/orbis-host-maintenance-responder\.mjs|packaging/systemd/orbis-host\.service")
+ALLOWED = re.compile(r"scripts/(?:orbis-[a-z-]+|install-orbis|migration-preflight)\.py|scripts/(?:orbis-host-maintenance-responder|orbis-controller-bootstrap-profile)\.mjs|packaging/systemd/orbis-host\.service")
 REQUIRED = {"scripts/install-orbis.py", "scripts/orbis-install.py", "scripts/orbis-install-prerequisites.py", "scripts/orbis-install-ui.py", "scripts/orbis-install-new.py", "scripts/orbis-install-replace.py", "scripts/orbis-install-fresh.py", "scripts/orbis-host-service-enable.py", "scripts/orbis-host-discovery.py", "scripts/orbis-release-check.py", "packaging/systemd/orbis-host.service", "scripts/orbis-proxy-identity.py", "scripts/orbis-host-maintenance-responder.mjs"}
 
 REQUIRED |= {
+    "scripts/orbis-host-controller-update.py",
+    "scripts/orbis-controller-bootstrap-profile.py",
+    "scripts/orbis-controller-bootstrap-profile.mjs",
+    "scripts/orbis-reset-authority.py",
     "scripts/orbis-host-app-create-intent.py",
     "scripts/orbis-host-app-inet-diag.py",
     "scripts/orbis-host-app-port-observer.py",
@@ -141,19 +147,11 @@ def fetch(url, limit):
         return data
 
 
-def verify_manifest(data, identity, *, required=REQUIRED):
-    if not isinstance(identity, dict) or not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?", str(identity.get("tag", ""))) or not re.fullmatch(r"[0-9a-f]{40}", str(identity.get("commit", ""))):
-        raise ValueError("Use the installer published with an Orbis release")
-    if sha(data) != identity.get("manifestSha256"):
-        raise ValueError("Installer manifest does not match this release launcher")
-    value = json.loads(data)
-    if not isinstance(value, dict) or value.get("schema") != "orbis.installer-bundle.v1" or any(value.get(key) != identity[key] for key in ("tag", "commit")) or value.get("archive") != ARCHIVE:
-        raise ValueError("Installer package has a different release identity")
+def verify_files_manifest(value, required):
     if type(value.get("archiveBytes")) is not int or not 0 < value["archiveBytes"] <= 8 * 1024 * 1024:
         raise ValueError("Installer archive size is invalid")
-    for key in ("archiveSha256", "releaseManifestSha256"):
-        if not re.fullmatch(r"[0-9a-f]{64}", str(value.get(key, ""))):
-            raise ValueError("Installer package hash is invalid")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(value.get("archiveSha256", ""))):
+        raise ValueError("Installer package hash is invalid")
     files = value.get("files")
     if not isinstance(required, set) or not required or not isinstance(files, dict) or not required.issubset(files) or not 1 <= len(files) <= 64:
         raise ValueError("Installer file list is incomplete")
@@ -164,6 +162,31 @@ def verify_manifest(data, identity, *, required=REQUIRED):
         total += record["size"]
     if total > 8 * 1024 * 1024:
         raise ValueError("Installer files exceed their total size limit")
+
+
+def verify_manifest(data, identity, *, required=REQUIRED):
+    if not isinstance(identity, dict) or not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?", str(identity.get("tag", ""))) or not re.fullmatch(r"[0-9a-f]{40}", str(identity.get("commit", ""))):
+        raise ValueError("Use the installer published with an Orbis release")
+    if sha(data) != identity.get("manifestSha256"):
+        raise ValueError("Installer manifest does not match this release launcher")
+    value = json.loads(data)
+    if not isinstance(value, dict) or value.get("schema") != "orbis.installer-bundle.v1" or any(value.get(key) != identity[key] for key in ("tag", "commit")) or value.get("archive") != ARCHIVE:
+        raise ValueError("Installer package has a different release identity")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(value.get("releaseManifestSha256", ""))):
+        raise ValueError("Installer package hash is invalid")
+    verify_files_manifest(value, required)
+    return value
+
+
+def verify_installer_manifest(data, identity, *, required=REQUIRED):
+    if not isinstance(identity, dict) or set(identity) != {"commit", "manifestSha256"} or not re.fullmatch(r"[0-9a-f]{40}", str(identity.get("commit", ""))) or not re.fullmatch(r"[0-9a-f]{64}", str(identity.get("manifestSha256", ""))):
+        raise ValueError("The published installer identity is invalid")
+    if sha(data) != identity["manifestSha256"]:
+        raise ValueError("Installer manifest does not match this installer launcher")
+    value = json.loads(data)
+    if not isinstance(value, dict) or value.get("schema") != "orbis.installer-bundle.v2" or value.get("installerCommit") != identity["commit"] or value.get("archive") != ARCHIVE:
+        raise ValueError("Installer package has a different source identity")
+    verify_files_manifest(value, required)
     return value
 
 
@@ -203,6 +226,63 @@ def private_directory(path):
     return path
 
 
+def run_published_installer(args, remaining):
+    if not isinstance(INSTALLER, dict) or set(INSTALLER) != {"commit", "manifestSha256"} or not re.fullmatch(r"[0-9a-f]{40}", str(INSTALLER.get("commit", ""))) or not re.fullmatch(r"[0-9a-f]{64}", str(INSTALLER.get("manifestSha256", ""))):
+        raise ValueError("Download the installer from the published Orbis installer endpoint")
+    catalog = json.loads(fetch(CHANNEL_METADATA_URL, 16 * 1024))
+    terminal = writer = None
+    try:
+        if args.channel is None and "--yes" not in remaining:
+            terminal = open("/dev/tty", "r", encoding="utf-8")
+            writer = open("/dev/tty", "w", encoding="utf-8")
+
+        def ask(question):
+            writer.write(question)
+            writer.flush()
+            answer = terminal.readline()
+            if not answer:
+                raise ValueError("Installation cancelled")
+            return answer
+
+        channel, record, prompted = select_channel(catalog, args.channel, ask if terminal else None)
+    finally:
+        if terminal:
+            terminal.close()
+        if writer:
+            writer.close()
+    if channel == "nightly" and "--accept-nightly" not in remaining:
+        if "--yes" in remaining:
+            raise ValueError("Unattended Nightly installation requires --accept-nightly")
+        if prompted:
+            remaining.append("--accept-nightly")
+    release_data = fetch(f"https://github.com/twentylines/orbis/releases/download/{record['tag']}/release-manifest.json", 16 * 1024)
+    release = json.loads(release_data)
+    if not isinstance(release, dict) or any(release.get(key) != record[key] for key in ("tag", "commit")):
+        raise ValueError("The selected release does not match its published channel")
+    if release.get("schema") != "orbis.release.v1" or release.get("image") != "ghcr.io/twentylines/orbis" or release.get("installationProtocol") != "orbis.installation-state.v1" or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(release.get("digest", ""))):
+        raise ValueError("The selected release has an invalid installation manifest")
+    base = INSTALLER_BASE_URL + INSTALLER["commit"] + "/"
+    print(f"Downloading Orbis {display_release(record['tag'])} installer…", flush=True)
+    manifest_data = fetch(base + MANIFEST, 64 * 1024)
+    manifest = verify_installer_manifest(manifest_data, INSTALLER)
+    files = verify_files(fetch(base + ARCHIVE, manifest["archiveBytes"]), manifest)
+    parent = private_directory(args.work_dir)
+    destination = Path(tempfile.mkdtemp(prefix="installer-" + INSTALLER["commit"][:12] + "-", dir=parent))
+    for name, content in files.items():
+        file = destination / name
+        file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        file.write_bytes(content)
+        file.chmod(0o600)
+    release_file = destination / "release-manifest.json"
+    release_file.write_bytes(release_data)
+    release_file.chmod(0o600)
+    package_manifest = destination / MANIFEST
+    package_manifest.write_bytes(manifest_data)
+    package_manifest.chmod(0o600)
+    print(f"Verified installer. Recovery files: {destination}", flush=True)
+    os.execv(sys.executable, [sys.executable, str(destination / "scripts/orbis-install.py"), "--manifest", str(release_file), "--state-dir", str(destination / "transactions"), "--channel", channel, *remaining])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work-dir", type=Path, default=Path("/var/lib/orbis/installer"))
@@ -211,6 +291,9 @@ def main():
     require_supported_host()
     if any(arg.split("=", 1)[0] in {"--manifest", "--state-dir"} for arg in remaining):
         raise ValueError("The release launcher supplies its own manifest and state directory")
+    if EXPECTED_RELEASE is None and isinstance(INSTALLER, dict):
+        run_published_installer(args, remaining)
+        return
     if EXPECTED_RELEASE is None:
         if not isinstance(CHANNEL_CATALOG, dict):
             raise ValueError("Download the installer from the published Orbis installer endpoint")

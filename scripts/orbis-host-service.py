@@ -570,7 +570,13 @@ class HostService:
             if state not in {"complete", "rolled-back", "failed"}:
                 return {"state": "checking"}
             if job.get("maintenanceSettled") is True:
-                return {"state": "idle"}
+                if not job.get("overlayId") or job.get("overlayCleanupRequired") is True:
+                    return {"state": "idle"}
+                try:
+                    if self.core_overlays().settled(job):
+                        return {"state": "idle"}
+                except (OSError, ValueError, RuntimeError, TypeError, KeyError, subprocess.SubprocessError):
+                    pass
             expected = target if state == "complete" else current
             # Persisted terminal jobs are only unlocked when the exact enrolled
             # publication is healthy. Reviews and app/package jobs never enter here.
@@ -586,6 +592,19 @@ class HostService:
                 fresh = read_private(self.job_file)
                 if fresh != job:
                     return {"state": "checking"}
+                if fresh.get("overlayId"):
+                    fresh["maintenanceSettled"] = False
+                    write_private(self.job_file, fresh)
+                    try:
+                        self.core_overlays().finish(fresh)
+                        if not self.core_overlays().settled(fresh):
+                            raise ValueError("maintenance routing still needs review")
+                    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+                        # The exact terminal publication above is healthy. Keep
+                        # it usable while blocking another core replacement.
+                        fresh["overlayCleanupRequired"] = True
+                    else:
+                        fresh.pop("overlayCleanupRequired", None)
                 fresh["maintenanceSettled"] = True
                 write_private(self.job_file, fresh)
             return {"state": "idle"}
@@ -660,6 +679,11 @@ class HostService:
         previous = read_private(self.job_file)
         if previous and previous.get("state") in {"running", "recovering", "interrupted"}:
             raise ValueError("finish or recover the current host update before changing release channels")
+        self.require_core_overlay_clear(previous)
+
+    def require_core_overlay_clear(self, previous):
+        if previous and previous.get("overlayId") and not self.core_overlays().settled(previous):
+            raise ValueError("The previous update's maintenance route needs recovery before another core operation.")
 
     def controller_capture_identity(self, expected_id: str, expected_image: str, enrollment: dict) -> dict:
         template = ('{"id":{{json .Id}},"imageId":{{json .Image}},"imageReference":{{json .Config.Image}},'
@@ -1730,6 +1754,7 @@ class HostService:
             previous = read_private(self.job_file)
             if previous and previous.get("state") in {"running", "recovering", "interrupted"}:
                 raise ValueError("resolve the previous host update before creating another plan")
+            self.require_core_overlay_clear(previous)
         current = self.current_manifest()
         target = manifest_for_tag(tag)
         channel = read_channel(self.root)
@@ -1787,6 +1812,7 @@ class HostService:
             previous = read_private(self.job_file)
             if previous and previous.get("state") in {"running", "recovering", "interrupted"}:
                 raise ValueError("resolve the previous host update before applying another")
+            self.require_core_overlay_clear(previous)
             plan = self._read_plan(plan_id)
             current = PLAN.validate_manifest(plan["current"])
             target = PLAN.validate_manifest(plan["target"])
@@ -1824,10 +1850,9 @@ class HostService:
             try:
                 self.core_overlays().resume(job)
                 options = {"expected_source": job["retainedSource"]} if job.get("retainedSource") is not None else {}
-                UPDATE.apply_update(self.root, current, target, self.context, snapshot, **options)
+                UPDATE.apply_update(self.root, current, target, self.context, snapshot, controller_state_dir=self.state_dir, **options)
                 self.complete_channel_change(job)
                 job["state"] = "complete"
-                job["maintenanceSettled"] = True
                 job["message"] = "Orbis reached the reviewed image and healthy state."
             except Exception:
                 try:
@@ -1837,8 +1862,6 @@ class HostService:
                 stage = journal.get("stage") if journal else None
                 job.update(UPDATE.safe_failure(journal))
                 job["state"] = "rolled-back" if stage == "rolled-back" else "failed" if stage in {None, "aborted"} else "interrupted"
-                if job["state"] == "rolled-back":
-                    job["maintenanceSettled"] = True
                 job["message"] = (
                     f"{UPDATE.failure_message(journal)} The previous Orbis release was restored.".strip()
                     if job["state"] == "rolled-back"
@@ -1851,10 +1874,7 @@ class HostService:
                 try:
                     write_private(self.job_file, job)
                     if job["state"] in {"complete", "rolled-back", "failed"}:
-                        try:
-                            self.core_overlays().finish(job)
-                        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
-                            pass
+                        self.core_operation_maintenance()
                 finally:
                     with self.lock:
                         self.busy = False
@@ -1887,12 +1907,17 @@ class HostService:
 
         def run() -> None:
             try:
-                UPDATE.recover(self.root, current, target, self.context, snapshot)
-                job["state"] = "rolled-back"
-                job["maintenanceSettled"] = True
+                outcome = UPDATE.recover(self.root, current, target, self.context, snapshot, controller_state_dir=self.state_dir)
+                committed = isinstance(outcome, dict) and outcome.get("result") == "healthy"
+                if committed:
+                    self.complete_channel_change(job)
+                job["state"] = "complete" if committed else "rolled-back"
                 journal = read_private(UPDATE.journal_path(snapshot))
                 job.update(UPDATE.safe_failure(journal))
-                job["message"] = f"{UPDATE.failure_message(journal)} Previous Orbis release is healthy.".strip()
+                job["message"] = (
+                    "Orbis reached the reviewed image and healthy state."
+                    if committed else f"{UPDATE.failure_message(journal)} Previous Orbis release is healthy.".strip()
+                )
             except Exception:
                 job["state"] = "interrupted"
                 job["message"] = "Recovery needs local inspection."
@@ -1900,11 +1925,8 @@ class HostService:
                 job["finishedAt"] = time.time()
                 try:
                     write_private(self.job_file, job)
-                    if job["state"] == "rolled-back":
-                        try:
-                            self.core_overlays().finish(job)
-                        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
-                            pass
+                    if job["state"] in {"complete", "rolled-back"}:
+                        self.core_operation_maintenance()
                 finally:
                     with self.lock:
                         self.busy = False

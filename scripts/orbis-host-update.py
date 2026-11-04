@@ -32,9 +32,11 @@ def load_script(name: str, module_name: str):
 HOST = load_script("orbis-host.py", "orbis_host_for_update")
 CHECK = load_script("orbis-release-check.py", "orbis_release_check_for_update")
 SNAPSHOT = load_script("orbis-snapshot.py", "orbis_snapshot_for_update")
+CONTROLLER = load_script("orbis-host-controller-update.py", "orbis_controller_update")
 CORE_SERVICES = ("runtipi-reverse-proxy", "runtipi", "runtipi-queue", "runtipi-db")
 JOURNAL_SCHEMA = "orbis.update.v1"
 TERMINAL_STAGES = {"complete", "rolled-back", "aborted"}
+FAILURE_MESSAGES = {**SNAPSHOT.FAILURE_MESSAGES, "source-bootstrap-preservation-unsupported": "The source controller cannot safely restart with its current network, cache and TLS state. Review the source bootstrap before updating.", "controller-preservation-unsupported": "This release cannot preserve the live proxy during a controller update. Choose a release with controller preservation support."}
 FAILURE_STAGES = {"preparing", "downloading", "pulled", "stopping", "stopped", "snapshotting", "snapshot-ready", "staged"}
 
 
@@ -43,7 +45,7 @@ def failure_details(stage: object, error: Exception) -> dict[str, str]:
     name = next((kind.__name__ for kind in (SNAPSHOT.SnapshotError, PermissionError, FileNotFoundError, OSError, ValueError, RuntimeError) if isinstance(error, kind)), "Exception")
     return {
         "failureStage": stage if isinstance(stage, str) and stage in FAILURE_STAGES else "unknown",
-        "failureCode": code if isinstance(code, str) and code in SNAPSHOT.FAILURE_MESSAGES else "update-step-failed",
+        "failureCode": code if isinstance(code, str) and code in FAILURE_MESSAGES else "update-step-failed",
         "failureType": name,
     }
 
@@ -54,7 +56,7 @@ def safe_failure(record: dict | None) -> dict[str, str]:
     stage, code, name = (record.get(key) for key in ("failureStage", "failureCode", "failureType"))
     if (
         not isinstance(stage, str) or stage not in FAILURE_STAGES | {"unknown"}
-        or not isinstance(code, str) or code not in SNAPSHOT.FAILURE_MESSAGES.keys() | {"update-step-failed"}
+        or not isinstance(code, str) or code not in FAILURE_MESSAGES.keys() | {"update-step-failed"}
         or not isinstance(name, str) or name not in {"SnapshotError", "PermissionError", "FileNotFoundError", "OSError", "ValueError", "RuntimeError", "Exception"}
     ):
         return {}
@@ -63,7 +65,7 @@ def safe_failure(record: dict | None) -> dict[str, str]:
 
 def failure_message(record: dict | None) -> str:
     failure = safe_failure(record)
-    return SNAPSHOT.FAILURE_MESSAGES.get(failure.get("failureCode"), "The reviewed update could not finish.") if failure else ""
+    return FAILURE_MESSAGES.get(failure.get("failureCode"), "The reviewed update could not finish.") if failure else ""
 
 
 def journal_path(snapshot: Path) -> Path:
@@ -294,7 +296,7 @@ def update_plan(root: Path, current: dict[str, str], target: dict[str, str], con
     scoped = target.get("installationProtocol") == HOST.PLAN.INSTALLATION_PROTOCOL
     if scoped:
         tools, reader = controller_tools(context)
-        checkpoint = tools.review(root, reader, snapshot, checkpoint_path(snapshot), scope="controller")
+        checkpoint = tools.review(root, reader, snapshot, checkpoint_path(snapshot), scope=CONTROLLER.SCOPE)
         snapshot_bytes = checkpoint["storage"]["estimatedBytes"]
     else:
         require_quiet_apps(root, context)
@@ -339,11 +341,41 @@ def start_core(root: Path, context: str, force_recreate: bool = False) -> None:
     docker_checked(context, command, root, "Docker Compose could not start the core services")
 
 
-def rollback(root: Path, current: dict[str, str], context: str, snapshot: Path, record: dict[str, object]) -> None:
+def rollback(root: Path, current: dict[str, str], context: str, snapshot: Path, record: dict[str, object], *, controller_state_dir=Path("/var/lib/orbis/state")) -> None:
     retained_source(root, context, record, current)
     origin = record.setdefault("rollbackStartedFrom", record["stage"])
     record["stage"] = "rolling-back"
     write_journal(snapshot, record)
+    if record.get("backupScope") == CONTROLLER.SCOPE:
+        runtime = CONTROLLER.ControllerUpdate(HOST, root, context, snapshot, current, record['targetPublication'], controller_state_dir)
+        protected = runtime.read()
+        runtime.preserved(protected)
+        if origin in {'preparing', 'downloading', 'pulled'}:
+            raw = runtime.verify_source(protected)
+            if not raw['State'].get('Running') or (raw['State'].get('Health') or {}).get('Status') != 'healthy':
+                raise ValueError('Controller preparation changed the live source')
+            record['stage'] = 'aborted'
+            write_journal(snapshot, record)
+            return
+        runtime.stop_for_rollback()
+        tools, reader = controller_tools(context, HOST.LOCK_DESCRIPTOR.get())
+        checkpoint = protected['checkpoint']
+        checkpoint_journal = checkpoint_path(snapshot)
+        reconstructed = runtime.restore_reconstructed_checkpoint()
+        if not reconstructed and checkpoint_journal.exists():
+            saved = tools.read_record(checkpoint_journal, root, reader)
+            if saved['review'] != checkpoint:
+                raise ValueError('Checkpoint recovery differs from protected controller authority')
+            if saved['stage'] != 'recovered':
+                tools.recover(root, reader, checkpoint_journal, host_writers_stopped=True,
+                              before_controller_start=runtime.verify_source_bootstrap)
+        runtime.start_original()
+        runtime.restore_policies(target=False)
+        restore_retained_enrollment(root, current, context, record)
+        HOST.write_state(root, HOST.installation_fingerprint(root, current, context))
+        record['stage'] = 'rolled-back'
+        write_journal(snapshot, record)
+        return
     if record.get("backupScope") == "controller":
         tools, reader = controller_tools(context, HOST.LOCK_DESCRIPTOR.get())
         checkpoint = record["checkpoint"]
@@ -425,7 +457,7 @@ def rollback(root: Path, current: dict[str, str], context: str, snapshot: Path, 
     write_journal(snapshot, record)
 
 
-def apply_update(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path, *, expected_source=None) -> dict[str, object]:
+def apply_update(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path, *, expected_source=None, controller_state_dir=Path("/var/lib/orbis/state")) -> dict[str, object]:
     with HOST.host_lock(root) as lock_fd:
         planned = update_plan(root, current, target, context, snapshot)
         if expected_source is not None and HOST.retained_descriptor(root, context, current) != expected_source:
@@ -446,7 +478,7 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
                 "publication": HOST.IDENTITY.PUBLICATION.release_identity(current), "target": HOST.IDENTITY.PUBLICATION.release_identity(target)}
             retained_source(root, context, record, current, target)
         if "checkpoint" in planned:
-            record.update(backupScope="controller", checkpoint=planned["checkpoint"])
+            record.update(backupScope=CONTROLLER.SCOPE, checkpoint=planned["checkpoint"], targetPublication=target)
         write_journal(snapshot, record)
         try:
             record["stage"] = "downloading"
@@ -454,9 +486,12 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
             docker_checked(context, ["pull", f"{target['image']}@{target['digest']}"], root, "Docker could not pull the verified Orbis image")
             record["stage"] = "pulled"
             write_journal(snapshot, record)
+            if record.get("backupScope") == CONTROLLER.SCOPE:
+                scoped_runtime = CONTROLLER.ControllerUpdate(HOST, root, context, snapshot, current, target, controller_state_dir)
+                scoped_runtime.prepare(planned['checkpoint'])
             record["stage"] = "stopping"
             write_journal(snapshot, record)
-            if record.get("backupScope") == "controller":
+            if record.get("backupScope") in {"controller", CONTROLLER.SCOPE}:
                 tools, reader = controller_tools(context, lock_fd)
                 tools.checkpoint(root, reader, planned["checkpoint"], host_writers_stopped=True)
             else:
@@ -478,24 +513,39 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
                 HOST.STAGE.stage(root, target)
             record["stage"] = "staged"
             write_journal(snapshot, record)
-            start_core(root, context)
+            if record.get("backupScope") == CONTROLLER.SCOPE:
+                scoped_runtime.start_target()
+            else:
+                start_core(root, context)
             core = HOST.current_core(root, context)
             if core.get("image") != f"{target['image']}@{target['digest']}" or core.get("state") != "running" or core.get("health") != "healthy":
                 raise RuntimeError("new Orbis core did not reach the verified image and healthy state")
             HOST.write_state(root, HOST.published_installation_fingerprint(root, target, context))
-            if record.get("backupScope") == "controller":
+            if record.get("backupScope") == CONTROLLER.SCOPE:
+                scoped_runtime.restore_policies(target=True)
+            elif record.get("backupScope") == "controller":
                 restore_core_policies(root, context, planned["checkpoint"])
+            if record.get("backupScope") == CONTROLLER.SCOPE:
+                record["controllerCleanupRequired"] = scoped_runtime.commit()
             record["stage"] = "complete"
             write_journal(snapshot, record)
             return {"result": "healthy", "releaseTag": target["tag"], "snapshot": str(snapshot), "journal": str(journal_path(snapshot))}
         except Exception as error:
+            if record.get('backupScope') == CONTROLLER.SCOPE and 'scoped_runtime' in locals():
+                try:
+                    protected = scoped_runtime.read()
+                except FileNotFoundError:
+                    protected = {}
+                if protected.get('phase') == 'committed':
+                    return {'result': 'healthy', 'releaseTag': target['tag'], 'snapshot': str(snapshot),
+                            'controllerCleanupRequired': protected.get('cleanupRequired', True)}
             record.update(failure_details(record["stage"], error))
             if record["stage"] in {"preparing", "downloading", "pulled"}:
                 record["stage"] = "aborted"
                 write_journal(snapshot, record)
                 raise RuntimeError("update stopped before service downtime") from error
             try:
-                rollback(root, current, context, snapshot, record)
+                rollback(root, current, context, snapshot, record, controller_state_dir=controller_state_dir)
             except Exception as rollback_error:
                 record["stage"] = "rollback-failed"
                 write_journal(snapshot, record)
@@ -505,9 +555,18 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
             raise RuntimeError("update failed; the previous release was restored and is healthy") from error
 
 
-def recover(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path) -> dict[str, object]:
+def recover(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path, *, controller_state_dir=Path("/var/lib/orbis/state")) -> dict[str, object]:
     with HOST.host_lock(root):
         record = read_journal(snapshot, root, context, current, target)
+        if record.get('backupScope') == CONTROLLER.SCOPE:
+            runtime = CONTROLLER.ControllerUpdate(HOST, root, context, snapshot, current, target, controller_state_dir)
+            protected = runtime.read()
+            if protected.get('phase') == 'committed':
+                record['controllerCleanupRequired'] = runtime.commit()
+                record['stage'] = 'complete'
+                write_journal(snapshot, record)
+                return {'result': 'healthy', 'releaseTag': target['tag'], 'snapshot': str(snapshot),
+                        'controllerCleanupRequired': record['controllerCleanupRequired']}
         if record.get("stage") in TERMINAL_STAGES:
             raise ValueError("update transaction is already complete or recovered")
         if record.get("stage") in {"preparing", "downloading", "pulled"}:
@@ -525,7 +584,7 @@ def recover(root: Path, current: dict[str, str], target: dict[str, str], context
             write_journal(snapshot, record)
             return {"result": "aborted-before-downtime", "releaseTag": current["tag"]}
         try:
-            rollback(root, current, context, snapshot, record)
+            rollback(root, current, context, snapshot, record, controller_state_dir=controller_state_dir)
         except Exception as error:
             record["stage"] = "rollback-failed"
             write_journal(snapshot, record)

@@ -16,6 +16,7 @@
       "!**/metadata.ts",
       "!**/api-client",
       "!**/swagger.json",
+      "!**/scripts/orbis-controller-bootstrap-profile.mjs",
       "!**/packages/backend/src/core/database/drizzle/meta"
     ]
   },

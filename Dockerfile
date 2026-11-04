@@ -85,6 +85,7 @@ COPY --from=builder /app/package.json ./
 COPY --from=builder /app/packages/backend/dist ./
 COPY --from=builder /app/packages/backend/src/retained-terminal-capability.json ./retained-terminal-capability.json
 COPY --from=builder /app/packages/backend/src/retained-app-engine-capability.json ./retained-app-engine-capability.json
+COPY --from=builder /app/packages/backend/src/controller-overlay-capability.json ./controller-overlay-capability.json
 
 # Assets
 COPY --from=builder /app/packages/backend/assets ./assets

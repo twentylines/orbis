@@ -57,6 +57,23 @@ it('refuses a symbolic link instead of following it into another directory', asy
   await expect(inventoryBackup([{ name: 'app-data', source: path.join(root, 'source') }], signal())).rejects.toThrow('links or special files');
 });
 
+it('excludes host reset intent and exact preference staging while retaining ordinary app data', async () => {
+  const state = path.join(root, 'state');
+  const stage = `.orbis-reset-stage-${randomUUID()}`;
+  const journal = path.join(state, 'orbis-reset');
+  const staged = path.join(state, 'desktop', stage);
+  const ordinary = path.join(state, 'apps', stage);
+  for (const directory of [journal, staged, ordinary]) await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+  await fs.writeFile(path.join(journal, 'active.json'), 'host-only intent');
+  await fs.writeFile(path.join(staged, '7.json'), 'staged preference');
+  await fs.writeFile(path.join(ordinary, 'app.txt'), 'app data');
+  await fs.writeFile(path.join(state, 'desktop', '8.json'), 'current preference');
+  const inventory = await inventoryBackup([{ name: 'data/state', source: state }], signal());
+  expect(inventory.files.map((file) => file.name).sort()).toEqual([`data/state/apps/${stage}/app.txt`, 'data/state/desktop/8.json']);
+  expect(await fs.readFile(path.join(journal, 'active.json'), 'utf8')).toBe('host-only intent');
+  expect(await fs.readFile(path.join(staged, '7.json'), 'utf8')).toBe('staged preference');
+});
+
 it('rejects a file replaced between inventory and copying', async () => {
   const source = path.join(root, 'file');
   await fs.writeFile(source, 'first');
