@@ -151,6 +151,60 @@ class AdoptionTests(unittest.TestCase):
         self.assertEqual(b'private synthetic identity', (self.adoption.identity / 'acme.json').read_bytes())
         self.assertEqual(0o600, (self.adoption.identity / 'acme.json').stat().st_mode & 0o777)
         self.assertEqual(0o700, self.adoption.identity.stat().st_mode & 0o777)
+    def test_preserved_pair_requires_current_protected_authority_and_exact_original(self):
+        self.apply()
+        live = self.engine.inspect('e' * 64)
+        original = self.engine.rows['a' * 64]
+        before = copy.deepcopy(original)
+        self.assertEqual({'liveId': 'e' * 64, 'retainedId': 'a' * 64},
+                         M.verified_preserved_pair(self.root, 'local', live, self.engine))
+        mutations = [
+            ('running', lambda row: row['State'].update(Running=True)),
+            ('paused', lambda row: row['State'].update(Paused=True)),
+            ('restarting', lambda row: row['State'].update(Restarting=True)),
+            ('restart policy', lambda row: row['HostConfig']['RestartPolicy'].update(Name='always')),
+            ('name', lambda row: row.update(Name='/renamed')),
+            ('image', lambda row: row.update(Image='sha256:' + '9' * 64)),
+            ('definition', lambda row: row['Config'].update(User='changed')),
+            ('generation', lambda row: row.update(Id='9' * 64)),
+        ]
+        for label, change in mutations:
+            with self.subTest(label=label):
+                self.engine.rows['a' * 64] = copy.deepcopy(before)
+                change(self.engine.rows['a' * 64])
+                with self.assertRaises(ValueError):
+                    M.verified_preserved_pair(self.root, 'local', live, self.engine)
+        self.engine.rows['a' * 64] = before
+        with mock.patch.object(self.engine, 'daemon', return_value='other-daemon'):
+            with self.assertRaises(ValueError):
+                M.verified_preserved_pair(self.root, 'local', live, self.engine)
+        receipt = self.adoption.directory / 'identity.json'
+        receipt.write_bytes(b'{}')
+        with self.assertRaises(ValueError):
+            M.verified_preserved_pair(self.root, 'local', live, self.engine)
+        receipt.unlink()
+        with self.assertRaises((ValueError, OSError)):
+            M.verified_preserved_pair(self.root, 'local', live, self.engine)
+
+    def test_preserved_pair_rejects_incomplete_adoption(self):
+        self.approve()
+        with self.assertRaises((ValueError, OSError)):
+            M.verified_preserved_pair(self.root, 'local', self.engine.inspect('a' * 64), self.engine)
+
+    def test_preserved_pair_survives_a_later_controller_generation(self):
+        self.apply()
+        old = self.engine.rows['d' * 64]
+        replacement = copy.deepcopy(old)
+        replacement.update(Id='f' * 64, Name='/runtipi')
+        replacement['HostConfig']['Binds'] = [str(M.execution_path(self.root)) + ':/data/traefik:ro']
+        replacement['Mounts'][0].update(Source=str(M.execution_path(self.root)), RW=False)
+        old['Name'] = '/orbis-controller-original-retained'
+        old['State']['Running'] = False
+        old['HostConfig']['RestartPolicy'] = {'Name': 'no', 'MaximumRetryCount': 0}
+        self.engine.rows[replacement['Id']] = replacement
+        self.assertEqual({'liveId': 'e' * 64, 'retainedId': 'a' * 64},
+                         M.verified_preserved_pair(self.root, 'local', self.engine.inspect('e' * 64), self.engine))
+
     def test_lost_create_reply_recovers_exact_intent_without_second_create(self):
         record = self.approve(); self.engine.lost = 'create'
         with self.assertRaises(RuntimeError): self.adoption.resume(record)

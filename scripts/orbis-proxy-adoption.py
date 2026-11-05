@@ -886,6 +886,32 @@ def verified_authority(root, context, proxy, runtime=None):
     return receipt
 
 
+def verified_preserved_pair(root, context, live, runtime=None):
+    """Identify the verified live proxy and its exact, quiescent original."""
+    adoption = Adoption(root, context, runtime)
+    try:
+        receipt = verified_authority(root, context, live, adoption.runtime)
+        record = adoption.read()
+        original = record['plan']['proxy']
+        source = adoption.runtime.inspect(original['Id'])
+        if (receipt['approvedPlanSha256'] != record['approvedPlanSha256']
+                or record['phase'] != 'verified' or record.get('intent') is not None
+                or record.get('rollbackPhase') or record.get('targetId') != live['Id']
+                or source['Id'] != original['Id'] or source['Id'] == live['Id']
+                or source['Name'] != '/' + record['retainedName']
+                or source['Image'] != original['Image']
+                or adoption.runtime.definition(source) != adoption.runtime.definition(original)
+                or source['State'].get('Running') is not False
+                or source['State'].get('Paused') is not False
+                or source['State'].get('Restarting') is not False
+                or source['State'].get('Status') != 'exited' or source['State'].get('Dead') is True
+                or source['HostConfig'].get('RestartPolicy') != {'Name': 'no', 'MaximumRetryCount': 0}):
+            raise fail('retained original identity or quiescence differs')
+    except (KeyError, TypeError, AttributeError) as error:
+        raise fail('retained proxy recovery metadata needs review') from error
+    return {'liveId': live['Id'], 'retainedId': source['Id']}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['review', 'plan', 'apply', 'verify', 'resume', 'rollback', 'reconcile-plan', 'forward'])

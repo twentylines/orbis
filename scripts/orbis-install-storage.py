@@ -175,18 +175,36 @@ def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, exi
         # This new scope never captures or stops the live reverse proxy. Existing
         # controller/full journals keep their original semantics.
         proxies = [row for row in rows if row['id'] in owned and row['service'] == 'runtipi-reverse-proxy']
-        if len(proxies) != 1:
+        live = [row for row in proxies if row['name'].lstrip('/') == 'runtipi-reverse-proxy' and row['state'] == 'running']
+        if len(live) != 1:
             raise StorageError('Exactly one live proxy must be preserved')
-        proxy = proxies[0]
-        owned.remove(proxy['id'])
+        proxy = live[0]
         raw_proxy = reader.app(proxy['id'])
-        for mount in DETECT.validate_mounts(raw_proxy.get('mounts')):
-            if mount['Destination'] in {'/etc/traefik', '/shared'}:
-                source = DETECT.path(mount.get('Source'))
-                if not source:
-                    raise StorageError('The preserved proxy storage is invalid')
-                live_paths.add(Path(source))
-                live_paths.add(Path(source).resolve(strict=False))
+        if raw_proxy.get('id') != proxy['id'] or raw_proxy.get('name') != '/runtipi-reverse-proxy' or raw_proxy.get('state') != 'running':
+            raise StorageError('The preserved live proxy changed during inspection')
+        preserved = {proxy['id']}
+        preserved_storage = [raw_proxy]
+        if len(proxies) > 1:
+            adoption = APPS.load_script('orbis-proxy-adoption.py', 'orbis_proxy_adoption_for_storage')
+            runtime = adoption.Adoption(root, reader.context).runtime
+            runtime.reader = reader
+            pair = adoption.verified_preserved_pair(root, reader.context, runtime.inspect(proxy['id']), runtime)
+            preserved = {pair['liveId'], pair['retainedId']}
+            if len(preserved) != 2 or preserved != {row['id'] for row in proxies}:
+                raise StorageError('Proxy candidates differ from verified adoption')
+            original = reader.app(pair['retainedId'])
+            if original.get('id') != pair['retainedId']:
+                raise StorageError('The retained proxy changed during inspection')
+            preserved_storage.append(original)
+        owned.difference_update(preserved)
+        for retained in preserved_storage:
+            for mount in DETECT.validate_mounts(retained.get('mounts')):
+                if mount['Destination'] in {'/etc/traefik', '/shared'}:
+                    source = DETECT.path(mount.get('Source'))
+                    if not source:
+                        raise StorageError('The preserved proxy storage is invalid')
+                    live_paths.add(Path(source))
+                    live_paths.add(Path(source).resolve(strict=False))
         if not live_paths:
             raise StorageError('The preserved proxy storage is missing')
     for row in rows:

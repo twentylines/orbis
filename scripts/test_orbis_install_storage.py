@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 
@@ -109,6 +110,56 @@ class InstallationStorageTests(unittest.TestCase):
             legacy = STORAGE.review(self.root, self.docker, self.bundle, scope='controller')
             self.assertIn(proxy_id, [item['id'] for item in legacy['containers']])
             self.assertNotIn('traefik', next(item for item in legacy['resources'] if item['source'] == str(self.root)).get('excludedPaths', []))
+
+    def test_live_proxy_scope_requires_exact_verified_pair(self):
+        live_id, old_id, extra_id = (FIXTURES.identifier(name) for name in ('proxy', 'old-proxy', 'extra-proxy'))
+        folder = self.root / 'traefik'
+        (folder / 'shared').mkdir(parents=True)
+        live_folder = self.root.parent / 'protected-proxy'
+        live_folder.mkdir()
+        def row(identifier, name, state):
+            return {'id': identifier, 'name': name, 'image': 'traefik:3', 'project': 'runtipi',
+                    'service': 'runtipi-reverse-proxy', 'workingDir': str(self.root), 'managed': '',
+                    'appUrn': '', 'state': state, 'publishedPorts': ''}
+        live = row(live_id, 'runtipi-reverse-proxy', 'running')
+        old = row(old_id, 'orbis-proxy-original', 'exited')
+        def raw(item):
+            return {'id': item['id'], 'name': '/' + item['name'], 'state': item['state'],
+                    'image': item['image'], 'imageId': 'sha256:' + 'f' * 64, 'labels': {},
+                    'mounts': [{'Type': 'bind', 'Source': str(live_folder if item['id'] == live_id else folder),
+                                'Destination': '/etc/traefik', 'RW': item['id'] != live_id}],
+                    'autoRemove': False, 'stopTimeout': 10,
+                    'restartPolicy': {'Name': 'no', 'MaximumRetryCount': 0}}
+        base = self.docker.containers()
+        report, installation = STORAGE.APPS.selected_installation(self.docker, self.root)
+        original_app = self.docker.app
+        rows = base + [live, old]
+        def app(identifier):
+            return raw(next(item for item in rows if item['id'] == identifier)) if identifier in {live_id, old_id, extra_id} else original_app(identifier)
+        runtime = SimpleNamespace(inspect=lambda identifier: {'Id': identifier}, reader=None)
+        adoption = SimpleNamespace(Adoption=lambda *args: SimpleNamespace(runtime=runtime),
+                                   verified_preserved_pair=lambda *args: {'liveId': live_id, 'retainedId': old_id})
+        load = STORAGE.APPS.load_script
+        with mock.patch.object(self.docker, 'containers', side_effect=lambda: copy.deepcopy(rows)), \
+                mock.patch.object(self.docker, 'app', side_effect=app), \
+                mock.patch.object(STORAGE.APPS, 'selected_installation', return_value=(report, installation)), \
+                mock.patch.object(STORAGE.APPS, 'load_script', side_effect=lambda name, key: adoption if name == 'orbis-proxy-adoption.py' else load(name, key)):
+            result = STORAGE.review(self.root, self.docker, self.bundle, check_capacity=False, scope=STORAGE.LIVE_PROXY_SCOPE)
+            self.assertFalse({live_id, old_id} & {item['id'] for item in result['containers']})
+            root_resource = next(item for item in result['resources'] if item['source'] == str(self.root))
+            self.assertIn('traefik', root_resource.get('excludedPaths', []))
+            self.assertIs(runtime.reader, self.docker)
+            rows.append(row(extra_id, 'unknown', 'exited'))
+            with self.assertRaisesRegex(STORAGE.StorageError, 'candidates differ'):
+                STORAGE.review(self.root, self.docker, self.bundle, check_capacity=False, scope=STORAGE.LIVE_PROXY_SCOPE)
+            rows.pop()
+            live['state'] = 'exited'
+            with self.assertRaisesRegex(STORAGE.StorageError, 'Exactly one'):
+                STORAGE.review(self.root, self.docker, self.bundle, check_capacity=False, scope=STORAGE.LIVE_PROXY_SCOPE)
+            live['state'] = 'running'
+            old.update(name='runtipi-reverse-proxy', state='running')
+            with self.assertRaisesRegex(STORAGE.DETECT.InspectionError, 'duplicate'):
+                STORAGE.review(self.root, self.docker, self.bundle, check_capacity=False, scope=STORAGE.LIVE_PROXY_SCOPE)
 
     def test_live_proxy_scope_excludes_only_verified_dedicated_reset_binding(self):
         proxy_id = FIXTURES.identifier('proxy-reset-scope')
