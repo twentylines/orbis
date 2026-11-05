@@ -156,12 +156,26 @@ export class DesktopPreferencesService {
     return selectedPreferences(await this.readSelectedRaw(userId), DEFAULT_DESKTOP_PREFERENCES);
   }
 
+  backupSnapshot(userId: number): Promise<DesktopPreferences> {
+    return this.serialize(userId, async () => {
+      const value = desktopPreferencesSchema.onDeepUndeclaredKey('reject').assert(JSON.parse(await this.readSelectedRaw(userId)));
+      return {
+        ...DEFAULT_DESKTOP_PREFERENCES,
+        ...value,
+        wallpaperMode: value.wallpaperMode ?? (value.wallpaperPreset || value.appearance?.wallpaperImage ? 'custom' : 'theme'),
+        mode: value.mode ?? (value.preset === 'graphite' ? 'dark' : 'light'),
+        workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, ...value.workspace },
+        appearance: normaliseDesktopAppearance(value.appearance),
+      };
+    });
+  }
+
   private async readSelectedRaw(userId: number) {
     try {
       const handle = await fs.open(this.fileFor(userId), fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
       try {
         const stat = await handle.stat();
-        if (!stat.isFile() || stat.size > 1024 * 1024 || stat.mode & 0o077 || (process.getuid && stat.uid !== process.getuid()))
+        if (!stat.isFile() || stat.nlink !== 1 || stat.size > 1024 * 1024 || stat.mode & 0o077 || (process.getuid && stat.uid !== process.getuid()))
           throw new UnsupportedDesktopPreferencesError();
         return await handle.readFile('utf8');
       } finally {

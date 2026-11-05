@@ -20,6 +20,18 @@ const emptyState = (): ThemePackState => ({ formatVersion: 1, installed: [], sel
 const sameVersion = (first: { id: string; version: string }, second: { id: string; version: string }) =>
   first.id === second.id && first.version === second.version;
 
+export function validateStoredThemeState(value: unknown): ThemePackState {
+  const state = themePackStateSchema.onDeepUndeclaredKey('reject').assert(structuredClone(value));
+  for (const record of state.installed.flatMap((item) => [item, ...(item.previous ? [item.previous] : [])])) {
+    if (
+      record.digest !== digest(record.manifest) ||
+      !legacyThemePacks.some((pack) => sameVersion(pack, record.manifest) && digest(pack) === record.digest)
+    )
+      throw new BadRequestException('Saved theme version did not pass integrity checks.');
+  }
+  return state;
+}
+
 export function validateThemeAsset(manifest: ThemePackManifest, data: Buffer) {
   const asset = manifest.assets[0];
   let dimensions: ReturnType<typeof imageDimensionsFromData>;
@@ -97,15 +109,7 @@ export class ThemePacksService {
   private async read(userId: number): Promise<ThemePackState> {
     try {
       const folder = await this.directory(userId);
-      const parsed = themePackStateSchema.assert(JSON.parse((await this.readPrivate(path.join(folder, 'registry.json'), 131_072)).toString()));
-      for (const record of parsed.installed.flatMap((item) => [item, ...(item.previous ? [item.previous] : [])])) {
-        if (
-          record.digest !== digest(record.manifest) ||
-          !legacyThemePacks.some((pack) => sameVersion(pack, record.manifest) && digest(pack) === record.digest)
-        )
-          throw new BadRequestException('Saved theme version did not pass integrity checks.');
-      }
-      return parsed;
+      return validateStoredThemeState(JSON.parse((await this.readPrivate(path.join(folder, 'registry.json'), 131_072)).toString()));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return emptyState();
       if (error instanceof BadRequestException) throw error;
@@ -147,6 +151,46 @@ export class ThemePacksService {
     return { catalogue: [...discoverableThemePacks, ...legacyThemePacks.filter((pack) => installed.has(pack.id))], state };
   }
 
+  backupSnapshot(userId: number) {
+    return this.serial(userId, async () => {
+      const state = await this.read(userId);
+      const assets = new Map<string, Buffer>();
+      for (const record of state.installed.flatMap((item) => [item, ...(item.previous ? [item.previous] : [])])) {
+        const manifest = record.manifest;
+        const folder = await this.directory(userId, [manifest.id, manifest.version]);
+        const data = await this.readPrivate(path.join(folder, manifest.wallpaper), 4_194_304);
+        validateThemeAsset(manifest, data);
+        assets.set(manifest.wallpaper, data);
+      }
+      return { state, assets: [...assets].map(([id, data]) => ({ id, data })) };
+    });
+  }
+
+  async restoreBackupSnapshot(userId: number, input: { state: ThemePackState; assets: { id: string; data: Buffer }[] }) {
+    const state = validateStoredThemeState(input.state);
+    if (!Array.isArray(input.assets) || input.assets.length > 24) throw new BadRequestException('Saved theme assets could not be verified.');
+    const assets = new Map<string, Buffer>();
+    for (const asset of input.assets) {
+      if (!asset || !/^[a-f0-9]{64}$/.test(asset.id) || !Buffer.isBuffer(asset.data) || asset.data.length > 4_194_304 || assets.has(asset.id))
+        throw new BadRequestException('Saved theme assets could not be verified.');
+      assets.set(asset.id, Buffer.from(asset.data));
+    }
+    const manifests = state.installed.flatMap((item) => [item.manifest, ...(item.previous ? [item.previous.manifest] : [])]);
+    if (assets.size !== new Set(manifests.map((manifest) => manifest.wallpaper)).size)
+      throw new BadRequestException('Saved theme assets could not be verified.');
+    for (const manifest of manifests) {
+      const data = assets.get(manifest.wallpaper);
+      if (!data) throw new BadRequestException('Saved theme photograph is missing.');
+      validateThemeAsset(manifest, data);
+    }
+    return this.serial(userId, async () => {
+      await this.read(userId);
+      for (const manifest of manifests) await this.stageData(userId, manifest, assets.get(manifest.wallpaper) as Buffer);
+      await this.write(userId, state);
+      return this.snapshot(userId);
+    });
+  }
+
   private manifest(id: string, version?: string) {
     if (!themePackIdSchema.allows(id) || (version !== undefined && !themePackVersionSchema.allows(version)))
       throw new BadRequestException('Invalid theme version.');
@@ -177,6 +221,11 @@ export class ThemePacksService {
 
   private async stage(userId: number, manifest: ThemePackManifest) {
     const data = await this.bundledAsset(manifest);
+    return this.stageData(userId, manifest, data);
+  }
+
+  private async stageData(userId: number, manifest: ThemePackManifest, data: Buffer) {
+    validateThemeAsset(manifest, data);
     const folder = await this.directory(userId, [manifest.id], true);
     const temporaryName = `.install-${randomUUID()}`;
     const temporary = await this.directory(userId, [manifest.id, temporaryName], true);

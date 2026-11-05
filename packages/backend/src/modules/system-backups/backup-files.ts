@@ -351,12 +351,22 @@ export async function copyBackupFiles(
   return manifest;
 }
 
-export async function archiveBackup(content: string, archive: string, signal: AbortSignal) {
+export async function archiveBackup(content: string, archive: string, signal: AbortSignal, options: { gzip?: boolean } = {}) {
   signal.throwIfAborted();
+  if (options.gzip !== undefined && typeof options.gzip !== 'boolean') throw new BackupRequirementError('Unsupported archive compression.');
   const output = await fs.open(archive, 'wx', 0o600);
   const child = spawn(
     'tar',
-    ['--format=pax', '--no-xattrs', ...(process.platform === 'darwin' ? ['--no-fflags'] : []), '-czf', '-', '-C', content, '.'],
+    [
+      '--format=pax',
+      '--no-xattrs',
+      ...(process.platform === 'darwin' ? ['--no-fflags'] : []),
+      options.gzip === false ? '-cf' : '-czf',
+      '-',
+      '-C',
+      content,
+      '.',
+    ],
     {
       stdio: ['ignore', 'pipe', 'pipe'],
       signal,

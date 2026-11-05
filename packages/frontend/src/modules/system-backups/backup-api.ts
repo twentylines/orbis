@@ -243,7 +243,7 @@ export function downloadBackup(
   id: string,
   credentials: Partial<BackupCredentials> | { creationSession: true },
   onError: (message: string) => void,
-  kind: 'backup' | 'capture' = 'backup',
+  kind: 'backup' | 'capture' | 'settings' = 'backup',
 ): () => void {
   const frame = document.createElement('iframe');
   frame.hidden = true;
@@ -251,9 +251,14 @@ export function downloadBackup(
   frame.name = `orbis-backup-download-${Date.now()}-${++downloadSequence}`;
   const form = document.createElement('form');
   form.method = 'POST';
-  if (kind === 'capture' && !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id))
+  if ((kind === 'capture' || kind === 'settings') && !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id))
     throw new Error('Choose a valid capture archive.');
-  form.action = kind === 'capture' ? `/api/system-backups/capsules/${id}/download` : endpoint(`/${id}/download`);
+  form.action =
+    kind === 'capture'
+      ? `/api/system-backups/capsules/${id}/download`
+      : kind === 'settings'
+        ? `/api/system-backups/settings-bundles/${id}/download`
+        : endpoint(`/${id}/download`);
   form.target = frame.name;
   for (const [name, value] of Object.entries(credentials)) {
     if (!value) continue;

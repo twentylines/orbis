@@ -320,6 +320,17 @@ test('native attachment POST clears credential fields and exposes no success cla
     expect(form.action).not.toContain('creationSession');
     expect(fields.every((field) => field.value === '')).toBe(true);
     creationCleanup();
+    fields.length = 0;
+    const settingsCleanup = downloadBackup(id, { password: 'test-value' }, (message) => errors.push(message), 'settings');
+    expect(sent).toMatchObject({
+      method: 'POST',
+      action: `/api/system-backups/settings-bundles/${id}/download`,
+      fields: [['password', 'test-value']],
+    });
+    expect(form.action).not.toContain('test-value');
+    expect(fields.every((field) => field.value === '')).toBe(true);
+    settingsCleanup();
+    expect(() => downloadBackup('../outside', { password: 'test-value' }, () => undefined, 'settings')).toThrow();
   } finally {
     if (originalDocument) Object.defineProperty(globalThis, 'document', originalDocument);
     else Reflect.deleteProperty(globalThis, 'document');

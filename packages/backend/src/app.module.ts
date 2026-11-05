@@ -50,6 +50,7 @@ import { BackupMaintenanceInterceptor, backupMaintenanceMiddleware } from './com
 import { ResetModule } from './modules/system-reset/reset.module';
 import { CapsulesModule } from './modules/time-machine-capsules/capsules.module';
 import { ThemeFrameworkCatalogueModule } from './modules/theme-framework-catalogue/theme-framework-catalogue.module';
+import { SettingsBackupsModule } from './modules/system-backups/settings-backups.module';
 
 const DEFAULT_THROTTLE_TTL = 60_000;
 const DEFAULT_THROTTLE_LIMIT = 300;
@@ -93,6 +94,7 @@ const imports: NonNullable<ModuleMetadata['imports']> = [
   NearbyDiscoveryModule,
   ResetModule,
   CapsulesModule,
+  SettingsBackupsModule,
 ];
 
 if (process.env.NODE_ENV === 'production') {

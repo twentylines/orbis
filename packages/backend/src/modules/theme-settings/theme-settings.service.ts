@@ -17,6 +17,18 @@ import { DesktopPreferencesService } from '../desktop-preferences/desktop-prefer
 import { ThemePacksService } from '../theme-packs/theme-packs.service';
 import { ThemeSettingsStore } from './theme-settings.store';
 
+export function validateStoredThemeSettings(value: unknown): ThemeSettingsDocument {
+  const document = themeSettingsDocumentSchema.onDeepUndeclaredKey('reject').assert(structuredClone(value));
+  for (const entry of document.settings.entries) {
+    const descriptor = [builtinInterfaceTheme, ...legacyThemeVersions.map((version) => registeredInterfaceTheme({ id: entry.id, version }))].find(
+      (candidate) => candidate?.id === entry.id && candidate.settingsVersion === entry.settingsVersion,
+    );
+    if (!descriptor || !interfaceThemeSettingsEntryAllows(descriptor, entry))
+      throw new ConflictException('Saved theme values need a compatibility review.');
+  }
+  return document;
+}
+
 @Injectable()
 export class ThemeSettingsService {
   private readonly writes = new Map<number, Promise<unknown>>();
@@ -73,6 +85,22 @@ export class ThemeSettingsService {
   async snapshot(userId: number) {
     const [document, { state }] = await Promise.all([this.read(userId), this.packs.snapshot(userId)]);
     return this.projection(document, state.selected);
+  }
+
+  async backupSnapshot(userId: number) {
+    return validateStoredThemeSettings(await this.read(userId));
+  }
+
+  async restoreBackupSnapshot(userId: number, value: unknown, expectedRevision: number) {
+    const restored = validateStoredThemeSettings(value);
+    return this.serialize(userId, async () => {
+      const current = await this.read(userId);
+      this.assertRevision(current, expectedRevision);
+      const next = { ...restored, revision: current.revision + 1 };
+      await this.store.write(userId, next);
+      const { state } = await this.packs.snapshot(userId);
+      return this.projection(next, state.selected);
+    });
   }
 
   async update(userId: number, input: unknown) {

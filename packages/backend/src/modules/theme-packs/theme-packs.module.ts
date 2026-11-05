@@ -10,5 +10,6 @@ import { ThemeSettingsService } from '../theme-settings/theme-settings.service';
   imports: [ConfigurationModule, DesktopPreferencesModule],
   controllers: [ThemePacksController, ThemeSettingsController],
   providers: [ThemePacksService, ThemeSettingsService],
+  exports: [ThemePacksService, ThemeSettingsService],
 })
 export class ThemePacksModule {}

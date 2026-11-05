@@ -33,6 +33,7 @@ function render(
   initialImportId?: string,
   statusError = false,
   exports: ExportJob[] = [],
+  allowCreate = true,
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
   client.setQueryData(appContextQueryKey(), { user: { id: 7, operator: true, totpEnabled: true } });
@@ -53,7 +54,13 @@ function render(
     <MemoryRouter>
       <QueryClientProvider client={client}>
         <AppContextProvider>
-          <SystemBackupsSettings restoreOnly={embedded} embedded={embedded} recoveryActions={recoveryActions} initialImportId={initialImportId} />
+          <SystemBackupsSettings
+            allowCreate={allowCreate}
+            restoreOnly={embedded}
+            embedded={embedded}
+            recoveryActions={recoveryActions}
+            initialImportId={initialImportId}
+          />
         </AppContextProvider>
       </QueryClientProvider>
     </MemoryRouter>,
@@ -690,4 +697,12 @@ test('stopping and recovering an ordinary restore use session authorization unle
       'current account password',
     );
   }
+});
+
+test('older full backups retain download and restore access without offering another full-app export', () => {
+  const markup = render(null, false, undefined, [], undefined, false, [completedExport], false);
+  expect(markup).toContain('Older full backups');
+  expect(markup).toContain('>Download</button>');
+  expect(markup).toContain('Restore a backup');
+  expect(markup).not.toContain('Create a backup');
 });

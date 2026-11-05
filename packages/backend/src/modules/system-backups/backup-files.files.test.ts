@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { copyBackupFiles, inventoryBackup, packageBackup, privateBackupDirectory, type BackupProgress } from './backup-files';
+import { archiveBackup, copyBackupFiles, inventoryBackup, packageBackup, privateBackupDirectory, type BackupProgress } from './backup-files';
 import { decryptBackup } from './backup-crypto';
 import { readTarArchive } from '@/core/archive/tar-metadata';
 import { randomUUID } from 'node:crypto';
@@ -69,6 +69,23 @@ it('round-trips nested app data, an empty directory and private configuration wi
   expect(await fs.readFile(path.join(restored, 'app-data', 'data.bin'))).toEqual(await fs.readFile(path.join(source, 'data.bin')));
   expect(await fs.readdir(path.join(restored, 'app-data', 'empty'))).toEqual([]);
   expect((await fs.readdir(root)).some((name) => name.endsWith('.partial'))).toBe(false);
+});
+
+it('can package already encrypted parts without gzip and preserves the existing compressed default', async () => {
+  const content = path.join(root, 'encrypted-parts');
+  await fs.mkdir(content, { mode: 0o700 });
+  await fs.writeFile(path.join(content, 'opaque.orbis'), 'disposable encrypted-part fixture', { mode: 0o600 });
+  for (const gzip of [false, true]) {
+    const destination = path.join(root, gzip ? 'compressed.tar.gz' : 'plain.tar');
+    await archiveBackup(content, destination, signal(), gzip ? undefined : { gzip: false });
+    const entries = await readTarArchive(destination, gzip, signal(), { strict: true });
+    expect(entries.filter((entry) => entry.type === '-').map((entry) => entry.path)).toEqual(['./opaque.orbis']);
+    const bytes = await fs.readFile(destination);
+    expect(bytes.subarray(0, 2).equals(Buffer.from([31, 139]))).toBe(gzip);
+  }
+  const invalid = path.join(root, 'invalid.tar');
+  await expect(archiveBackup(content, invalid, signal(), { gzip: 'false' as unknown as boolean })).rejects.toThrow();
+  await expect(fs.lstat(invalid)).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
 it('refuses a symbolic link instead of following it into another directory', async () => {

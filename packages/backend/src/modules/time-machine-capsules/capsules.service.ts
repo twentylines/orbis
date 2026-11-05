@@ -12,7 +12,8 @@ import { BackupDatabaseService } from '../system-backups/backup-database.service
 import { privateBackupDirectory } from '../system-backups/backup-files';
 import { acquireBackupDisk } from '@/common/backup-disk';
 import { enterBackupMutation } from '@/common/backup-maintenance';
-import { capsuleLimits, exportCapsule, importCapsule, type CapsuleSource } from './capsule';
+import { capsuleLimits, importCapsule } from './capsule';
+import { exportPortablePoint } from './portable-point-export';
 import { verifyCapsuleContents } from './verify';
 
 type Credentials = { password: string; totpCode?: string };
@@ -173,61 +174,30 @@ export class CapsulesService {
       job: this.public(job),
       start: () =>
         this.run(job, async (signal) =>
-          this.machine.withPortablePoint(pointId, ownerId, request, credentials, signal, async (value) => {
-            if (value.point.version !== 2 || !value.point.archiveSha256 || !value.point.runtimeCipherSha256 || !value.point.metadataSha256)
-              throw fail();
-            const dir = path.join(this.config.get('directories').dataDir, 'backups', 'time-machine', 'points', pointId);
-            const metadataStat = await fs.lstat(path.join(dir, 'metadata.orbis'));
-            const entries: CapsuleSource[] = [
-              { name: 'backup.orbis', bytes: value.point.archiveBytes, sha256: value.point.archiveSha256, source: value.source },
-              {
-                name: 'runtime.orbis',
-                bytes: value.point.runtimeBytes,
-                sha256: value.point.runtimeCipherSha256,
-                file: path.join(dir, 'runtime.orbis'),
-              },
-              { name: 'metadata.orbis', bytes: metadataStat.size, sha256: value.point.metadataSha256, file: path.join(dir, 'metadata.orbis') },
-            ];
-            const preview = value.metadata.preview;
-            if (preview.available && preview.wallpaperAsset.available)
-              entries.push({
-                name: 'wallpaper.orbis',
-                bytes: preview.wallpaperAsset.bytes + 52,
-                sha256: preview.wallpaperAsset.cipherSha256,
-                file: path.join(dir, 'wallpaper.orbis'),
-              });
-            if (preview.available && preview.appIcons)
-              entries.push({
-                name: 'icons.orbis',
-                bytes: preview.appIcons.bytes + 52,
-                sha256: preview.appIcons.cipherSha256,
-                file: path.join(dir, 'icons.orbis'),
-              });
-            if (
-              [...this.jobs.values()].reduce((sum, item) => sum + item.bytes, 0) +
-                entries.reduce((sum, item) => sum + item.bytes, 0) +
-                8 * 1024 ** 2 >
-              capsuleLimits.bytes + 8 * 1024 ** 2
-            )
-              throw fail();
-            const result = await exportCapsule({
-              destination: path.join(this.directory(job.id), 'capsule.orbis-tm'),
+          (async () => {
+            const result = await exportPortablePoint({
+              machine: this.machine,
+              dataDir: this.config.get('directories').dataDir,
               pointId,
-              createdAt: value.point.createdAt,
-              pointKey: value.pointKey,
-              entries,
+              ownerId,
+              request,
+              credentials,
               passphrase,
-              signal: value.signal,
+              destination: path.join(this.directory(job.id), 'capsule.orbis-tm'),
+              signal,
               progress: (done, total) => {
                 job.completedBytes = done;
                 job.totalBytes = total;
+              },
+              admitBytes: (bytes) => {
+                if ([...this.jobs.values()].reduce((sum, item) => sum + item.bytes, 0) + bytes > capsuleLimits.bytes) throw fail();
               },
             });
             job.bytes = result.bytes;
             job.capsuleId = result.capsuleId;
             job.sha256 = result.sha256;
             job.status = 'ready';
-          }),
+          })(),
         ),
     };
   }
@@ -371,8 +341,8 @@ export class CapsulesService {
             passphrase,
             expectedSha256: job.sha256 ?? undefined,
             signal,
-            verify: (manifest, directory, signal) =>
-              verifyCapsuleContents({
+            verify: async (manifest, directory, signal) => {
+              await verifyCapsuleContents({
                 manifest,
                 directory,
                 signal,
@@ -382,7 +352,8 @@ export class CapsulesService {
                   runtipiVersion: this.config.get('version'),
                   architecture: this.config.get('architecture'),
                 },
-              }),
+              });
+            },
           });
           await verified.dispose();
           job.capsuleId = verified.capsuleId;

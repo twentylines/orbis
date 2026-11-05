@@ -92,6 +92,44 @@ describe('account theme pack lifecycle with real files', () => {
     expect((await new ThemePacksService(config).snapshot(7)).state.selected).toBeNull();
   });
 
+  it('backs up current and previous theme assets and restores them to a different account without a bundled download', async () => {
+    await seedLegacyInstallation(7, pack.id, '1.0.0');
+    await service.select(7, { id: pack.id, version: '1.0.0' });
+    await service.install(7, pack.id, '1.1.0', true);
+    const saved = await service.backupSnapshot(7);
+    expect(saved.state.installed[0]?.previous?.manifest.version).toBe('1.0.0');
+    expect(saved.assets.map((asset) => asset.id)).toEqual([
+      ...new Set(saved.state.installed.flatMap((item) => [item.manifest.wallpaper, ...(item.previous ? [item.previous.manifest.wallpaper] : [])])),
+    ]);
+    await service.restoreBackupSnapshot(8, saved);
+    expect(await service.backupSnapshot(8)).toEqual(saved);
+    await service.rollback(8, pack.id);
+    expect((await service.snapshot(8)).state.selected?.version).toBe('1.0.0');
+    expect((await service.snapshot(7)).state.selected?.version).toBe('1.1.0');
+  });
+
+  it('rejects missing, extra, duplicate, corrupt and unregistered backup assets before writing account state', async () => {
+    await seedLegacyInstallation(7);
+    const saved = await service.backupSnapshot(7);
+    const firstAsset = saved.assets[0];
+    if (!firstAsset) throw new Error('Missing seeded theme asset');
+    for (const assets of [
+      [],
+      [...saved.assets, firstAsset],
+      [{ id: 'a'.repeat(64), data: Buffer.from('unrecognized') }],
+      saved.assets.map((asset) => ({ ...asset, data: Buffer.from('corrupt') })),
+    ]) {
+      await expect(service.restoreBackupSnapshot(8, { state: saved.state, assets })).rejects.toThrow();
+      await expect(fs.stat(path.join(directory, 'state/theme-packs/8'))).rejects.toMatchObject({ code: 'ENOENT' });
+    }
+    const altered = structuredClone(saved.state);
+    const installed = altered.installed[0];
+    if (!installed) throw new Error('Missing seeded theme installation');
+    installed.manifest.name = 'Changed manifest';
+    await expect(service.restoreBackupSnapshot(8, { state: altered, assets: saved.assets })).rejects.toThrow();
+    expect((await service.snapshot(8)).state.installed).toEqual([]);
+  });
+
   it('rejects asset corruption and unsafe versions without replacing the installed selection', async () => {
     await seedLegacyInstallation(7);
     await service.select(7, { id: pack.id, version: pack.version });

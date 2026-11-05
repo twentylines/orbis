@@ -29,6 +29,8 @@ import { privateBackupDirectory } from './backup-files';
 import { timeMachineConflict } from './time-machine-policy';
 import { capturedWallpaper, type CapturedWallpaper } from './time-machine-assets';
 import { requireV6SealAdmission, reviewV6SealArchive, type V6SealAdmission } from './time-machine-v6-seal-admission';
+import { withVerifiedCapsuleContents, type VerifiedCapsuleContents, type VerifiedCapsuleBinding } from '../time-machine-capsules/verify';
+import { inspectCapsuleEntry } from '../time-machine-capsules/verified-source';
 
 const envelopeSchema = type({
   version: '1',
@@ -65,6 +67,14 @@ const runtimeStoredPointSchema = legacyStoredPointSchema
   })
   .onUndeclaredKey('reject');
 const storedPointSchema = legacyStoredPointSchema.or(runtimeStoredPointSchema);
+const portableImportMarkerSchema = type({
+  version: '1',
+  operationId: timeMachineIdSchema,
+  ownerId: 'number.integer > 0',
+  pointId: timeMachineIdSchema,
+  archiveSha256: timeMachineHashSchema,
+  metadataSha256: timeMachineHashSchema,
+}).onUndeclaredKey('reject');
 export type StoredTimeMachinePoint = typeof storedPointSchema.infer;
 type Draft<T> = T extends unknown ? Omit<T, 'archiveBytes' | 'archiveSha256' | 'runtime'> : never;
 export type TimeMachineDraftMetadata = Draft<TimeMachineMetadata>;
@@ -81,6 +91,22 @@ export class TimeMachineStore {
   private pointDirectory(id: string) {
     if (!timeMachineIdSchema.allows(id)) throw timeMachineConflict('point-not-found');
     return path.join(this.root(), 'points', id);
+  }
+  private async portableStorageParents() {
+    const parent = await fs.lstat(this.dataDir);
+    if (!parent.isDirectory() || parent.isSymbolicLink() || (await fs.realpath(this.dataDir)) !== path.resolve(this.dataDir))
+      throw timeMachineConflict('storage-unavailable');
+    for (const directory of [
+      path.join(this.dataDir, 'backups'),
+      this.root(),
+      ...['points', 'keys', 'portable-staging'].map((name) => path.join(this.root(), name)),
+    ]) {
+      try {
+        await this.directory(directory);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    }
   }
   private async directory(directory: string, create = false) {
     if (create) await privateBackupDirectory(directory);
@@ -239,6 +265,244 @@ export class TimeMachineStore {
     const value = JSON.parse((await this.read(path.join(this.pointDirectory(id), 'point.json'), 32_768)).toString());
     if (!storedPointSchema.allows(value) || value.id !== id) throw timeMachineConflict('point-integrity-failed');
     return value;
+  }
+  /** Caller holds global backup maintenance and disk leases through publication; this method does not acquire them. */
+  importPortablePoint(
+    ownerId: number,
+    token: VerifiedCapsuleContents,
+    signal: AbortSignal,
+    operationId?: string,
+  ): Promise<{ point: StoredTimeMachinePoint; created: boolean }> {
+    return this.serialize(async () => {
+      if (!Number.isSafeInteger(ownerId) || ownerId < 1 || (operationId !== undefined && !timeMachineIdSchema.allows(operationId)))
+        throw timeMachineConflict('invalid-request');
+      return withVerifiedCapsuleContents(token, signal, async (verified) => {
+        await this.portableStorageParents();
+        const { manifest, metadata } = verified;
+        if (metadata.version !== 2) throw timeMachineConflict('point-integrity-failed');
+        const metadataEntry = manifest.entries.find((entry) => entry.name === 'metadata.orbis');
+        if (!metadataEntry) throw timeMachineConflict('point-integrity-failed');
+        const assetBytes = manifest.entries
+          .filter((entry) => entry.name === 'wallpaper.orbis' || entry.name === 'icons.orbis')
+          .reduce((sum, entry) => sum + entry.bytes, 0);
+        const identity = {
+          version: 2 as const,
+          id: metadata.id,
+          ownerId,
+          createdAt: metadata.createdAt,
+          status: 'sealed' as const,
+          backupJobId: null,
+          issue: null,
+          archiveBytes: metadata.archiveBytes,
+          archiveSha256: metadata.archiveSha256,
+          metadataSha256: metadataEntry.sha256,
+          assetBytes,
+          runtimeBytes: metadata.runtime.cipherBytes,
+          runtimeCipherSha256: metadata.runtime.cipherSha256,
+          runtimeManifestSha256: metadata.runtime.manifestSha256,
+          imageCaptureSha256: metadata.runtime.imageCaptureSha256,
+          imageInventorySha256: metadata.runtime.imageInventorySha256,
+          configurationSetSha256: metadata.runtime.configurationSetSha256,
+        };
+        const names = [...manifest.entries.map((entry) => entry.name), 'point.json'].sort().join(',');
+        const checkContents = async (point: StoredTimeMachinePoint, directory: string) => {
+          await this.directory(directory);
+          const stored = storedPointSchema.assert(JSON.parse((await this.read(path.join(directory, 'point.json'), 32_768)).toString()));
+          if (JSON.stringify(stored) !== JSON.stringify(point)) throw timeMachineConflict('point-integrity-failed');
+          const contents = await fs.readdir(directory);
+          if (
+            contents
+              .filter((name) => name !== 'portable-import.json')
+              .sort()
+              .join(',') !== names
+          )
+            throw timeMachineConflict('point-integrity-failed');
+          if (contents.includes('portable-import.json')) await this.portableImportMarker(point, directory);
+          for (const entry of manifest.entries) await inspectCapsuleEntry(directory, entry, signal);
+          const record = await this.metadataRecord(point, directory);
+          if (
+            JSON.stringify(record.metadata) !== JSON.stringify(metadata) ||
+            JSON.stringify(record.runtimeExpectation) !== JSON.stringify(verified.runtimeExpectation)
+          )
+            throw timeMachineConflict('point-integrity-failed');
+        };
+        const points = await this.list();
+        const existing = points.find((point) => point.id === metadata.id);
+        if (existing) {
+          if (
+            existing.ownerId !== ownerId ||
+            existing.status !== 'sealed' ||
+            Object.entries(identity).some(([key, value]) => !['backupJobId', 'issue'].includes(key) && Reflect.get(existing, key) !== value) ||
+            (await this.unwrap(existing)) !== manifest.pointKey
+          )
+            throw timeMachineConflict('point-integrity-failed');
+          await checkContents(existing, this.pointDirectory(existing.id));
+          await verified.recheck(signal);
+          return { point: existing, created: false };
+        }
+        const incoming = manifest.entries.reduce((sum, entry) => sum + entry.bytes, 0);
+        const retained = points.reduce(
+          (sum, point) =>
+            sum + point.archiveBytes + (point.assetBytes ?? 0) + (point.version === 2 ? point.runtimeBytes : 0) + timeMachineLimits.metadataBytes,
+          0,
+        );
+        let filesystem = this.root();
+        for (;;) {
+          try {
+            await fs.lstat(filesystem);
+            break;
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || filesystem === path.resolve(this.dataDir)) throw error;
+            filesystem = path.dirname(filesystem);
+          }
+        }
+        const space = await fs.statfs(filesystem, { bigint: true });
+        if (
+          points.length >= timeMachineLimits.points ||
+          retained + incoming > timeMachineLimits.bytes ||
+          space.bavail * space.bsize < BigInt(incoming + 256 * 1024 * 1024 + 32_768)
+        )
+          throw timeMachineConflict('capacity-exceeded');
+        if (points.length) {
+          const key = await this.masterKey(false);
+          try {
+            const keyId = createHash('sha256').update(key).digest('hex');
+            if (points.some((point) => point.envelope.keyId !== keyId)) throw timeMachineConflict('point-integrity-failed');
+          } finally {
+            key.fill(0);
+          }
+        }
+        signal.throwIfAborted();
+        const stagingParent = path.join(this.root(), 'portable-staging');
+        await this.directory(stagingParent, true);
+        const staging = await fs.mkdtemp(path.join(stagingParent, 'import-'));
+        await fs.chmod(staging, 0o700);
+        // Failed or ambiguously published generations remain private evidence outside points/.
+        await verified.copyTo(staging, signal);
+        const point = storedPointSchema.assert({ ...identity, envelope: await this.wrap(metadata.id, ownerId, manifest.pointKey) });
+        await this.atomic(path.join(staging, 'point.json'), JSON.stringify(point), false);
+        if (operationId)
+          await this.atomic(
+            path.join(staging, 'portable-import.json'),
+            JSON.stringify({
+              version: 1,
+              operationId,
+              ownerId,
+              pointId: point.id,
+              archiveSha256: point.archiveSha256,
+              metadataSha256: point.metadataSha256,
+            }),
+            false,
+          );
+        await checkContents(point, staging);
+        await verified.recheck(signal);
+        await this.sync(staging);
+        const destination = this.pointDirectory(point.id);
+        const parent = path.dirname(destination);
+        await this.directory(parent, true);
+        try {
+          await fs.lstat(destination);
+          throw timeMachineConflict('point-integrity-failed');
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
+        signal.throwIfAborted();
+        await fs.rename(staging, destination);
+        await this.sync(parent);
+        await this.sync(stagingParent);
+        return { point, created: true };
+      });
+    });
+  }
+  private async portableImportMarker(point: StoredTimeMachinePoint, directory: string) {
+    const marker = portableImportMarkerSchema.assert(JSON.parse((await this.read(path.join(directory, 'portable-import.json'), 4096)).toString()));
+    if (
+      !Number.isSafeInteger(marker.ownerId) ||
+      marker.ownerId !== point.ownerId ||
+      marker.pointId !== point.id ||
+      marker.archiveSha256 !== point.archiveSha256 ||
+      marker.metadataSha256 !== point.metadataSha256
+    )
+      throw timeMachineConflict('point-integrity-failed');
+    return marker;
+  }
+  /** Removes only this operation's verified library publication. Caller holds maintenance and disk leases. */
+  removePortableImport(ownerId: number, operationId: string, binding: VerifiedCapsuleBinding, signal: AbortSignal): Promise<{ removed: boolean }> {
+    return this.serialize(async () => {
+      if (
+        !Number.isSafeInteger(ownerId) ||
+        ownerId < 1 ||
+        !timeMachineIdSchema.allows(operationId) ||
+        !binding ||
+        !timeMachineIdSchema.allows(binding.pointId) ||
+        !Number.isSafeInteger(binding.createdAt) ||
+        binding.createdAt < 1 ||
+        !timeMachineHashSchema.allows(binding.archiveSha256) ||
+        !timeMachineHashSchema.allows(binding.metadataSha256)
+      )
+        throw timeMachineConflict('invalid-request');
+      signal.throwIfAborted();
+      await this.portableStorageParents();
+      const directory = this.pointDirectory(binding.pointId);
+      let before: Awaited<ReturnType<typeof fs.lstat>>;
+      try {
+        before = await fs.lstat(directory);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { removed: false };
+        throw error;
+      }
+      await this.directory(directory);
+      const point = await this.load(binding.pointId);
+      if (
+        point.version !== 2 ||
+        point.status !== 'sealed' ||
+        point.ownerId !== ownerId ||
+        point.createdAt !== binding.createdAt ||
+        point.archiveSha256 !== binding.archiveSha256 ||
+        point.metadataSha256 !== binding.metadataSha256
+      )
+        throw timeMachineConflict('point-integrity-failed');
+      const marker = await this.portableImportMarker(point, directory);
+      if (marker.operationId !== operationId) throw timeMachineConflict('point-integrity-failed');
+      const metadata = await this.metadata(point);
+      const expectedNames = ['point.json', 'portable-import.json', 'backup.orbis', 'metadata.orbis', 'runtime.orbis'];
+      if (metadata.preview.available && metadata.preview.wallpaperAsset.available) {
+        expectedNames.push('wallpaper.orbis');
+        const wallpaper = await this.wallpaper(point, metadata.preview.wallpaperAsset);
+        wallpaper.data.fill(0);
+      }
+      if (metadata.preview.available && metadata.preview.appIcons) {
+        expectedNames.push('icons.orbis');
+        (await this.appIcons(point, metadata.preview.appIcons)).fill(0);
+      }
+      if ((await fs.readdir(directory)).sort().join(',') !== expectedNames.sort().join(',')) throw timeMachineConflict('point-integrity-failed');
+      await this.verifyArchive(point, signal);
+      for (const name of ['point.json', 'portable-import.json']) {
+        const file = path.join(directory, name);
+        const stat = await fs.lstat(file);
+        await this.read(file, name === 'point.json' ? 32_768 : 4096);
+        if (!sameStat(stat, await fs.lstat(file))) throw timeMachineConflict('point-integrity-failed');
+      }
+      if (
+        JSON.stringify(await this.load(point.id)) !== JSON.stringify(point) ||
+        (await this.portableImportMarker(point, directory)).operationId !== operationId ||
+        !sameStat(before, await fs.lstat(directory))
+      )
+        throw timeMachineConflict('point-integrity-failed');
+      const stagingParent = path.join(this.root(), 'portable-staging');
+      await this.directory(stagingParent, true);
+      signal.throwIfAborted();
+      const retired = path.join(stagingParent, `rollback-${randomUUID()}`);
+      await fs.rename(directory, retired);
+      await this.sync(path.dirname(directory));
+      await this.sync(stagingParent);
+      const after = await fs.lstat(retired);
+      if (['dev', 'ino', 'mode', 'uid'].some((key) => Reflect.get(before, key) !== Reflect.get(after, key)))
+        throw timeMachineConflict('point-integrity-failed');
+      await fs.rm(retired, { recursive: true });
+      await this.sync(stagingParent);
+      return { removed: true };
+    });
   }
   async update(point: StoredTimeMachinePoint) {
     const current = await this.load(point.id);
@@ -547,9 +811,8 @@ export class TimeMachineStore {
       await fs.rm(runtimeTemporary, { force: true });
     }
   }
-  private async metadataRecord(point: StoredTimeMachinePoint) {
+  private async metadataRecord(point: StoredTimeMachinePoint, directory = this.pointDirectory(point.id)) {
     if (point.status !== 'sealed' || !point.metadataSha256) throw timeMachineConflict('point-not-found');
-    const directory = this.pointDirectory(point.id);
     const source = path.join(directory, 'metadata.orbis');
     const maximum = timeMachineLimits.metadataBytes + runtimePayloadLimits.metadataBytes + 65536;
     const ciphertext = await this.read(source, maximum + 52);

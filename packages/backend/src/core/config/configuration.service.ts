@@ -52,6 +52,10 @@ const envSchema = type({
   EXPERIMENTAL_INSECURE_COOKIE: 'string',
 });
 
+export const runtimeUserSettingsSchema = settingsSchema
+  .merge({ experimental: type({ insecureCookie: 'boolean' }).onUndeclaredKey('reject') })
+  .onDeepUndeclaredKey('reject');
+
 export const isValidIpOrCidr = (value: string) => {
   return validator.isIP(value) || validator.isIPRange(value);
 };
@@ -216,6 +220,16 @@ export class ConfigurationService {
       this.logger.error('Failed to set user settings');
       throw new InternalServerErrorException('Failed to set user settings');
     }
+  }
+
+  public async adoptRestoredUserSettingsRuntime(value: unknown) {
+    const parsed = runtimeUserSettingsSchema.assert(structuredClone(value));
+    await this.initSentry({ release: this.config.version, allowSentry: parsed.allowErrorMonitoring });
+    this.config.userSettings = {
+      ...parsed,
+      themeBase: parsed.themeBase ?? 'light',
+      themeColor: parsed.themeColor ?? 'blue',
+    };
   }
 
   public async initSentry(params: { release: string; allowSentry: boolean }) {

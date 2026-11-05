@@ -9,6 +9,8 @@ import { type SettingsFormValues, UserSettingsForm } from '../components/user-se
 import { UpdateSchedules } from './automatic-updates-settings';
 import { ReleaseChannelSettings } from './release-channel-settings';
 import { SystemBackupsSettings } from '@/modules/system-backups/system-backups-settings';
+import { SettingsBundleSettings } from '@/modules/system-backups/settings-bundle-settings';
+import { useState } from 'react';
 import { HostTransferPanel } from '@/modules/host-transfer/host-transfer-panel';
 
 type Props = {
@@ -20,6 +22,7 @@ export const UserSettingsContainer = ({ initialValues, section = 'general' }: Pr
   const { t } = useTranslation();
   const { refreshAppContext, user } = useAppContext();
   const { refreshUserContext, setUserContext } = useUserContext();
+  const [olderBackupsOpened, setOlderBackupsOpened] = useState(false);
   const updateSettings = useMutation({
     ...updateUserSettingsMutation(),
     onError: (e: TranslatableError) => {
@@ -48,14 +51,20 @@ export const UserSettingsContainer = ({ initialValues, section = 'general' }: Pr
     );
   if (section === 'backups')
     return (
-      <div id="setting-server-backups">
-        <SystemBackupsSettings
-          recoveryActions={
-            <div id="setting-server-transfer">
-              <HostTransferPanel contained />
-            </div>
-          }
-        />
+      <div id="setting-server-backups" className="settings-backup-groups">
+        <SettingsBundleSettings />
+        <details
+          className="system-backups-overview"
+          onToggle={(event) => {
+            if (event.currentTarget.open) setOlderBackupsOpened(true);
+          }}
+        >
+          <summary>Older full backups</summary>
+          {olderBackupsOpened ? <SystemBackupsSettings allowCreate={false} /> : null}
+        </details>
+        <div id="setting-server-transfer">
+          <HostTransferPanel contained />
+        </div>
       </div>
     );
   return (

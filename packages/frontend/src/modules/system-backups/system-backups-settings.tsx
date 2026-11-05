@@ -339,6 +339,7 @@ function Review({ review }: { review: BackupReview }) {
     'runtipi-version': 'Runtipi version differs',
     'newer-orbis': 'Backup needs a newer Orbis version',
     'unknown-orbis-version': 'Orbis version could not be compared',
+    'volume-restore-support': 'This version of Orbis cannot restore all the app data in this backup.',
   };
   return (
     <div className="system-backups-review">
@@ -396,6 +397,7 @@ function Review({ review }: { review: BackupReview }) {
 }
 
 type BackupSettingsProps = {
+  allowCreate?: boolean;
   restoreOnly?: boolean;
   recoveryScene?: boolean;
   embedded?: boolean;
@@ -406,6 +408,7 @@ type BackupSettingsProps = {
 };
 
 export function SystemBackupsSettings({
+  allowCreate = true,
   restoreOnly = false,
   recoveryScene = false,
   embedded = false,
@@ -1448,7 +1451,7 @@ export function SystemBackupsSettings({
                 Encrypted backup
               </h3>
             ) : (
-              <h2 id={`${id}-title`}>{restoreOnly ? 'Restore a backup' : 'Full backup & recovery'}</h2>
+              <h2 id={`${id}-title`}>{restoreOnly ? 'Restore a backup' : allowCreate ? 'Full backup & recovery' : 'Older full backups'}</h2>
             )}
             {hasSettingsHeaderActions && !embedded ? (
               <SettingsHeaderAction>
@@ -1467,7 +1470,9 @@ export function SystemBackupsSettings({
           <p>
             {restoreOnly
               ? 'Verify the encrypted archive before replacing this server’s configuration and managed app data.'
-              : 'Orbis configuration, accounts and managed app data are backed up together in an encrypted file. Shared media is optional. Apps pause while their data is copied to keep it consistent.'}
+              : allowCreate
+                ? 'Orbis configuration, accounts and managed app data are backed up together in an encrypted file. Shared media is optional. Apps pause while their data is copied to keep it consistent.'
+                : 'Download saved full backups or verify an older archive before restoring it. These archives can include managed app data. Restoring one pauses apps and restarts Orbis.'}
           </p>
         )}
         {status.isPending ? <output>Reading backup capabilities…</output> : null}
@@ -1502,16 +1507,18 @@ export function SystemBackupsSettings({
         )
       ) : (
         <div className="system-backups-choices">
-          <div>
-            <h3>Create a backup</h3>
-            <p>
-              Encrypt with your account password or a separate backup passphrase. Server copies expire after {data?.exports.retentionHours ?? 24}{' '}
-              hours.
-            </p>
-            <Button type="button" variant="outline" disabled={working || unavailable} onClick={() => chooseAction({ kind: 'export' })}>
-              Create
-            </Button>
-          </div>
+          {allowCreate ? (
+            <div>
+              <h3>Create a backup</h3>
+              <p>
+                Encrypt with your account password or a separate backup passphrase. Server copies expire after {data?.exports.retentionHours ?? 24}{' '}
+                hours.
+              </p>
+              <Button type="button" variant="outline" disabled={working || unavailable} onClick={() => chooseAction({ kind: 'export' })}>
+                Create
+              </Button>
+            </div>
+          ) : null}
           <div>
             <h3>Restore a backup</h3>
             <p>

@@ -5,7 +5,9 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { backupMetadataBytes } from '../system-backups/backup-crypto';
 import { exportCapsule, importCapsule, type CapsuleSource } from './capsule';
+import { stabilizeDarwinFixtureCreation, stabilizeExistingDarwinFixtures } from '../system-backups/darwin-files.fixture';
 let root: string;
+let restoreFixtureCreation: () => void;
 let entries: CapsuleSource[];
 let expected: Map<string, Buffer>;
 const password = 'fixture-capsule-password';
@@ -15,6 +17,7 @@ const sha = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 beforeEach(async () => {
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'capsule-files-')));
   await fs.chmod(root, 0o700);
+  restoreFixtureCreation = stabilizeDarwinFixtureCreation(() => root);
   expected = new Map();
   entries = [];
   for (const name of ['backup.orbis', 'runtime.orbis', 'metadata.orbis'] as const) {
@@ -27,9 +30,11 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   vi.restoreAllMocks();
+  restoreFixtureCreation();
   await fs.rm(root, { recursive: true, force: true });
 });
 async function exported(name = 'capture.orbis-tm') {
+  stabilizeExistingDarwinFixtures(root);
   const destination = path.join(root, name);
   const result = await exportCapsule({
     destination,

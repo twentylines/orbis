@@ -16,6 +16,8 @@ import { captureInstallationMode, installationMode } from './common/installation
 import { BackupRestoreJournal } from './modules/system-backups/backup-restore-journal';
 import { BackupRestoresService } from './modules/system-backups/backup-restores.service';
 import { SystemBackupsService } from './modules/system-backups/system-backups.service';
+import { SettingsBackupApplyService } from './modules/system-backups/settings-backup-apply.service';
+import { prepareSettingsRestoreEnvironment } from './modules/system-backups/settings-restore-startup';
 import {
   captureRestoreStartupRole,
   retainedBootstrapStartup,
@@ -72,8 +74,10 @@ async function bootstrap() {
       throw new Error('Restore startup ownership changed.');
     captureInstallationMode({ ORBIS_INSTALLER_TRANSACTION: restore.state.id, ORBIS_INSTALLER_PHASE: 'resume' });
   } else captureInstallationMode();
-  await verifierDiagnostics.run('env', () =>
-    generateSystemEnvFile({ readOnly: restoreMode === 'verify' || retainedBootstrapStartup() || retainedSettledStartup() }),
+  await prepareSettingsRestoreEnvironment(DATA_DIR, () =>
+    verifierDiagnostics.run('env', () =>
+      generateSystemEnvFile({ readOnly: restoreMode === 'verify' || retainedBootstrapStartup() || retainedSettledStartup() }),
+    ),
   );
 
   const app = await verifierDiagnostics.run('app', () =>
@@ -88,6 +92,7 @@ async function bootstrap() {
   await verifierDiagnostics.run('database', () =>
     appService.bootstrap(() =>
       verifierDiagnostics.run('recovery', async () => {
+        await app.get(SettingsBackupApplyService).prepareStartup();
         await app.get(SystemBackupsService).onModuleInit();
         await app.get(BackupRestoresService).prepareStartup();
       }),

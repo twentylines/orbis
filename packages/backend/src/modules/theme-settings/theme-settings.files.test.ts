@@ -67,6 +67,34 @@ afterEach(async () => {
 });
 
 describe('separate private per-user theme state', () => {
+  it('restores backed-up theme namespaces with a fresh local revision and leaves other accounts unchanged', async () => {
+    await service.update(7, update(0));
+    const saved = await service.backupSnapshot(7);
+    const restored = await service.restoreBackupSnapshot(8, saved, 0);
+    expect(restored.settings).toEqual(saved.settings);
+    expect(restored.revision).toBe(1);
+    await service.update(8, update(1, 'accent', '#654321'));
+    await expect(service.restoreBackupSnapshot(8, saved, 1)).rejects.toThrow('changed');
+    expect((await service.snapshot(8)).current.values.find((item) => item.key === 'accent')?.value).toBe('#654321');
+    expect(await service.backupSnapshot(7)).toEqual(saved);
+    const next = await service.restoreBackupSnapshot(8, saved, 2);
+    expect(next.revision).toBe(3);
+    expect(next.settings).toEqual(saved.settings);
+  });
+
+  it('rejects incompatible or unknown saved theme namespaces without replacing current values', async () => {
+    await service.update(7, update(0));
+    const saved = await service.backupSnapshot(7);
+    for (const entry of [
+      { id: 'unknown-theme', settingsVersion: 1, values: [] },
+      { id: builtin.id, settingsVersion: 1, values: [{ key: 'unregistered-value', value: true }] },
+    ]) {
+      const altered = { ...saved, settings: { formatVersion: 1, entries: [entry] } };
+      await expect(service.restoreBackupSnapshot(7, altered, 1)).rejects.toThrow();
+      expect(await service.backupSnapshot(7)).toEqual(saved);
+    }
+  });
+
   it('reads empty state without creating directories or migrating legacy preferences', async () => {
     const snapshot = await service.snapshot(7);
     expect(snapshot.revision).toBe(0);

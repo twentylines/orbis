@@ -1811,10 +1811,9 @@ it('removes an ordinary point with the current session by default and enforces t
   await expect(machine.removeForSession(second.point.id, 1, {} as Request)).rejects.toThrow('account password');
   expect(await store().load(second.point.id)).toBeDefined();
 });
-it('reset presentation hides ordinary old Time Machine references while preserving actual interrupted recovery blockers', async () => {
-  await machine.list(1);
-  const old = await store().create(1);
-  await store().fail(old.point, 'capture-failed');
+it('lists saved captures after a completed reset only for their owner and preserves interrupted recovery blockers', async () => {
+  const saved = await capture();
+  expect(saved.status).toBe('sealed');
   const recovery = await store().create(1);
   await store().update({ ...recovery.point, status: 'interrupted', issue: 'capture-interrupted' });
   await new ResetState(data).save({
@@ -1827,7 +1826,10 @@ it('reset presentation hides ordinary old Time Machine references while preservi
     createdAt: Date.now() + 10,
   });
   const listed = await machine.list(1);
-  expect(listed.points.map((point) => point.id)).toEqual([recovery.point.id]);
-  expect((await store().load(old.point.id)).status).toBe('failed');
+  expect(listed.points.map((point) => point.id)).toEqual(expect.arrayContaining([saved.id, recovery.point.id]));
+  expect((await machine.inspect(saved.id, 1)).status).toBe('sealed');
+  expect((await machine.list(2)).points).toEqual([]);
+  await expect(machine.inspect(saved.id, 2)).rejects.toMatchObject({ response: { code: 'point-not-found' } });
+  expect((await store().load(saved.id)).status).toBe('sealed');
   expect((await store().load(recovery.point.id)).status).toBe('interrupted');
 });
