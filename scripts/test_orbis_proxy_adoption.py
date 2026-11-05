@@ -420,4 +420,91 @@ class AdoptionTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.adoption.resume(self.adoption.read())
 
 
+
+class LocalTLSProbeTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import shutil
+        import subprocess
+        if not shutil.which('node') or not shutil.which('openssl'):
+            raise unittest.SkipTest('node and openssl are required for local TLS integration')
+        cls.tmp = tempfile.TemporaryDirectory(prefix='proxy-local-tls-')
+        cls.addClassCleanup(cls.tmp.cleanup)
+        cls.path = Path(cls.tmp.name)
+        for name in ('approved', 'other'):
+            subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+                            '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost',
+                            '-keyout', str(cls.path / (name + '.key')), '-out', str(cls.path / (name + '.pem'))],
+                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cls.cert = (cls.path / 'approved.pem').read_bytes()
+        cls.other = (cls.path / 'other.pem').read_bytes()
+        server = "const h=require('https'),f=require('fs');h.createServer({key:f.readFileSync(process.argv[1]),cert:f.readFileSync(process.argv[2])},(q,r)=>{r.writeHead(200,{'content-type':'text/html'});r.end('ok')}).listen(0,'127.0.0.1',function(){console.log(this.address().port)});"
+        cls.server = subprocess.Popen(['node', '-e', server, str(cls.path / 'approved.key'), str(cls.path / 'approved.pem')],
+                                      stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        cls.addClassCleanup(cls.server.wait, timeout=5)
+        cls.addClassCleanup(cls.server.terminate)
+        cls.port = int(cls.server.stdout.readline())
+        cls.addClassCleanup(cls.server.stdout.close)
+
+    def probe(self, hostname, certs, pins):
+        import subprocess
+        options = {'hostname': '127.0.0.1', 'port': self.port, 'path': '/dashboard',
+                   'headers': {'host': hostname, 'accept': 'text/html'}, 'servername': hostname}
+        code = M.dashboard_probe_code(options, secure=True, certificates=certs, pins=pins)
+        return subprocess.run(['node', '--input-type=module', '-e', code], capture_output=True, timeout=6)
+
+    def test_tls_validation_and_leaf_pin(self):
+        anchor = M.local_certificates({'cert.pem': self.cert})
+        pin, pem = anchor[0]
+        self.assertEqual(b'ok', self.probe('localhost', [pem], [pin]).stdout)
+        self.assertNotEqual(0, self.probe('localhost', [], []).returncode)
+        code = M.dashboard_probe_code({'hostname': 'localhost'}, secure=True)
+        self.assertNotIn('rejectUnauthorized', code)
+        self.assertNotIn('checkServerIdentity', code)
+        self.assertNotIn('\"ca\"', code)
+        self.assertNotEqual(0, self.probe('wrong.local', [pem], [pin]).returncode)
+        other = M.local_certificates({'cert.pem': self.other})[0]
+        self.assertNotEqual(0, self.probe('localhost', [pem], [other[0]]).returncode)
+        self.assertNotEqual(0, self.probe('localhost', [other[1]], [other[0]]).returncode)
+
+    def test_anchor_rejections(self):
+        for bodies in ({}, {'bad': b'-----BEGIN CERTIFICATE-----\n***\n-----END CERTIFICATE-----'},
+                       {'mixed': self.cert + b'-----BEGIN PRIVATE KEY-----\nprivate\n-----END PRIVATE KEY-----'}):
+            with self.assertRaises(ValueError): M.local_certificates(bodies)
+
+    def test_route_policy_bound_to_config_and_router(self):
+        local = {'status': 'enabled', 'service': 'dashboard', 'entryPoints': ['websecure'], 'rule': 'Host(`localhost`)'}
+        routers = {'dashboard@docker': {'status': 'enabled', 'service': 'dashboard', 'entryPoints': ['web'], 'rule': 'Host(`localhost`)'},
+                   'dashboard-secure@docker': {'status': 'enabled', 'service': 'dashboard', 'entryPoints': ['websecure'], 'rule': 'Host(`public.example`)'},
+                   'dashboard-local@docker': local}
+        class Runtime:
+            public_fail = True
+            def proxy_routers(self, *args): return routers
+            def bounded_output(self, args, *rest):
+                if self.public_fail and 'public.example' in args[-1]: raise ValueError('public TLS failed')
+                return b'ok'
+        runtime = Runtime()
+        adoption = M.Adoption(self.path, 'local', runtime)
+        proxy = {'NetworkSettings': {'Networks': {'core': {'IPAddress': '127.0.0.1'}}}}
+        controller = {'Id': 'controller'}
+        tree = {'entries': {'': {}, 'cert': {'sha256': hashlib.sha256(self.cert).hexdigest()}}}
+        config = (tree, {'cert': self.cert})
+        policy = adoption.routes(proxy, controller, 'core', configuration=config)
+        self.assertIn('localTls', policy)
+        self.assertEqual(policy, adoption.routes(proxy, controller, 'core', policy, configuration=config))
+        with self.assertRaises(ValueError): adoption.routes(proxy, controller, 'core', policy, configuration=(tree, {'cert': self.other}))
+        altered = copy.deepcopy(tree); altered['entries']['extra'] = {'sha256': '0' * 64}
+        with self.assertRaises(ValueError): adoption.routes(proxy, controller, 'core', policy, configuration=(altered, config[1]))
+        routers['dashboard-local@docker'] = dict(local, rule='Host(`other.local`)')
+        with self.assertRaises(ValueError): adoption.routes(proxy, controller, 'core', policy, configuration=config)
+        old = {k: v for k, v in policy.items() if k != 'localTls'}
+        with self.assertRaises(ValueError): adoption.routes(proxy, controller, 'core', old, configuration=config)
+        runtime.public_fail = False
+        self.assertEqual(old, adoption.routes(proxy, controller, 'core', old, configuration=(tree, {})))
+        self.assertEqual(old, adoption.routes(proxy, controller, 'core', configuration=(tree, {})))
+        for invalid in (None, False, [], 'local'):
+            with self.subTest(policy=invalid), self.assertRaises(ValueError):
+                adoption.routes(proxy, controller, 'core', {**old, 'localTls': invalid}, configuration=config)
+
+
 if __name__ == '__main__': unittest.main()

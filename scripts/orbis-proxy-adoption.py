@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Root-reviewed, resumable proxy-only identity cutover. Never executes Compose."""
 import argparse
+import base64
+import binascii
 import copy
 import hashlib
 import importlib.util
@@ -285,6 +287,56 @@ def make_body(source, root):
     return body
 
 
+def local_certificates(bodies):
+    """Extract only standalone PEM certificate bundles from sealed configuration."""
+    certificates = []
+    pattern = re.compile(rb'-----BEGIN CERTIFICATE-----\s*([A-Za-z0-9+/=\s]+?)\s*-----END CERTIFICATE-----')
+    for body in bodies.values():
+        if b'-----BEGIN CERTIFICATE-----' not in body:
+            continue
+        matches = list(pattern.finditer(body))
+        remaining = pattern.sub(b'', body)
+        if not matches or remaining.strip():
+            raise fail('malformed or mixed certificate bundle')
+        for match in matches:
+            try:
+                der = base64.b64decode(re.sub(rb'\s+', b'', match.group(1)), validate=True)
+            except (binascii.Error, ValueError):
+                raise fail('malformed certificate bundle')
+            if not der or len(der) > 65536:
+                raise fail('certificate exceeds its bound')
+            pem = b'-----BEGIN CERTIFICATE-----\n' + base64.encodebytes(der) + b'-----END CERTIFICATE-----\n'
+            certificates.append((hashlib.sha256(der).hexdigest(), pem.decode('ascii')))
+    if not certificates or len(certificates) > 32 or sum(len(pem) for _, pem in certificates) > 65536:
+        raise fail('local certificate anchors missing or exceed their bound')
+    return sorted(set(certificates))
+
+
+def dashboard_probe_code(options, *, secure, certificates=(), pins=()):
+    options = dict(options)
+    if certificates:
+        options['ca'] = list(certificates)
+    pin_check = ("const p=r.socket.getPeerCertificate(true);if(!p.raw||!pins.includes(c.createHash('sha256').update(p.raw).digest('hex')))process.exit(4);" if pins else '')
+    return ("import h from 'node:" + ('https' if secure else 'http') + "';import c from 'node:crypto';const pins="
+            + json.dumps(list(pins)) + ";const q=h.get(" + json.dumps(options) + ",r=>{" + pin_check
+            + "r.resume();if(r.statusCode!==200||!(r.headers['content-type']||'').startsWith('text/html'))process.exit(2);r.on('end',()=>process.stdout.write('ok'));});q.setTimeout(3000,()=>q.destroy());q.on('error',()=>process.exit(3));")
+
+
+def local_hostname(router):
+    if (not isinstance(router, dict) or router.get('status') != 'enabled' or router.get('service') != 'dashboard'
+            or router.get('entryPoints') != ['websecure']):
+        raise fail('local dashboard router is not active')
+    match = re.fullmatch(r'Host\((?P<quote>[`"])(?P<host>[A-Za-z0-9.-]+)(?P=quote)\)', router.get('rule', ''))
+    host = match.group('host') if match else ''
+    if (len(host) > 253 or not host or any(not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?', part) for part in host.split('.'))):
+        raise fail('local dashboard host must be one literal hostname')
+    try:
+        D.ipaddress.ip_address(host)
+    except ValueError:
+        return host
+    raise fail('local dashboard host must be a hostname')
+
+
 class Adoption:
     def __init__(self, root, context, runtime=None):
         self.root, self.context = Path(root), context
@@ -315,28 +367,65 @@ class Adoption:
         return {'definition': self.runtime.definition(raw), 'restartPolicy': raw['HostConfig'].get('RestartPolicy'),
                 'name': raw['Name'], 'running': raw['State'].get('Running'), 'startedAt': raw['State'].get('StartedAt')}
 
-    def routes(self, proxy, controller, network, expected=None):
+    def routes(self, proxy, controller, network, expected=None, *, configuration=None):
         observed = self.runtime.proxy_routers(controller['Id'], proxy, network)
         selected = {name: observed.get(name) for name in ('dashboard@docker', 'dashboard-secure@docker')}
         for name, router in selected.items():
             if (not isinstance(router, dict) or router.get('status') != 'enabled' or router.get('service') != 'dashboard'
                     or router.get('entryPoints') != (['websecure'] if 'secure' in name else ['web'])):
                 raise fail('dashboard HTTP/HTTPS routers are not active')
-        if expected is not None and selected != expected:
+        policy = expected.get('localTls') if expected is not None else None
+        if expected is not None and 'localTls' in expected and not isinstance(policy, dict):
+            raise fail('approved local TLS policy is invalid')
+        expected_routers = {key: value for key, value in expected.items() if key != 'localTls'} if expected is not None else None
+        if expected_routers is not None and selected != expected_routers:
             raise fail('dashboard routers changed')
-        # Use the existing controller's Node runtime, the reviewed network IP and
-        # router host rule. TLS is checked and no credentials/body are emitted.
         address = proxy['NetworkSettings']['Networks'][network].get('IPAddress')
         D.ipaddress.ip_address(address)
-        for secure, router in ((False, selected['dashboard@docker']), (True, selected['dashboard-secure@docker'])):
-            match = re.search(r'Host\([`\"]([A-Za-z0-9.-]+)[`\"]\)', router.get('rule', ''))
-            hostname = match.group(1) if match else address
+        def probe(secure, hostname, certs=(), pins=()):
             options = {'hostname': address, 'port': 443 if secure else 80, 'path': '/dashboard',
                        'headers': {'host': hostname, 'accept': 'text/html'}, 'servername': hostname}
-            code = "import h from 'node:" + ('https' if secure else 'http') + "';const q=h.get(" + json.dumps(options) + ",r=>{r.resume();if(r.statusCode!==200||!(r.headers['content-type']||'').startsWith('text/html'))process.exit(2);r.on('end',()=>process.stdout.write('ok'));});q.setTimeout(3000,()=>q.destroy());q.on('error',()=>process.exit(3));"
-            if self.runtime.bounded_output(['docker', '--context', self.context, 'exec', controller['Id'], 'node', '--input-type=module', '-e', code], 1024, 6) != b'ok':
+            code = dashboard_probe_code(options, secure=secure, certificates=certs, pins=pins)
+            try:
+                result = self.runtime.bounded_output(['docker', '--context', self.context, 'exec', controller['Id'], 'node', '--input-type=module', '-e', code], 1024, 6)
+            except (OSError, ValueError, RuntimeError) as error:
+                raise fail('HTTP/HTTPS dashboard verification failed') from error
+            if result != b'ok':
                 raise fail('HTTP/HTTPS dashboard verification failed')
+        def router_host(router):
+            match = re.search(r'Host\([`"]([A-Za-z0-9.-]+)[`"]\)', router.get('rule', ''))
+            return match.group(1) if match else address
+        probe(False, router_host(selected['dashboard@docker']))
+        if policy is None:
+            try:
+                probe(True, router_host(selected['dashboard-secure@docker']))
+                return selected
+            except (OSError, ValueError, RuntimeError):
+                if expected is not None:
+                    raise
+        if configuration is None:
+            raise fail('sealed local TLS configuration is required')
+        tree, bodies = configuration
+        local = observed.get('dashboard-local@docker')
+        hostname = local_hostname(local)
+        anchors = local_certificates(bodies)
+        derived = {'schema': 'orbis.proxy-dashboard-local-tls.v1', 'router': local, 'hostname': hostname, 'configurationSha256': content_fingerprint(tree),
+                   'certificateSha256': [sha for sha, _ in anchors]}
+        if policy is not None and policy != derived:
+            raise fail('approved local TLS policy changed')
+        probe(True, hostname, [pem for _, pem in anchors], [sha for sha, _ in anchors])
+        selected['localTls'] = derived
         return selected
+
+    def original_routes(self, proxy, controller, network, plan):
+        if 'localTls' not in plan['routes']:
+            return self.routes(proxy, controller, network, plan['routes'])
+        with sealed_tree(self.root / 'traefik', exclude=('shared',)) as (tree, bodies, seal):
+            if tree != plan['configuration']:
+                raise fail('original configuration changed')
+            result = self.routes(proxy, controller, network, plan['routes'], configuration=(tree, bodies))
+            seal()
+            return result
 
     def review(self, reviewed_writers=()):
         environment = self.environment()
@@ -366,13 +455,13 @@ class Adoption:
         if network not in common:
             raise fail('reviewed dashboard network is required')
         with sealed_static(self.root) as (static, _, seal), sealed_tree(self.root / 'traefik/shared') as (tree, _, tree_seal), \
-                sealed_tree(self.root / 'traefik', exclude=('shared',)) as (configuration, _, config_seal):
+                sealed_tree(self.root / 'traefik', exclude=('shared',)) as (configuration, config_bodies, config_seal):
             plan = {'schema': PLAN_SCHEMA, 'root': str(self.root), 'environment': environment,
                     'proxy': proxy, 'body': make_body(proxy, self.root), 'static': static,
                     'identity': tree, 'identitySha256': content_fingerprint(tree), 'reviewedConfigWriters': writers,
                     'configuration': configuration, 'configurationSha256': content_fingerprint(configuration),
                     'peers': {r['Id']: self.fingerprint(r) for r in rows if r['Id'] != proxy['Id']},
-                    'controllerId': controller['Id'], 'network': network, 'routes': self.routes(proxy, controller, network),
+                    'controllerId': controller['Id'], 'network': network, 'routes': self.routes(proxy, controller, network, configuration=(configuration, config_bodies)),
                     'preserveOriginal': True, 'rollback': 'only-if-new-identity-content-unchanged; otherwise-explicit-forward-reconciliation'}
             seal(); tree_seal(); config_seal()
         if environment != self.environment():
@@ -623,12 +712,12 @@ class Adoption:
         if (not target['State'].get('Running') or target['State'].get('Paused') or target['State'].get('Restarting')
                 or target['Name'] != '/' + NAME):
             raise fail('target is not running')
-        with sealed_execution(self.root, record) as (observed, _, seal):
+        with sealed_execution(self.root, record) as (observed, execution_bodies, seal):
             if observed['metadata']['ctime_ns'] > started_ns(target['State']['StartedAt']):
                 raise fail('static configuration was modified after proxy start')
             if self.runtime.observed_proxy_static_digest(target) != observed['sha256']:
                 raise fail('container static bytes differ from approved immutable authority')
-            self.routes(target, self.runtime.inspect(record['plan']['controllerId']), record['plan']['network'], record['plan']['routes'])
+            self.routes(target, self.runtime.inspect(record['plan']['controllerId']), record['plan']['network'], record['plan']['routes'], configuration=(record['executionTree'], execution_bodies))
             seal()
         with sealed_tree(self.identity, private=True) as (tree, _, _):
             ownership = {key: tree['entries']['']['metadata'][key] for key in ('dev', 'ino', 'uid', 'gid', 'mode')}
@@ -712,7 +801,7 @@ class Adoption:
                 raise fail('rollback terminal generation differs')
             # A lost start reply must never replay old identity over writes made
             # by the restarted original. Finish only its terminal receipt.
-            self.routes(source, self.runtime.inspect(record['plan']['controllerId']), record['plan']['network'], record['plan']['routes'])
+            self.original_routes(source, self.runtime.inspect(record['plan']['controllerId']), record['plan']['network'], record['plan'])
             record['phase'] = 'rolled-back'; record['intent'] = None; self.save(record)
             return {'phase': 'rolled-back', 'originalPreserved': True, 'targetPreserved': bool(target)}
         if target and not record.get('targetId'):
@@ -760,7 +849,7 @@ class Adoption:
         if not source['State'].get('Running'):
             change('start-original', ['start', source['Id']], 'original-started')
         source = self.guard(record, target=target)
-        self.routes(source, self.runtime.inspect(record['plan']['controllerId']), record['plan']['network'], record['plan']['routes'])
+        self.original_routes(source, self.runtime.inspect(record['plan']['controllerId']), record['plan']['network'], record['plan'])
         record['phase'] = 'rolled-back'; record['intent'] = None; self.save(record)
         return {'phase': 'rolled-back', 'originalPreserved': True, 'targetPreserved': bool(target)}
 
