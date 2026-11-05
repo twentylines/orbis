@@ -63,6 +63,10 @@
   flex: 1 1 15rem;
 }
 
+.release-channel-settings .release-channel-heading h2 {
+  margin: 0;
+}
+
 .release-channel-switch {
   position: relative;
   isolation: isolate;

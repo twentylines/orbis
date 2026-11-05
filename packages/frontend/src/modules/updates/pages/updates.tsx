@@ -9,7 +9,7 @@ import { OrbisReleaseNotes } from './orbis-release-notes';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
 import { useAppContext } from '@/context/app-context';
 import { IconAlertTriangle, IconArrowRight, IconBrandGithub, IconPackage, IconRefresh, IconServerCog } from '@tabler/icons-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
@@ -173,6 +173,7 @@ function LocalUpdates() {
   const [section, setSection] = useState<'orbis' | 'apps' | 'system'>('orbis');
   const [coreReview, setCoreReview] = useState<ReleaseCompatibility | null>(null);
   const coreReviewIntent = useRef(0);
+  const coreUpdateRequested = useRef(false);
   const coreReviewButton = useRef<HTMLButtonElement>(null);
   const entry = useLocation().key;
   const lastEntry = useRef(entry);
@@ -411,11 +412,19 @@ function LocalUpdates() {
       rememberAcceptedCoreUpdate(result.jobId, tag);
     },
     onSettled: () => {
+      coreUpdateRequested.current = false;
       setCoreRequestStage(null);
       void host.refetch();
     },
     retry: false,
   });
+  const coreUpdateKey = ['orbis-compatibility', 'update', user.id, build.data?.version ?? '', 'apply'];
+  const coreUpdates = useMutationState({
+    filters: { mutationKey: coreUpdateKey, exact: true },
+    select: (mutation) => ({ status: mutation.state.status, error: mutation.state.error, submittedAt: mutation.state.submittedAt }),
+  });
+  const coreUpdatePending = updateCore.isPending || coreUpdates.some((mutation) => mutation.status === 'pending');
+  const lastCoreUpdate = [...coreUpdates].sort((a, b) => b.submittedAt - a.submittedAt)[0];
   const recover = useMutation({
     mutationFn: (jobId: string) => hostRequest<{ jobId: string; state: string }>('recover', { jobId }),
     onSuccess: () => void host.refetch(),
@@ -604,10 +613,10 @@ function LocalUpdates() {
           <Dialog
             open={coreReview !== null}
             onOpenChange={(open) => {
-              if (!open && !updateCore.isPending) setCoreReview(null);
+              if (!open && !coreUpdatePending) setCoreReview(null);
             }}
           >
-            <DialogContent className="desktop-update-review-dialog" closeDisabled={updateCore.isPending} restoreFocusTo={coreReviewButton}>
+            <DialogContent className="desktop-update-review-dialog" closeDisabled={coreUpdatePending} restoreFocusTo={coreReviewButton}>
               <DialogHeader>
                 <DialogTitle>{coreReview?.crossesRuntipiBoundary ? 'Runtipi version changes' : 'Update Orbis?'}</DialogTitle>
                 <DialogDescription>
@@ -639,20 +648,30 @@ function LocalUpdates() {
                     </li>
                   </ol>
                 ) : null}
-                {updateCore.isError ? <p role="alert">{updateCore.error.message} Check the update status before retrying.</p> : null}
               </section>
               <DialogFooter className="desktop-update-plan-actions">
-                <button type="button" disabled={updateCore.isPending} onClick={() => setCoreReview(null)}>
+                <button type="button" disabled={coreUpdatePending} onClick={() => setCoreReview(null)}>
                   Cancel
                 </button>
                 <button
                   type="button"
-                  disabled={!coreReview?.hostUpdateSupported || coreReview.crossesRuntipiBoundary || !canPlan || updateCore.isPending}
+                  disabled={!coreReview?.hostUpdateSupported || coreReview.crossesRuntipiBoundary || !canPlan || coreUpdatePending}
                   onClick={() => {
-                    if (coreReview?.hostUpdateSupported && !coreReview.crossesRuntipiBoundary) updateCore.mutate(coreReview.tag);
+                    if (
+                      !coreReview?.hostUpdateSupported ||
+                      coreReview.crossesRuntipiBoundary ||
+                      coreUpdateRequested.current ||
+                      queryClient.isMutating({ mutationKey: coreUpdateKey, exact: true })
+                    )
+                      return;
+                    coreUpdateRequested.current = true;
+                    const tag = coreReview.tag;
+                    setCoreReview(null);
+                    setCoreRequestStage('checking');
+                    updateCore.mutate(tag);
                   }}
                 >
-                  {updateCore.isPending ? (coreRequestStage === 'checking' ? 'Checking update…' : 'Starting update…') : 'Update Orbis'}
+                  {coreUpdatePending ? (coreRequestStage === 'checking' ? 'Checking update…' : 'Starting update…') : 'Update Orbis'}
                 </button>
               </DialogFooter>
             </DialogContent>
@@ -669,14 +688,14 @@ function LocalUpdates() {
                 <button
                   className="desktop-update-action"
                   type="button"
-                  disabled={!canPlan || checkingCore || updateCore.isPending}
+                  disabled={!canPlan || checkingCore || coreUpdatePending}
                   onClick={(event) => {
                     updateCore.reset();
                     coreReviewButton.current = event.currentTarget;
                     reviewCore.mutate(latest.tag);
                   }}
                 >
-                  {checkingCore ? 'Preparing update…' : updateCore.isPending ? 'Starting update…' : `Update to ${formatOrbisVersion(latest.tag)}`}
+                  {checkingCore ? 'Preparing update…' : coreUpdatePending ? 'Starting update…' : `Update to ${formatOrbisVersion(latest.tag)}`}
                 </button>
               ) : null}
             </section>
@@ -820,16 +839,19 @@ function LocalUpdates() {
               ) : null}
             </section>
           ) : null}
-          {coreRequestStage ? (
+          {coreUpdatePending ? (
             <output className="desktop-update-note" aria-live="polite">
               {coreRequestStage === 'checking'
                 ? 'Checking the release and backup storage…'
-                : 'Starting the update. The page will reload automatically when Orbis is ready.'}
+                : coreRequestStage === 'starting'
+                  ? 'Starting the update. The page will reload automatically when Orbis is ready.'
+                  : 'Preparing the update…'}
             </output>
           ) : null}
-          {updateCore.isError ? (
+          {lastCoreUpdate?.status === 'error' ? (
             <p className="desktop-update-note" role="alert">
-              {updateCore.error.message} Check the update status before retrying.
+              {lastCoreUpdate.error instanceof Error ? lastCoreUpdate.error.message : 'The update could not be started.'} Check the update status
+              before retrying.
             </p>
           ) : null}
           {recover.isError ? (

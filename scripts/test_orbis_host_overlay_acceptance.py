@@ -84,6 +84,7 @@ class OverlayAcceptanceTests(unittest.TestCase):
     def job(self):
         return {'schema': 'orbis.host-service-job.v1', 'id': self.identifier, 'overlayId': self.identifier,
                 'current': self.current, 'target': self.target, 'state': 'running',
+                'startedAt': 1793814360.3561795,
                 'snapshot': str(self.snapshots / ('orbis-target-' + self.identifier))}
 
     def test_stale_socket_rejection_precedes_overlay_allocation(self):
@@ -131,6 +132,36 @@ class OverlayAcceptanceTests(unittest.TestCase):
         self.overlay.reconcile_unaccepted()
         self.assertEqual(self.overlay.receipt(record)['phase'], 'accepted')
         self.assertFalse(self.events)
+
+    def test_job_acceptance_supports_existing_fractional_unix_timestamps(self):
+        record = self.begin()
+        job = {**self.job(), 'startedAt': 1793814360.3561795, 'finishedAt': 1793814551.0904615,
+               'download': {'updatedAt': 1793814390.528241, 'currentBytes': 115333777}}
+        H.AUTHORITY.atomic(self.service.job_file, H.IDENTITY.PUBLICATION.canonical(job))
+        self.assertTrue(self.overlay.accepted_job(record))
+        self.overlay.reconcile_unaccepted()
+        self.assertEqual('accepted', self.overlay.receipt(record)['phase'])
+        self.assertFalse(self.events)
+
+    def test_previous_completed_job_does_not_block_progress_preparation(self):
+        previous = {**self.job(), 'id': str(uuid.uuid4()), 'overlayId': str(uuid.uuid4()),
+                    'state': 'complete', 'startedAt': 1793814360.3561795, 'finishedAt': 1793814551.0904615}
+        H.AUTHORITY.atomic(self.service.job_file, H.IDENTITY.PUBLICATION.canonical(previous))
+        record = self.begin()
+        self.assertFalse(self.overlay.accepted_job(record))
+        self.overlay.ready(record['id'])
+
+    def test_job_binding_still_rejects_duplicate_fields_and_changed_publication(self):
+        record = self.begin()
+        job = {**self.job(), 'startedAt': 1793814360.3561795, 'target': {'tag': 0.5}}
+        H.AUTHORITY.atomic(self.service.job_file, H.IDENTITY.PUBLICATION.canonical(job))
+        with self.assertRaises(ValueError):
+            self.overlay.accepted_job(record)
+        body = H.IDENTITY.PUBLICATION.canonical(self.job())
+        duplicate = b'{"id":"other",' + body[1:]
+        H.AUTHORITY.atomic(self.service.job_file, duplicate)
+        with self.assertRaises(ValueError):
+            self.overlay.accepted_job(record)
 
     def test_reconcile_unaccepted_allocation_settles_after_process_crash(self):
         record = self.begin()

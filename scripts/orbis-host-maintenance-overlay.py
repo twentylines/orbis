@@ -98,7 +98,17 @@ class CoreOverlay:
         try:
             with self.authority.protected_directory(self.service.job_file.parent) as directory:
                 with self.authority.protected_file(directory, self.service.job_file.name, 1024 * 1024) as body:
-                    job = self.P.metadata(body, byte_limit=1024 * 1024)
+                    # Host jobs contain fractional Unix timestamps. Acceptance
+                    # binds only operation identity; proof JSON stays integer-only.
+                    try:
+                        saved = json.loads(body.decode('utf-8'), object_pairs_hook=self.P.pairs,
+                                           parse_constant=self.P.unsupported_number)
+                        if type(saved) is not dict:
+                            raise ValueError('Job is not an object')
+                        job = self.P.metadata(self.P.canonical({name: saved.get(name) for name in
+                            ('schema', 'id', 'overlayId', 'current', 'target', 'snapshot')}), byte_limit=1024 * 1024)
+                    except (ValueError, TypeError, UnicodeError, RecursionError) as error:
+                        raise ValueError('Core progress job acceptance could not be verified') from error
         except FileNotFoundError:
             return False
         if job.get('id') != record['id'] and job.get('overlayId') != record['id']:
