@@ -1,6 +1,6 @@
 import { setRestoreRecoveryRequired } from '@/common/backup-maintenance';
 import { type } from 'arktype';
-import type { ConsumerHandler } from 'rabbitmq-client';
+import { Connection, type ConsumerHandler } from 'rabbitmq-client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import type { ConfigurationService } from '@/core/config/configuration.service';
@@ -9,9 +9,10 @@ import { QueueFactory } from './queue.factory';
 import * as restoreStartup from '../system-backups/backup-restore-startup';
 
 const rabbit = vi.hoisted(() => ({
-  createConsumer: vi.fn((_options: unknown, _callback: ConsumerHandler) => undefined),
+  createConsumer: vi.fn((_options: unknown, _callback: ConsumerHandler) => ({ close: vi.fn().mockResolvedValue(undefined), start: vi.fn() })),
   createPublisher: vi.fn(() => ({ close: vi.fn(), send: vi.fn() })),
-  createRPCClient: vi.fn(() => ({ send: vi.fn() })),
+  createRPCClient: vi.fn(() => ({ send: vi.fn(), close: vi.fn().mockResolvedValue(undefined) })),
+  close: vi.fn().mockResolvedValue(undefined),
   queueDeclare: vi.fn(),
   on: vi.fn((event: string, callback: () => void) => {
     if (event === 'connection') {
@@ -25,6 +26,7 @@ vi.mock('rabbitmq-client', () => ({
   Connection: vi.fn(function Connection() {
     return rabbit;
   }),
+  ConsumerStatus: { REQUEUE: 1 },
 }));
 
 describe('QueueFactory', () => {
@@ -39,12 +41,177 @@ describe('QueueFactory', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     rabbit.queueDeclare.mockReset().mockResolvedValue({ messageCount: 0, consumerCount: 0 });
+    rabbit.ready = true;
 
     configurationService.get.calledWith('queue').mockReturnValue({
       host: 'localhost',
       password: 'guest',
       username: 'guest',
     });
+  });
+
+  it('waits for an active worker and its confirmed event before closing resources exactly once', async () => {
+    const factory = new QueueFactory(loggerService, configurationService);
+    const queue = await factory.createQueue({ queueName: 'active', eventSchema: type({ event: 'string' }) });
+    const worker = Promise.withResolvers<void>();
+    const confirmation = Promise.withResolvers<void>();
+    const callback = vi.fn(async () => worker.promise);
+    queue.onEvent(callback);
+    const consumer = rabbit.createConsumer.mock.results[0]?.value;
+    const handler = rabbit.createConsumer.mock.calls[0]?.[1];
+    const publisher = rabbit.createPublisher.mock.results[0]?.value;
+    const rpc = rabbit.createRPCClient.mock.results[0]?.value;
+    if (!consumer || !handler || !publisher || !rpc) throw new Error('Missing fixture');
+    publisher.send.mockImplementationOnce(() => confirmation.promise);
+    const running = handler({ body: { event: 'active' } } as Parameters<ConsumerHandler>[0], vi.fn());
+    await vi.waitFor(() => expect(callback).toHaveBeenCalledOnce());
+    const shutdown = factory.onModuleDestroy();
+    expect(factory.onModuleDestroy()).toBe(shutdown);
+    expect(await queue.publish({ event: 'later' })).toMatchObject({ success: false, message: expect.stringContaining('shutting down') });
+    expect(consumer.close).not.toHaveBeenCalled();
+    expect(rpc.close).not.toHaveBeenCalled();
+    worker.resolve();
+    await vi.waitFor(() => expect(publisher.send).toHaveBeenCalledOnce());
+    expect(consumer.close).not.toHaveBeenCalled();
+    confirmation.resolve();
+    await running;
+    await shutdown;
+    expect(consumer.close).toHaveBeenCalledOnce();
+    expect(rpc.close).toHaveBeenCalledOnce();
+    expect(publisher.close).toHaveBeenCalledOnce();
+    expect(rabbit.close).toHaveBeenCalledOnce();
+    expect(consumer.close.mock.invocationCallOrder[0]).toBeLessThan(rpc.close.mock.invocationCallOrder[0] as number);
+    expect(publisher.close.mock.invocationCallOrder[0]).toBeLessThan(rabbit.close.mock.invocationCallOrder[0] as number);
+    expect(await handler({ body: { event: 'late' } } as Parameters<ConsumerHandler>[0], vi.fn())).toBe(1);
+    expect(callback).toHaveBeenCalledOnce();
+    expect(() => queue.onEvent(vi.fn())).toThrow('shutting down');
+    await expect(factory.createQueue({ queueName: 'late', eventSchema: type({ event: 'string' }) })).rejects.toThrow('shutting down');
+  });
+
+  it('keeps cross-queue RPC available to an admitted worker while rejecting outside dispatch', async () => {
+    const factory = new QueueFactory(loggerService, configurationService);
+    const source = await factory.createQueue({ queueName: 'source', eventSchema: type({ event: 'string' }) });
+    const target = await factory.createQueue({ queueName: 'target', eventSchema: type({ event: 'string' }) });
+    const continueWorker = Promise.withResolvers<void>();
+    let childResult: unknown;
+    source.onEvent(async () => {
+      await continueWorker.promise;
+      childResult = await target.publish({ event: 'child' });
+    });
+    const child = vi.fn(async (_data, reply) => reply({ success: true, message: 'child finished' }));
+    target.onEvent(child);
+    const sourceHandler = rabbit.createConsumer.mock.calls[0]?.[1];
+    const targetHandler = rabbit.createConsumer.mock.calls[1]?.[1];
+    const targetRPC = rabbit.createRPCClient.mock.results[1]?.value;
+    if (!sourceHandler || !targetHandler || !targetRPC) throw new Error('Missing fixture');
+    targetRPC.send.mockImplementation(async (_queue: string, body: unknown) => {
+      let result: unknown;
+      await targetHandler({ body } as Parameters<ConsumerHandler>[0], async (value) => {
+        result = value;
+      });
+      return { body: result };
+    });
+    const running = sourceHandler({ body: { event: 'parent' } } as Parameters<ConsumerHandler>[0], vi.fn());
+    await Promise.resolve();
+    const stopping = factory.onModuleDestroy();
+    expect(await target.publish({ event: 'outside' })).toMatchObject({ success: false });
+    continueWorker.resolve();
+    await running;
+    await stopping;
+    expect(childResult).toEqual({ success: true, message: 'child finished' });
+    expect(child).toHaveBeenCalledOnce();
+    expect(targetRPC.send).toHaveBeenCalledOnce();
+    expect(targetRPC.close).toHaveBeenCalledOnce();
+  });
+
+  it('awaits an admitted RPC and the consumer close promise before closing the connection', async () => {
+    const factory = new QueueFactory(loggerService, configurationService);
+    const queue = await factory.createQueue({ queueName: 'pending', eventSchema: type({ event: 'string' }) });
+    queue.onEvent(vi.fn());
+    const rpc = rabbit.createRPCClient.mock.results[0]?.value;
+    const consumer = rabbit.createConsumer.mock.results[0]?.value;
+    if (!rpc || !consumer) throw new Error('Missing fixture');
+    const response = Promise.withResolvers<{ body: { success: boolean; message: string } }>();
+    const consumerClosed = Promise.withResolvers<void>();
+    rpc.send.mockImplementationOnce(() => response.promise);
+    consumer.close.mockImplementationOnce(() => consumerClosed.promise);
+    const publishing = queue.publish({ event: 'admitted' });
+    await vi.waitFor(() => expect(rpc.send).toHaveBeenCalledOnce());
+    const stopping = factory.onModuleDestroy();
+    expect(consumer.close).not.toHaveBeenCalled();
+    response.resolve({ body: { success: true, message: 'finished' } });
+    expect(await publishing).toMatchObject({ success: true });
+    await vi.waitFor(() => expect(consumer.close).toHaveBeenCalledOnce());
+    expect(rpc.close).not.toHaveBeenCalled();
+    expect(rabbit.close).not.toHaveBeenCalled();
+    consumerClosed.resolve();
+    await stopping;
+    expect(rpc.close).toHaveBeenCalledOnce();
+    expect(rabbit.close).toHaveBeenCalledOnce();
+  });
+
+  it('does not report shutdown settled or close the connection when consumer closure fails', async () => {
+    const factory = new QueueFactory(loggerService, configurationService);
+    const queue = await factory.createQueue({ queueName: 'failure', eventSchema: type({ event: 'string' }) });
+    queue.onEvent(vi.fn());
+    const consumer = rabbit.createConsumer.mock.results[0]?.value;
+    if (!consumer) throw new Error('Missing consumer');
+    consumer.close.mockRejectedValueOnce(new Error('fixture consumer close failed'));
+    await expect(factory.onModuleDestroy()).rejects.toThrow('consumer close failed');
+    expect(rabbit.close).not.toHaveBeenCalled();
+    expect(await queue.publish({ event: 'later' })).toMatchObject({ success: false });
+  });
+
+  it('does not reopen capture-paused consumers when their hold is released during shutdown', async () => {
+    const factory = new QueueFactory(loggerService, configurationService);
+    for (const queueName of ['app-events-queue', 'repo-queue', 'system-events-queue']) {
+      const queue = await factory.createQueue({ queueName, eventSchema: type({ event: 'string' }) });
+      queue.onEvent(vi.fn());
+    }
+    const capture = await factory.pauseForBackup(new AbortController().signal);
+    const stopping = factory.onModuleDestroy();
+    capture.release();
+    await stopping;
+    for (const result of rabbit.createConsumer.mock.results) {
+      expect(result.value.close).toHaveBeenCalledOnce();
+      expect(result.value.start).not.toHaveBeenCalled();
+    }
+  });
+
+  it('cancels pending initialization and rejects queue creation without later resurrection', async () => {
+    rabbit.ready = false;
+    const factory = new QueueFactory(loggerService, configurationService);
+    const pending = factory.createQueue({ queueName: 'pending', eventSchema: type({ event: 'string' }) });
+    const rejection = expect(pending).rejects.toThrow();
+    await factory.onModuleDestroy();
+    await rejection;
+    rabbit.ready = true;
+    const connected = rabbit.on.mock.calls.find(([event]) => event === 'connection')?.[1];
+    if (!connected) throw new Error('Missing connection listener');
+    connected();
+    expect(factory.isReady()).toBe(false);
+    await expect(factory.initializeConnection()).rejects.toThrow('shutting down');
+    expect(Connection).toHaveBeenCalledOnce();
+    expect(rabbit.close).toHaveBeenCalledOnce();
+    expect(rabbit.createRPCClient).not.toHaveBeenCalled();
+    expect(rabbit.createConsumer).not.toHaveBeenCalled();
+  });
+
+  it('uses the existing reconnecting connection and ignores connection events after shutdown', async () => {
+    const factory = new QueueFactory(loggerService, configurationService);
+    const disconnected = rabbit.on.mock.calls.find(([event]) => event === 'error')?.[1];
+    const connected = rabbit.on.mock.calls.find(([event]) => event === 'connection')?.[1];
+    if (!disconnected || !connected) throw new Error('Missing listeners');
+    disconnected();
+    expect(factory.isReady()).toBe(false);
+    connected();
+    expect(factory.isReady()).toBe(true);
+    await factory.onModuleDestroy();
+    disconnected();
+    connected();
+    expect(factory.isReady()).toBe(false);
+    expect(Connection).toHaveBeenCalledOnce();
+    expect(rabbit.close).toHaveBeenCalledOnce();
   });
 
   it('declares durable RPC and consumer queues', async () => {
@@ -92,7 +259,7 @@ describe('QueueFactory', () => {
     queue.onEvent(vi.fn());
     expect(rabbit.createConsumer).toHaveBeenCalledOnce();
     expect(rabbit.queueDeclare).not.toHaveBeenCalled();
-    factory.onModuleDestroy();
+    await factory.onModuleDestroy();
   });
 
   it('registers a repeatable event only once per queue and stops timers on shutdown', async () => {
@@ -102,8 +269,9 @@ describe('QueueFactory', () => {
     queue.publishRepeatable({ event: 'refresh' }, '*/15 * * * *');
     queue.publishRepeatable({ event: 'refresh' }, '*/15 * * * *');
     expect(vi.getTimerCount()).toBe(1);
-    factory.onModuleDestroy();
+    const stopping = factory.onModuleDestroy();
     expect(vi.getTimerCount()).toBe(0);
+    await stopping;
   });
 
   it('does not consume, enqueue, observe or schedule jobs during installer hold', async () => {

@@ -4,18 +4,16 @@ import { setTimeout } from 'node:timers/promises';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { Injectable } from '@nestjs/common';
-import * as Sentry from '@sentry/nestjs';
 import { type } from 'arktype';
 import { Connection } from 'rabbitmq-client';
 import { EventPublisher } from './event.publisher';
-import { type ArkTypeSchema, Queue, type QueueObserver } from './queue.entity';
+import { type ArkTypeSchema, Queue, QueueLifecycle, type QueueObserver } from './queue.entity';
 import { installationMode } from '@/common/installation-mode';
 import { backupMaintenanceActive, setBackupRecoveryRequired } from '@/common/backup-maintenance';
 
 @Injectable()
 export class QueueFactory {
   private rabbit: Connection;
-  private connectionAttempts = 0;
   private connectionGeneration = 0;
   private isInitialized = false;
   private initializationPromise: Promise<void> | null = null;
@@ -24,6 +22,8 @@ export class QueueFactory {
     {
       resumeAfterInstallation: () => void;
       stopRepeatables: () => void;
+      closeConsumer: () => Promise<void>;
+      closeResources: () => Promise<void>;
       pauseForBackup: () => { drain: (signal: AbortSignal) => Promise<void>; release: () => void };
     }
   >();
@@ -31,6 +31,9 @@ export class QueueFactory {
   private installationPrepared = false;
   private installationCompleted = false;
   private retainedBootstrapAttempted = false;
+  private readonly lifecycle = new QueueLifecycle();
+  private readonly shutdownSignal = new AbortController();
+  private shutdownPromise?: Promise<void>;
 
   public async pauseForBackup(signal: AbortSignal) {
     if (this.captureHeld || installationMode().phase !== 'normal' || !this.isReady()) throw new Error('Queue capture is unavailable.');
@@ -213,17 +216,35 @@ export class QueueFactory {
   }
 
   public onModuleDestroy() {
+    if (this.shutdownPromise) return this.shutdownPromise;
+    this.lifecycle.stopping = true;
+    this.isInitialized = false;
+    this.shutdownSignal.abort();
     for (const queue of this.queues.values()) queue.stopRepeatables();
+    this.shutdownPromise = this.shutdown();
+    return this.shutdownPromise;
+  }
+
+  private async shutdown() {
+    if (this.initializationPromise) await Promise.allSettled([this.initializationPromise]);
+    // Keep every consumer available until workers and their cross-queue RPCs finish.
+    await this.lifecycle.drainAndSeal();
+    await Promise.all([...this.queues.values()].map((queue) => queue.closeConsumer()));
+    await Promise.all([...this.queues.values()].map((queue) => queue.closeResources()));
+    await this.rabbit?.close();
   }
 
   public constructor(
     private readonly logger: LoggerService,
     private readonly config: ConfigurationService,
   ) {
-    this.initializeConnection();
+    void this.initializeConnection().catch((error) => {
+      if (!this.lifecycle.stopping) this.logger.error('Queue initialization failed', error);
+    });
   }
 
   public async initializeConnection() {
+    if (this.lifecycle.stopping) throw new Error('Queue is shutting down.');
     // Prevent multiple simultaneous initialization attempts
     if (this.initializationPromise) {
       return this.initializationPromise;
@@ -236,7 +257,7 @@ export class QueueFactory {
   private async doInitialize() {
     const { host, password, username } = this.config.get('queue');
 
-    this.rabbit = new Connection({
+    this.rabbit ??= new Connection({
       hostname: host,
       username,
       password,
@@ -245,16 +266,16 @@ export class QueueFactory {
     });
 
     this.rabbit.on('connection', () => {
+      if (this.lifecycle.stopping) return;
       this.connectionGeneration++;
-      this.connectionAttempts = 0;
       this.isInitialized = true;
       this.logger.info('Connected to the queue');
     });
 
-    this.rabbit.on('error', async (error) => {
+    this.rabbit.on('error', (error) => {
+      if (this.lifecycle.stopping) return;
       this.logger.error('Queue connection error', error);
       this.isInitialized = false;
-      this.reconnect(error);
     });
 
     // Wait for the connection to be ready
@@ -265,7 +286,7 @@ export class QueueFactory {
     const startTime = Date.now();
 
     while (!this.rabbit.ready && Date.now() - startTime < maxWaitTime) {
-      await setTimeout(1000);
+      await setTimeout(1000, undefined, { signal: this.shutdownSignal.signal });
     }
 
     if (!this.rabbit.ready) {
@@ -278,29 +299,7 @@ export class QueueFactory {
   }
 
   public isReady() {
-    return this.isInitialized && this.rabbit?.ready;
-  }
-
-  // Re-establish connection to Queue with exponential backoff
-  public async reconnect(error: Error) {
-    if (this.connectionAttempts > 5) {
-      this.logger.error('Queue connection lost, exceeded maximum reconnection attempts');
-      Sentry.captureException(error, { tags: { source: 'rabbitmq' } });
-
-      return error;
-    }
-
-    this.connectionAttempts++;
-    this.logger.warn(`Queue connection lost, attempting to reconnect... (attempt ${this.connectionAttempts}/5)`);
-
-    const timeout = 2 ** this.connectionAttempts * 1000;
-    await setTimeout(timeout);
-
-    // Reset the initialization promise to allow re-initialization
-    this.initializationPromise = null;
-    this.isInitialized = false;
-
-    await this.initializeConnection();
+    return !this.lifecycle.stopping && this.isInitialized && this.rabbit?.ready;
   }
 
   public async createQueue<T extends ArkTypeSchema>(params: {
@@ -310,12 +309,14 @@ export class QueueFactory {
     timeout?: number;
     observer?: QueueObserver<T['infer']>;
   }) {
+    if (this.lifecycle.stopping) throw new Error('Queue is shutting down.');
     if (this.captureHeld) throw new Error('Queues cannot be added during capture.');
     // Ensure connection is ready before creating queue
     if (!this.isReady()) {
       this.logger.warn('Queue connection not ready, waiting for initialization...');
       await this.initializeConnection();
     }
+    if (this.lifecycle.stopping) throw new Error('Queue is shutting down.');
 
     const publisher = new EventPublisher(this.rabbit, this.logger, params.queueName);
     const resultSchema = type({ success: 'boolean', message: 'string' });
@@ -330,7 +331,18 @@ export class QueueFactory {
       queues: [{ autoDelete: false, durable: true, queue: queueName }],
     });
 
-    const queue = new Queue(this.rabbit, rpcClient, publisher, queueName, workers, eventSchema, resultSchema, this.logger, params.observer);
+    const queue = new Queue(
+      this.rabbit,
+      rpcClient,
+      publisher,
+      queueName,
+      workers,
+      eventSchema,
+      resultSchema,
+      this.logger,
+      params.observer,
+      this.lifecycle,
+    );
     this.queues.set(queueName, queue);
     return queue;
   }

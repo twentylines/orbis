@@ -3,6 +3,7 @@ import type { Connection, Publisher } from 'rabbitmq-client';
 
 export class EventPublisher {
   private publisher: Publisher;
+  private closing?: Promise<void>;
 
   constructor(
     private rabbit: Connection,
@@ -36,7 +37,7 @@ export class EventPublisher {
       throw new Error('EventPublisher not initialized. Call initialize() first.');
     }
     try {
-      this.publisher.send(
+      await this.publisher.send(
         {
           exchange: this.eventExchange,
           routingKey,
@@ -49,7 +50,12 @@ export class EventPublisher {
     }
   }
 
-  public async close(): Promise<void> {
+  public close(): Promise<void> {
+    this.closing ??= this.closePublisher();
+    return this.closing;
+  }
+
+  private async closePublisher(): Promise<void> {
     if (this.publisher) {
       await this.publisher.close();
       this.logger.info('EventPublisher channel closed.');

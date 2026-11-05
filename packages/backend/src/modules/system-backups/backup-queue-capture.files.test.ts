@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { type } from 'arktype';
-import { Queue } from '../queue/queue.entity';
+import { Queue, QueueLifecycle } from '../queue/queue.entity';
 import { QueueFactory } from '../queue/queue.factory';
 import { setBackupRecoveryRequired } from '@/common/backup-maintenance';
 
@@ -42,6 +42,7 @@ function fixture() {
     isInitialized: true,
     connectionGeneration: 1,
     captureHeld: false,
+    lifecycle: new QueueLifecycle(),
     queues: new Map(names.map((name, index) => [name, queues[index]])),
   });
   return { factory, queues, consumers, rpc, rabbit };
