@@ -22,6 +22,8 @@ import { appearanceFromStored, preferenceStorageKey, preferenceCacheLimit, prefe
 import { validHomePins } from './workspace-apps';
 import { resolveWallpaperKey, type ThemePreset } from './wallpaper-presets';
 import { validHiddenRecommendationCategories, type StoreRecommendationCategory } from '@/modules/app/components/store-discover/store-recommendations';
+import { clientStatusHintEvent } from '@/components/recovery-progress/operation-status';
+import { themePacksChanged } from '@/modules/theme-packs/theme-packs-api';
 
 export const widgetIds = ['applications', 'activity', 'storage', 'attention'] as const;
 export type WidgetId = (typeof widgetIds)[number];
@@ -200,6 +202,17 @@ export type PreferenceContext = {
 
 const LOAD_NOTICE = 'desktop-preferences-load';
 
+function onboardingStatus(value: unknown) {
+  if (!value || typeof value !== 'object' || !('complete' in value) || typeof value.complete !== 'boolean') throw new Error('Invalid setup status');
+  if ('generation' in value && (typeof value.generation !== 'string' || !/^[a-f0-9-]{36}$/.test(value.generation)))
+    throw new Error('Invalid setup generation');
+  return {
+    complete: value.complete,
+    generation: 'generation' in value ? (value.generation as string) : null,
+    origin: 'entry' in value && value.entry === 'runtipi' ? ('runtipi' as const) : ('fresh' as const),
+  };
+}
+
 export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const { isLoggedIn, sessionEpoch, sessionAbortSignal } = useUserContext();
   const { pathname } = useLocation();
@@ -251,6 +264,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const revision = useRef(0);
   const fieldEdits = useRef(new Map<keyof DesktopPreferences, number>());
   const acknowledgedRevision = useRef(0);
+  const resetGeneration = useRef<string | null | undefined>(undefined);
   const saveQueue = useMemo(() => new PreferenceSaveQueue(sessionAbortSignal), [sessionAbortSignal]);
   const currentSession = useRef(sessionEpoch);
   currentSession.current = sessionEpoch;
@@ -262,7 +276,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   );
   const canEdit = () => mounted.current && currentSession.current === sessionEpoch && (!isLoggedIn || !sessionAbortSignal.aborted);
   const canSave = useCallback(
-    () => isCurrentSession() && isLoggedIn && loadedSession.current === sessionEpoch,
+    () => isCurrentSession() && isLoggedIn && loadedSession.current === sessionEpoch && resetGeneration.current !== undefined,
     [isCurrentSession, isLoggedIn, sessionEpoch],
   );
   const requestSignal = useCallback(() => AbortSignal.any([sessionAbortSignal, AbortSignal.timeout(20_000)]), [sessionAbortSignal]);
@@ -281,6 +295,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     revision.current = 0;
     fieldEdits.current.clear();
     acknowledgedRevision.current = 0;
+    resetGeneration.current = undefined;
     setServerReady(false);
     setInitialLoadComplete(false);
     setPreview(null);
@@ -346,32 +361,36 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     const timer = window.setTimeout(() => controller.abort(), 10000);
     const loadRevision = revision.current;
     const canReplace = loadAttempt === 0 || acknowledgedRevision.current === loadRevision;
+    let preferenceGeneration: string | null = null;
     setSyncState('loading');
     setLoadError(false);
     Promise.all(
       ['/api/desktop-preferences', '/api/desktop-preferences/onboarding'].map(async (url) => {
-        const response = await fetch(url, { credentials: 'include', signal: AbortSignal.any([controller.signal, sessionAbortSignal]) });
+        const response = await fetch(url, {
+          credentials: 'include',
+          cache: 'no-store',
+          signal: AbortSignal.any([controller.signal, sessionAbortSignal]),
+        });
         if (!response.ok) throw new Error('Preference load failed');
+        if (url === '/api/desktop-preferences') preferenceGeneration = response.headers.get('X-Orbis-Reset-Generation');
         return response.json() as Promise<unknown>;
       }),
     )
       .then(([value, setup]) => {
         if (!isPreferences(value)) throw new Error('Invalid server preferences');
-        if (!setup || typeof setup !== 'object' || !('complete' in setup) || typeof setup.complete !== 'boolean') {
-          throw new Error('Invalid setup status');
-        }
-        if ('generation' in setup && (typeof setup.generation !== 'string' || !/^[a-f0-9-]{36}$/.test(setup.generation)))
-          throw new Error('Invalid setup generation');
+        const status = onboardingStatus(setup);
+        if (preferenceGeneration !== null && preferenceGeneration !== (status.generation ?? 'none')) throw new Error('Preference generation changed');
         if (disposed || controller.signal.aborted || !isCurrentSession()) return;
         if (revision.current === loadRevision && canReplace) {
           acknowledgedRevision.current = loadRevision;
           replacePreferences(normalisePreferences(value));
         }
         loadedSession.current = sessionEpoch;
+        resetGeneration.current = status.generation;
         setServerReady(true);
-        setRequiresOnboarding(!setup.complete);
-        setOnboardingGeneration('generation' in setup ? (setup.generation as string) : null);
-        setOnboardingOrigin('entry' in setup && setup.entry === 'runtipi' ? 'runtipi' : 'fresh');
+        setRequiresOnboarding(!status.complete);
+        setOnboardingGeneration(status.generation);
+        setOnboardingOrigin(status.origin);
         setSyncState(acknowledgedRevision.current === revision.current ? 'saved' : 'saving');
       })
       .catch(() => {
@@ -402,29 +421,49 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     const controller = new AbortController();
     const refresh = async () => {
       if (disposed || !canSave()) return;
-      if (reading || revision.current !== acknowledgedRevision.current) {
+      if (reading) {
         waiting = true;
         return;
       }
       reading = true;
       waiting = false;
       const currentRevision = revision.current;
+      let preferenceGeneration: string | null = null;
       try {
-        const response = await fetch('/api/desktop-preferences', {
-          credentials: 'include',
-          signal: AbortSignal.any([controller.signal, sessionAbortSignal, AbortSignal.timeout(10_000)]),
-        });
-        if (!response.ok) return;
-        const value: unknown = await response.json();
-        if (
-          !disposed &&
-          canSave() &&
-          isPreferences(value) &&
-          revision.current === currentRevision &&
-          acknowledgedRevision.current === currentRevision
-        ) {
+        const [value, setup] = await Promise.all(
+          ['/api/desktop-preferences', '/api/desktop-preferences/onboarding'].map(async (url) => {
+            const response = await fetch(url, {
+              credentials: 'include',
+              cache: 'no-store',
+              signal: AbortSignal.any([controller.signal, sessionAbortSignal, AbortSignal.timeout(10_000)]),
+            });
+            if (!response.ok) throw new Error('Preference refresh failed');
+            if (url === '/api/desktop-preferences') preferenceGeneration = response.headers.get('X-Orbis-Reset-Generation');
+            return response.json() as Promise<unknown>;
+          }),
+        );
+        const status = onboardingStatus(setup);
+        if (preferenceGeneration !== null && preferenceGeneration !== (status.generation ?? 'none')) throw new Error('Preference generation changed');
+        if (!disposed && canSave() && isPreferences(value)) {
+          const reset = resetGeneration.current !== status.generation;
+          if (reset) {
+            resetGeneration.current = status.generation;
+            revision.current++;
+            acknowledgedRevision.current = revision.current;
+            fieldEdits.current.clear();
+            completingSetup.current = false;
+            setPreview(null);
+            setWallpaperRevision((previous) => previous + 1);
+            setSyncState('saved');
+            window.dispatchEvent(new Event(themePacksChanged));
+            window.dispatchEvent(new Event(clientStatusHintEvent));
+          }
+          setRequiresOnboarding(!status.complete);
+          setOnboardingGeneration(status.generation);
+          setOnboardingOrigin(status.origin);
           const next = normalisePreferences(value);
-          replacePreferences((previous) => (JSON.stringify(previous) === JSON.stringify(next) ? previous : next));
+          if (reset || (revision.current === currentRevision && acknowledgedRevision.current === currentRevision))
+            replacePreferences((previous) => (JSON.stringify(previous) === JSON.stringify(next) ? previous : next));
         }
       } catch {
         // The saved browser appearance remains available while the server reconnects.
@@ -437,13 +476,15 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     const focus = () => {
       if (document.visibilityState === 'visible') void refresh();
     };
-    window.addEventListener('focus', focus);
+    for (const event of ['focus', 'online', 'pageshow']) window.addEventListener(event, focus);
+    document.addEventListener('visibilitychange', focus);
     window.addEventListener(preferenceChangeEvent, changed);
     remoteRefresh.current = refresh;
     return () => {
       disposed = true;
       controller.abort();
-      window.removeEventListener('focus', focus);
+      for (const event of ['focus', 'online', 'pageshow']) window.removeEventListener(event, focus);
+      document.removeEventListener('visibilitychange', focus);
       window.removeEventListener(preferenceChangeEvent, changed);
       if (remoteRefresh.current === refresh) remoteRefresh.current = null;
     };
@@ -494,20 +535,22 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     if (preferences !== currentPreferences.current || !canSave() || !serverReady || acknowledgedRevision.current === revision.current) return;
     let superseded = false;
     const saveRevision = revision.current;
+    const generation = resetGeneration.current;
     setSyncState('saving');
     const timer = window.setTimeout(() => {
       const save = async () => {
-        if (superseded || !canSave() || saveRevision !== revision.current) return;
+        if (superseded || !canSave() || saveRevision !== revision.current || generation !== resetGeneration.current) return;
         try {
           const response = await fetch('/api/desktop-preferences', {
             method: 'PUT',
             credentials: 'include',
             keepalive: true,
             signal: requestSignal(),
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-Orbis-Reset-Generation': generation ?? 'none' },
             body: JSON.stringify(currentPreferences.current),
           });
           if (!isCurrentSession()) return;
+          if (generation !== resetGeneration.current) return;
           if (!response.ok) throw new Error('Preference save failed');
           acknowledgedRevision.current = saveRevision;
           if (!superseded && revision.current === saveRevision) setSyncState('saved');
@@ -540,9 +583,11 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     if (!canSave() || !serverReady || completingSetup.current || !isPreferences({ ...currentPreferences.current, ...value }))
       throw new Error('These settings cannot be saved yet. Try again.');
     const expectedRevision = revision.current;
+    const generation = resetGeneration.current;
     setSyncState('saving');
     const write = async () => {
       if (!canSave()) throw new Error('Your session changed. Reload your settings before saving.');
+      if (generation !== resetGeneration.current) throw new Error('Orbis was reset. Reload your settings before saving.');
       if (revision.current !== expectedRevision) throw new Error('Settings changed while saving. Try again.');
       const baseline = currentPreferences.current;
       const submittedFieldEdits = new Map(fieldEdits.current);
@@ -552,10 +597,11 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         method: 'PUT',
         credentials: 'include',
         signal: requestSignal(),
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Orbis-Reset-Generation': generation ?? 'none' },
         body: JSON.stringify(next),
       });
       if (!isCurrentSession()) throw new Error('Your session changed. Reload your settings before saving.');
+      if (generation !== resetGeneration.current) throw new Error('Orbis was reset. Reload your settings before saving.');
       if (!response.ok) throw new Error('The settings could not be saved. Try again.');
       const unchanged = revision.current === expectedRevision;
       revision.current++;
@@ -575,7 +621,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     try {
       await pending;
     } catch (error) {
-      if (isCurrentSession()) setSyncState('error');
+      if (isCurrentSession() && generation === resetGeneration.current) setSyncState('error');
       throw error;
     }
   };
@@ -609,28 +655,34 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     const next = { ...draft, serverName: serverName.trim() };
     if (!canSave() || !serverReady || !isPreferences(next) || completingSetup.current) throw new Error('Setup cannot be saved yet. Try again.');
     completingSetup.current = true;
+    const generation = resetGeneration.current;
     const saveRevision = ++revision.current;
     setSyncState('saving');
     const save = async () => {
       if (!canSave()) throw new Error('Your session changed. Reload your settings before saving.');
+      if (generation !== resetGeneration.current) throw new Error('Orbis was reset. Reload setup before saving.');
       const saved = await fetch('/api/desktop-preferences', {
         method: 'PUT',
         credentials: 'include',
         signal: requestSignal(),
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Orbis-Reset-Generation': generation ?? 'none' },
         body: JSON.stringify(next),
       });
       if (!isCurrentSession()) throw new Error('Your session changed. Reload your settings before saving.');
+      if (generation !== resetGeneration.current) throw new Error('Orbis was reset. Reload setup before saving.');
       if (!saved.ok) throw new Error('Server settings could not be saved. Try again.');
       const captureCompletedSetup = capture ? await capture() : false;
       if (!isCurrentSession()) throw new Error('Your session changed. Reload your settings before saving.');
+      if (generation !== resetGeneration.current) throw new Error('Orbis was reset. Reload setup before saving.');
       const completed = await fetch('/api/desktop-preferences/onboarding', {
         method: captureCompletedSetup ? 'GET' : 'POST',
         credentials: 'include',
         signal: requestSignal(),
+        headers: { 'X-Orbis-Reset-Generation': generation ?? 'none' },
       });
       if (!completed.ok || (await completed.json()).complete !== true) throw new Error('Setup could not be completed. Try again.');
       if (!isCurrentSession()) throw new Error('Your session changed. Reload your settings before saving.');
+      if (generation !== resetGeneration.current) throw new Error('Orbis was reset. Reload setup before saving.');
       acknowledgedRevision.current = saveRevision;
       replacePreferences(next);
       setPreview(null);
@@ -641,10 +693,10 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     try {
       await pending;
     } catch (error) {
-      if (isCurrentSession()) setSyncState('error');
+      if (isCurrentSession() && generation === resetGeneration.current) setSyncState('error');
       throw error;
     } finally {
-      if (isCurrentSession()) completingSetup.current = false;
+      if (isCurrentSession() && generation === resetGeneration.current) completingSetup.current = false;
     }
   };
 

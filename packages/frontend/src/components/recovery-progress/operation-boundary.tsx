@@ -32,6 +32,8 @@ import { useOperationDeparture } from './use-operation-departure';
 import { restorePresentation } from './restore-presentation';
 import {
   confirmResetSnapshot,
+  clientStatusHintEvent,
+  ResetGenerationTracker,
   hasAcceptedReset,
   loadOperationStatus,
   operationAllowsDeparture,
@@ -95,6 +97,7 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
   const [actionError, setActionError] = useState<string | null>(null);
   const observed = useRef(Boolean(initialMarker.current));
   const observedReset = useRef(hasAcceptedReset());
+  const resetGenerations = useRef(new ResetGenerationTracker());
   const [resetRecovery, setResetRecovery] = useState(false);
   const startedId = useRef<string | null>(null);
   const activeKind =
@@ -139,7 +142,7 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
     const check = async () => {
       const shared = await loadOperationStatus(attempt > 0);
       if (!current) return;
-      if (shared.state === 'resetting' || hasAcceptedReset()) observedReset.current = true;
+      if (shared.state === 'resetting' || hasAcceptedReset() || resetGenerations.current.observe(shared)) observedReset.current = true;
       let next = await confirmResetSnapshot(shared, observedReset.current);
       if (!current) return;
       if (next.state === 'resetting') observedReset.current = true;
@@ -260,6 +263,15 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
       clearTimeout(timer);
     };
   }, [visible, attempt]);
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'hidden') setAttempt((previous) => previous + 1);
+    };
+    for (const event of [clientStatusHintEvent, 'focus', 'online', 'pageshow']) window.addEventListener(event, refresh);
+    return () => {
+      for (const event of [clientStatusHintEvent, 'focus', 'online', 'pageshow']) window.removeEventListener(event, refresh);
+    };
+  }, []);
   const authRoute = pathname === '/login' || pathname === '/reset-password';
   useEffect(() => {
     if (signInRequired && snapshot && operationAllowsDeparture(snapshot) && !authRoute) void navigate('/', { replace: true });

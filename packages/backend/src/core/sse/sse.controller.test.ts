@@ -6,12 +6,14 @@ import { Test } from '@nestjs/testing';
 import { ArkValidationPipe } from 'nestjs-arktype';
 import { EMPTY, of, Subject } from 'rxjs';
 import request from 'supertest';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import { LoggerService } from '../logger/logger.service';
 import { SSEController } from './sse.controller';
 import { SSEService } from './sse.service';
 import { MonitoringActivityService } from '../monitoring/monitoring-activity.service';
+import { notifyClientStatusChanged } from '@/common/restoration-status';
+import { acquireBackupMaintenance } from '@/common/backup-maintenance';
 
 describe('SSEController log query validation', () => {
   let app: INestApplication;
@@ -83,6 +85,34 @@ describe('SSEController log query validation', () => {
     second.unsubscribe();
     expect(changes).toEqual([false, true, false]);
     stop();
+  });
+
+  it('notifies both opted-in client streams after reset without exposing journal or account details', async () => {
+    service.getTopicObservable.mockReturnValue(EMPTY);
+    const controller = new SSEController(service, preferences, activity);
+    const first: unknown[] = [];
+    const second: unknown[] = [];
+    const legacy: unknown[] = [];
+    const subscriptions = [
+      controller.appEvents({ user: { id: 1 } } as never, '1').subscribe((event) => first.push(event)),
+      controller.appEvents({ user: { id: 2 } } as never, '1').subscribe((event) => second.push(event)),
+      controller.appEvents({ user: { id: 1 } } as never).subscribe((event) => legacy.push(event)),
+    ];
+    try {
+      const release = await acquireBackupMaintenance(AbortSignal.timeout(1000));
+      notifyClientStatusChanged();
+      notifyClientStatusChanged();
+      await Promise.resolve();
+      expect(first).toEqual([]);
+      expect(second).toEqual([]);
+      release();
+      await vi.waitFor(() => expect(first).toHaveLength(1));
+      expect(first).toEqual([{ type: 'client-status', data: { changed: true } }]);
+      expect(second).toEqual(first);
+      expect(legacy).toEqual([]);
+    } finally {
+      for (const subscription of subscriptions) subscription.unsubscribe();
+    }
   });
 
   it.each(['/sse/app', '/sse/app-logs?appUrn=media:test', '/sse/runtipi-logs'])('requires authentication before accessing %s', async (path) => {

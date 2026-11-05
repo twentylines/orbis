@@ -44,12 +44,33 @@ test.each(['running', 'recovery-required', 'unknown'] as const)(
       </QueryClientProvider>,
     );
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Create backup<\/button>/);
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Open backup<\/button>/);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Restore<\/button>/);
     expect(html.match(/<button[^>]*>Download<\/button>/)?.[0]).not.toContain('disabled');
     if (status !== 'unknown') expect(html.match(/<button[^>]*>Roll back<\/button>/)?.[0]).not.toContain('disabled');
     client.clear();
   },
 );
+
+test('a routed file cannot upload while settings restore recovery is held', () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
+  client.setQueryData(appContextQueryKey(), { user: { id: 7, operator: true } });
+  client.setQueryData(['orbis-settings-bundles', 7, 'exports'], { version: 1, jobs: [] });
+  client.setQueryData(['orbis-settings-bundles', 7, 'imports'], { available: true, jobs: [] });
+  client.setQueryData(['orbis-settings-bundles', 7, 'restore'], {
+    job: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', status: 'recovery-required', stage: 'recovery', needsRecovery: true, canRollback: true },
+  });
+  const html = renderToStaticMarkup(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <AppContextProvider>
+          <SettingsBundleSettings restoreOnly initialFile={new File(['fixture'], 'backup.orbis-settings')} />
+        </AppContextProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Upload<\/button>/);
+  client.clear();
+});
 
 test('shows verified contents and download for a ready backup', () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });

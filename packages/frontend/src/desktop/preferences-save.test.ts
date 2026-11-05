@@ -17,6 +17,11 @@ const scenarios = [
   'name-acknowledgement',
   'load-failure-recovery',
   'user-session-lifetime',
+  'two-clients-onboarding',
+  'two-clients-reset',
+  'sleeping-client-reset',
+  'queued-reset',
+  'snapshot-crossing-reset',
 ];
 for (const scenario of scenarios) {
   test(`mounted preference lifecycle: ${scenario}`, async () => {

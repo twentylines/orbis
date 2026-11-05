@@ -5,6 +5,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Post,
   Put,
   Query,
@@ -75,22 +76,25 @@ export class DesktopPreferencesController {
 
   @Post('onboarding')
   @ApiResponse({ status: 201, schema: { type: 'object', properties: { complete: { type: 'boolean' } }, required: ['complete'] } })
-  completeOnboarding(@Req() request: Request) {
+  completeOnboarding(@Req() request: Request, @Headers('x-orbis-reset-generation') generation?: string) {
     if (!request.user?.id) throw new UnauthorizedException();
-    return this.preferences.completeOnboarding(request.user.id);
+    return this.preferences.completeOnboarding(request.user.id, generation ?? null);
   }
 
   @Get()
   @ApiResponse({ type: DesktopPreferencesDto })
-  get(@Req() request: Request) {
+  async get(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
     if (!request.user?.id) throw new UnauthorizedException();
-    return this.preferences.read(request.user.id);
+    const snapshot = await this.preferences.clientSnapshot(request.user.id);
+    response.setHeader('X-Orbis-Reset-Generation', snapshot.generation ?? 'none');
+    response.setHeader('Cache-Control', 'private, no-store');
+    return snapshot.preferences;
   }
 
   @Put()
   @ApiResponse({ type: DesktopPreferencesDto })
-  put(@Req() request: Request, @Body() body: DesktopPreferencesDto) {
+  put(@Req() request: Request, @Body() body: DesktopPreferencesDto, @Headers('x-orbis-reset-generation') generation?: string) {
     if (!request.user?.id) throw new UnauthorizedException();
-    return this.preferences.write(request.user.id, body);
+    return this.preferences.write(request.user.id, body, generation ?? null);
   }
 }

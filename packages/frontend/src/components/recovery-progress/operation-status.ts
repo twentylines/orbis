@@ -4,7 +4,19 @@ export type OperationStatus = {
   stage?: 'preparing' | 'downloading' | 'applying' | 'restarting' | 'verifying' | 'restoring' | 'recovering' | 'resetting';
   progress?: number;
 };
-export type OperationSnapshot = OperationStatus & { supported: boolean; unavailable?: boolean };
+export type OperationSnapshot = OperationStatus & { supported: boolean; unavailable?: boolean; resetGeneration?: string | null };
+export const clientStatusHintEvent = 'orbis-client-status-changed';
+
+export class ResetGenerationTracker {
+  private generation: string | null | undefined;
+
+  observe(snapshot: OperationSnapshot) {
+    if (!operationAllowsDeparture(snapshot) || snapshot.resetGeneration === undefined) return false;
+    const changed = this.generation !== undefined && snapshot.resetGeneration !== null && this.generation !== snapshot.resetGeneration;
+    this.generation = snapshot.resetGeneration;
+    return changed;
+  }
+}
 export function operationUsesSpace(snapshot: OperationSnapshot | null, acceptedOperation: boolean) {
   return acceptedOperation || Boolean(snapshot && (operationIsWaiting(snapshot) || snapshot.state !== 'idle'));
 }
@@ -42,7 +54,7 @@ export function parseOperationStatus(value: unknown): OperationStatus {
 }
 export type OperationStatusTransport = (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>;
 export async function readOperationStatus(signal?: AbortSignal, transport: OperationStatusTransport = fetch): Promise<OperationSnapshot> {
-  const response = await transport('/api/system/operation-status', {
+  const response = await transport('/api/system/operation-status?client=1', {
     credentials: 'same-origin',
     cache: 'no-store',
     redirect: 'error',
@@ -52,7 +64,20 @@ export async function readOperationStatus(signal?: AbortSignal, transport: Opera
   if (!response.ok) throw new Error('Restore status is unavailable.');
   const raw = await response.text();
   if (raw.length > 2048) throw new Error('Restore status is unavailable.');
-  return { ...parseOperationStatus(JSON.parse(raw)), supported: true };
+  const value: unknown = JSON.parse(raw);
+  if (value && typeof value === 'object' && 'version' in value) {
+    const envelope = value as Record<string, unknown>;
+    if (
+      envelope.version !== 1 ||
+      Object.keys(envelope).sort().join(',') !== 'resetGeneration,status,version' ||
+      (envelope.resetGeneration !== null &&
+        (typeof envelope.resetGeneration !== 'string' ||
+          !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(envelope.resetGeneration)))
+    )
+      throw new Error('Client status is unavailable.');
+    return { ...parseOperationStatus(envelope.status), supported: true, resetGeneration: envelope.resetGeneration as string | null };
+  }
+  return { ...parseOperationStatus(value), supported: true };
 }
 export async function confirmResetSnapshot(
   shared: OperationSnapshot,

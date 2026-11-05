@@ -12,6 +12,7 @@ import { appEventAffectsQuery } from '@/desktop/app-event-cache';
 import { useBrowserPresence } from '@/desktop/browser-presence';
 import { useAppContext } from '@/context/app-context';
 import { AppNotification } from '@/components/notifications/app-notification';
+import { clientStatusHintEvent } from '@/components/recovery-progress/operation-status';
 
 const announcePreferences = () => window.dispatchEvent(new Event(preferenceChangeEvent));
 
@@ -20,7 +21,7 @@ export const SSEProvider = ({ children }: PropsWithChildren) => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
-  const { userSettings } = useAppContext();
+  const { userSettings, refreshAppContext } = useAppContext();
   const setConnectionStatus = useConnectionStore((state) => state.setStatus);
   const pending = useRef({
     urns: new Set<string>(),
@@ -49,11 +50,19 @@ export const SSEProvider = ({ children }: PropsWithChildren) => {
 
   const streamStatus = useSSE({
     topic: 'app',
+    params: new URLSearchParams({ client: '1' }),
     onOpen: () => {
       announcePreferences();
+      window.dispatchEvent(new Event(clientStatusHintEvent));
+      void refreshAppContext();
       refresh(undefined, true, true);
     },
     onPreferencesChanged: announcePreferences,
+    onClientStatusChanged: () => {
+      announcePreferences();
+      void refreshAppContext();
+      window.dispatchEvent(new Event(clientStatusHintEvent));
+    },
     onEvent: ({ event, appUrn, error }) => {
       if (error) {
         console.error(error);

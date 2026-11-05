@@ -8,6 +8,7 @@ import { settingsBackupRestoreJobSchema } from '@runtipi/common/schemas/settings
 import { settingsSchema } from '@/app.dto';
 import { ConfigurationService, runtimeUserSettingsSchema } from '@/core/config/configuration.service';
 import { acquireBackupDisk } from '@/common/backup-disk';
+import { notifyClientStatusChanged } from '@/common/restoration-status';
 import { acquireBackupMaintenance, backupMaintenanceActive, setSettingsRestoreRecoveryRequired } from '@/common/backup-maintenance';
 import { AuthService } from '../auth/auth.service';
 import { DesktopPreferencesService } from '../desktop-preferences/desktop-preferences.service';
@@ -247,6 +248,7 @@ export class SettingsBackupApplyService {
       maintenance?.();
       disk?.();
       lease?.();
+      notifyClientStatusChanged();
     }
   }
   private async incoming(
@@ -392,6 +394,7 @@ export class SettingsBackupApplyService {
       maintenance?.();
       disk?.();
       lease();
+      notifyClientStatusChanged();
     }
   }
   async onModuleDestroy() {

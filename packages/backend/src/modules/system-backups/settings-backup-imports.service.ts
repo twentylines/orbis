@@ -295,9 +295,10 @@ export class SettingsBackupImportsService implements OnModuleDestroy {
     timer.unref();
     this.expiryTimers.set(job.id, timer);
   }
-  async create(ownerId: number, request: Request, credentials: Credentials) {
+  async create(ownerId: number, request: Request, credentials?: Credentials) {
     await this.initialize();
-    const actor = await this.actor(ownerId, request, credentials);
+    const actor = credentials ? await this.actor(ownerId, request, credentials) : await this.auth.operatorActionContext(request);
+    if (actor.userId !== ownerId) throw failed();
     const reservation = this.reserve('', 'remove');
     try {
       if (this.jobs.size >= 32) throw new ConflictException('Remove an older settings backup import first.');
@@ -322,6 +323,7 @@ export class SettingsBackupImportsService implements OnModuleDestroy {
       this.locations.set(job, { dev: location.dev, ino: location.ino });
       await this.save(job);
       this.jobs.set(id, job);
+      await this.recheck(actor, request);
       return this.publicJob(job);
     } finally {
       reservation.finish();

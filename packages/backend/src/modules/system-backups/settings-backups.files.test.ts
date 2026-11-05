@@ -81,6 +81,7 @@ it('reserves one job, starts once, persists progress and exposes a hash-verified
   accepted.start();
   expect((await terminal(accepted.job.id))?.status).toBe('ready');
   expect(source.write).toHaveBeenCalledOnce();
+  expect(source.write.mock.calls[0]?.[0].passphrase).toBe(passphrase);
   const metadata = await fs.readFile(path.join(directory(accepted.job.id), 'job.json'), 'utf8');
   expect(metadata.includes(credentials.password)).toBe(false);
   expect(metadata.includes(passphrase)).toBe(false);
@@ -103,6 +104,28 @@ it('keeps owner isolation and fresh authentication ahead of downloads and deleti
   auth.verifySensitiveAction.mockRejectedValueOnce(new Error('Wrong password'));
   await expect(service.download(accepted.job.id, 7, req, credentials)).rejects.toThrow('Wrong password');
   expect(await fs.readFile(archive(accepted.job.id), 'utf8')).toBe('opaque verified source fixture');
+});
+
+it('requires an unchanged live owner session for session download admission', async () => {
+  const accepted = await create();
+  accepted.start();
+  await terminal(accepted.job.id);
+  await expect(service.downloadInfo(accepted.job.id, 8, req)).rejects.toThrow();
+  auth.operatorActionContext.mockRejectedValueOnce(new Error('Session revoked'));
+  await expect(service.downloadSession(accepted.job.id, 7, req)).rejects.toThrow('Session revoked');
+  auth.operatorActionContext.mockResolvedValueOnce(actor).mockResolvedValueOnce({ ...actor, securityBinding: 'c'.repeat(64) });
+  await expect(service.downloadSession(accepted.job.id, 7, req)).rejects.toThrow();
+  expect(auth.verifySensitiveAction).toHaveBeenCalledTimes(1);
+});
+
+it('uses a verified account password by default and rejects short defaults', async () => {
+  await expect(service.create(7, req, { password: 'short' }, defaultSettingsBackupSelection())).rejects.toThrow('separate backup passphrase');
+  const accepted = await service.create(7, req, credentials, defaultSettingsBackupSelection());
+  accepted.start();
+  await terminal(accepted.job.id);
+  expect(source.write.mock.calls[0]?.[0].passphrase).toBe(credentials.password);
+  const metadata = await fs.readFile(path.join(directory(accepted.job.id), 'job.json'), 'utf8');
+  expect(metadata).not.toContain(credentials.password);
 });
 
 it('preserves interrupted artifacts on restart and never replays a queued export', async () => {
@@ -179,11 +202,12 @@ it('serves a real selected settings archive through guarded HTTP creation, progr
     }
     next();
   });
+  app.setGlobalPrefix('/api');
   await app.listen(0, '127.0.0.1');
   const server = app.getHttpServer();
-  const url = '/system-backups/settings-bundles';
+  const url = '/api/system-backups/settings-bundles';
   await request(server).get(url).expect(401);
-  const retention = await request(server).get('/system-backups/settings').set('Authorization', 'operator').expect(200);
+  const retention = await request(server).get('/api/system-backups/settings').set('Authorization', 'operator').expect(200);
   expect(retention.body).toEqual({ available: true, retentionHours: 72, revision: 3 });
   const listed = await request(server).get(url).set('Authorization', 'operator').expect(200);
   expect(listed.body).toEqual({ version: 1, jobs: [] });
@@ -198,11 +222,25 @@ it('serves a real selected settings archive through guarded HTTP creation, progr
     .set('Authorization', 'operator')
     .set('Host', 'orbis.test')
     .set('Origin', 'http://orbis.test')
-    .send({ ...credentials, passphrase, selection })
+    .send({ ...credentials, selection })
     .expect(202);
   expect(accepted.headers['cache-control']).toBe('no-store');
   const job = await terminal(accepted.body.id);
   expect(job?.status).toBe('ready');
+  const info = await request(server).get(`${url}/${accepted.body.id}/download-info`).set('Authorization', 'operator').expect(200);
+  expect(info.headers['cache-control']).toBe('no-store');
+  expect(info.body).toEqual({
+    version: 1,
+    href: `${url}/${accepted.body.id}/download`,
+    filename: `orbis-settings-${accepted.body.id}.orbis-settings`,
+    bytes: job?.bytes,
+    sha256: job?.sha256,
+  });
+  const sessionDownload = await request(server).get(info.body.href).set('Authorization', 'operator').expect(200);
+  expect(sessionDownload.headers['x-content-type-options']).toBe('nosniff');
+  expect(sessionDownload.headers['content-length']).toBe(String(job?.bytes));
+  expect(digest(sessionDownload.body)).toBe(job?.sha256);
+  await request(server).get(info.body.href).expect(401);
   const downloaded = await request(server)
     .post(`${url}/${accepted.body.id}/download`)
     .set('Authorization', 'operator')
@@ -220,7 +258,7 @@ it('serves a real selected settings archive through guarded HTTP creation, progr
   const reviewed = await openSettingsBackupReview({
     source: file,
     directory: path.join(root, 'review'),
-    passphrase,
+    passphrase: credentials.password,
     signal: new AbortController().signal,
   });
   expect(reviewed.summary.contents.map((value) => value.kind)).toEqual(['settings', 'dashboard']);

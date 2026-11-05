@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { prefersReducedMotion } from '@/desktop/motion-setting';
 import { useOperationStartup } from './operation-startup';
 import { StartupSurface } from './startup-surface';
+import { waitForStartupWallpaper } from './wallpaper-ready';
 import { startupCycleRemaining } from './startup-timing';
 import { useThemeApplyStartup } from '@/modules/theme-packs/use-theme-apply-startup';
 import { ThemeApplyCover } from '@/modules/theme-packs/theme-apply-cover';
@@ -71,11 +72,20 @@ export function StartupBoundary({ children }: PropsWithChildren) {
       ?.getAnimations()
       .find((animation) => animation instanceof CSSAnimation && animation.animationName === 'orbis-startup-flow');
     const elapsed = typeof cycle?.currentTime === 'number' ? cycle.currentTime : 0;
-    const timer = window.setTimeout(
-      () => setPhase('finishing'),
-      prefersReducedMotion() || sessionTransition === 'preparing-orbis' ? 0 : startupCycleRemaining(elapsed),
-    );
-    return () => window.clearTimeout(timer);
+    let timer: number | undefined;
+    const finishLoading = () => {
+      timer = window.setTimeout(
+        () => setPhase('finishing'),
+        prefersReducedMotion() || sessionTransition === 'preparing-orbis' ? 0 : startupCycleRemaining(elapsed),
+      );
+    };
+    let stopWaiting: (() => void) | undefined;
+    if (sessionTransition === 'preparing-orbis' && surface.current) stopWaiting = waitForStartupWallpaper(surface.current, finishLoading);
+    else finishLoading();
+    return () => {
+      stopWaiting?.();
+      window.clearTimeout(timer);
+    };
   }, [ready, sessionPending, phase, themeHandoff.pending, sessionTransition]);
 
   useEffect(() => {

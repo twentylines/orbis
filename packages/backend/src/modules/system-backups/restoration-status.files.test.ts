@@ -9,12 +9,55 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterEach, expect, it } from 'vitest';
 import { BackupRestoreJournal } from '@/modules/system-backups/backup-restore-journal';
-import { createRestorationMiddleware, readOperationStatus, readRestorationStatus } from '@/common/restoration-status';
+import { createRestorationMiddleware, readClientOperationStatus, readOperationStatus, readRestorationStatus } from '@/common/restoration-status';
 import { readRootCoreState, readRootCoreProgress, readRootRestorationState } from '@/common/restoration-root-status';
 import { parseCoreUpdateProgress } from '@/common/core-update-progress';
 import { ResetState } from '@/modules/system-reset/reset-state';
 
 const directories: string[] = [];
+it('projects a completed reset only for negotiated clients and retains active/unreadable holds', async () => {
+  const directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'reset-client-status-')));
+  directories.push(directory);
+  const store = new ResetState(directory);
+  const journal = {
+    version: 1 as const,
+    id: randomUUID(),
+    controller: 'private-controller',
+    accounts: 'remove' as const,
+    users: [7],
+    phase: 'complete' as const,
+    createdAt: Date.now(),
+  };
+  await store.save(journal);
+  const idle = async () => ({ state: 'idle' as const });
+  const read = () => store.active();
+  expect(await readClientOperationStatus(idle, read)).toEqual({ version: 1, status: { state: 'idle' }, resetGeneration: journal.id });
+  const app = await (await Test.createTestingModule({ imports: [ProbeModule] }).compile()).createNestApplication();
+  app.use(createRestorationMiddleware(idle, async () => null, read));
+  await app.init();
+  try {
+    expect((await request(app.getHttpServer()).get('/api/system/operation-status')).body).toEqual({ state: 'idle' });
+    expect((await request(app.getHttpServer()).get('/api/system/operation-status?client=1')).body).toEqual({
+      version: 1,
+      status: { state: 'idle' },
+      resetGeneration: journal.id,
+    });
+    expect((await request(app.getHttpServer()).get('/api/system/restoration-status?client=1')).body).toEqual({ state: 'idle' });
+    await store.save({ ...journal, phase: 'accounts' });
+    expect(await readClientOperationStatus(idle, read)).toEqual({
+      version: 1,
+      status: { state: 'resetting', stage: 'resetting' },
+      resetGeneration: null,
+    });
+    expect(
+      await readClientOperationStatus(idle, async () => {
+        throw new Error('unreadable');
+      }),
+    ).toEqual({ version: 1, status: { state: 'checking' }, resetGeneration: null });
+  } finally {
+    await app.close();
+  }
+});
 it('holds reset across reload, exposes no account data, and keeps protected restore/core state dominant', async () => {
   const directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'reset-public-status-')));
   directories.push(directory);

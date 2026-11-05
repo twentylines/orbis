@@ -15,7 +15,7 @@ const restoreSchema = type({ job: settingsBackupRestoreJobSchema.or('null') }).o
 const limit = 256 * 1024;
 function path(value: string) {
   if (value === '' || value === '/imports' || value === '/restores') return root + value;
-  const match = value.match(/^\/(?:([^/]+)\/remove|imports\/([^/]+)\/(?:file|review|restore|remove)|restores\/([^/]+)\/rollback)$/);
+  const match = value.match(/^\/(?:([^/]+)\/(?:remove|download-info)|imports\/([^/]+)\/(?:file|review|restore|remove)|restores\/([^/]+)\/rollback)$/);
   const id = match?.[1] ?? match?.[2] ?? match?.[3];
   if (!id || !idPattern.test(id)) throw new Error('Invalid backup action.');
   return root + value;
@@ -91,14 +91,40 @@ export async function readSettingsRestore(signal: AbortSignal) {
 }
 export async function createSettingsBundle(
   credentials: BackupCredentials,
-  passphrase: string,
+  passphrase: string | undefined,
   selection: SettingsBackupSelection,
   signal?: AbortSignal,
 ) {
-  return parseBackupResponse(settingsBackupJobSchema, await settingsBundleRequest('', 'POST', { ...credentials, passphrase, selection }, signal));
+  return parseBackupResponse(
+    settingsBackupJobSchema,
+    await settingsBundleRequest('', 'POST', { ...credentials, ...(passphrase === undefined ? {} : { passphrase }), selection }, signal),
+  );
 }
-export async function createSettingsImport(credentials: BackupCredentials, signal?: AbortSignal) {
-  return parseBackupResponse(settingsBackupImportJobSchema, await settingsBundleRequest('/imports', 'POST', credentials, signal));
+export async function settingsBundleDownloadInfo(id: string, signal?: AbortSignal) {
+  const value = await settingsBundleRequest(`/${id}/download-info`, 'GET', undefined, signal);
+  if (!value || typeof value !== 'object' || !idPattern.test(id)) throw new Error('Download information could not be verified.');
+  const info = value as Record<string, unknown>;
+  if (
+    Object.keys(info).sort().join(',') !== 'bytes,filename,href,sha256,version' ||
+    info.version !== 1 ||
+    info.href !== `${root}/${id}/download` ||
+    info.filename !== `orbis-settings-${id}.orbis-settings` ||
+    typeof info.bytes !== 'number' ||
+    !Number.isSafeInteger(info.bytes) ||
+    info.bytes <= 0 ||
+    typeof info.sha256 !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(info.sha256)
+  )
+    throw new Error('Download information could not be verified.');
+  return { href: info.href, filename: info.filename, bytes: info.bytes, sha256: info.sha256 } as {
+    href: string;
+    filename: string;
+    bytes: number;
+    sha256: string;
+  };
+}
+export async function createSettingsImport(credentials?: BackupCredentials, signal?: AbortSignal) {
+  return parseBackupResponse(settingsBackupImportJobSchema, await settingsBundleRequest('/imports', 'POST', credentials ?? {}, signal));
 }
 export async function uploadSettingsImport(id: string, file: File, onProgress: (done: number, total: number) => void, signal: AbortSignal) {
   const url = path(`/imports/${id}/file`);

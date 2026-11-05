@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   defaultSettingsBackupSelection,
@@ -15,7 +15,8 @@ import { preferenceStorageKey } from '@/desktop/appearance-cache';
 import { themePackCacheKey } from '@/modules/theme-packs/theme-pack-cache';
 import type { SettingsBackupRestoreJob } from '@runtipi/common/schemas/settings-backup-import';
 import { readTimeMachinePoints } from '@/modules/time-machine/time-machine-api';
-import { downloadBackup } from './backup-api';
+import { backupFileFamily } from './backup-file-family';
+import { SystemBackupsSettings } from './system-backups-settings';
 import {
   createSettingsBundle,
   createSettingsImport,
@@ -26,6 +27,7 @@ import {
   reviewSettingsImport,
   rollbackSettingsRestore,
   settingsBundleRequest,
+  settingsBundleDownloadInfo,
   uploadSettingsImport,
 } from './settings-bundle-api';
 import './system-backups-settings.css';
@@ -38,9 +40,7 @@ export function settingsRestoreCanReload(job: SettingsBackupRestoreJob | null | 
 export function pendingAcceptedExport(accepted: SettingsBackupJob | null, jobs: SettingsBackupJob[]) {
   return accepted && !jobs.some((job) => job.id === accepted.id) ? accepted : null;
 }
-type Action =
-  | { kind: 'create' | 'upload' }
-  | { kind: 'download' | 'remove' | 'review' | 'restore' | 'rollback' | 'resume-upload' | 'remove-import'; id: string };
+type Action = { kind: 'create' | 'upload' } | { kind: 'remove' | 'review' | 'restore' | 'rollback' | 'resume-upload' | 'remove-import'; id: string };
 const bytes = (value: number) =>
   value < 1024
     ? `${value} B`
@@ -84,17 +84,31 @@ function Choices({
     </div>
   );
 }
-export function SettingsBundleSettings() {
+export function SettingsBundleSettings({
+  initialFile,
+  onReturn,
+  restoreOnly = false,
+}: {
+  initialFile?: File;
+  onReturn?: () => void;
+  restoreOnly?: boolean;
+} = {}) {
   const { user } = useAppContext();
-  return <SettingsBundleWorkspace key={user?.id} />;
+  return <SettingsBundleWorkspace key={user?.id} initialFile={initialFile} onReturn={onReturn} restoreOnly={restoreOnly} />;
 }
-function SettingsBundleWorkspace() {
+function SettingsBundleWorkspace({ initialFile, onReturn, restoreOnly }: { initialFile?: File; onReturn?: () => void; restoreOnly: boolean }) {
+  const fileLabel = useId();
+  const filePicker = useRef<HTMLInputElement>(null);
   const { user } = useAppContext();
   const visible = useWindowVisible();
   const key = ['orbis-settings-bundles', user?.id];
   const [selection, setSelection] = useState(defaultSettingsBackupSelection);
   const [restoreSelection, setRestoreSelection] = useState<SettingsBackupSelection | null>(null);
-  const [action, setAction] = useState<Action | null>(null);
+  const [action, setAction] = useState<Action | null>(initialFile ? { kind: 'upload' } : null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(initialFile ?? null);
+  const [legacyFile, setLegacyFile] = useState<File | null>(null);
+  const fileGeneration = useRef(0);
+  const [separateKey, setSeparateKey] = useState(false);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState('');
@@ -108,7 +122,6 @@ function SettingsBundleWorkspace() {
   const opener = useRef<HTMLElement | null>(null);
   const completedRestore = useRef<string | null>(null);
   const observedRestore = useRef<string | null>(null);
-  const frameCleanup = useRef<(() => void) | null>(null);
   const exportsQuery = useQuery({
     queryKey: [...key, 'exports'],
     queryFn: ({ signal }) => readSettingsExports(signal),
@@ -166,7 +179,6 @@ function SettingsBundleWorkspace() {
   useEffect(
     () => () => {
       requestAbort.current?.abort();
-      frameCleanup.current?.();
     },
     [],
   );
@@ -203,8 +215,11 @@ function SettingsBundleWorkspace() {
   const reviewed = action?.kind === 'restore' ? imports.find((job) => job.id === action.id)?.review : undefined;
   const open = (next: Action) => {
     if (busyRef.current) return;
+    fileGeneration.current += 1;
+    setSelectedFile(null);
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setError('');
+    setSeparateKey(false);
     setAction(next);
     if (next.kind === 'restore') {
       const review = imports.find((job) => job.id === next.id)?.review;
@@ -215,13 +230,13 @@ function SettingsBundleWorkspace() {
     event.preventDefault();
     if (!action || busyRef.current || user?.operator !== true) return;
     const canAct =
-      action.kind === 'create' || action.kind === 'download' || action.kind === 'remove'
-        ? exportsFresh
+      action.kind === 'create' || action.kind === 'remove'
+        ? exportsFresh && (action.kind !== 'create' || !restoreHeld)
         : action.kind === 'restore'
           ? importsFresh && restoreFresh && !acceptedRestore && restore?.status !== 'running' && !restore?.needsRecovery
           : action.kind === 'rollback'
             ? restoreFresh
-            : importsFresh;
+            : importsFresh && !restoreHeld;
     if (!canAct) {
       setError('Refresh status before continuing.');
       return;
@@ -230,15 +245,19 @@ function SettingsBundleWorkspace() {
     const data = new FormData(form);
     const password = String(data.get('password') ?? '');
     const totpCode = String(data.get('totpCode') ?? '').trim();
-    const passphrase = String(data.get('passphrase') ?? '');
+    const passphrase = separateKey ? String(data.get('passphrase') ?? '') : password;
     const credentials = { password, ...(totpCode ? { totpCode } : {}) };
-    const file = data.get('file');
-    if (action.kind === 'create' && passphrase !== String(data.get('confirmPassphrase') ?? '')) {
-      setError('Backup keys do not match.');
+    const file = selectedFile;
+    if (action.kind === 'create' && separateKey && passphrase !== String(data.get('confirmPassphrase') ?? '')) {
+      setError('Backup passwords do not match.');
       return;
     }
-    if (['create', 'review', 'restore'].includes(action.kind) && (!passphrase.trim() || passphrase.length < 8 || passphrase.length > 1024)) {
-      setError('Use a backup key between 8 and 1024 characters.');
+    if (
+      separateKey &&
+      ['create', 'review', 'restore'].includes(action.kind) &&
+      (!passphrase.trim() || passphrase.length < 8 || passphrase.length > 1024)
+    ) {
+      setError('Use a backup password between 8 and 1024 characters.');
       return;
     }
     if ((action.kind === 'upload' || action.kind === 'resume-upload') && (!(file instanceof File) || !file.size)) {
@@ -254,17 +273,17 @@ function SettingsBundleWorkspace() {
     try {
       if (action.kind === 'create') {
         if (!settingsBackupSelectionSchema.allows(selection)) throw new Error('Choose at least one item.');
-        setAccepted(await createSettingsBundle(credentials, passphrase, selection, controller.signal));
-      }
-      if (action.kind === 'download') {
-        frameCleanup.current?.();
-        frameCleanup.current = downloadBackup(action.id, credentials, setError, 'settings');
+        setAccepted(await createSettingsBundle(credentials, separateKey ? passphrase : undefined, selection, controller.signal));
       }
       if (action.kind === 'remove') await settingsBundleRequest(`/${action.id}/remove`, 'POST', credentials, controller.signal);
       if (action.kind === 'remove-import') await settingsBundleRequest(`/imports/${action.id}/remove`, 'POST', credentials, controller.signal);
       if (action.kind === 'upload' || action.kind === 'resume-upload') {
         if (!(file instanceof File) || !file.size) throw new Error('Choose a backup file.');
-        const id = 'id' in action ? action.id : (await createSettingsImport(credentials, controller.signal)).id;
+        if ((await backupFileFamily(file)) === 'full') {
+          setLegacyFile(file);
+          return;
+        }
+        const id = 'id' in action ? action.id : (await createSettingsImport(undefined, controller.signal)).id;
         await uploadSettingsImport(id, file, (done, total) => setUploadProgress({ done, total }), controller.signal);
       }
       if (action.kind === 'review') await reviewSettingsImport(action.id, credentials, passphrase, controller.signal);
@@ -283,6 +302,7 @@ function SettingsBundleWorkspace() {
       }
       if (action.kind === 'rollback') setAcceptedRestore(await rollbackSettingsRestore(action.id, credentials, controller.signal));
       setAction(null);
+      setSelectedFile(null);
       setUploadProgress(null);
       requestAnimationFrame(() => (opener.current?.isConnected ? opener.current : sectionHeading.current)?.focus());
     } catch (failure) {
@@ -298,56 +318,88 @@ function SettingsBundleWorkspace() {
   };
   const sealed = points.data?.points.filter((point) => point.status === 'sealed' && point.metadata?.version === 2) ?? [];
   const passphraseNeeded = action?.kind === 'create' || action?.kind === 'review' || action?.kind === 'restore';
+  if (legacyFile)
+    return (
+      <SystemBackupsSettings
+        allowCreate={false}
+        restoreOnly
+        initialFile={legacyFile}
+        onReturn={() => {
+          setLegacyFile(null);
+          setSelectedFile(null);
+          requestAnimationFrame(() => formHeading.current?.focus());
+        }}
+      />
+    );
+  const download = async (id: string) => {
+    if (busyRef.current || !exportsFresh) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError('');
+    try {
+      const info = await settingsBundleDownloadInfo(id);
+      const anchor = document.createElement('a');
+      anchor.href = info.href;
+      anchor.download = info.filename;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Download information could not be verified.');
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
   return (
     <section className="system-backups-settings settings-bundle-settings">
-      <div className="system-backups-overview">
-        <h2 ref={sectionHeading} tabIndex={-1}>
-          Backup &amp; Restore
-        </h2>
-        <p>
-          Choose your settings and saved Time Machine captures. This backup doesn’t take a new copy of your apps or media. Imported captures appear in
-          Time Machine; you choose separately when to restore their contents.
-        </p>
-        <Choices selection={selection} onChange={setSelection} />
-        {sealed.length ? (
-          <fieldset>
-            <legend>Saved Time Machine captures</legend>
-            {sealed.map((point) => (
-              <Checkbox
-                key={point.id}
-                label={new Date(point.createdAt).toLocaleString()}
-                checked={selection.timeMachine.includes(point.id)}
-                onCheckedChange={(checked) =>
-                  setSelection((current) => ({
-                    ...current,
-                    timeMachine: checked ? [...current.timeMachine, point.id] : current.timeMachine.filter((id) => id !== point.id),
-                  }))
-                }
-              />
-            ))}
-          </fieldset>
-        ) : (
-          <p>{points.isError ? 'Saved captures could not be loaded.' : 'No saved captures selected.'}</p>
-        )}
-        <div className="system-backups-actions">
-          <Button
-            type="button"
-            intent="primary"
-            disabled={busy || restoreHeld || user?.operator !== true || !exportsFresh || !settingsBackupSelectionSchema.allows(selection)}
-            onClick={() => open({ kind: 'create' })}
-          >
-            Create backup
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy || restoreHeld || !importsFresh || !importsQuery.data?.available}
-            onClick={() => open({ kind: 'upload' })}
-          >
-            Open backup
-          </Button>
+      {restoreOnly && onReturn ? (
+        <Button type="button" variant="outline" onClick={onReturn}>
+          Back
+        </Button>
+      ) : null}
+      {restoreOnly ? null : (
+        <div className="system-backups-overview">
+          <h2 ref={sectionHeading} tabIndex={-1}>
+            Backups
+          </h2>
+          <p>
+            Choose your settings and saved Time Machine captures. This backup doesn’t take a new copy of your apps or media. Imported captures appear
+            in Time Machine; you choose separately when to restore their contents.
+          </p>
+          <Choices selection={selection} onChange={setSelection} />
+          {sealed.length ? (
+            <fieldset>
+              <legend>Saved Time Machine captures</legend>
+              {sealed.map((point) => (
+                <Checkbox
+                  key={point.id}
+                  label={new Date(point.createdAt).toLocaleString()}
+                  checked={selection.timeMachine.includes(point.id)}
+                  onCheckedChange={(checked) =>
+                    setSelection((current) => ({
+                      ...current,
+                      timeMachine: checked ? [...current.timeMachine, point.id] : current.timeMachine.filter((id) => id !== point.id),
+                    }))
+                  }
+                />
+              ))}
+            </fieldset>
+          ) : (
+            <p>{points.isError ? 'Saved captures could not be loaded.' : 'No saved captures selected.'}</p>
+          )}
+          <div className="system-backups-actions">
+            <Button
+              type="button"
+              intent="primary"
+              disabled={busy || restoreHeld || user?.operator !== true || !exportsFresh || !settingsBackupSelectionSchema.allows(selection)}
+              onClick={() => open({ kind: 'create' })}
+            >
+              Create backup
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
       {(
         [
           ['Export', exportsQuery],
@@ -369,28 +421,44 @@ function SettingsBundleWorkspace() {
           </div>
         ) : null,
       )}
-      {shownJobs.map((job) => (
-        <article className="system-backups-job" key={job.id}>
-          <h3>{new Date(job.createdAt).toLocaleString()}</h3>
-          <p>{job.status === 'ready' ? 'Ready to download' : `Backup ${job.status}`}</p>
-          <Progress done={job.completedBytes} total={job.totalBytes} />
-          <div className="system-backups-actions">
-            {job.status === 'ready' ? (
-              <Button type="button" intent="primary" disabled={busy || !exportsFresh} onClick={() => open({ kind: 'download', id: job.id })}>
-                Download
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy || !exportsFresh || job.status === 'running' || job.status === 'queued'}
-              onClick={() => open({ kind: 'remove', id: job.id })}
-            >
-              Remove
-            </Button>
-          </div>
-        </article>
-      ))}
+      {restoreOnly
+        ? null
+        : shownJobs.map((job) => (
+            <article className="system-backups-job" key={job.id}>
+              <h3>{new Date(job.createdAt).toLocaleString()}</h3>
+              <p>{job.status === 'ready' ? 'Ready to download' : `Backup ${job.status}`}</p>
+              <Progress done={job.completedBytes} total={job.totalBytes} />
+              <div className="system-backups-actions">
+                {job.status === 'ready' ? (
+                  <Button type="button" intent="primary" disabled={busy || !exportsFresh} onClick={() => void download(job.id)}>
+                    Download
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy || !exportsFresh || job.status === 'running' || job.status === 'queued'}
+                  onClick={() => open({ kind: 'remove', id: job.id })}
+                >
+                  Remove
+                </Button>
+              </div>
+            </article>
+          ))}
+      <div className="system-backups-overview">
+        <h2>Restore a backup</h2>
+        <p>Choose a settings or full backup. Review its contents before restoring.</p>
+        <div className="system-backups-actions">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy || restoreHeld || !importsFresh || !importsQuery.data?.available}
+            onClick={() => open({ kind: 'upload' })}
+          >
+            Restore
+          </Button>
+        </div>
+      </div>
       {imports.map((job) => (
         <article className="system-backups-job" key={job.id}>
           <h3>Opened backup · {new Date(job.createdAt).toLocaleString()}</h3>
@@ -483,7 +551,6 @@ function SettingsBundleWorkspace() {
               {
                 create: 'Create backup',
                 upload: 'Open backup',
-                download: 'Download backup',
                 remove: 'Remove backup',
                 review: 'Review contents',
                 restore: 'Restore selected items',
@@ -519,23 +586,79 @@ function SettingsBundleWorkspace() {
             </>
           ) : null}
           {action.kind === 'upload' || action.kind === 'resume-upload' ? (
-            <Input label="Backup file" name="file" type="file" accept=".orbis-settings" required />
+            <>
+              <span id={fileLabel}>Backup file</span>
+              <input
+                ref={filePicker}
+                aria-labelledby={fileLabel}
+                name="file"
+                type="file"
+                className="visually-hidden"
+                tabIndex={-1}
+                accept=".orbis-settings,.orbis,application/octet-stream"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0] ?? null;
+                  const generation = ++fileGeneration.current;
+                  setSelectedFile(file);
+                  setError('');
+                  if (file)
+                    void backupFileFamily(file)
+                      .then((family) => {
+                        if (generation === fileGeneration.current && family === 'full') setLegacyFile(file);
+                      })
+                      .catch((failure: unknown) => {
+                        if (generation === fileGeneration.current)
+                          setError(failure instanceof Error ? failure.message : 'This file is not a supported backup.');
+                      });
+                  event.currentTarget.value = '';
+                }}
+              />
+              <div className="system-backups-file-picker">
+                <Button type="button" variant="outline" disabled={busy} onClick={() => filePicker.current?.click()}>
+                  Choose file
+                </Button>
+                <span className="system-backups-file" aria-live="polite">
+                  {selectedFile?.name ?? 'No file chosen'}
+                </span>
+              </div>
+            </>
           ) : null}
-          <Input label="Account password" name="password" type="password" autoComplete="current-password" maxLength={1024} disabled={busy} required />
-          <Input
-            label={user?.totpEnabled ? 'Authentication code' : 'Authentication code, if enabled'}
-            name="totpCode"
-            autoComplete="one-time-code"
-            inputMode="numeric"
-            pattern="[0-9]{6}"
-            minLength={6}
-            maxLength={6}
-            disabled={busy}
-            required={user?.totpEnabled === true}
-          />
+          {action.kind !== 'upload' && action.kind !== 'resume-upload' ? (
+            <>
+              <Input
+                label="Account password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                maxLength={1024}
+                disabled={busy}
+                required
+              />
+              {user?.totpEnabled ? (
+                <Input
+                  label="Authentication code"
+                  name="totpCode"
+                  autoComplete="one-time-code"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  minLength={6}
+                  maxLength={6}
+                  disabled={busy}
+                  required
+                />
+              ) : null}
+            </>
+          ) : null}
           {passphraseNeeded ? (
+            <Checkbox
+              label={action.kind === 'create' ? 'Use a separate backup password' : 'This backup uses a different password'}
+              checked={separateKey}
+              onCheckedChange={setSeparateKey}
+            />
+          ) : null}
+          {passphraseNeeded && separateKey ? (
             <Input
-              label={action.kind === 'create' ? 'New backup key' : 'Backup key'}
+              label={action.kind === 'create' ? 'New backup password' : 'Backup password'}
               name="passphrase"
               type="password"
               autoComplete="off"
@@ -544,10 +667,18 @@ function SettingsBundleWorkspace() {
               required
             />
           ) : null}
-          {action.kind === 'create' ? (
-            <Input label="Confirm backup key" name="confirmPassphrase" type="password" autoComplete="off" minLength={8} maxLength={1024} required />
+          {action.kind === 'create' && separateKey ? (
+            <Input
+              label="Confirm backup password"
+              name="confirmPassphrase"
+              type="password"
+              autoComplete="off"
+              minLength={8}
+              maxLength={1024}
+              required
+            />
           ) : null}
-          {action.kind === 'create' ? <p>Keep the backup key somewhere safe. You will need it to open this file.</p> : null}
+          {action.kind === 'create' && separateKey ? <p>Keep this password somewhere safe. You will need it to open the backup.</p> : null}
           {uploadProgress ? <Progress done={uploadProgress.done} total={uploadProgress.total} /> : null}
           {error ? <p role="alert">{error}</p> : null}
           <div className="system-backups-actions">
@@ -556,13 +687,13 @@ function SettingsBundleWorkspace() {
               intent="primary"
               disabled={
                 busy ||
-                (action.kind === 'create' || action.kind === 'download' || action.kind === 'remove'
-                  ? !exportsFresh
+                (action.kind === 'create' || action.kind === 'remove'
+                  ? !exportsFresh || (action.kind === 'create' && restoreHeld)
                   : action.kind === 'restore'
                     ? !importsFresh || !restoreFresh || !!acceptedRestore || restore?.status === 'running' || !!restore?.needsRecovery
                     : action.kind === 'rollback'
                       ? !restoreFresh
-                      : !importsFresh) ||
+                      : !importsFresh || restoreHeld) ||
                 (action.kind === 'restore' &&
                   (!reviewed || reviewed.expiresAt <= now || !restoreSelection || !settingsBackupSelectionSchema.allows(restoreSelection)))
               }
@@ -572,7 +703,6 @@ function SettingsBundleWorkspace() {
                 {
                   create: 'Create',
                   upload: 'Upload',
-                  download: 'Download',
                   remove: 'Remove',
                   review: 'Review',
                   restore: 'Restore',
@@ -589,6 +719,12 @@ function SettingsBundleWorkspace() {
               onClick={() => {
                 setAction(null);
                 setError('');
+                setSelectedFile(null);
+                fileGeneration.current += 1;
+                if (onReturn) {
+                  onReturn();
+                  return;
+                }
                 requestAnimationFrame(() => (opener.current?.isConnected ? opener.current : sectionHeading.current)?.focus());
               }}
             >

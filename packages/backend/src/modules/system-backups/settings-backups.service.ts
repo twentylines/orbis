@@ -22,6 +22,7 @@ const matches = (a: Awaited<ReturnType<typeof fs.stat>>, b: Awaited<ReturnType<t
 export class SettingsBackupsService {
   private readonly jobs = new Map<string, Stored>();
   private readonly downloads = new Map<string, Set<ReadStream>>();
+  private readonly admissions = new Map<string, number>();
   private loaded?: Promise<void>;
   private active?: { id: string; abort: AbortController; done: Promise<void> };
   private reserved: string | null = null;
@@ -120,10 +121,12 @@ export class SettingsBackupsService {
     return { version: 1 as const, jobs: [...this.jobs.values()].filter((job) => job.ownerId === ownerId).map((job) => this.public(job)) };
   }
 
-  async create(ownerId: number, request: Request, credentials: Credentials, selection: unknown, passphrase: string) {
+  async create(ownerId: number, request: Request, credentials: Credentials, selection: unknown, passphrase?: string) {
     const contents = settingsBackupSelectionSchema.assert(structuredClone(selection));
-    if (typeof passphrase !== 'string' || passphrase.length < 8 || !passphrase.trim() || passphrase.length > 1024) throw fail();
     await this.verify(request, ownerId, credentials);
+    const encryptionKey = passphrase === undefined ? credentials.password : passphrase;
+    if (typeof encryptionKey !== 'string' || encryptionKey.length < 8 || !encryptionKey.trim() || encryptionKey.length > 1024)
+      throw new ConflictException('Choose a separate backup passphrase of at least 8 characters.');
     await this.initialize();
     if (this.closing || this.active || this.reserved || this.jobs.size >= 32) throw fail();
     const job: Stored = {
@@ -150,7 +153,7 @@ export class SettingsBackupsService {
     }
     return {
       job: this.public(job),
-      start: () => this.run(job, request, credentials, passphrase),
+      start: () => this.run(job, request, credentials, encryptionKey),
     };
   }
   private run(job: Stored, request: Request, credentials: Credentials, passphrase: string) {
@@ -208,20 +211,62 @@ export class SettingsBackupsService {
     })();
   }
 
+  private async sessionContext(request: Request, ownerId: number) {
+    const context = await this.auth.operatorActionContext(request);
+    if (context.userId !== ownerId) throw fail();
+    return context;
+  }
+  private async verifySession(request: Request, ownerId: number, before: Awaited<ReturnType<AuthService['operatorActionContext']>>) {
+    const after = await this.sessionContext(request, ownerId);
+    if (before.securityBinding !== after.securityBinding || before.sessionBinding !== after.sessionBinding) throw fail();
+  }
+  private async ready(id: string, ownerId: number) {
+    const job = await this.owned(id, ownerId);
+    if (job.status !== 'ready' || !job.sha256 || this.closing) throw fail();
+    return job;
+  }
+  async downloadInfo(id: string, ownerId: number, request: Request) {
+    const before = await this.sessionContext(request, ownerId);
+    const job = await this.ready(id, ownerId);
+    await this.verifySession(request, ownerId, before);
+    if ((await this.ready(id, ownerId)) !== job) throw fail();
+    return {
+      version: 1 as const,
+      href: `/api/system-backups/settings-bundles/${id}/download`,
+      filename: `orbis-settings-${id}.orbis-settings`,
+      bytes: job.bytes,
+      sha256: job.sha256,
+    };
+  }
+  async downloadSession(id: string, ownerId: number, request: Request) {
+    const before = await this.sessionContext(request, ownerId);
+    const job = await this.ready(id, ownerId);
+    return this.openDownload(id, job, async () => {
+      await this.verifySession(request, ownerId, before);
+      if ((await this.ready(id, ownerId)) !== job) throw fail();
+    });
+  }
   async download(id: string, ownerId: number, request: Request, credentials: Credentials) {
     const job = await this.owned(id, ownerId);
     await this.verify(request, ownerId, credentials);
     if (job.status !== 'ready' || !job.sha256 || this.closing) throw fail();
+    return this.openDownload(id, job);
+  }
+  private async openDownload(id: string, job: Stored, validate?: () => Promise<void>) {
     const filename = path.join(this.directory(id), 'archive.orbis-settings');
-    const file = await fs.open(filename, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+    this.admissions.set(id, (this.admissions.get(id) ?? 0) + 1);
+    let file: Awaited<ReturnType<typeof fs.open>> | undefined;
     let transferred = false;
     try {
+      file = await fs.open(filename, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
       const before = await file.stat();
       if (!before.isFile() || before.nlink !== 1 || before.size !== job.bytes || before.mode & 0o077 || before.uid !== process.getuid?.())
         throw fail();
       const hash = createHash('sha256');
       for await (const chunk of file.createReadStream({ autoClose: false })) hash.update(chunk);
       if (hash.digest('hex') !== job.sha256 || !matches(before, await file.stat()) || !matches(before, await fs.lstat(filename))) throw fail();
+      await validate?.();
+      if (!matches(before, await file.stat()) || !matches(before, await fs.lstat(filename))) throw fail();
       const stream = file.createReadStream({ start: 0, autoClose: true });
       const readers = this.downloads.get(id) ?? new Set<ReadStream>();
       readers.add(stream);
@@ -233,13 +278,17 @@ export class SettingsBackupsService {
       transferred = true;
       return { stream, bytes: job.bytes };
     } finally {
-      if (!transferred) await file.close();
+      if (!transferred) await file?.close();
+      const remaining = (this.admissions.get(id) ?? 1) - 1;
+      if (remaining) this.admissions.set(id, remaining);
+      else this.admissions.delete(id);
     }
   }
   async remove(id: string, ownerId: number, request: Request, credentials: Credentials) {
     await this.owned(id, ownerId);
     await this.verify(request, ownerId, credentials);
-    if (this.downloads.get(id)?.size) throw new ConflictException('Wait for this backup download to finish before removing it.');
+    if (this.downloads.get(id)?.size || this.admissions.has(id))
+      throw new ConflictException('Wait for this backup download to finish before removing it.');
     if (this.reserved === id) this.reserved = null;
     if (this.active?.id === id) {
       this.active.abort.abort();

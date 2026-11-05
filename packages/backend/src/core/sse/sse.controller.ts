@@ -4,10 +4,11 @@ import { DesktopPreferencesService } from '@/modules/desktop-preferences/desktop
 import { BadRequestException, type CanActivate, Controller, type MessageEvent, Query, Req, Sse, UseGuards } from '@nestjs/common';
 import { type } from 'arktype';
 import type { Request } from 'express';
-import { defer, finalize, map, merge, Observable } from 'rxjs';
+import { defer, EMPTY, finalize, map, merge, Observable } from 'rxjs';
 import { StreamAppLogsQueryDto, StreamRuntipiLogsQueryDto, streamAppQuerySchema, streamRuntipiQuerySchema } from './dto/sse.dto';
 import { SSEService } from './sse.service';
 import { MonitoringActivityService } from '../monitoring/monitoring-activity.service';
+import { observeClientStatusChanges } from '@/common/restoration-status';
 
 // Pipes run inside interceptor observables; SSE would commit HTTP 200 before their errors.
 const validateLogQuery = (validate: (query: unknown) => unknown): CanActivate => ({
@@ -28,10 +29,14 @@ export class SSEController {
   ) {}
 
   @Sse('app')
-  appEvents(@Req() request: Request): Observable<MessageEvent> {
+  appEvents(@Req() request: Request, @Query('client') client?: string): Observable<MessageEvent> {
     const observable = this.sseService.getTopicObservable('app');
     if (!request.user?.id) return observable;
-    const stream = merge(observable, this.preferences.changesFor(request.user.id).pipe(map((event) => ({ ...event, type: 'desktop-preferences' }))));
+    const stream = merge(
+      observable,
+      this.preferences.changesFor(request.user.id).pipe(map((event) => ({ ...event, type: 'desktop-preferences' }))),
+      client === '1' ? observeClientStatusChanges().pipe(map(() => ({ data: { changed: true }, type: 'client-status' }))) : EMPTY,
+    );
     return defer(() => {
       const disconnect = this.activity.connect();
       return stream.pipe(finalize(disconnect));

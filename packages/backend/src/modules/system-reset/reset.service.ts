@@ -19,7 +19,7 @@ import {
   backupMaintenanceOutsideResetActive,
   setResetRecoveryRequired,
 } from '@/common/backup-maintenance';
-import { readOperationStatus } from '@/common/restoration-status';
+import { notifyClientStatusChanged, readOperationStatus } from '@/common/restoration-status';
 import { defaultTimeMachinePreferences } from '@runtipi/common/schemas/time-machine';
 import { TimeMachineService } from '../system-backups/time-machine.service';
 import { SystemBackupsService } from '../system-backups/system-backups.service';
@@ -142,6 +142,7 @@ export class ResetService {
             }
             this.busy = false;
             unlock();
+            notifyClientStatusChanged();
           });
         },
       };
@@ -193,8 +194,6 @@ export class ResetService {
       await this.automatic.resetOrbisPreferences();
       const { version: _version, revision: _revision, ...defaults } = defaultTimeMachinePreferences();
       await this.machine.updatePreferences({ ...defaults, expectedRevision: (await this.machine.preferences()).revision });
-      const retention = await this.backups.settings();
-      await this.backups.updateSettings({ revision: retention.revision, retentionHours: 24 });
       await this.cluster.transaction(async (state) => {
         delete state.invite;
         await this.sync.transaction(state.id, (sync) => {

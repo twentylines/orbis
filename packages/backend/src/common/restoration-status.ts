@@ -6,6 +6,21 @@ import { readRootCoreState, readRootCoreProgress, readRootRestorationState, type
 import { BackupRestoreJournal } from '@/modules/system-backups/backup-restore-journal';
 import { ResetState } from '@/modules/system-reset/reset-state';
 import { parseCoreUpdateProgress } from './core-update-progress';
+import { Subject } from 'rxjs';
+import { waitForBackupMutation } from './backup-maintenance';
+
+const clientStatusChanges = new Subject<void>();
+let clientStatusPending = false;
+export const observeClientStatusChanges = () => clientStatusChanges.asObservable();
+export const notifyClientStatusChanged = () => {
+  if (clientStatusPending) return;
+  clientStatusPending = true;
+  void waitForBackupMutation().then((release) => {
+    clientStatusPending = false;
+    release();
+    clientStatusChanges.next();
+  });
+};
 
 export type RestorationStatus =
   | { state: 'idle' | 'checking' }
@@ -79,7 +94,23 @@ export async function readOperationStatus(
   return { state: 'idle' };
 }
 
-export function createRestorationMiddleware(readStatus = readOperationStatus, readProgress = readRootCoreProgress) {
+export async function readClientOperationStatus(readStatus = readOperationStatus, readReset = () => new ResetState(DATA_DIR).active()) {
+  let status = await readStatus();
+  try {
+    const reset = await readReset();
+    if (reset && reset.phase !== 'complete' && status.state === 'idle')
+      status = { state: 'resetting', stage: reset.phase === 'recovery' ? 'recovering' : reset.phase === 'prepared' ? 'preparing' : 'resetting' };
+    return { version: 1 as const, status, resetGeneration: reset?.phase === 'complete' ? reset.id : null };
+  } catch {
+    return { version: 1 as const, status: { state: 'checking' as const }, resetGeneration: null };
+  }
+}
+
+export function createRestorationMiddleware(
+  readStatus = readOperationStatus,
+  readProgress = readRootCoreProgress,
+  readReset = () => new ResetState(DATA_DIR).active(),
+) {
   return async (request: Request, response: Response, next: NextFunction) => {
     const pathname = request.originalUrl.split('?')[0] ?? '';
     if (/^\/api\/system\/core-update-progress\/?$/.test(pathname)) {
@@ -96,6 +127,8 @@ export function createRestorationMiddleware(readStatus = readOperationStatus, re
     const statusRoute = /^\/api\/system\/(?:restoration-status|operation-status)\/?$/.test(pathname);
     if (statusRoute && ['GET', 'HEAD'].includes(request.method)) {
       response.setHeader('Cache-Control', 'no-store');
+      if (/^\/api\/system\/operation-status\/?$/.test(pathname) && request.query?.client === '1')
+        return response.json(await readClientOperationStatus(readStatus, readReset));
       return response.json(await readStatus());
     }
     if (!pathname.startsWith('/api/')) return next();

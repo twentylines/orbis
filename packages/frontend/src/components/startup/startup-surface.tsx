@@ -12,6 +12,7 @@ import { RecoveryProgressBar } from '@/components/recovery-progress/recovery-pro
 import './startup-space.css';
 
 const viewportGutterProperty = '--orbis-startup-viewport-gutter';
+
 export const startupViewportBootstrap = `requestAnimationFrame(()=>document.documentElement.style.setProperty('${viewportGutterProperty}',Math.max(0,window.innerWidth-document.documentElement.clientWidth)+'px'));
 `;
 
@@ -84,7 +85,7 @@ export function StartupSurface({
   const content = (
     <div
       ref={surface}
-      className={`orbis-startup${current ? ' orbis-theme' : ''}${setupSpace ? ' orbis-startup-setup-space' : ''}${loggingOff ? ' orbis-logout-surface' : signingIn ? ' orbis-login-surface' : status ? ' orbis-update-surface' : ''}${overlay ? ' orbis-startup-overlay' : ''}`}
+      className={`orbis-startup${current ? ' orbis-theme' : ''}${setupSpace || setupHandoff ? ' orbis-startup-setup-space' : ''}${loggingOff ? ' orbis-logout-surface' : signingIn ? ' orbis-login-surface' : status ? ' orbis-update-surface' : ''}${overlay ? ' orbis-startup-overlay' : ''}`}
       data-session-state={loggingOff || resumingLogout ? 'logging-out' : signingIn ? 'signing-in' : status ? 'updating' : 'loading'}
       data-setup-handoff={setupHandoff || undefined}
       data-revealing={revealing || undefined}

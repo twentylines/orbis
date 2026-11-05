@@ -695,7 +695,7 @@ function LocalUpdates() {
                     reviewCore.mutate(latest.tag);
                   }}
                 >
-                  {checkingCore ? 'Preparing update…' : coreUpdatePending ? 'Starting update…' : `Update to ${formatOrbisVersion(latest.tag)}`}
+                  {checkingCore ? 'Preparing update…' : coreUpdatePending ? 'Starting update…' : 'Update'}
                 </button>
               ) : null}
             </section>

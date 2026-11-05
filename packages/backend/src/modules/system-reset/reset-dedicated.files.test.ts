@@ -16,7 +16,7 @@ import { ResetState, type ResetJournal, type ResetStateOptions } from './reset-s
 import { ResetService } from './reset.service';
 
 const status = vi.hoisted(() => vi.fn());
-vi.mock('@/common/restoration-status', () => ({ readOperationStatus: status }));
+vi.mock('@/common/restoration-status', () => ({ readOperationStatus: status, notifyClientStatusChanged: vi.fn() }));
 
 const actor = { userId: 7, sessionBinding: 'a'.repeat(64), securityBinding: 'b'.repeat(64) };
 const request = {} as Request;

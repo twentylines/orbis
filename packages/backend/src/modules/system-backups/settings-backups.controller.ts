@@ -22,7 +22,7 @@ export class SettingsBackupsController {
   async create(@Req() request: Request, @Res({ passthrough: true }) response: Response, @Body() body: unknown) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw new BadRequestException('Choose what to include in your backup.');
     const { selection, ...proof } = body as Record<string, unknown>;
-    const credentials = backupCredentials(proof, true);
+    const credentials = backupCredentials(proof, Object.hasOwn(proof, 'passphrase'));
     const accepted = await this.backups.create(backupOperator(request), request, credentials, selection, credentials.passphrase);
     response.setHeader('Cache-Control', 'no-store');
     let started = false;
@@ -38,12 +38,22 @@ export class SettingsBackupsController {
     return accepted.job;
   }
 
-  @Post(':id/download')
-  @HttpCode(200)
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  async download(@Req() request: Request, @Res({ passthrough: true }) response: Response, @Param('id') id: string, @Body() body: unknown) {
-    const result = await this.backups.download(id, backupOperator(request), request, backupCredentials(body));
+  @Get(':id/download-info')
+  async downloadInfo(@Req() request: Request, @Res({ passthrough: true }) response: Response, @Param('id') id: string) {
     response.setHeader('Cache-Control', 'no-store');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    return this.backups.downloadInfo(id, backupOperator(request), request);
+  }
+
+  @Get(':id/download')
+  async downloadSession(@Req() request: Request, @Res({ passthrough: true }) response: Response, @Param('id') id: string) {
+    const result = await this.backups.downloadSession(id, backupOperator(request), request);
+    return this.streamDownload(request, response, id, result);
+  }
+
+  private streamDownload(request: Request, response: Response, id: string, result: Awaited<ReturnType<SettingsBackupsService['download']>>) {
+    response.setHeader('Cache-Control', 'no-store');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
     const close = () => result.stream.destroy();
     response.once('close', close);
     result.stream.once('close', () => response.removeListener('close', close));
@@ -53,6 +63,14 @@ export class SettingsBackupsController {
       length: result.bytes,
       disposition: `attachment; filename="orbis-settings-${id}.orbis-settings"`,
     });
+  }
+
+  @Post(':id/download')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  async download(@Req() request: Request, @Res({ passthrough: true }) response: Response, @Param('id') id: string, @Body() body: unknown) {
+    const result = await this.backups.download(id, backupOperator(request), request, backupCredentials(body));
+    return this.streamDownload(request, response, id, result);
   }
 
   @Post(':id/remove')

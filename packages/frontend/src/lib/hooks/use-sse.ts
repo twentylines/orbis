@@ -8,17 +8,18 @@ type Props<T> = {
   onError?: (error: Event) => void;
   onOpen?: () => void;
   onPreferencesChanged?: () => void;
+  onClientStatusChanged?: () => void;
   params?: URLSearchParams;
 };
 
-export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, onPreferencesChanged, params }: Props<T>) => {
-  const handlers = useRef({ onEvent, onError, onOpen, onPreferencesChanged });
+export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, onPreferencesChanged, onClientStatusChanged, params }: Props<T>) => {
+  const handlers = useRef({ onEvent, onError, onOpen, onPreferencesChanged, onClientStatusChanged });
   const hasConnected = useRef(false);
   const [status, setStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'disconnected'>('connecting');
   const query = params?.toString() ?? '';
   useEffect(() => {
-    handlers.current = { onEvent, onError, onOpen, onPreferencesChanged };
-  }, [onEvent, onError, onOpen, onPreferencesChanged]);
+    handlers.current = { onEvent, onError, onOpen, onPreferencesChanged, onClientStatusChanged };
+  }, [onEvent, onError, onOpen, onPreferencesChanged, onClientStatusChanged]);
 
   const visible = useWindowVisible();
   useEffect(() => {
@@ -77,6 +78,9 @@ export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, onPre
       };
       source.addEventListener('desktop-preferences', () => {
         if (!disposed && source === stream) handlers.current.onPreferencesChanged?.();
+      });
+      source.addEventListener('client-status', () => {
+        if (!disposed && source === stream) handlers.current.onClientStatusChanged?.();
       });
       source.onerror = (error) => {
         if (disposed || source !== stream) return;

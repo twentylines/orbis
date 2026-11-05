@@ -142,7 +142,7 @@ test('embedded restore uses a file button, neutral backup key and one restore ac
   expect(markup).toContain('No file chosen');
   expect(markup).toContain('type="file"');
   expect(markup).toContain('class="visually-hidden"');
-  expect(markup).toContain('accept=".orbis,application/octet-stream"');
+  expect(markup).toContain('accept=".orbis,.orbis-settings,application/octet-stream"');
   expect(markup).toContain('name="passphrase"');
   expect(markup).toContain('>Restore</button>');
   expect(markup).not.toContain('name="confirmation"');

@@ -3,16 +3,14 @@ import { PreferenceSession } from './preference-save-queue';
 import { usePreferenceNameDraft } from './preference-name-draft';
 import { act } from 'react';
 const events = new EventTarget();
+const documentEvents = new EventTarget();
 // React mounts its real provider/hooks; the null-output host does not model browser layout.
 const doc = {
   nodeType: 9,
   visibilityState: 'visible',
-  addEventListener() {
-    return undefined;
-  },
-  removeEventListener() {
-    return undefined;
-  },
+  addEventListener: documentEvents.addEventListener.bind(documentEvents),
+  removeEventListener: documentEvents.removeEventListener.bind(documentEvents),
+  dispatchEvent: documentEvents.dispatchEvent.bind(documentEvents),
   activeElement: null,
   documentElement: {
     dataset: {},
@@ -120,29 +118,48 @@ const refreshedPreferences: typeof import('./preferences') | null = process.argv
 const CompositionProvider =
   process.argv[2] === 'provider-composition' ? (await import('@/components/providers/providers')).Providers : DesktopPreferencesProvider;
 let controls: ReturnType<typeof useDesktopPreferences>;
+const clients = new Map<string, ReturnType<typeof useDesktopPreferences>>();
+const client = (id: string) => {
+  const current = clients.get(id);
+  if (!current) throw new Error(`Client ${id} has not mounted`);
+  return current;
+};
 let nameDraft: ReturnType<typeof usePreferenceNameDraft>;
-function Probe() {
+function Probe({ id = 'main' }: { id?: string }) {
   controls = (refreshedPreferences?.useDesktopPreferences ?? useDesktopPreferences)();
+  clients.set(id, controls);
   nameDraft = usePreferenceNameDraft(controls.preferences.serverName);
   return null;
 }
-type RequestRecord = { url: string; method: string; body: string; signal: AbortSignal | null | undefined };
+type RequestRecord = { url: string; method: string; body: string; signal: AbortSignal | null | undefined; generation: string | null };
 const requests: RequestRecord[] = [];
 let server = structuredClone(defaultDesktopPreferences);
-let onboardingComplete = !process.argv[2]?.startsWith('onboarding-capture-') && process.argv[2] !== 'provider-composition';
+let onboardingComplete =
+  !process.argv[2]?.startsWith('onboarding-capture-') && process.argv[2] !== 'provider-composition' && process.argv[2] !== 'two-clients-onboarding';
+let generation: string | null = null;
 let intercept: ((r: RequestRecord) => Promise<Response> | undefined) | undefined;
 Object.assign(globalThis, {
   fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-    const r = { url: String(input), method: init?.method ?? 'GET', body: String(init?.body ?? ''), signal: init?.signal };
+    const r = {
+      url: String(input),
+      method: init?.method ?? 'GET',
+      body: String(init?.body ?? ''),
+      signal: init?.signal,
+      generation: new Headers(init?.headers).get('X-Orbis-Reset-Generation'),
+    };
     requests.push(r);
     const result = intercept?.(r);
     if (result) return result;
     if (r.url.endsWith('/onboarding')) {
+      if (r.method === 'POST' && generation && r.generation !== generation) return new Response('', { status: 409 });
       if (r.method === 'POST') onboardingComplete = true;
-      return Response.json({ complete: onboardingComplete });
+      return Response.json({ complete: onboardingComplete, ...(generation ? { generation } : {}) });
     }
-    if (r.method === 'PUT') server = JSON.parse(r.body);
-    return Response.json(server);
+    if (r.method === 'PUT') {
+      if (generation && r.generation !== generation) return new Response('', { status: 409 });
+      server = JSON.parse(r.body);
+    }
+    return Response.json(server, { headers: { 'X-Orbis-Reset-Generation': generation ?? 'none' } });
   },
 });
 const deferred = () => {
@@ -175,9 +192,20 @@ const container = {
 let root = createRoot(container as unknown as HTMLElement);
 const render = () =>
   root.render(
-    <CompositionProvider>
-      <Probe />
-    </CompositionProvider>,
+    process.argv[2]?.startsWith('two-clients-') ? (
+      <>
+        <DesktopPreferencesProvider>
+          <Probe id="first" />
+        </DesktopPreferencesProvider>
+        <DesktopPreferencesProvider>
+          <Probe id="second" />
+        </DesktopPreferencesProvider>
+      </>
+    ) : (
+      <CompositionProvider>
+        <Probe />
+      </CompositionProvider>
+    ),
   );
 const switchSession = async () => {
   session.invalidate();
@@ -188,6 +216,107 @@ const switchSession = async () => {
   });
 };
 const scenarios: Record<string, () => Promise<void>> = {
+  'two-clients-onboarding': async () => {
+    expect(client('first').requiresOnboarding).toBe(true);
+    expect(client('second').requiresOnboarding).toBe(true);
+    await act(async () => {
+      await client('first').completeOnboarding('Shared server');
+      window.dispatchEvent(new Event('orbis-desktop-preferences-changed'));
+    });
+    expect(client('first').requiresOnboarding).toBe(false);
+    expect(client('second').requiresOnboarding).toBe(false);
+    expect(client('second').preferences.serverName).toBe('Shared server');
+  },
+  'two-clients-reset': async () => {
+    await act(async () => {
+      client('first').update({ workspace: { ...client('first').preferences.workspace, pinnedApps: ['media:fixture'] } });
+      client('second').updateAppearance({ dockPins: ['media:fixture'] });
+    });
+    generation = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    server = structuredClone(defaultDesktopPreferences);
+    onboardingComplete = false;
+    await act(async () => {
+      window.dispatchEvent(new Event('orbis-desktop-preferences-changed'));
+    });
+    for (const client of clients.values()) {
+      expect(client.preferences.workspace.pinnedApps).toEqual([]);
+      expect(client.preferences.appearance.dockPins).toEqual([]);
+      expect(client.requiresOnboarding).toBe(true);
+      expect(client.onboardingGeneration).toBe(generation);
+    }
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    expect(puts()).toHaveLength(0);
+    await act(async () => {
+      await client('first').commit({ serverName: 'Fresh settings' });
+    });
+    expect(puts().at(-1)?.generation).toBe(generation);
+  },
+  'sleeping-client-reset': async () => {
+    doc.visibilityState = 'hidden';
+    generation = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    server = { ...structuredClone(defaultDesktopPreferences), serverName: 'After reset' };
+    onboardingComplete = false;
+    expect(controls.requiresOnboarding).toBe(false);
+    await act(async () => {
+      doc.visibilityState = 'visible';
+      doc.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(controls.requiresOnboarding).toBe(true);
+    expect(controls.onboardingGeneration).toBe(generation);
+    expect(controls.preferences.serverName).toBe('After reset');
+    expect(puts()).toHaveLength(0);
+  },
+  'queued-reset': async () => {
+    const pending = deferred();
+    intercept = (r) => (r.method === 'PUT' ? pending.promise : undefined);
+    let first!: Promise<unknown>;
+    let queued!: Promise<unknown>;
+    await act(async () => {
+      first = controls.commit({ workspace: { ...controls.preferences.workspace, pinnedApps: ['media:fixture'] } }).catch((error) => error);
+      queued = controls.commit({ serverName: 'Stale queued name' }).catch((error) => error);
+    });
+    expect(puts()).toHaveLength(1);
+    generation = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    onboardingComplete = false;
+    server = structuredClone(defaultDesktopPreferences);
+    await act(async () => {
+      window.dispatchEvent(new Event('orbis-desktop-preferences-changed'));
+    });
+    await act(async () => {
+      pending.resolve(Response.json({}));
+      expect(await first).toBeInstanceOf(Error);
+      expect(await queued).toBeInstanceOf(Error);
+    });
+    expect(puts()).toHaveLength(1);
+    expect(controls.preferences.workspace.pinnedApps).toEqual([]);
+    expect(controls.preferences.serverName).toBe('Server');
+    expect(controls.requiresOnboarding).toBe(true);
+    expect(controls.syncState).toBe('saved');
+  },
+  'snapshot-crossing-reset': async () => {
+    generation = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    onboardingComplete = false;
+    intercept = (r) =>
+      r.method === 'GET' && r.url === '/api/desktop-preferences'
+        ? Promise.resolve(Response.json({ ...server, serverName: 'Stale response' }, { headers: { 'X-Orbis-Reset-Generation': 'none' } }))
+        : undefined;
+    await act(async () => {
+      window.dispatchEvent(new Event('orbis-desktop-preferences-changed'));
+    });
+    expect(controls.preferences.serverName).toBe('Server');
+    await act(async () => {
+      await expect(controls.commit({ serverName: 'Stale write' })).rejects.toThrow();
+    });
+    expect(puts().at(-1)?.generation).toBe('none');
+    intercept = undefined;
+    await act(async () => {
+      window.dispatchEvent(new Event('orbis-desktop-preferences-changed'));
+    });
+    expect(controls.onboardingGeneration).toBe(generation);
+    expect(controls.preferences.serverName).toBe('Server');
+  },
   'hmr-context-identity': async () => {
     if (refreshedPreferences?.useDesktopPreferences === useDesktopPreferences || !controls?.preferences)
       throw new Error('Refreshed consumer lost its existing provider');

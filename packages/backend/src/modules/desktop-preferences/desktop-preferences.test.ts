@@ -13,6 +13,8 @@ import { AuthGuard } from '../auth/auth.guard';
 import { DesktopPreferencesController } from './desktop-preferences.controller';
 import { DEFAULT_DESKTOP_PREFERENCES, DesktopPreferencesService } from './desktop-preferences.service';
 import { DesktopWallpaperService } from './desktop-wallpaper.service';
+import { ResetState } from '../system-reset/reset-state';
+import { randomUUID } from 'node:crypto';
 
 describe('desktop preferences', () => {
   let directory: string;
@@ -52,6 +54,61 @@ describe('desktop preferences', () => {
     expect((await request(app.getHttpServer()).put('/desktop-preferences').send(DEFAULT_DESKTOP_PREFERENCES)).status).toBe(401);
     expect((await request(app.getHttpServer()).get('/desktop-preferences/onboarding')).status).toBe(401);
     expect((await request(app.getHttpServer()).post('/desktop-preferences/onboarding')).status).toBe(401);
+  });
+
+  it('announces onboarding completion to both connected clients of its account', async () => {
+    const service = app.get(DesktopPreferencesService);
+    const first: unknown[] = [];
+    const second: unknown[] = [];
+    const subscriptions = [
+      service.changesFor(7).subscribe((event) => first.push(event.data)),
+      service.changesFor(7).subscribe((event) => second.push(event.data)),
+    ];
+    try {
+      await request(app.getHttpServer()).post('/desktop-preferences/onboarding').set('Authorization', 'Bearer test').expect(201);
+      expect(first).toEqual([{ changed: true }]);
+      expect(second).toEqual(first);
+    } finally {
+      for (const subscription of subscriptions) subscription.unsubscribe();
+      await fs.rm(path.join(directory, 'state', 'onboarding', '7.json'), { force: true });
+    }
+  });
+
+  it('rejects stale and generationless HTTP writes after reset while allowing fresh clients and internal recovery', async () => {
+    const reset = new ResetState(directory);
+    const id = randomUUID();
+    await reset.save({ version: 1, id, controller: 'fixture', users: [7, 8], accounts: 'keep', phase: 'complete', createdAt: Date.now() });
+    try {
+      const read = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test').expect(200);
+      expect(read.headers['x-orbis-reset-generation']).toBe(id);
+      const pinned = { ...DEFAULT_DESKTOP_PREFERENCES, workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, pinnedApps: ['media:fixture'] } };
+      for (const generation of [undefined, 'none', randomUUID()]) {
+        const put = request(app.getHttpServer()).put('/desktop-preferences').set('Authorization', 'Bearer test');
+        const setup = request(app.getHttpServer()).post('/desktop-preferences/onboarding').set('Authorization', 'Bearer test');
+        if (generation) {
+          put.set('X-Orbis-Reset-Generation', generation);
+          setup.set('X-Orbis-Reset-Generation', generation);
+        }
+        await put.send(pinned).expect(409);
+        await setup.expect(409);
+      }
+      expect((await app.get(DesktopPreferencesService).read(7)).workspace?.pinnedApps).toEqual([]);
+      await request(app.getHttpServer())
+        .put('/desktop-preferences')
+        .set('Authorization', 'Bearer test')
+        .set('X-Orbis-Reset-Generation', id)
+        .send(DEFAULT_DESKTOP_PREFERENCES)
+        .expect(200);
+      await request(app.getHttpServer())
+        .post('/desktop-preferences/onboarding')
+        .set('Authorization', 'Bearer test')
+        .set('X-Orbis-Reset-Generation', id)
+        .expect(201);
+      await app.get(DesktopPreferencesService).write(7, DEFAULT_DESKTOP_PREFERENCES);
+    } finally {
+      await fs.rm(path.join(directory, 'state', 'orbis-reset'), { recursive: true, force: true });
+      await fs.rm(path.join(directory, 'state', 'onboarding', '7.json'), { force: true });
+    }
   });
 
   it('defaults old account preferences to 12-hour display and persists each account clock format independently', async () => {

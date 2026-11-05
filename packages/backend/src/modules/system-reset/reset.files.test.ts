@@ -13,10 +13,10 @@ import {
 } from '@/common/backup-maintenance';
 import { ResetState, type ResetJournal } from './reset-state';
 import { ResetService, resetBinding } from './reset.service';
-import { DesktopPreferencesService } from '../desktop-preferences/desktop-preferences.service';
+import { DEFAULT_DESKTOP_PREFERENCES, DesktopPreferencesService } from '../desktop-preferences/desktop-preferences.service';
 
 const status = vi.hoisted(() => vi.fn());
-vi.mock('@/common/restoration-status', () => ({ readOperationStatus: status }));
+vi.mock('@/common/restoration-status', () => ({ readOperationStatus: status, notifyClientStatusChanged: vi.fn() }));
 let root: string;
 const actor = { userId: 7, sessionBinding: 'a'.repeat(64), securityBinding: 'b'.repeat(64) };
 let records: { id: number; password: string; totpEnabled: boolean; hasSeenWelcome: boolean; locale: string }[];
@@ -26,6 +26,7 @@ let auth: { operatorActionContext: ReturnType<typeof vi.fn>; verifySensitiveActi
 let keys: { snapshot: ReturnType<typeof vi.fn>; change: ReturnType<typeof vi.fn> };
 let sessions: { destroyAllSessionsByUserId: ReturnType<typeof vi.fn> };
 let automatic: { resetOrbisPreferences: ReturnType<typeof vi.fn> };
+let backups: { settings: ReturnType<typeof vi.fn>; updateSettings: ReturnType<typeof vi.fn> };
 let service: ResetService;
 let passkeys: { verifySensitive: ReturnType<typeof vi.fn>; sensitiveOptions: ReturnType<typeof vi.fn> };
 const request = {} as Request;
@@ -65,6 +66,7 @@ beforeEach(async () => {
   keys = { snapshot: vi.fn().mockResolvedValue({ version: 1, users: {} }), change: vi.fn(async (change) => change({ users: { 7: {} } })) };
   sessions = { destroyAllSessionsByUserId: vi.fn().mockResolvedValue(undefined) };
   automatic = { resetOrbisPreferences: vi.fn().mockResolvedValue(undefined) };
+  backups = { settings: vi.fn().mockResolvedValue({ revision: 9, retentionHours: 720 }), updateSettings: vi.fn().mockResolvedValue({}) };
   passkeys = { verifySensitive: vi.fn().mockRejectedValue(new Error('Invalid passkey proof')), sensitiveOptions: vi.fn().mockResolvedValue({}) };
   const tx = {
     execute: vi.fn(),
@@ -112,7 +114,7 @@ beforeEach(async () => {
     sync as never,
     automatic as never,
     { preferences: vi.fn().mockResolvedValue({ revision: 1 }), updatePreferences: vi.fn().mockResolvedValue({}) } as never,
-    { settings: vi.fn().mockResolvedValue({ revision: 1 }), updateSettings: vi.fn().mockResolvedValue({}) } as never,
+    backups as never,
   );
 });
 afterEach(async () => {
@@ -128,18 +130,27 @@ it('keeps account security, installed app data, app configs and host trust while
     'state/cluster.json',
     'state/host-authority/receipt.json',
     'state/desktop/99.json',
+    'backups/archive/retained.orbis',
+    'backups/time-machine/retained-point/backup.orbis',
+    'backups/keyring.json',
   ];
   for (const name of preserved) await file(name);
   await fs.chmod(await file('.orbis-onboarding-origin.json', 'fixture adoption-origin'), 0o644);
-  for (const name of [
-    'desktop/7.json',
-    'theme-settings/7.json',
-    'onboarding/7.json',
-    'wallpapers/7.image',
-    'wallpapers/7.image.saved',
-    'theme-packs/7/custom/asset',
-  ])
+  for (const name of ['theme-settings/7.json', 'onboarding/7.json', 'wallpapers/7.image', 'wallpapers/7.image.saved', 'theme-packs/7/custom/asset'])
     await file(`state/${name}`, 'old preference');
+  await file(
+    'state/desktop/7.json',
+    JSON.stringify({
+      ...DEFAULT_DESKTOP_PREFERENCES,
+      workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, pinnedApps: ['jellyfin:fixture'] },
+      appearance: { ...DEFAULT_DESKTOP_PREFERENCES.appearance, dockPins: ['jellyfin:fixture'] },
+    }),
+  );
+  const preferences = new DesktopPreferencesService({ get: () => ({ dataDir: root }) } as never);
+  expect(await preferences.read(7)).toMatchObject({
+    workspace: { pinnedApps: ['jellyfin:fixture'] },
+    appearance: { dockPins: ['jellyfin:fixture'] },
+  });
   const accepted = await service.accept(request, body());
   expect(backupMaintenanceActive()).toBe(true);
   expect(mutations).toEqual([]);
@@ -154,9 +165,15 @@ it('keeps account security, installed app data, app configs and host trust while
   expect(mutations).not.toContain(app);
   expect(mutations).not.toContain(appStore);
   await expect(fs.stat(path.join(root, 'state/desktop/7.json'))).rejects.toMatchObject({ code: 'ENOENT' });
-  const preferences = new DesktopPreferencesService({ get: () => ({ dataDir: root }) } as never);
   expect(await preferences.onboarding(7)).toEqual({ complete: false, generation: accepted.job.id });
-  expect(await preferences.read(7)).toMatchObject({ serverName: 'Server', preset: 'frost', mode: 'light' });
+  expect(await preferences.read(7)).toMatchObject({
+    serverName: 'Server',
+    preset: 'frost',
+    mode: 'light',
+    workspace: { pinnedApps: [] },
+    appearance: { dockPins: [] },
+  });
+  expect(backups.updateSettings).not.toHaveBeenCalled();
   await expect(fs.stat(path.join(root, '.orbis-onboarding-origin.json'))).rejects.toMatchObject({ code: 'ENOENT' });
   expect(backupMaintenanceActive()).toBe(false);
 });

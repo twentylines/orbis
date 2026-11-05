@@ -272,7 +272,7 @@ const chooseFile = () =>
   handler(
     flatten(tree).find((element) => element.type === 'input' && element.props.type === 'file'),
     'onChange',
-  )({ currentTarget: { files: [new File(['x'.repeat(100)], 'fixture.orbis')], value: '' } });
+  )({ currentTarget: { files: [new File([`ORBISBK1${'x'.repeat(92)}`], 'fixture.orbis')], value: '' } });
 const submit = () =>
   handler(
     flatten(tree).find((element) => element.type === 'form'),
@@ -304,6 +304,9 @@ try {
   await flush(render);
   await flush(chooseFile);
   await flush(submit);
+  expect(requests.filter((item) => item.path === '/restores')).toHaveLength(0);
+  expect(flatten(tree).some((element) => element.props.children === 'Restore')).toBe(true);
+  await flush(submit);
   const dispatched = requests.filter((item) => item.path === '/restores');
   expect(dispatched).toHaveLength(1);
   expect(dispatched[0]?.body).toEqual({ importId: id, manifestSha256: 'a'.repeat(64), confirmation: 'replace-server' });
@@ -318,6 +321,8 @@ try {
   expect(retry?.props.disabled).toBe(false);
   expect(secret.value).toBe('');
   await flush(() => handler(retry, 'onClick')());
+  secret.value = 'archive-key';
+  await flush(submit);
   expect(requests.filter((item) => item.path.endsWith('/reuse'))).toHaveLength(1);
   const repeated = requests.filter((item) => item.path === '/restores');
   expect(repeated).toHaveLength(2);

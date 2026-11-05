@@ -15,6 +15,7 @@ import {
   operationShowsContent,
   operationBootIsReady,
   type OperationStatusTransport,
+  ResetGenerationTracker,
 } from './operation-status';
 
 test('a reloaded operation releases its boot after a fresh matching success and idle authority', () => {
@@ -63,7 +64,7 @@ test('fresh unsupported hosts can start normally, but 404 never unlocks an obser
 test('the status reader uses the public no-store same-origin endpoint and rejects unavailable/malformed status', async () => {
   let called = false;
   const transport = (async (url: string | URL | Request, options?: RequestInit) => {
-    expect(url).toBe('/api/system/operation-status');
+    expect(url).toBe('/api/system/operation-status?client=1');
     expect(options?.credentials).toBe('same-origin');
     expect(options?.cache).toBe('no-store');
     expect(options?.redirect).toBe('error');
@@ -85,6 +86,36 @@ test('the status reader uses the public no-store same-origin endpoint and reject
     state: 'idle',
     supported: false,
   });
+});
+
+test('negotiated client status preserves the strict legacy parser and carries only the durable reset generation', async () => {
+  const generation = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const transport = (async () => Response.json({ version: 1, status: { state: 'idle' }, resetGeneration: generation })) as OperationStatusTransport;
+  expect(await readOperationStatus(undefined, transport)).toEqual({ state: 'idle', supported: true, resetGeneration: generation });
+  expect(() => parseOperationStatus({ state: 'idle', resetGeneration: generation })).toThrow();
+  for (const body of [
+    { version: 2, status: { state: 'idle' }, resetGeneration: generation },
+    { version: 1, status: { state: 'idle' }, resetGeneration: 'private-data' },
+    { version: 1, status: { state: 'idle' }, resetGeneration: generation, users: [7] },
+    { version: 1, status: { state: 'idle', accounts: 'remove' }, resetGeneration: generation },
+  ])
+    await expect(readOperationStatus(undefined, (async () => Response.json(body)) as OperationStatusTransport)).rejects.toThrow();
+});
+
+test('two clients catch a reset that completes between idle polls, including a sleeping client, without false unlock', () => {
+  const first = new ResetGenerationTracker();
+  const sleeping = new ResetGenerationTracker();
+  const initial = { state: 'idle' as const, supported: true, resetGeneration: null };
+  expect(first.observe(initial)).toBe(false);
+  expect(sleeping.observe(initial)).toBe(false);
+  const completed = { ...initial, resetGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' };
+  expect(first.observe({ ...completed, state: 'checking', unavailable: true })).toBe(false);
+  expect(first.observe({ ...completed, state: 'restoring' })).toBe(false);
+  expect(first.observe({ ...completed, supported: false })).toBe(false);
+  expect(first.observe(completed)).toBe(true);
+  expect(first.observe(completed)).toBe(false);
+  expect(sleeping.observe(completed)).toBe(true);
+  expect(new ResetGenerationTracker().observe(completed)).toBe(false);
 });
 
 test('waiting never exposes sign in and a confirmed idle response resumes content automatically', () => {

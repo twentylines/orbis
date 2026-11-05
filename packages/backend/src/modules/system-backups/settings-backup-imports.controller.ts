@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, HttpCode, Param, Post, Put,
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
-import { backupCredentials, backupOperator } from './backup-access';
+import { backupCredentials, backupOperator, optionalBackupCredentials } from './backup-access';
 import { SettingsBackupImportsService } from './settings-backup-imports.service';
 
 @Controller('system-backups/settings-bundles/imports')
@@ -18,7 +18,7 @@ export class SettingsBackupImportsController {
   @HttpCode(201)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   create(@Req() request: Request, @Body() body: unknown) {
-    return this.imports.create(backupOperator(request), request, backupCredentials(body));
+    return this.imports.create(backupOperator(request), request, optionalBackupCredentials(body));
   }
   @Put(':id/file')
   @HttpCode(200)

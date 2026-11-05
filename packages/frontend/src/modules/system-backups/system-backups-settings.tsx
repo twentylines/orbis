@@ -45,7 +45,9 @@ import {
   type RestoreJob,
 } from './contracts';
 import { isAcceptedRestoreReconnect, shouldStopBackupStatusPolling } from './backup-reconnection';
-import { restoreAfterReview } from './review-for-restore';
+import { restoreAfterReview, reviewForRestore } from './review-for-restore';
+import { backupFileFamily } from './backup-file-family';
+import { SettingsBundleSettings } from './settings-bundle-settings';
 import { acceptRestoreAttempt, beginRestoreAttempt, restoreCanResume, restoreForAttempt, type RestoreAttempt } from './restore-attempt';
 import { accountSecurityKey, readAccountSecurity } from '@/desktop/account-security-api';
 import { cancelImportBeforeRestore } from './cancel-backup-preparation';
@@ -405,6 +407,9 @@ type BackupSettingsProps = {
   onActivityChange?: (active: boolean) => void;
   onDismiss?: () => void;
   recoveryActions?: ReactNode;
+  initialFile?: File;
+  onReturn?: () => void;
+  downloadsOnly?: boolean;
 };
 
 export function SystemBackupsSettings({
@@ -416,6 +421,9 @@ export function SystemBackupsSettings({
   onActivityChange,
   onDismiss,
   recoveryActions,
+  initialFile,
+  onReturn,
+  downloadsOnly = false,
 }: BackupSettingsProps = {}) {
   const id = useId();
   const reduced = useReducedMotion();
@@ -440,18 +448,22 @@ export function SystemBackupsSettings({
     },
     refetchIntervalInBackground: false,
   });
-  const [action, setAction] = useState<Action | null>(() => (restoreOnly && embedded && !initialImportId ? { kind: 'upload' } : null));
+  const [action, setAction] = useState<Action | null>(() =>
+    initialFile || (restoreOnly && embedded && !initialImportId) ? { kind: 'upload' } : null,
+  );
   const [restoreSource, setRestoreSource] = useState<'upload' | 'server'>('upload');
   const [savedBackupId, setSavedBackupId] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(initialFile ?? null);
+  const [settingsFile, setSettingsFile] = useState<File | null>(null);
+  const fileGeneration = useRef(0);
   const [useAccountPassword, setUseAccountPassword] = useState(true);
   const [includeMedia, setIncludeMedia] = useState(false);
   const [archiveKeyMode, setArchiveKeyMode] = useState<ArchiveKeyMode | null>(null);
-  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(Boolean(initialFile) && !embedded);
   const [restoreAttempt, setRestoreAttempt] = useState<RestoreAttempt | null>(null);
   const [, setRestoreSettled] = useState(0);
   const [wizardJob, setWizardJob] = useState<{ kind: 'export' | 'import'; id: string } | null>(null);
-  const [wizardPurpose, setWizardPurpose] = useState<Action['kind'] | null>(null);
+  const [wizardPurpose, setWizardPurpose] = useState<Action['kind'] | null>(initialFile ? 'upload' : null);
   const [busy, setBusy] = useState(false);
   const [stoppingPreparation, setStoppingPreparation] = useState(false);
   const [dismissedRestoreId, setDismissedRestoreId] = useState<string | null>(null);
@@ -484,6 +496,7 @@ export function SystemBackupsSettings({
   const actionOpener = useRef<HTMLElement | null>(null);
   const actionKeyboard = useRef(false);
   const chooseAction = (next: Action) => {
+    fileGeneration.current += 1;
     formOpenedAt.current = Date.now();
     if (next.kind !== 'reuse') retryArchiveKey.current = null;
     actionOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -766,6 +779,11 @@ export function SystemBackupsSettings({
             if (mounted.current) setWizardJob({ kind: 'import', id: uploadedJob.id });
           } else {
             if (!file || file.size < 52) throw new Error('Choose a complete encrypted Orbis backup file.');
+            if ((await backupFileFamily(file)) === 'settings') {
+              setRestoreAttempt(null);
+              setSettingsFile(file);
+              return;
+            }
             const job = await createImport(signal);
             if (mounted.current) setWizardJob({ kind: 'import', id: job.id });
             setUpload({ completed: 0, total: file.size, confirmed: false });
@@ -774,7 +792,11 @@ export function SystemBackupsSettings({
             });
             if (mounted.current) setUpload({ completed: file.size, total: file.size, confirmed: true });
           }
-          await verifyAndRestore(uploadedJob);
+          const reviewed = await reviewForRestore(uploadedJob.id, passphrase, signal);
+          setRestoreAttempt(null);
+          setWizardPurpose('restore');
+          setAction({ kind: 'restore', job: reviewed });
+          setNotice('Backup verified. Review its contents before restoring.');
         } else if (selected.kind === 'reuse') {
           const reused = await backupRequest(`/restores/${selected.job.id}/reuse`, 'POST', {}, signal);
           if (!importJobSchema.allows(reused) || reused.status !== 'uploaded')
@@ -782,7 +804,11 @@ export function SystemBackupsSettings({
           setWizardJob({ kind: 'import', id: reused.id });
           await verifyAndRestore(reused);
         } else if (selected.kind === 'review') {
-          await verifyAndRestore(selected.job);
+          const reviewed = await reviewForRestore(selected.job.id, passphrase, signal);
+          setRestoreAttempt(null);
+          setWizardPurpose('restore');
+          setAction({ kind: 'restore', job: reviewed });
+          setNotice('Backup verified. Review its contents before restoring.');
         } else if (selected.kind === 'download') {
           downloadCleanup.current?.();
           downloadCleanup.current = downloadBackup(selected.job.id, credentials, (message) => {
@@ -832,7 +858,7 @@ export function SystemBackupsSettings({
               : `/restores/${selected.job.id}/${selected.kind === 'cancel-restore' ? 'cancel' : 'recover'}`;
           await backupRequest(path, 'POST', credentials.password ? credentials : {}, signal);
         }
-        if (mounted.current) setAction(null);
+        if (mounted.current && selected.kind !== 'upload' && selected.kind !== 'review') setAction(null);
       },
       {
         onError: (message) => {
@@ -877,6 +903,7 @@ export function SystemBackupsSettings({
   };
   const dismissForm = () => {
     if (running.current || stoppingPreparation || restoreActive || awaitingAcceptedRestore || terminalChecking) return;
+    fileGeneration.current += 1;
     retryArchiveKey.current = null;
     credentialsForm.current?.reset();
     setUpload(null);
@@ -895,6 +922,7 @@ export function SystemBackupsSettings({
       setAction(null);
       setFile(null);
       setWizardOpen(false);
+      onReturn?.();
     }
   };
   const cancelPreparation = async () => {
@@ -1180,10 +1208,22 @@ export function SystemBackupsSettings({
                     aria-label="Encrypted Orbis backup"
                     className="visually-hidden"
                     tabIndex={-1}
-                    accept=".orbis,application/octet-stream"
-                    disabled={busy}
+                    accept=".orbis,.orbis-settings,application/octet-stream"
+                    disabled={working || unavailable}
                     onChange={(event) => {
-                      setFile(event.currentTarget.files?.[0] ?? null);
+                      const chosen = event.currentTarget.files?.[0] ?? null;
+                      const generation = ++fileGeneration.current;
+                      setFile(chosen);
+                      setError(null);
+                      if (chosen)
+                        void backupFileFamily(chosen)
+                          .then((family) => {
+                            if (generation === fileGeneration.current && family === 'settings') setSettingsFile(chosen);
+                          })
+                          .catch((failure: unknown) => {
+                            if (generation === fileGeneration.current)
+                              setError(failure instanceof Error ? failure.message : 'This file is not a supported backup.');
+                          });
                       setUpload(null);
                       event.currentTarget.value = '';
                     }}
@@ -1193,7 +1233,7 @@ export function SystemBackupsSettings({
                       id={`${id}-file`}
                       type="button"
                       variant="outline"
-                      disabled={busy}
+                      disabled={working || unavailable}
                       aria-describedby={`${id}-filename`}
                       onClick={() => filePicker.current?.click()}
                     >
@@ -1380,6 +1420,7 @@ export function SystemBackupsSettings({
     wizardPurpose === 'recover-restore';
   const closeWizard = () => {
     if (wizardLocked) return;
+    fileGeneration.current += 1;
     credentialsForm.current?.reset();
     setAction(null);
     setFile(null);
@@ -1387,7 +1428,20 @@ export function SystemBackupsSettings({
     setError(null);
     setNotice(null);
     setWizardOpen(false);
+    onReturn?.();
   };
+  if (settingsFile)
+    return (
+      <SettingsBundleSettings
+        restoreOnly
+        initialFile={settingsFile}
+        onReturn={() => {
+          setSettingsFile(null);
+          setFile(null);
+          requestAnimationFrame(() => document.getElementById(`${id}-file`)?.focus());
+        }}
+      />
+    );
   return (
     <section
       ref={section}
@@ -1439,104 +1493,118 @@ export function SystemBackupsSettings({
           </>
         }
       />
-      <div className="system-backups-overview">
-        {guidedImportId && !status.isError ? (
-          <h3 id={`${id}-title`} className="visually-hidden">
-            Encrypted backup
-          </h3>
-        ) : (
-          <div className="system-backups-heading">
-            {embedded ? (
-              <h3 id={`${id}-title`} className={guidedImportId ? 'visually-hidden' : undefined}>
+      {downloadsOnly ? <h2>Saved full backups</h2> : null}
+      {downloadsOnly && status.isError ? (
+        <p role="alert">
+          Full backup status could not be loaded.{' '}
+          <Button type="button" onClick={refresh}>
+            Refresh
+          </Button>
+        </p>
+      ) : null}
+      {downloadsOnly ? null : (
+        <>
+          <div className="system-backups-overview">
+            {guidedImportId && !status.isError ? (
+              <h3 id={`${id}-title`} className="visually-hidden">
                 Encrypted backup
               </h3>
             ) : (
-              <h2 id={`${id}-title`}>{restoreOnly ? 'Restore a backup' : allowCreate ? 'Full backup & recovery' : 'Older full backups'}</h2>
+              <div className="system-backups-heading">
+                {embedded ? (
+                  <h3 id={`${id}-title`} className={guidedImportId ? 'visually-hidden' : undefined}>
+                    Encrypted backup
+                  </h3>
+                ) : (
+                  <h2 id={`${id}-title`}>{restoreOnly ? 'Restore a backup' : allowCreate ? 'Full backup & recovery' : 'Older full backups'}</h2>
+                )}
+                {hasSettingsHeaderActions && !embedded ? (
+                  <SettingsHeaderAction>
+                    <Button variant="outline" type="button" onClick={refresh} disabled={status.isFetching || busy}>
+                      Refresh
+                    </Button>
+                  </SettingsHeaderAction>
+                ) : (
+                  <Button variant="outline" type="button" onClick={refresh} disabled={status.isFetching || busy}>
+                    Refresh
+                  </Button>
+                )}
+              </div>
             )}
-            {hasSettingsHeaderActions && !embedded ? (
-              <SettingsHeaderAction>
-                <Button variant="outline" type="button" onClick={refresh} disabled={status.isFetching || busy}>
-                  Refresh
-                </Button>
-              </SettingsHeaderAction>
-            ) : (
-              <Button variant="outline" type="button" onClick={refresh} disabled={status.isFetching || busy}>
-                Refresh
-              </Button>
-            )}
-          </div>
-        )}
-        {embedded ? null : (
-          <p>
-            {restoreOnly
-              ? 'Verify the encrypted archive before replacing this server’s configuration and managed app data.'
-              : allowCreate
-                ? 'Orbis configuration, accounts and managed app data are backed up together in an encrypted file. Shared media is optional. Apps pause while their data is copied to keep it consistent.'
-                : 'Download saved full backups or verify an older archive before restoring it. These archives can include managed app data. Restoring one pauses apps and restarts Orbis.'}
-          </p>
-        )}
-        {status.isPending ? <output>Reading backup capabilities…</output> : null}
-      </div>
-      {status.isError ? (
-        <InlineFeedback>
-          {exportStatusError ??
-            (reconnectingAcceptedRestore
-              ? 'Orbis is reconnecting after the accepted restore. The status below shows the last confirmed progress; the new server has not replied yet.'
-              : missing
-                ? 'This server does not provide the full backup and restore API. Update Orbis, then refresh status.'
-                : status.error.message)}
-          {restoreActive && !reconnectingAcceptedRestore ? ' Reconnecting; the last confirmed restore status remains below.' : ''}
-          {status.error instanceof BackupApiError && status.error.status === 401 ? (
-            <Button type="button" variant="outline" onClick={() => window.location.reload()}>
-              Sign in again
-            </Button>
-          ) : null}
-        </InlineFeedback>
-      ) : null}
-      {data && (!data.exports.available || !data.imports.available) ? (
-        <InlineFeedback>Backup storage needs operator review. Existing status remains available; new operations are disabled.</InlineFeedback>
-      ) : null}
-      {embedded || !wizardOpen ? restorePanel : null}
-      {restoreOnly ? (
-        action || guidedImportId ? null : (
-          <div className="system-backups-actions">
-            <Button type="button" variant="outline" disabled={working || unavailable} onClick={() => chooseAction({ kind: 'upload' })}>
-              Restore
-            </Button>
-          </div>
-        )
-      ) : (
-        <div className="system-backups-choices">
-          {allowCreate ? (
-            <div>
-              <h3>Create a backup</h3>
+            {embedded ? null : (
               <p>
-                Encrypt with your account password or a separate backup passphrase. Server copies expire after {data?.exports.retentionHours ?? 24}{' '}
-                hours.
+                {restoreOnly
+                  ? 'Verify the encrypted archive before replacing this server’s configuration and managed app data.'
+                  : allowCreate
+                    ? 'Orbis configuration, accounts and managed app data are backed up together in an encrypted file. Shared media is optional. Apps pause while their data is copied to keep it consistent.'
+                    : 'Download saved full backups or verify an older archive before restoring it. These archives can include managed app data. Restoring one pauses apps and restarts Orbis.'}
               </p>
-              <Button type="button" variant="outline" disabled={working || unavailable} onClick={() => chooseAction({ kind: 'export' })}>
-                Create
-              </Button>
-            </div>
-          ) : null}
-          <div>
-            <h3>Restore a backup</h3>
-            <p>
-              Choose a saved server backup or upload an archive, then verify it. Restoring replaces this server’s configuration and managed app data.
-            </p>
-            <Button type="button" variant="outline" disabled={working || unavailable} onClick={() => chooseAction({ kind: 'upload' })}>
-              Restore
-            </Button>
+            )}
+            {status.isPending ? <output>Reading backup capabilities…</output> : null}
           </div>
-        </div>
+          {status.isError ? (
+            <InlineFeedback>
+              {exportStatusError ??
+                (reconnectingAcceptedRestore
+                  ? 'Orbis is reconnecting after the accepted restore. The status below shows the last confirmed progress; the new server has not replied yet.'
+                  : missing
+                    ? 'This server does not provide the full backup and restore API. Update Orbis, then refresh status.'
+                    : status.error.message)}
+              {restoreActive && !reconnectingAcceptedRestore ? ' Reconnecting; the last confirmed restore status remains below.' : ''}
+              {status.error instanceof BackupApiError && status.error.status === 401 ? (
+                <Button type="button" variant="outline" onClick={() => window.location.reload()}>
+                  Sign in again
+                </Button>
+              ) : null}
+            </InlineFeedback>
+          ) : null}
+          {data && (!data.exports.available || !data.imports.available) ? (
+            <InlineFeedback>Backup storage needs operator review. Existing status remains available; new operations are disabled.</InlineFeedback>
+          ) : null}
+          {embedded || !wizardOpen ? restorePanel : null}
+          {restoreOnly ? (
+            action || guidedImportId ? null : (
+              <div className="system-backups-actions">
+                <Button type="button" variant="outline" disabled={working || unavailable} onClick={() => chooseAction({ kind: 'upload' })}>
+                  Restore
+                </Button>
+              </div>
+            )
+          ) : (
+            <div className="system-backups-choices">
+              {allowCreate ? (
+                <div>
+                  <h3>Create a backup</h3>
+                  <p>
+                    Encrypt with your account password or a separate backup passphrase. Server copies expire after{' '}
+                    {data?.exports.retentionHours ?? 24} hours.
+                  </p>
+                  <Button type="button" variant="outline" disabled={working || unavailable} onClick={() => chooseAction({ kind: 'export' })}>
+                    Create
+                  </Button>
+                </div>
+              ) : null}
+              <div>
+                <h3>Restore a backup</h3>
+                <p>
+                  Choose a saved server backup or upload an archive, then verify it. Restoring replaces this server’s configuration and managed app
+                  data.
+                </p>
+                <Button type="button" variant="outline" disabled={working || unavailable} onClick={() => chooseAction({ kind: 'upload' })}>
+                  Restore
+                </Button>
+              </div>
+            </div>
+          )}
+          {restoreOnly ? null : <BackupRetentionSettings key={user?.id} disabled={working || unavailable} />}
+          {embedded || restoreOnly ? null : recoveryActions}
+          {restoreOnly && data?.exports.jobs.some((job) => job.status === 'running' || job.needsRecovery || job.restartRequired) ? (
+            <InlineFeedback>Finish the existing full backup or its app recovery in Settings before starting a restore.</InlineFeedback>
+          ) : null}
+          {embedded ? credentialPanel : null}
+        </>
       )}
-      {restoreOnly ? null : <BackupRetentionSettings key={user?.id} disabled={working || unavailable} />}
-      {embedded || restoreOnly ? null : recoveryActions}
-      {restoreOnly && data?.exports.jobs.some((job) => job.status === 'running' || job.needsRecovery || job.restartRequired) ? (
-        <InlineFeedback>Finish the existing full backup or its app recovery in Settings before starting a restore.</InlineFeedback>
-      ) : null}
-      {embedded ? credentialPanel : null}
-      {guidedImportId && data && !selectedImport && !busy && !restoreActive && !awaitingAcceptedRestore ? (
+      {!downloadsOnly && guidedImportId && data && !selectedImport && !busy && !restoreActive && !awaitingAcceptedRestore ? (
         <InlineFeedback>
           This received backup is no longer available. Choose another backup to continue.
           <Button
@@ -1555,7 +1623,7 @@ export function SystemBackupsSettings({
           </Button>
         </InlineFeedback>
       ) : null}
-      {!restoreOnly && (data?.exports.jobs.length || trackedExport) ? (
+      {(!restoreOnly || downloadsOnly) && (data?.exports.jobs.length || trackedExport) ? (
         <div className="system-backups-jobs">
           <h3>Server backups</h3>
           {[
@@ -1566,7 +1634,7 @@ export function SystemBackupsSettings({
             .map((job) => renderExportJob(job))}
         </div>
       ) : null}
-      {showImportSummary && visibleImports?.length ? (
+      {!downloadsOnly && showImportSummary && visibleImports?.length ? (
         <div className="system-backups-jobs">
           <h3>{guidedImportId ? 'Backup details' : 'Uploaded backups'}</h3>
           {[...visibleImports].sort((a, b) => b.createdAt - a.createdAt).map((job) => renderImportJob(job))}

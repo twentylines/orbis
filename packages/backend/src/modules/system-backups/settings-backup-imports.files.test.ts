@@ -152,3 +152,80 @@ it('reports an interrupted upload after restart and preserves its partial file u
   await service.remove(job.id, 1, request, credentials);
   expect((await service.list(1)).jobs).toEqual([]);
 });
+
+it('stages an upload over HTTP with the operator session while retaining explicit proof and owner checks', async () => {
+  const { Test } = await import('@nestjs/testing');
+  const { UnauthorizedException } = await import('@nestjs/common');
+  type HttpRequest = import('express').Request;
+  const { default: http } = await import('supertest');
+  const { AuthGuard } = await import('../auth/auth.guard');
+  const { LoggerService } = await import('@/core/logger/logger.service');
+  const { SettingsBackupImportsController } = await import('./settings-backup-imports.controller');
+  const auth = {
+    operatorActionContext: vi.fn(async (req: { headers: Record<string, string>; user: { id: number } }) => {
+      if (req.headers['x-revoked'] === 'yes') throw new UnauthorizedException('Session revoked');
+      return { ...actor, userId: req.user.id };
+    }),
+    verifySensitiveAction: vi.fn(async (_id: number, password: string) => {
+      if (password !== credentials.password) throw new UnauthorizedException('Wrong password');
+    }),
+  };
+  await service.onModuleDestroy();
+  service = new SettingsBackupImportsService({ get: () => ({ dataDir: root }) } as never, auth as never, { inspectors: () => ({}) } as never);
+  const module = await Test.createTestingModule({
+    controllers: [SettingsBackupImportsController],
+    providers: [AuthGuard, { provide: SettingsBackupImportsService, useValue: service }, { provide: LoggerService, useValue: { debug: vi.fn() } }],
+  }).compile();
+  const app = module.createNestApplication({ logger: false });
+  app.use((req: HttpRequest, _res: unknown, next: () => void) => {
+    if (req.headers.authorization === 'operator' || req.headers.authorization === 'other') {
+      req.user = { id: req.headers.authorization === 'operator' ? 1 : 2, operator: true } as HttpRequest['user'];
+      req.authMethod = 'session';
+    }
+    next();
+  });
+  app.setGlobalPrefix('/api');
+  await app.listen(0, '127.0.0.1');
+  try {
+    const server = app.getHttpServer();
+    const url = '/api/system-backups/settings-bundles/imports';
+    const post = () => http(server).post(url).set('Host', 'orbis.test').set('Origin', 'http://orbis.test');
+    await post().send({}).expect(401);
+    await post().set('Authorization', 'operator').set('X-Revoked', 'yes').send({}).expect(401);
+    auth.operatorActionContext.mockResolvedValueOnce(actor).mockResolvedValueOnce({ ...actor, securityBinding: 'changed' });
+    await post().set('Authorization', 'operator').send({}).expect(409);
+    const created = await post().set('Authorization', 'operator').send({}).expect(201);
+    expect(auth.verifySensitiveAction).not.toHaveBeenCalled();
+    const bytes = Buffer.from('encrypted upload fixture');
+    await http(server)
+      .put(`${url}/${created.body.id}/file`)
+      .set('Authorization', 'other')
+      .set('Host', 'orbis.test')
+      .set('Origin', 'http://orbis.test')
+      .set('Content-Type', 'application/octet-stream')
+      .send(bytes)
+      .expect(404);
+    const upload = await http(server)
+      .put(`${url}/${created.body.id}/file`)
+      .set('Authorization', 'operator')
+      .set('Host', 'orbis.test')
+      .set('Origin', 'http://orbis.test')
+      .set('Content-Type', 'application/octet-stream')
+      .send(bytes)
+      .expect(200);
+    expect(upload.body.status).toBe('uploaded');
+    await post().set('Authorization', 'operator').send(credentials).expect(201);
+    expect(auth.verifySensitiveAction).toHaveBeenCalledOnce();
+    await post().set('Authorization', 'operator').send({ password: 'incorrect' }).expect(401);
+    expect(auth.verifySensitiveAction).toHaveBeenCalledTimes(2);
+    await http(server)
+      .post(`${url}/${created.body.id}/review`)
+      .set('Authorization', 'operator')
+      .set('Host', 'orbis.test')
+      .set('Origin', 'http://orbis.test')
+      .send({ passphrase })
+      .expect(400);
+  } finally {
+    await app.close();
+  }
+});

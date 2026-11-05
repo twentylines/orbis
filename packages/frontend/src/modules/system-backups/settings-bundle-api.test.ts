@@ -1,9 +1,71 @@
 import { afterEach, expect, test } from 'bun:test';
-import { settingsBundleRequest } from './settings-bundle-api';
+import { createSettingsBundle, createSettingsImport, settingsBundleDownloadInfo, settingsBundleRequest } from './settings-bundle-api';
 
 const originalFetch = globalThis.fetch;
+
+test('stages an encrypted upload with the current session without sending a password', async () => {
+  const id = 'e6e2d3ef-99e9-4b99-8a72-28c4bda5d281';
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    expect(String(input)).toBe('/api/system-backups/settings-bundles/imports');
+    expect(init?.credentials).toBe('same-origin');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(String(init?.body))).toEqual({});
+    return Response.json({
+      id,
+      status: 'awaiting-upload',
+      createdAt: 1,
+      updatedAt: 1,
+      uploadedBytes: 0,
+      completedBytes: 0,
+      totalBytes: null,
+      message: 'Choose a backup.',
+    });
+  }) as typeof fetch;
+  expect((await createSettingsImport()).id).toBe(id);
+});
+
+test('accepts only the matching session download path and verified metadata', async () => {
+  const id = 'e6e2d3ef-99e9-4b99-8a72-28c4bda5d281';
+  const valid = {
+    version: 1,
+    href: `/api/system-backups/settings-bundles/${id}/download`,
+    filename: `orbis-settings-${id}.orbis-settings`,
+    bytes: 1024,
+    sha256: 'a'.repeat(64),
+  };
+  globalThis.fetch = (async () => Response.json(valid)) as unknown as typeof fetch;
+  expect(await settingsBundleDownloadInfo(id)).toEqual({ href: valid.href, filename: valid.filename, bytes: valid.bytes, sha256: valid.sha256 });
+  for (const change of [{ href: '//elsewhere/download' }, { bytes: 0 }, { sha256: 'x'.repeat(64) }, { filename: '../bad' }]) {
+    globalThis.fetch = (async () => Response.json({ ...valid, ...change })) as unknown as typeof fetch;
+    await expect(settingsBundleDownloadInfo(id)).rejects.toThrow('could not be verified');
+  }
+});
 afterEach(() => {
   globalThis.fetch = originalFetch;
+});
+test('omits the separate key by default and sends it only when selected', async () => {
+  const selection = { version: 1 as const, settings: true, dashboard: false, wallpapers: false, themes: false, timeMachine: [] };
+  const job = {
+    version: 1,
+    id: 'e6e2d3ef-99e9-4b99-8a72-28c4bda5d281',
+    createdAt: 1,
+    status: 'queued',
+    stage: 'preparing',
+    completedBytes: 0,
+    totalBytes: null,
+    bytes: 0,
+    sha256: null,
+    selection,
+  };
+  let body: Record<string, unknown> = {};
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    body = JSON.parse(String(init?.body));
+    return Response.json(job);
+  }) as typeof fetch;
+  await createSettingsBundle({ password: 'account-password' }, undefined, selection);
+  expect(body).toEqual({ password: 'account-password', selection });
+  await createSettingsBundle({ password: 'account-password' }, 'separate-key', selection);
+  expect(body).toEqual({ password: 'account-password', passphrase: 'separate-key', selection });
 });
 test('restricts actions and sends credentials only in the request body', async () => {
   let url = '';

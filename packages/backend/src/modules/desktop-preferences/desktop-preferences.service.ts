@@ -1,5 +1,5 @@
 import { ConfigurationService } from '@/core/config/configuration.service';
-import { Injectable, type MessageEvent } from '@nestjs/common';
+import { ConflictException, Injectable, type MessageEvent } from '@nestjs/common';
 import { filter, map, Subject } from 'rxjs';
 import { type } from 'arktype';
 import { randomUUID } from 'node:crypto';
@@ -9,6 +9,7 @@ import { desktopPreferencesSchema } from './desktop-preferences.dto';
 import { defaultAppLaunch, defaultDesktopAppearance, normaliseDesktopAppearance } from '@runtipi/common/schemas';
 import { ResetState } from '../system-reset/reset-state';
 import { patchSelectedPreferences, selectedPreferences, UnsupportedDesktopPreferencesError } from './desktop-preferences-sync';
+import { notifyClientStatusChanged } from '@/common/restoration-status';
 
 export type DesktopPreferences = typeof desktopPreferencesSchema.infer;
 export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences & { workspace: NonNullable<DesktopPreferences['workspace']> } = {
@@ -89,9 +90,23 @@ export class DesktopPreferencesService {
     }
   }
 
-  async completeOnboarding(userId: number) {
+  private async assertClientGeneration(generation: string | null | undefined) {
+    if (generation === undefined) return;
+    const reset = await new ResetState(this.config.get('directories').dataDir).active();
+    if (
+      (reset && reset.phase !== 'complete') ||
+      (reset?.phase === 'complete' && generation !== reset.id) ||
+      (!reset && generation !== null && generation !== 'none')
+    )
+      throw new ConflictException('Orbis was reset. Reload your settings before saving.');
+  }
+
+  async completeOnboarding(userId: number, generation?: string | null) {
     return this.serialize(userId, async () => {
+      await this.assertClientGeneration(generation);
       await this.writeState(this.onboardingFile(userId), { version: 1 });
+      this.changes.next(userId);
+      notifyClientStatusChanged();
       return { complete: true };
     });
   }
@@ -99,7 +114,11 @@ export class DesktopPreferencesService {
   withIncompleteOnboarding<T>(userId: number, work: (complete: () => Promise<void>) => Promise<T>) {
     return this.serialize(userId, async () => {
       if ((await this.onboarding(userId)).complete) return null;
-      const value = await work(() => this.writeState(this.onboardingFile(userId), { version: 1 }));
+      const value = await work(async () => {
+        await this.writeState(this.onboardingFile(userId), { version: 1 });
+        this.changes.next(userId);
+        notifyClientStatusChanged();
+      });
       return { value };
     });
   }
@@ -135,8 +154,19 @@ export class DesktopPreferencesService {
     }
   }
 
-  async write(userId: number, preferences: DesktopPreferences): Promise<DesktopPreferences> {
-    return this.serialize(userId, () => this.writePreferences(userId, preferences));
+  async clientSnapshot(userId: number) {
+    return this.serialize(userId, async () => {
+      const reset = await new ResetState(this.config.get('directories').dataDir).active();
+      if (reset && reset.phase !== 'complete') throw new ConflictException('Wait for Orbis to finish resetting before loading preferences.');
+      return { preferences: await this.read(userId), generation: reset?.id ?? null };
+    });
+  }
+
+  async write(userId: number, preferences: DesktopPreferences, generation?: string | null): Promise<DesktopPreferences> {
+    return this.serialize(userId, async () => {
+      await this.assertClientGeneration(generation);
+      return this.writePreferences(userId, preferences);
+    });
   }
 
   async updateSelected(userId: number, update: (current: DesktopPreferences) => DesktopPreferences): Promise<DesktopPreferences> {
