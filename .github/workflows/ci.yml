@@ -29,7 +29,11 @@ jobs:
           fi
 
       - name: Run tests
-        run: bun run test
+        run: |
+          TMPDIR="$(mktemp -d "${GITHUB_WORKSPACE:?}/.orbis-tests.XXXXXX")"
+          export TMPDIR
+          trap 'rm -rf -- "$TMPDIR"' EXIT
+          bun run test
 
       - name: Verify maintenance proxy streaming
         run: node --test scripts/test-orbis-maintenance-proxy.mjs

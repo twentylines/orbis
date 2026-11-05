@@ -36,6 +36,7 @@
     },
     "test": {
       "cache": false,
+      "passThroughEnv": ["TMPDIR"],
       "dependsOn": ["^test"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": ["coverage/"]
