@@ -27,7 +27,28 @@ def fail():
     return ValueError('Proxy mutable identity overlaps backup data or lacks protected ownership. Existing proxy data was preserved. An explicit proxy layout migration is required before coherent Time Machine capture.')
 
 
+def adoption_module():
+    return load('orbis-proxy-adoption.py', 'orbis_adoption_for_proxy_identity')
+
+
+def adoption_selected(root):
+    layout = A.LAYOUT
+    try:
+        layout.STATE_ROOT.lstat()
+    except FileNotFoundError:
+        return False
+    return layout.read(root) is not None and (layout.namespace(root) / 'proxy-config').exists()
+
+
+def configuration_path(root):
+    if adoption_selected(root):
+        return adoption_module().execution_path(root)
+    return Path(root) / 'traefik'
+
+
 def shared_path(root):
+    if adoption_selected(root):
+        return A.LAYOUT.namespace(root) / 'proxy-identity'
     return root.parent / ('.' + root.name + '.orbis-proxy-identity')
 
 
@@ -36,7 +57,7 @@ def receipt_path(root):
 
 
 def declaration(root):
-    return {'schema': SCHEMA, 'policy': POLICY, 'configuration': {'source': str(root / 'traefik'), 'destination': '/etc/traefik', 'readOnly': True,
+    return {'schema': SCHEMA, 'policy': POLICY, 'configuration': {'source': str(configuration_path(root)), 'destination': '/etc/traefik', 'readOnly': True,
             'capture': 'encrypted-review-only', 'restore': 'preserve-live'},
             'mutableIdentity': {'source': str(shared_path(root)), 'destination': '/shared', 'capture': 'excluded', 'restore': 'preserve-live'}}
 
@@ -76,7 +97,11 @@ def initialize(root):
     return value
 
 
-def owned(root):
+def owned(root, context=None, proxy=None):
+    if adoption_selected(root):
+        if context is None or proxy is None:
+            raise fail()
+        return adoption_module().verified_authority(root, context, proxy)
     store, receipt = shared_path(root), receipt_path(root)
     with A.protected_directory(root.parent, private=False) as parent:
         with A.protected_file(parent, receipt.name, 4096) as body:
@@ -99,28 +124,33 @@ def observe(root, context, proxy):
             or labels.get('com.docker.compose.project.working_dir') != str(root) or not proxy.get('State', {}).get('Running')
             or proxy['State'].get('Paused') or proxy['State'].get('Restarting')):
         raise fail()
-    ownership = owned(root)
+    ownership = owned(root, context, proxy)
     mounts = proxy.get('Mounts')
     if not isinstance(mounts, list):
         raise fail()
     config = [item for item in mounts if item.get('Destination') == '/etc/traefik']
     shared = [item for item in mounts if item.get('Destination') == '/shared']
-    if (len(config) != 1 or config[0].get('Type') != 'bind' or config[0].get('Source') != str(root / 'traefik') or config[0].get('RW') is not False
+    if (len(config) != 1 or config[0].get('Type') != 'bind' or config[0].get('Source') != str(configuration_path(root)) or config[0].get('RW') is not False
             or len(shared) != 1 or shared[0].get('Type') != 'bind' or shared[0].get('Source') != str(shared_path(root)) or shared[0].get('RW') is not True):
         raise fail()
     for item in mounts:
         source = item.get('Source')
         if item.get('RW') is True and (item.get('Type') != 'bind' or source != str(shared_path(root))):
             raise fail()
-    with A.protected_directory(root / 'traefik', private=False) as directory:
-        with A.protected_file(directory, 'traefik.yml', 1024 * 1024, private=False) as body:
-            static_sha = hashlib.sha256(body).hexdigest()
+    if adoption_selected(root):
+        static_sha = ownership['static']['sha256']
+        root_sha = hashlib.sha256(str(root).encode()).hexdigest()
+    else:
+        with A.protected_directory(root / 'traefik', private=False) as directory:
+            with A.protected_file(directory, 'traefik.yml', 1024 * 1024, private=False) as body:
+                static_sha = hashlib.sha256(body).hexdigest()
+        root_sha = ownership['rootSha256']
     image = proxy.get('Image')
     identifier = proxy.get('Id')
     if not HOST.IDENTITY.hashed(image) or not isinstance(identifier, str) or not HOST.IDENTITY.HEX.fullmatch(identifier):
         raise fail()
     descriptor = {'schema': 'orbis.proxy-host-identity-policy.v1', 'policy': POLICY,
-                  'rootSha256': ownership['rootSha256'], 'dockerContextSha256': hashlib.sha256(context.encode()).hexdigest(),
+                  'rootSha256': root_sha, 'dockerContextSha256': hashlib.sha256(context.encode()).hexdigest(),
                   'configuration': {'destination': '/etc/traefik', 'readOnly': True, 'staticSha256': static_sha,
                                     'capture': 'encrypted-review-only', 'restore': 'preserve-live'},
                   'mutableIdentity': {'destination': '/shared', 'capture': 'excluded', 'restore': 'preserve-live',

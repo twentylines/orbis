@@ -28,11 +28,11 @@ D = load('orbis-host-retained-restore-runtime.py', 'orbis_controller_update_runt
 BOOTSTRAP = load('orbis-controller-bootstrap-profile.py', 'orbis_controller_bootstrap_profile')
 POLICY = 'orbis.controller-update-preserve-live-proxy.v1'
 SCOPE = 'controller-live-proxy.v1'
-PROBE_RETIREMENT = 'orbis.controller-probe-retirement.v2'
 RESET = D.RESET
 RESET_POLICY = 'orbis.controller-update-reset-mount.v1'
 RESET_POLICY_V2 = 'orbis.controller-update-reset-mount.v2'
 SOURCE_RETIREMENT = 'orbis.controller-source-retirement.v1'
+PROBE_RETIREMENT = 'orbis.controller-probe-retirement.v2'
 TOOLS = load('orbis-install-transaction.py', 'orbis_controller_reconstruction_transaction')
 CAPABILITY = {'schema': 'orbis.controller-overlay-startup.v1', 'version': 1, 'preserveNetworkAccess': True,
               'preserveRunningApps': True, 'environment': 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1'}
@@ -109,6 +109,70 @@ class ControllerUpdate:
         else:
             RESET.require_no_enrollment_aliases(self.root, mounts, binding)
         return binding
+
+    def proxy_candidate_body(self, body, *, transform):
+        identity = D.load('orbis-proxy-identity.py', 'orbis_controller_candidate_proxy_identity')
+        if not identity.adoption_selected(self.root):
+            return body
+        adoption = identity.adoption_module()
+        execution = str(adoption.execution_path(self.root))
+        original = str(self.root / 'traefik')
+        host = body['HostConfig']
+        if host.get('VolumesFrom') or host.get('Privileged'):
+            raise ValueError('Adopted proxy configuration requires isolated controller mounts')
+        if any(value is not None and not isinstance(value, list) for value in (host.get('Mounts'), host.get('Binds'))):
+            raise ValueError('Controller mount intent is invalid')
+        mounts = []
+        selected = []
+        for item in host.get('Mounts') or []:
+            if not isinstance(item, dict) or item.get('Type') != 'bind' or type(item.get('ReadOnly', False)) is not bool:
+                raise ValueError('Controller mount intent is invalid')
+            source, target, writable = item.get('Source'), item.get('Target'), not item.get('ReadOnly', False)
+            if target == '/data/traefik':
+                selected.append((item, None, source))
+                if transform and source in {original, execution}:
+                    source = execution
+                    writable = False
+            mounts.append({'Type': 'bind', 'Source': source, 'Destination': target, 'RW': writable})
+        for index, item in enumerate(host.get('Binds') or []):
+            parts = item.split(':') if isinstance(item, str) else []
+            if len(parts) not in (2, 3):
+                raise ValueError('Controller bind intent is invalid')
+            options = parts[2].split(',') if len(parts) == 3 else []
+            if (len(set(options)) != len(options) or set(options) - {'ro', 'rw', 'z', 'Z', 'private', 'rprivate', 'shared', 'rshared', 'slave', 'rslave'}
+                    or len(set(options) & {'ro', 'rw'}) > 1 or len(set(options) & {'z', 'Z'}) > 1
+                    or len(set(options) & {'private', 'rprivate', 'shared', 'rshared', 'slave', 'rslave'}) > 1):
+                raise ValueError('Controller bind options are invalid')
+            writable = 'ro' not in options
+            if parts[1] == '/data/traefik':
+                selected.append((parts, index, parts[0]))
+                writable = False if transform else writable
+            source = execution if transform and parts[1] == '/data/traefik' and parts[0] in {original, execution} else parts[0]
+            mounts.append({'Type': 'bind', 'Source': source, 'Destination': parts[1], 'RW': writable})
+        if len(selected) != 1 or selected[0][2] not in ({original, execution} if transform else {execution}):
+            raise ValueError('Controller proxy configuration bind is missing or changed')
+        if len({mount['Destination'] for mount in mounts if isinstance(mount['Destination'], str)}) != len(mounts):
+            raise ValueError('Controller mount destinations are invalid')
+        for mount in mounts:
+            target = mount['Destination']
+            if (not isinstance(target, str) or not target.startswith('/') or os.path.normpath(target) != target
+                    or (target != '/data/traefik' and mount['RW'] and adoption.overlap(target, '/data/traefik'))):
+                raise ValueError('Controller mount overlaps proxy configuration')
+        if next(m for m in mounts if m['Destination'] == '/data/traefik')['RW']:
+            raise ValueError('Controller proxy configuration bind must be read-only')
+        adoption.require_aliases(self.root, [{'Id': 'candidate', 'Mounts': mounts}], source_id='not-candidate')
+        if transform:
+            item, index, _ = selected[0]
+            if index is None:
+                item['Source'] = execution
+                item['ReadOnly'] = True
+            else:
+                options = item[2].split(',') if len(item) == 3 else []
+                options = [option for option in options if option != 'rw']
+                if 'ro' not in options:
+                    options.append('ro')
+                host['Binds'][index] = ':'.join([execution, item[1], ','.join(options)])
+        return body
 
     def reset_candidate_body(self, record, body):
         binding = self.optional_reset_enrollment(record['source'])
@@ -434,6 +498,7 @@ class ControllerUpdate:
         if (self.runtime.definition(proxy) != record['proxyDefinition']
                 or self.runtime.controller_proxy_policy(proxy) != record['proxyPolicy']):
             raise ValueError('The preserved live proxy changed')
+        self.proxy_candidate_body(record['body'], transform=False)
         for identifier, prior in record.get('appIdentities', {}).items():
             raw = self.runtime.inspect(identifier)
             if (self.runtime.definition(raw) != prior['definition']
@@ -533,7 +598,6 @@ class ControllerUpdate:
         self.a.atomic(receipt_path, self.P.canonical(receipt))
         return True
 
-
     def prepare(self, checkpoint):
         if checkpoint['storage'].get('backupScope') != SCOPE:
             raise ValueError('This controller replacement requires a live-proxy checkpoint')
@@ -584,6 +648,7 @@ class ControllerUpdate:
                 app_identities[identifier] = {'definition': self.runtime.definition(raw), 'running': raw['State'].get('Running'),
                                               'startedAt': raw['State'].get('StartedAt')}
             body = self.reset_candidate_body(record, body)
+            body = self.proxy_candidate_body(body, transform=True)
             record.update(body=body, targetImageId=target_image['Id'], appIdentities=app_identities)
             self.save(record)
         if record['checkpoint'] != checkpoint:

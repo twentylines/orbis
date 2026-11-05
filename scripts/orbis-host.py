@@ -41,13 +41,21 @@ CAPTURE_READ_DEADLINE = ContextVar("orbis_host_capture_read_deadline", default=N
 
 
 def capture_fence_path(root: Path) -> Path:
-    return root.parent / f".{root.name}.orbis-capture-fence.json"
+    return AUTHORITY.LAYOUT.selected_path(root, 'capture-fence')
+
+
+def host_lock_path(root: Path) -> Path:
+    return AUTHORITY.LAYOUT.selected_path(root, 'host-lock')
+
+
+def restore_selector_path(root: Path) -> Path:
+    return AUTHORITY.LAYOUT.selected_path(root, 'restore-selector')
 
 
 def require_no_capture_fence(root: Path) -> None:
-    restore = root.parent / ("." + root.name + ".orbis-retained-restore.json")
+    restore = restore_selector_path(root)
     if restore.exists() or restore.is_symlink():
-        with AUTHORITY.protected_directory(root.parent, private=False) as directory:
+        with AUTHORITY.protected_directory(restore.parent, private=False) as directory:
             with AUTHORITY.protected_file(directory, restore.name, 4096) as body:
                 value = IDENTITY.PUBLICATION.metadata(body, byte_limit=4096)
         if (set(value) != {"schema", "id", "root", "context"}
@@ -64,13 +72,12 @@ def require_no_capture_fence(root: Path) -> None:
 @contextmanager
 def host_lock(root: Path):
     require_no_capture_fence(root)
-    path = root.parent / f".{root.name}.orbis-host.lock"
-    descriptor = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
-        try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as error:
-            raise ValueError("another Orbis host operation is in progress") from error
+        descriptors = AUTHORITY.LAYOUT.open_locks(root)
+    except BlockingIOError as error:
+        raise ValueError("another Orbis host operation is in progress") from error
+    descriptor = descriptors[0]
+    try:
         require_no_capture_fence(root)
         token = LOCK_DESCRIPTOR.set(descriptor)
         try:
@@ -78,7 +85,8 @@ def host_lock(root: Path):
         finally:
             LOCK_DESCRIPTOR.reset(token)
     finally:
-        os.close(descriptor)
+        for item in reversed(descriptors):
+            os.close(item)
 
 
 def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:

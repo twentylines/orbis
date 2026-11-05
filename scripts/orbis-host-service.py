@@ -444,6 +444,7 @@ class HostService:
         if stat.S_IMODE(self.state_dir.stat().st_mode) & 0o077:
             raise ValueError("host service state directory must be private (0700)")
         self.capture_fence_fd = None
+        self.capture_fence_companions = []
         self.capture_fence_session = str(uuid.uuid4())
         self.prepared_capture = None
         self.lock = threading.Lock()
@@ -524,7 +525,7 @@ class HostService:
         return {"version": 1, "descriptor": module.observe_current(self.root, self.context)}
 
     def resume_pending_retained_restore(self):
-        marker = self.root.parent / ("." + self.root.name + ".orbis-retained-restore.json")
+        marker = HOST.restore_selector_path(self.root)
         if not marker.exists() and not marker.is_symlink():
             return
         manager = self.retained_restores()
@@ -763,6 +764,15 @@ class HostService:
     def time_machine_capability(self, kind):
         return TIME_MACHINE_CAPABILITIES.capability(kind, HOST.AUTHORITY)
 
+    def capture_volumes(self, action, point_id, request):
+        with self.lock:
+            if not hasattr(self, '_volume_capture_service'):
+                module = load_script('orbis-host-volume-service.py', 'orbis_volume_service_for_host')
+                self._volume_capture_service = module.VolumeCaptureService(
+                    self, host=HOST, capture=CAPTURE_AUTHORITY, read_fence=read_capture_job, fence_maximum=CAPTURE_FENCE_MAX)
+            selected = self._volume_capture_service
+        return selected.request(action, point_id, request)
+
     def acquire_capture_fence(self, request):
         keys = {"pointId", "controllerId", "imageId", "configurationSetSha256", "preparationSha256"}
         modern = isinstance(request, dict) and "captureContractSha256" in request
@@ -785,15 +795,17 @@ class HostService:
                 return ({"version": 2, "token": request["clientKey"], "expiresAt": record["expiresAt"], "captureContractSha256": record["captureContractSha256"]}
                         if modern else {"version": 1, "token": request["clientKey"], "expiresAt": record["expiresAt"]})
             self.require_idle_core()
-            parent = self.root.parent.lstat()
+            marker_parent = marker.parent
+            parent = marker_parent.lstat()
             if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.geteuid()
-                    or stat.S_IMODE(parent.st_mode) & 0o022 or self.root.parent.resolve(strict=True) != self.root.parent):
+                    or stat.S_IMODE(parent.st_mode) & 0o022 or marker_parent.resolve(strict=True) != marker_parent):
                 raise ValueError("controller capture marker directory is not protected")
             prepared = self.prepared_capture
             if (not isinstance(prepared, dict) or prepared.get("expiresAt", 0) <= time.time()
                     or any(prepared.get(key) != request[key] for key in keys)):
                 raise ValueError("controller publication must be independently prepared before fencing")
-            descriptor = os.open(self.root.parent / f".{self.root.name}.orbis-host.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+            descriptors = HOST.AUTHORITY.LAYOUT.open_locks(self.root)
+            descriptor = descriptors[0]
             try:
                 details = os.fstat(descriptor)
                 if (not stat.S_ISREG(details.st_mode) or details.st_uid != os.geteuid() or details.st_nlink != 1
@@ -827,16 +839,18 @@ class HostService:
                     # Keep an ambiguous durable marker fail-closed for explicit reconciliation.
                     raise
                 self.capture_fence_fd = descriptor
+                self.capture_fence_companions = descriptors[1:]
                 descriptor = None
                 self.prepared_capture = None
                 return ({"version": 2, "token": token, "expiresAt": record["expiresAt"], "captureContractSha256": record["captureContractSha256"]}
                         if modern else {"version": 1, "token": token, "expiresAt": record["expiresAt"]})
             finally:
                 if descriptor is not None:
-                    os.close(descriptor)
+                    for item in reversed(descriptors):
+                        os.close(item)
 
     def _sync_capture_fence_directory(self):
-        descriptor = os.open(self.root.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        descriptor = os.open(HOST.capture_fence_path(self.root).parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             os.fsync(descriptor)
         finally:
@@ -861,10 +875,11 @@ class HostService:
             if action == "reconcile" and record["session"] == self.capture_fence_session:
                 raise ValueError("a current capture must release its own fence")
             descriptor = None
+            descriptors = []
             try:
                 if action == "reconcile":
-                    descriptor = os.open(self.root.parent / f".{self.root.name}.orbis-host.lock", os.O_RDWR | os.O_NOFOLLOW)
-                    HOST.fcntl.flock(descriptor, HOST.fcntl.LOCK_EX | HOST.fcntl.LOCK_NB)
+                    descriptors = HOST.AUTHORITY.LAYOUT.open_locks(self.root, create=False)
+                    descriptor = descriptors[0]
                 current = self._capture_controller_config_locked(record["pointId"], record["controllerId"], record["imageId"])
                 if current["configurationSetSha256"] != record["configurationSetSha256"]:
                     if (expected is None or action == "renew"
@@ -881,10 +896,14 @@ class HostService:
                 if self.capture_fence_fd is not None:
                     os.close(self.capture_fence_fd)
                     self.capture_fence_fd = None
+                    for item in reversed(self.capture_fence_companions):
+                        os.close(item)
+                    self.capture_fence_companions = []
                 return {"version": 1, "released": True}
             finally:
                 if descriptor is not None:
-                    os.close(descriptor)
+                    for item in reversed(descriptors):
+                        os.close(item)
 
     def publication_image(self, image_id: str, platform=None) -> dict:
         deadline = time.monotonic() + 15
@@ -1827,7 +1846,7 @@ class HostService:
             elif stage == "aborted":
                 job["state"] = "failed"
                 job.update(UPDATE.safe_failure(journal))
-                job["message"] = "Update stopped before service downtime."
+                job["message"] = f"{UPDATE.failure_message(journal)} The update stopped before restarting Orbis.".strip()
                 job["finishedAt"] = time.time()
                 write_private(self.job_file, job)
         if job and job.get("state") == "failed":
@@ -1915,6 +1934,7 @@ class HostService:
             previous = read_private(self.job_file)
             if previous and previous.get("state") in {"running", "recovering", "interrupted"}:
                 raise ValueError("resolve the previous host update before applying another")
+            self.core_overlays().reconcile_unaccepted()
             self.require_core_overlay_clear(previous)
             plan = self._read_plan(plan_id)
             current = PLAN.validate_manifest(plan["current"])
@@ -1930,7 +1950,16 @@ class HostService:
             snapshot = Path(plan["snapshot"])
             if snapshot.parent != self.snapshots or snapshot.name != f"orbis-{target['tag']}-{plan_id}":
                 raise ValueError("update plan has an invalid snapshot destination")
-            overlay_id = self.core_overlays().begin(plan_id, current, target)
+            overlays = self.core_overlays()
+            try:
+                overlay_id = overlays.begin(plan_id, current, target)
+                overlays.ready(overlay_id)
+            except Exception:
+                try:
+                    overlays.abort(plan_id)
+                except Exception:
+                    pass
+                raise
             job = {
                 "schema": "orbis.host-service-job.v1",
                 "id": plan_id,
@@ -1946,8 +1975,21 @@ class HostService:
             }
             if plan.get("retainedSource") is not None:
                 job["retainedSource"] = plan["retainedSource"]
-            write_private(self.job_file, job)
+            try:
+                write_private(self.job_file, job)
+            except Exception:
+                try:
+                    overlays.abort(plan_id)
+                except Exception:
+                    pass
+                raise
             self.busy = True
+            try:
+                overlays.accept(job)
+            except Exception:
+                # The durable job itself proves acceptance after a lost receipt
+                # write. Resume can settle the separate acceptance receipt.
+                pass
 
         def run() -> None:
             try:
@@ -1968,7 +2010,8 @@ class HostService:
                 job["message"] = (
                     f"{UPDATE.failure_message(journal)} The previous Orbis release was restored.".strip()
                     if job["state"] == "rolled-back"
-                    else "Update stopped before service downtime."
+                    else (f"{UPDATE.failure_message(journal)} The update stopped before restarting Orbis.".strip()
+                          if stage == "aborted" else "The update failed. Check Updates before trying again.")
                     if job["state"] == "failed"
                     else "Update needs local inspection or recovery."
                 )
@@ -2086,12 +2129,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except (OSError, ValueError, RuntimeError, TypeError, KeyError):
                 self.send_json(503, {"error": "Core progress is unavailable"})
             return
-        if self.path in {"/v3/controller-capture-authority/capability", "/v1/retained-restore/capability", "/v1/backup-archive/capability"}:
+        if self.path in {"/v3/controller-capture-authority/capability", "/v1/retained-restore/capability", "/v1/backup-archive/capability", "/v1/backup-volumes/capability"}:
             if not trusted_capture_peer(self.connection):
                 self.send_json(403, {"error": "native helper peer is unavailable"})
                 return
             try:
-                kind = "archive" if self.path == "/v1/backup-archive/capability" else "capture" if self.path.startswith("/v3/") else "restore"
+                kind = "volume" if self.path == "/v1/backup-volumes/capability" else "archive" if self.path == "/v1/backup-archive/capability" else "capture" if self.path.startswith("/v3/") else "restore"
                 self.send_json(200, self.server.service.time_machine_capability(kind))
             except (OSError, ValueError, RuntimeError, TypeError):
                 self.send_json(409, {"error": "Native helper contracts require a complete protected installation."})
@@ -2215,6 +2258,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json(503, {"error": "package changelog is unavailable"})
 
     def do_POST(self) -> None:
+        if self.path.startswith('/v1/backup-volumes/'):
+            self.close_connection = True
+            try:
+                self.connection.settimeout(15)
+                if not trusted_capture_peer(self.connection):
+                    self.send_json(403, {'error': 'App storage capture is unavailable.'})
+                    return
+                match = re.fullmatch(r'/v1/backup-volumes/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})/(prepare|inventory|verify)', self.path)
+                length = self.headers.get('Content-Length', '')
+                if (not match or self.headers.get('Transfer-Encoding') is not None or self.headers.get('Content-Type') != 'application/json'
+                        or not length.isascii() or not length.isdecimal() or not 1 <= int(length) <= 4096):
+                    raise ValueError('invalid volume capture request')
+                request = CONTROLLER_IDENTITY.metadata(self.rfile.read(int(length)), byte_limit=4096)
+                self.connection.settimeout(330)
+                body = self.server.service.capture_volumes(match[2], match[1], request)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(body)))
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                self.wfile.write(body)
+                self.wfile.flush()
+            except (OSError, ValueError, RuntimeError, TypeError, KeyError, subprocess.SubprocessError):
+                self.send_json(409, {'error': 'App storage capture needs recovery. Existing app data has not been changed.'})
+            return
         if self.path.startswith("/v1/portable-capture/") or self.path in {"/v1/portable-restore/prepare", "/v1/portable-restore/approve"}:
             try:
                 if not trusted_capture_peer(self.connection):

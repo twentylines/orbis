@@ -86,6 +86,51 @@ class ResetAuthorityMountTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.runtime.storage_mounts(self.record, 'verifier')
 
+    def preserve_proxy(self):
+        self.record['source']['proxyHostIdentity'] = {'schema': 'fixture-verified-policy'}
+        self.record['stage'] = {'metadata': {'schema': 'orbis.time-machine-runtime.v6'},
+                                'bootstrap': {'preserveLiveProxy': True},
+                                'journal': {'roots': sorted(D.ROOTS - {'traefik'})}}
+        proxy = next(item for item in self.mounts if item['Destination'] == '/data/traefik')
+        proxy['RW'] = False
+        return proxy
+
+    def test_preserved_proxy_remains_readonly_in_both_auxiliary_roles(self):
+        proxy = self.preserve_proxy()
+        for schema in ('orbis.time-machine-runtime.v4', 'orbis.time-machine-runtime.v6'):
+            self.record['stage']['metadata']['schema'] = schema
+            for role in ('coordinator', 'verifier'):
+                mounts = self.runtime.storage_mounts(self.record, role)
+                observed = next(item for item in mounts if item['Target'] == '/data/traefik')
+                self.assertEqual(observed['Source'], proxy['Source'])
+                self.assertTrue(observed['ReadOnly'])
+
+    def test_readonly_proxy_requires_an_authenticated_preserved_proxy_stage(self):
+        self.preserve_proxy()
+        original = copy.deepcopy(self.record)
+        mutations = [lambda record: record.pop('stage'),
+                     lambda record: record['stage']['metadata'].update(schema='orbis.time-machine-runtime.v3'),
+                     lambda record: record['stage']['bootstrap'].update(preserveLiveProxy=False),
+                     lambda record: record['stage']['journal']['roots'].append('traefik'),
+                     lambda record: record['source'].pop('proxyHostIdentity')]
+        for mutation in mutations:
+            record = copy.deepcopy(original)
+            mutation(record)
+            for role in ('coordinator', 'verifier'):
+                with self.subTest(role=role, mutation=mutation), self.assertRaises(ValueError):
+                    self.runtime.storage_mounts(record, role)
+
+    def test_readonly_proxy_rejects_writable_source_aliases_and_nested_shadows(self):
+        proxy = self.preserve_proxy()
+        for source, target in ((proxy['Source'], '/other'), ('/fixture', '/other'),
+                               (proxy['Source'] + '/child', '/other'), ('/unrelated', '/data/traefik/dynamic')):
+            self.mounts.append({'Type': 'bind', 'Source': source, 'Destination': target, 'RW': True})
+            try:
+                with self.subTest(source=source, target=target), self.assertRaises(ValueError):
+                    self.runtime.storage_mounts(self.record, 'coordinator')
+            finally:
+                self.mounts.pop()
+
 
 class Runtime:
     def __init__(self):

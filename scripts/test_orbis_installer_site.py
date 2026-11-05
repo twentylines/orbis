@@ -17,6 +17,12 @@ SPEC.loader.exec_module(SITE)
 
 
 class InstallerEndpointTests(unittest.TestCase):
+    def test_literal_required_updates_are_included_without_executing_published_source(self):
+        values = {'scripts/orbis-installer-bundle.py': b"REQUIRED = {'scripts/install-orbis.py'}\nREQUIRED |= {'scripts/orbis-host-volume-engine.py'}\nraise Exception('must not execute')\n"}
+        self.assertEqual(SITE.required_sources(values), {'scripts/install-orbis.py', 'scripts/orbis-host-volume-engine.py'})
+        for body in [b"REQUIRED = {'one'}\nREQUIRED |= callback()", b"REQUIRED = {'one'}\nREQUIRED += {'two'}"]:
+            with self.assertRaises(ValueError): SITE.required_sources({'scripts/orbis-installer-bundle.py': body})
+
     def test_packaged_helper_changes_trigger_independent_installer_publication(self):
         repository = Path(__file__).resolve().parent.parent
         workflow = (repository / '.github/workflows/installer-site.yml').read_text()
@@ -32,7 +38,7 @@ class InstallerEndpointTests(unittest.TestCase):
         self.release = {"schema": "orbis.release.v1", "image": "ghcr.io/twentylines/orbis", "tag": "v1.0.0", "commit": "a" * 40, "digest": "sha256:" + "b" * 64, "installationProtocol": "orbis.installation-state.v1", "runtipiCompatibility": "4.10.1"}
         self.files = {name: b"# public source\n" for name in SITE.BUILD.REQUIRED}
         self.files["scripts/install-orbis.py"] = Path(__file__).with_name("install-orbis.py").read_bytes()
-        self.files["scripts/orbis-installer-bundle.py"] = ("REQUIRED = " + repr(SITE.BUILD.REQUIRED)).encode()
+        self.files["scripts/orbis-installer-bundle.py"] = ("REQUIRED = " + repr(SITE.BUILD.REQUIRED) + "\nBUILD_ONLY = " + repr(SITE.BUILD.BUILD_ONLY)).encode()
         self.assets = {**SITE.BUILD.build(self.files, json.dumps(self.release).encode()), "release-manifest.json": json.dumps(self.release).encode()}
         self.selected = self.record(self.release["tag"])
         self.selected["assets"] = [{"name": name, "browser_download_url": SITE.BASE + "download/" + self.selected["tag_name"] + "/" + name, "state": "uploaded", "size": len(data), "digest": "sha256:" + SITE.BUILD.sha(data)} for name, data in self.assets.items()]
@@ -125,7 +131,7 @@ class InstallerEndpointTests(unittest.TestCase):
         required = SITE.BUILD.REQUIRED - {"scripts/orbis-install-ui.py"}
         del self.files["scripts/orbis-install-ui.py"]
         self.files["scripts/orbis-installer-bundle.py"] = ("REQUIRED = " + repr(required)).encode()
-        with mock.patch.object(SITE.BUILD, "REQUIRED", required):
+        with mock.patch.object(SITE.BUILD, "REQUIRED", required), mock.patch.object(SITE.BUILD, 'BUILD_ONLY', set()):
             assets = {**SITE.BUILD.build(self.files, self.assets["release-manifest.json"]), "release-manifest.json": self.assets["release-manifest.json"]}
         selected = copy.deepcopy(self.selected)
         for item in selected["assets"]:
@@ -267,7 +273,7 @@ class CombinedChannelEndpointTests(unittest.TestCase):
         self.assertEqual(namespace["INSTALLER"], {"commit": "b" * 40, "manifestSha256": result["installerManifestSha256"]})
         installer = self.output / "installer" / ("b" * 40)
         manifest = SITE.BOOT.verify_installer_manifest((installer / SITE.BUILD.MANIFEST).read_bytes(), namespace["INSTALLER"])
-        self.assertEqual(SITE.BOOT.verify_files((installer / SITE.BUILD.ARCHIVE).read_bytes(), manifest), {name: data for name, data in self.files.items() if SITE.BUILD.ALLOWED.fullmatch(name)})
+        self.assertEqual(SITE.BOOT.verify_files((installer / SITE.BUILD.ARCHIVE).read_bytes(), manifest), {name: data for name, data in self.files.items() if SITE.BUILD.ALLOWED.fullmatch(name) and name not in SITE.BUILD.BUILD_ONLY})
         self.assertEqual((self.output / "stable/install").read_bytes(), self.assets["install-orbis.py"])
         self.assertEqual((self.output / "nightly/install").read_bytes(), self.assets["install-orbis.py"])
         self.assertEqual({p.name for p in self.output.iterdir()}, {"install", "channels.json", "stable", "nightly", "installer", "index.html", ".nojekyll"})

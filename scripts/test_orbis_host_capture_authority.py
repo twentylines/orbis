@@ -26,8 +26,13 @@ P = S.CONTROLLER_IDENTITY
 
 def track_fixture(path):
     # Establish macOS document tracking before taking immutable fixture metadata.
-    if hasattr(os, 'chflags') and hasattr(stat, 'UF_TRACKED') and stat.S_ISREG(path.lstat().st_mode):
-        os.chflags(path, path.stat().st_flags | stat.UF_TRACKED, follow_symlinks=False)
+    if hasattr(os, 'chflags') and hasattr(stat, 'UF_TRACKED'):
+        details = path.lstat()
+        if stat.S_ISREG(details.st_mode):
+            os.chflags(path, details.st_flags | stat.UF_TRACKED | 0x8000, follow_symlinks=False)
+        elif stat.S_ISDIR(details.st_mode):
+            # macOS clears file-tracking flags on directories during enumeration.
+            os.chflags(path, (details.st_flags & ~stat.UF_TRACKED) | 0x8000, follow_symlinks=False)
 
 
 def tar_bytes(entries):
@@ -79,11 +84,13 @@ class CaptureAuthorityTests(unittest.TestCase):
             self.native_scripts = self.fixture.base / 'native-scripts'
             self.native_scripts.mkdir(mode=0o700)
             capabilities = S.TIME_MACHINE_CAPABILITIES
-            for source in Path(__file__).parent.iterdir():
+            setup = S.load_script('orbis-host-service-setup.py', 'capture_installed_fixture_setup')
+            for source in setup.source_files(Path(__file__).parent)[0]:
                 if source.is_file() and capabilities.NAMES.fullmatch(source.name):
                     target = self.native_scripts / source.name
                     target.write_bytes(source.read_bytes()); target.chmod(0o600)
                     track_fixture(target)
+            track_fixture(self.native_scripts)
             reader = capabilities.source_digest
             self.enterContext(mock.patch.object(capabilities, 'source_digest', side_effect=lambda authority, **_: reader(authority, directory=self.native_scripts)))
             fence_request['captureContractSha256'] = self.service.time_machine_capability('capture')['contractSha256']

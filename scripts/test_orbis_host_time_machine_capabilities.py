@@ -62,6 +62,13 @@ class CapabilityTests(unittest.TestCase):
         file.unlink()
         with self.assertRaises(ValueError): self.capability()
 
+    def test_layout_and_reset_authority_are_required_capability_dependencies(self):
+        for name in ('orbis-host-layout.py', 'orbis-reset-authority.py'):
+            file = self.path / name
+            file.unlink()
+            with self.subTest(name=name), self.assertRaises(ValueError): self.capability()
+            file.write_bytes(b'# fixture source\n'); file.chmod(0o600)
+
     def test_symlink_or_hardlink_cannot_supply_a_helper(self):
         file = self.path / 'orbis-host-app-inet-diag.py'
         file.unlink(); file.symlink_to('orbis-host-service.py')
@@ -75,6 +82,19 @@ class CapabilityTests(unittest.TestCase):
         self.assertEqual(self.capability(), before)
         with self.assertRaises(ValueError): self.capability('untrusted-feature')
 
+    def test_volume_support_has_an_independent_domain_and_requires_its_complete_closure(self):
+        with self.assertRaises(ValueError): self.capability('volume')
+        for name in M.VOLUME_REQUIRED:
+            file = self.path / name; file.write_bytes(b'# fixture source\n'); file.chmod(0o600)
+        value = self.capability('volume')
+        self.assertEqual(value['manifestVersion'], 3)
+        self.assertEqual(value['schema'], 'orbis.backup-volume-capture.v1')
+        body = {key: item for key, item in value.items() if key != 'contractSha256'}
+        self.assertEqual(value['contractSha256'], hashlib.sha256(M.VOLUME_DOMAIN + M.canonical(body)).hexdigest())
+        self.assertNotEqual(value['contractSha256'], self.capability('capture')['contractSha256'])
+        (self.path / 'orbis-host-volume-engine.py').unlink()
+        with self.assertRaises(ValueError): self.capability('volume')
+
     def test_real_installed_helper_closure_can_declare_both_contracts(self):
         setup = load('orbis-host-service-setup.py')
         with tempfile.TemporaryDirectory(prefix='orbis-installed-') as folder:
@@ -82,10 +102,17 @@ class CapabilityTests(unittest.TestCase):
             for source in setup.source_files(Path(__file__).parent)[0]:
                 target = destination / source.name
                 target.write_bytes(source.read_bytes()); target.chmod(0o600)
-            for kind in ('capture', 'restore'):
+                C.track_fixture(target)
+            C.track_fixture(destination)
+            for kind in ('capture', 'restore', 'volume'):
                 value = M.capability(kind, A, directory=destination)
                 self.assertEqual(len(value['sourceSha256']), 64)
             self.assertLessEqual(len(list(destination.iterdir())), 64)
+            layout = destination / 'orbis-host-layout.py'
+            layout_body = layout.read_bytes()
+            layout.unlink()
+            with self.assertRaises(ValueError): M.capability('capture', A, directory=destination)
+            layout.write_bytes(layout_body); layout.chmod(0o600)
             (destination / 'orbis-host-app-inet-diag.py').unlink()
             with self.assertRaises(ValueError): M.capability('restore', A, directory=destination)
 

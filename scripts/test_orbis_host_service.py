@@ -263,7 +263,6 @@ class HostServiceTests(unittest.TestCase):
         self.assertEqual(observed, [{"state": "idle"}])
         module.RestoreManager.assert_called_once_with(self.service)
 
-
     def wait_for_job(self):
         for _ in range(100):
             record = SERVICE.read_private(self.service.job_file)
@@ -500,6 +499,36 @@ class HostServiceTests(unittest.TestCase):
         self.assertEqual(args[4], Path(job["snapshot"]))
         self.assertEqual(args[4].parent, self.snapshots)
 
+    def test_overlay_preflight_failure_aborts_before_accepting_job_and_preserves_error(self):
+        planned = self.service.plan(TARGET['tag'])
+        original = ValueError('Orbis or its proxy has a stale Docker connection')
+        overlays = self.service.core_overlay_manager
+        overlays.ready.side_effect = original
+        overlays.abort.side_effect = ValueError('abort requires recovery')
+        with self.assertRaises(ValueError) as raised:
+            self.service.apply(planned['planId'])
+        self.assertIs(raised.exception, original)
+        overlays.abort.assert_called_once_with(planned['planId'])
+        self.assertFalse(self.service.job_file.exists())
+        self.assertFalse(self.service.busy)
+
+    def test_durable_job_is_accepted_even_if_acceptance_receipt_reply_is_lost(self):
+        planned = self.service.plan(TARGET['tag'])
+        overlays = self.service.core_overlay_manager
+        observed = []
+        def lost(job):
+            observed.append(SERVICE.read_private(self.service.job_file)['id'])
+            raise OSError('receipt reply lost')
+        overlays.accept.side_effect = lost
+        with mock.patch.object(SERVICE.UPDATE, 'apply_update'):
+            accepted, launch = self.service.apply(planned['planId'])
+            self.assertEqual(observed, [planned['planId']])
+            self.assertEqual(accepted['state'], 'running')
+            launch()
+            job = self.wait_for_job()
+        self.assertEqual(job['state'], 'complete')
+        overlays.abort.assert_not_called()
+
     def test_helper_maintenance_rejects_new_core_operations(self):
         planned = self.service.plan(TARGET["tag"])
         SERVICE.write_private(self.service.maintenance_file, {"schema": "orbis.helper-upgrade.v1"})
@@ -641,6 +670,24 @@ class HostServiceTests(unittest.TestCase):
             job = self.wait_for_job()
         self.assertEqual(job["state"], "rolled-back")
         self.assertEqual(job["message"], "The previous Orbis release was restored.")
+
+    def test_aborted_update_reports_safe_version_reason_without_internal_error(self):
+        planned = self.service.plan(TARGET["tag"])
+        failure = {"failureStage": "pulled", "failureCode": "controller-preservation-unsupported", "failureType": "ValueError"}
+
+        def reject_release(root, current, target, context, snapshot, **kwargs):
+            SERVICE.write_private(SERVICE.UPDATE.journal_path(snapshot), {"stage": "aborted", **failure})
+            raise RuntimeError("SECRET_MARKER /private/password.env")
+
+        with mock.patch.object(SERVICE.UPDATE, "apply_update", side_effect=reject_release):
+            _, launch = self.service.apply(planned["planId"])
+            launch()
+            job = self.wait_for_job()
+        self.assertEqual(job["state"], "failed")
+        self.assertIn(SERVICE.UPDATE.FAILURE_MESSAGES["controller-preservation-unsupported"], job["message"])
+        self.assertIn("The update stopped before restarting Orbis.", job["message"])
+        self.assertNotIn("SECRET_MARKER", json.dumps(job))
+        self.assertEqual({key: job[key] for key in failure}, failure)
 
     def test_plan_expires_and_state_directory_must_be_private(self):
         planned = self.service.plan(TARGET["tag"])

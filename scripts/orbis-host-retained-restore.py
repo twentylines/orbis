@@ -49,7 +49,7 @@ def digest(value):
 
 
 def marker_path(root):
-    return root.parent / ('.' + root.name + '.orbis-retained-restore.json')
+    return HOST.restore_selector_path(root)
 
 
 class RestoreManager:

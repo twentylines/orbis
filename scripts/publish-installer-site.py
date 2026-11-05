@@ -69,10 +69,32 @@ def head_commit(repository):
 
 def required_sources(source):
     tree = ast.parse(source["scripts/orbis-installer-bundle.py"])
-    values = [node.value for node in tree.body if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "REQUIRED" for target in node.targets)]
-    if len(values) != 1:
-        raise ValueError("Published source has no unique installer file list")
-    return ast.literal_eval(values[0])
+    result = None
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "REQUIRED" for target in node.targets):
+            if result is not None: raise ValueError("Published source has no unique installer file list")
+            value = ast.literal_eval(node.value)
+            if not isinstance(value, set) or any(not isinstance(name, str) for name in value): raise ValueError("Invalid installer file list")
+            result = set(value)
+        elif isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name) and node.target.id == 'REQUIRED':
+            if result is None or not isinstance(node.op, ast.BitOr): raise ValueError("Invalid installer file list update")
+            value = ast.literal_eval(node.value)
+            if not isinstance(value, set) or any(not isinstance(name, str) for name in value): raise ValueError("Invalid installer file list update")
+            result.update(value)
+    if not result or len(result) > 66: raise ValueError("Published source has no bounded installer file list")
+    return result
+
+
+def packaged_sources(source):
+    tree = ast.parse(source['scripts/orbis-installer-bundle.py'])
+    assignments = [node.value for node in tree.body if isinstance(node, ast.Assign)
+                   and any(isinstance(target, ast.Name) and target.id == 'BUILD_ONLY' for target in node.targets)]
+    if len(assignments) > 1: raise ValueError('Ambiguous installer build tools')
+    excluded = ast.literal_eval(assignments[0]) if assignments else set()
+    if not isinstance(excluded, set) or any(not isinstance(name, str) or not BUILD.ALLOWED.fullmatch(name) for name in excluded):
+        raise ValueError('Invalid installer build tools')
+    if excluded & required_sources(source): raise ValueError('Installer build tools overlap required runtime files')
+    return {name: body for name, body in source.items() if BUILD.ALLOWED.fullmatch(name) and name not in excluded}
 
 
 def site(repository, releases, output, fetch=BOOT.fetch, *, channel="stable"):
@@ -107,7 +129,7 @@ def site(repository, releases, output, fetch=BOOT.fetch, *, channel="stable"):
     if manifest["releaseManifestSha256"] != BUILD.sha(downloaded["release-manifest.json"]):
         raise ValueError("Installer and core image manifests do not match")
     verified = BOOT.verify_files(downloaded[BUILD.ARCHIVE], manifest)
-    expected = {name: data for name, data in source.items() if BUILD.ALLOWED.fullmatch(name)}
+    expected = packaged_sources(source)
     launcher = BUILD.release_launcher(source["scripts/" + BUILD.LAUNCHER], identity)
     if verified != expected or downloaded[BUILD.LAUNCHER] != launcher:
         raise ValueError("Published installer differs from its committed source")

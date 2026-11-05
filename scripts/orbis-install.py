@@ -421,7 +421,8 @@ def update_existing(root, reader, target, display, *, without_host_service=False
                     raise ValueError("The update finished without the expected healthy image; inspect Updates before retrying")
                 return {"result": "orbis-updated", "releaseTag": target["tag"], "jobId": job_id}
             if job.get("state") not in {"queued", "running"}:
-                raise ValueError(f"{job.get('message') or 'The update needs inspection'}. Job: {job_id}. Do not retry until resolved")
+                message = str(job.get('message') or 'The update needs attention').rstrip().rstrip('.')
+                raise ValueError(f"{message}. Job: {job_id}. Check Updates before trying again")
             time.sleep(1)
         raise ValueError(f"Update {job_id} is still running. Follow it in Updates; do not start another update")
 

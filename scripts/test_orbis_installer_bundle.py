@@ -52,6 +52,35 @@ class BundleTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             BUILD.build_installer(missing, 'c' * 40)
 
+    def test_volume_helpers_are_required_without_shipping_release_build_tools(self):
+        expected = {'scripts/orbis-host-volume-' + name + '.py' for name in ('capture', 'engine', 'inventory', 'service')}
+        expected.add('scripts/orbis-app-volume-authority.py')
+        self.assertTrue(expected <= BUILD.REQUIRED & BOOT.REQUIRED)
+        repository = Path(__file__).resolve().parent.parent
+        files = {str(file.relative_to(repository)): file.read_bytes() for file in (repository / 'scripts').iterdir()
+                 if file.is_file() and BUILD.ALLOWED.fullmatch(str(file.relative_to(repository)))}
+        unit = 'packaging/systemd/orbis-host.service'; files[unit] = (repository / unit).read_bytes()
+        values = BUILD.sources(files)
+        self.assertLessEqual(len(values), 66)
+        self.assertFalse(BUILD.BUILD_ONLY & set(values))
+        self.assertTrue(expected <= set(values))
+        for name in expected:
+            with self.subTest(name=name), self.assertRaises(ValueError): BUILD.sources({key: body for key, body in files.items() if key != name})
+
+    def test_proxy_adoption_is_required_and_source_bound_in_both_packages(self):
+        name = 'scripts/orbis-proxy-adoption.py'
+        self.assertIn(name, BUILD.REQUIRED & BOOT.REQUIRED)
+        missing = {key: data for key, data in self.files.items() if key != name}
+        with self.assertRaises(ValueError): BUILD.sources(missing)
+        files = dict(self.files)
+        index = 0
+        while len(files) < 66:
+            files['scripts/orbis-fixture-' + 'a' * (index + 1) + '.py'] = b'# fixture\n'
+            index += 1
+        self.assertEqual(66, len(BUILD.sources(files)))
+        files['scripts/orbis-one-too-many.py'] = b'# fixture\n'
+        with self.assertRaises(ValueError): BUILD.sources(files)
+
     def validate_manifest_value(self, value):
         data = json.dumps(value).encode()
         identity = {**self.identity, "manifestSha256": BUILD.sha(data)}
@@ -144,7 +173,7 @@ class BundleTests(unittest.TestCase):
         assets = BUILD.build(files, self.release_bytes)
         manifest = json.loads(assets[BUILD.MANIFEST])
         verified = BOOT.verify_files(assets[BUILD.ARCHIVE], manifest)
-        self.assertEqual(set(verified), set(files))
+        self.assertEqual(set(verified), set(BUILD.sources(files)))
         self.assertIn("scripts/orbis-proxy-identity.py", verified)
         self.assertIn("scripts/orbis-host-maintenance-responder.mjs", verified)
         self.assertIn("scripts/orbis-install-prerequisites.py",BUILD.REQUIRED & BOOT.REQUIRED)

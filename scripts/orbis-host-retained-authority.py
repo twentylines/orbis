@@ -22,6 +22,9 @@ from pathlib import Path
 SPEC = importlib.util.spec_from_file_location('orbis_retained_identity', Path(__file__).with_name('orbis-host-identity.py'))
 IDENTITY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(IDENTITY)
+LAYOUT_SPEC = importlib.util.spec_from_file_location('orbis_layout_for_retained_authority', Path(__file__).with_name('orbis-host-layout.py'))
+LAYOUT = importlib.util.module_from_spec(LAYOUT_SPEC)
+LAYOUT_SPEC.loader.exec_module(LAYOUT)
 P = IDENTITY.PUBLICATION
 OWNER = 0
 LIMIT = 8 * 1024 * 1024
@@ -144,7 +147,19 @@ def installation_files(root, names):
 
 
 def store_path(root):
-    return root.parent / ('.' + root.name + '.orbis-retained-authority')
+    return LAYOUT.selected_path(root, 'retained-authority')
+
+
+def installation_observations(root, names, *, daemon, context):
+    """Bounded hashes for capture/review, never authority to execute these files."""
+    names = tuple(names)
+    path = LAYOUT.selected_path(root, 'host-lock')
+    if path == LAYOUT.legacy_path(root, 'host-lock'):
+        with installation_files(root, names) as hashes:
+            return hashes
+    receipt = LAYOUT.read(root, daemon=daemon, context=context)
+    plan = receipt['plan']
+    return LAYOUT.observe_files(root, plan['daemon'], plan['context'], names)
 
 
 def override_content(release, creation):
@@ -396,7 +411,7 @@ def authorize_reviewed(root, context, bundle, review_digest, *, confirm_root, lo
     if os.geteuid() != OWNER or confirm_root != str(root):
         raise fail()
     locked = os.fstat(lock_fd)
-    marker = root.parent / ('.' + root.name + '.orbis-host.lock')
+    marker = LAYOUT.lock_paths(root)[0]
     if (not stat.S_ISREG(locked.st_mode) or locked.st_uid != OWNER or locked.st_nlink != 1
             or stat.S_IMODE(locked.st_mode) & 0o077 or seal(locked) != seal(marker.lstat())):
         raise fail()

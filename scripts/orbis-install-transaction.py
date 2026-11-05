@@ -50,9 +50,9 @@ def validate_review(value: dict) -> None:
 
 def private_paths(root: Path, storage: dict, journal: Path) -> Path:
     journal = APPS.journal_path(journal, root)
-    lock = root.parent / f".{root.name}.orbis-host.lock"
+    locks = APPS.HOST.AUTHORITY.LAYOUT.lock_paths(root)
     targets = [Path(item["source"]) for item in storage["resources"]] + [Path(storage["bundle"])]
-    if any(STORAGE.overlaps(path, target) for path in (journal, lock) for target in targets):
+    if any(STORAGE.overlaps(path, target) for path in (journal, *locks) for target in targets):
         raise TransactionError("The installation journal and lock must be outside every storage source and backup")
     return journal
 

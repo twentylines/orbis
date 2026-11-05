@@ -33,6 +33,8 @@ REQUIRED |= {
     "scripts/orbis-controller-bootstrap-profile.py",
     "scripts/orbis-controller-bootstrap-profile.mjs",
     "scripts/orbis-reset-authority.py",
+    "scripts/orbis-host-layout.py",
+    "scripts/orbis-proxy-adoption.py",
     "scripts/orbis-host-app-create-intent.py",
     "scripts/orbis-host-app-inet-diag.py",
     "scripts/orbis-host-app-port-observer.py",
@@ -40,6 +42,11 @@ REQUIRED |= {
     "scripts/orbis-host-retained-app-driver.py",
     "scripts/orbis-host-retained-app-effects.py",
     "scripts/orbis-host-time-machine-capabilities.py",
+    "scripts/orbis-host-volume-capture.py",
+    "scripts/orbis-host-volume-engine.py",
+    "scripts/orbis-host-volume-inventory.py",
+    "scripts/orbis-host-volume-service.py",
+    "scripts/orbis-app-volume-authority.py",
 }
 
 
@@ -153,7 +160,7 @@ def verify_files_manifest(value, required):
     if not re.fullmatch(r"[0-9a-f]{64}", str(value.get("archiveSha256", ""))):
         raise ValueError("Installer package hash is invalid")
     files = value.get("files")
-    if not isinstance(required, set) or not required or not isinstance(files, dict) or not required.issubset(files) or not 1 <= len(files) <= 64:
+    if not isinstance(required, set) or not required or not isinstance(files, dict) or not required.issubset(files) or not 1 <= len(files) <= 66:
         raise ValueError("Installer file list is incomplete")
     total = 0
     for name, record in files.items():

@@ -291,10 +291,14 @@ class DockerRestoreRuntime:
             raise fail()
         if self.host.retained_state(self.root):
             self.host.resolve_current_identity(self.root, self.context, manifest)
-        files = {name: self.host.file_digest(self.root / name) for name in self.host.IDENTITY.FILES | {'orbis-host-compose.yml'}}
         daemon = self.reader._object(['info', '--format', '{{json .}}'])
         if not isinstance(daemon.get('ID'), str) or not daemon['ID']:
             raise fail()
+        names = self.host.IDENTITY.FILES | {'orbis-host-compose.yml'}
+        if self.a.LAYOUT.selected_path(self.root, 'host-lock') == self.a.LAYOUT.legacy_path(self.root, 'host-lock'):
+            files = {name: self.host.file_digest(self.root / name) for name in names}
+        else:
+            files = self.a.installation_observations(self.root, names, daemon=daemon['ID'], context=self.context)
         stable = copy.deepcopy(raw)
         mounts = stable.get('Mounts')
         if (not isinstance(mounts, list) or any(not isinstance(item, dict) or not isinstance(item.get('Destination'), str) for item in mounts)
@@ -319,6 +323,109 @@ class DockerRestoreRuntime:
         if reset_authority is not None:
             result['resetAuthority'] = reset_authority
         return result
+
+    def live_docker_sockets(self, *, allow_stale_controller=False):
+        message = 'Orbis or its proxy has a stale Docker connection. Repair the Docker socket binding before installing a release.'
+        try:
+            endpoint = self.reader.socket()
+            if not isinstance(endpoint, str) or not endpoint.startswith('/') or os.geteuid() != 0:
+                raise ValueError(message)
+            selected = os.stat(endpoint)
+            if not stat.S_ISSOCK(selected.st_mode):
+                raise ValueError(message)
+            daemon = self.reader._object(['info', '--format', '{{json .}}'])['ID']
+            result = {}
+            for name in ('runtipi', 'runtipi-reverse-proxy'):
+                raw = self.inspect(name)
+                pid = raw['State'].get('Pid')
+                if (type(pid) is not int or pid <= 1 or not raw['State'].get('Running')
+                        or raw['State'].get('Restarting') or raw['State'].get('Paused')
+                        or not re.fullmatch(r'[a-f0-9]{64}', raw['Id'])):
+                    raise ValueError(message)
+                process = Path('/proc') / str(pid)
+                cgroup = (process / 'cgroup').read_text()
+                if len(cgroup) > 65536 or not re.search(r'(?:/|:)(?:docker-)?' + raw['Id'] + r'(?:\.scope)?(?:/|\n|$)', cgroup):
+                    raise ValueError(message)
+                mounts = [item for item in raw['Mounts'] if item.get('Destination') in {'/run/docker.sock', '/var/run/docker.sock'}]
+                if len(mounts) != 1 or mounts[0].get('Type') != 'bind':
+                    raise ValueError(message)
+                source = mounts[0].get('Source')
+                if source not in {endpoint, '/run/docker.sock', '/var/run/docker.sock'}:
+                    raise ValueError(message)
+                origin = os.stat(source)
+                if (origin.st_dev, origin.st_ino) != (selected.st_dev, selected.st_ino):
+                    raise ValueError(message)
+                root = os.open(process / 'root', os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
+                try:
+                    canonical, bound = self.socket_in_root(root, mounts[0]['Destination'])
+                finally:
+                    os.close(root)
+                table = (process / 'mountinfo').read_text()
+                if len(table) > 4 * 1024 * 1024:
+                    raise ValueError(message)
+                entries = [line.split() for line in table.splitlines()]
+                physical = [entry for entry in entries if len(entry) >= 10 and entry[4] == canonical]
+                device = str(os.major(bound.st_dev)) + ':' + str(os.minor(bound.st_dev))
+                if len(physical) != 1 or physical[0][2] != device or not stat.S_ISSOCK(bound.st_mode):
+                    raise ValueError(message)
+                fresh = (bound.st_dev, bound.st_ino) == (selected.st_dev, selected.st_ino)
+                if not fresh and not (name == 'runtipi' and allow_stale_controller):
+                    raise ValueError(message)
+                result['controller' if name == 'runtipi' else 'proxy'] = 'current' if fresh else 'stale'
+                after = self.inspect(raw['Id'])
+                if (after['Id'] != raw['Id'] or after['State'].get('Pid') != pid
+                        or after['State'].get('StartedAt') != raw['State'].get('StartedAt')
+                        or not after['State'].get('Running') or after['State'].get('Restarting') or after['State'].get('Paused')
+                        or after['Mounts'] != raw['Mounts']
+                        or (process / 'cgroup').read_text() != cgroup or (process / 'mountinfo').read_text() != table):
+                    raise ValueError(message)
+            latest = os.stat(endpoint)
+            if ((latest.st_dev, latest.st_ino) != (selected.st_dev, selected.st_ino)
+                    or self.reader.socket() != endpoint
+                    or self.reader._object(['info', '--format', '{{json .}}']).get('ID') != daemon):
+                raise ValueError(message)
+            return result
+        except (OSError, KeyError, TypeError, AttributeError, ValueError, RuntimeError) as error:
+            raise ValueError(message) from error
+
+    @staticmethod
+    def socket_in_root(root, destination):
+        # Resolve container symlinks beneath its pinned process root. Ordinary
+        # /proc/PID/root/var/run resolution can follow /run into the host root.
+        pending, resolved, links = destination.split('/')[1:], [], 0
+        descriptors = [os.dup(root)]
+        try:
+            while pending:
+                component = pending.pop(0)
+                if component in {'', '.'}:
+                    continue
+                if component == '..':
+                    if resolved:
+                        resolved.pop()
+                        os.close(descriptors.pop())
+                    continue
+                details = os.stat(component, dir_fd=descriptors[-1], follow_symlinks=False)
+                if stat.S_ISLNK(details.st_mode):
+                    links += 1
+                    if links > 16:
+                        raise ValueError('Container socket symlink limit exceeded')
+                    target = os.readlink(component, dir_fd=descriptors[-1])
+                    if target.startswith('/'):
+                        while len(descriptors) > 1:
+                            os.close(descriptors.pop())
+                        resolved = []
+                    pending = target.split('/') + pending
+                elif pending:
+                    descriptor = os.open(component, os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                                         dir_fd=descriptors[-1])
+                    descriptors.append(descriptor)
+                    resolved.append(component)
+                else:
+                    return '/' + '/'.join(resolved + [component]), details
+            raise ValueError('Container socket path is invalid')
+        finally:
+            for descriptor in reversed(descriptors):
+                os.close(descriptor)
 
     def reset_authority_snapshot(self, original):
         mounts = original.get('Mounts') or []
@@ -362,6 +469,10 @@ class DockerRestoreRuntime:
         return {item['name']: item for item in result}
 
     def proxy_static_digest(self, proxy):
+        identity = load('orbis-proxy-identity.py', 'orbis_proxy_for_runtime_static')
+        if identity.adoption_selected(self.root):
+            authority = identity.adoption_module().verified_authority(self.root, self.context, proxy, self)
+            return authority['static']['sha256']
         mounts = [item for item in proxy.get('Mounts', []) if item.get('Destination') == '/etc/traefik']
         if (len(mounts) != 1 or mounts[0].get('Type') != 'bind'
                 or mounts[0].get('Source') != str(self.root / 'traefik') or mounts[0].get('RW') is not False):
@@ -371,11 +482,11 @@ class DockerRestoreRuntime:
                 return hashed(body)
 
     def observed_proxy_static_digest(self, proxy):
-        # This is a drift observation, never configuration authority. The scoped
-        # updater preserves this running proxy and never executes these bytes.
+        # A container read detects drift; approved private bytes grant authority.
+        identity = load('orbis-proxy-identity.py', 'orbis_proxy_for_runtime_observation')
         mounts = [item for item in proxy.get('Mounts', []) if item.get('Destination') == '/etc/traefik']
         if (len(mounts) != 1 or mounts[0].get('Type') != 'bind'
-                or mounts[0].get('Source') != str(self.root / 'traefik')):
+                or mounts[0].get('Source') != str(identity.configuration_path(self.root))):
             raise fail()
         output = self.bounded_output(['docker', '--context', self.context, 'container', 'cp',
                                       proxy['Id'] + ':/etc/traefik/traefik.yml', '-'], 2 * 1024 * 1024, 20)
@@ -392,11 +503,15 @@ class DockerRestoreRuntime:
         mounts = proxy.get('Mounts')
         if not isinstance(mounts, list) or len({m.get('Destination') for m in mounts}) != len(mounts):
             raise fail()
+        identity = load('orbis-proxy-identity.py', 'orbis_proxy_for_runtime_policy')
+        adopted = identity.adoption_selected(self.root)
+        if adopted:
+            identity.adoption_module().verified_authority(self.root, self.context, proxy, self)
         by_target = {m.get('Destination'): m for m in mounts}
         config, shared = by_target.get('/etc/traefik', {}), by_target.get('/shared', {})
-        if (config.get('Type') != 'bind' or config.get('Source') != str(self.root / 'traefik')
+        if (config.get('Type') != 'bind' or config.get('Source') != str(identity.configuration_path(self.root))
                 or type(config.get('RW')) is not bool or shared.get('Type') != 'bind'
-                or shared.get('Source') not in {str(self.root / 'traefik/shared'), str(self.root.parent / ('.' + self.root.name + '.orbis-proxy-identity'))}
+                or shared.get('Source') not in {str(self.root / 'traefik/shared'), str(self.root.parent / ('.' + self.root.name + '.orbis-proxy-identity')), str(identity.shared_path(self.root))}
                 or shared.get('RW') is not True):
             raise fail()
         for mount in mounts:
@@ -575,8 +690,8 @@ class DockerRestoreRuntime:
     def journal_directory(self, source, identifier):
         return self.map_path(source['container'], '/data/backups') / 'restores' / identifier
 
-    def provisional_auxiliaries(self, source, journal, bootstrap):
-        record = {'source': source}
+    def provisional_auxiliaries(self, source, journal, bootstrap, metadata=None):
+        record = {'source': source, 'stage': {'journal': journal, 'bootstrap': bootstrap, 'metadata': metadata or {}}}
         result = {}
         for role, field in (('worker', 'worker'), ('verifier', 'verifierController')):
             identifier = journal.get(field)
@@ -895,7 +1010,7 @@ class DockerRestoreRuntime:
             app_destination['destinationAppRuntimeSha256'] = self.destination_app_digest(observed, bindings)
             app_destination['executionContractSha256'] = self.manager.service.time_machine_capability('restore')['contractSha256']
         return {'journal': journal, 'bootstrap': bootstrap, 'admission': admission, 'journalPath': str(path), **app_destination,
-                'provisional': self.provisional_auxiliaries(source, journal, bootstrap),
+                'provisional': self.provisional_auxiliaries(source, journal, bootstrap, metadata),
                 'sourceBinding': {'originalJournalSha256': hashed(self.P.canonical(journal)),
                                   'bootstrapSha256': hashed(self.read_file(path / 'bootstrap.json', 1024 * 1024)),
                                   'admissionSha256': hashed(self.read_file(path / 'time-machine-admission.json', 8192)),
@@ -1150,6 +1265,12 @@ class DockerRestoreRuntime:
             raise fail()
         original = record['source']['container']
         authority = self.require_reset_authority(record)
+        stage = record.get('stage') or {}
+        roots = (stage.get('journal') or {}).get('roots')
+        preserve_proxy = ((stage.get('metadata') or {}).get('schema') in {'orbis.time-machine-runtime.v4', 'orbis.time-machine-runtime.v6'}
+                          and (stage.get('bootstrap') or {}).get('preserveLiveProxy') is True
+                          and isinstance(roots, list) and 'traefik' not in roots
+                          and isinstance(record['source'].get('proxyHostIdentity'), dict))
         destinations = ['/data/' + name for name in ('state', 'apps', 'repos', 'media', 'user-config', 'traefik', 'backups', 'logs', '.env')] + ['/app-data', '/cache']
         selected = {}
         for destination in destinations:
@@ -1157,9 +1278,19 @@ class DockerRestoreRuntime:
             if not matches:
                 raise fail()
             item = max(matches, key=lambda value: len(value['Destination']))
-            if item.get('Type') != 'bind' or item.get('RW') is not True:
+            readonly_proxy = (destination == '/data/traefik' and item.get('Destination') == destination
+                              and item.get('RW') is False and preserve_proxy)
+            if item.get('Type') != 'bind' or (item.get('RW') is not True and not readonly_proxy):
                 raise fail()
             selected[item['Destination']] = item
+        proxy = selected.get('/data/traefik')
+        if proxy is not None and proxy.get('RW') is False:
+            source = proxy.get('Source')
+            if (not isinstance(source, str) or not source.startswith('/') or source == '/' or os.path.normpath(source) != source
+                    or any(item is not proxy and item.get('RW') is True and isinstance(item.get('Source'), str)
+                           and (item['Source'] == source or item['Source'].startswith(source + '/') or source.startswith(item['Source'].rstrip('/') + '/'))
+                           for item in original['Mounts'])):
+                raise fail()
         if authority is not None:
             mount = next(item for item in original['Mounts'] if item.get('Destination') == RESET.TARGET)
             selected[RESET.TARGET] = mount

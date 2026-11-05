@@ -25,6 +25,8 @@ REQUIRED |= {
     "scripts/orbis-controller-bootstrap-profile.py",
     "scripts/orbis-controller-bootstrap-profile.mjs",
     "scripts/orbis-reset-authority.py",
+    "scripts/orbis-host-layout.py",
+    "scripts/orbis-proxy-adoption.py",
     "scripts/orbis-host-app-create-intent.py",
     "scripts/orbis-host-app-inet-diag.py",
     "scripts/orbis-host-app-port-observer.py",
@@ -32,7 +34,15 @@ REQUIRED |= {
     "scripts/orbis-host-retained-app-driver.py",
     "scripts/orbis-host-retained-app-effects.py",
     "scripts/orbis-host-time-machine-capabilities.py",
+    "scripts/orbis-host-volume-capture.py",
+    "scripts/orbis-host-volume-engine.py",
+    "scripts/orbis-host-volume-inventory.py",
+    "scripts/orbis-host-volume-service.py",
+    "scripts/orbis-app-volume-authority.py",
 }
+
+BUILD_ONLY = {"scripts/orbis-installer-bundle.py", "scripts/orbis-migration-fingerprint.py",
+              "scripts/orbis-release-metadata.py", "scripts/orbis-release-watermark.py"}
 
 
 def sha(data):
@@ -67,8 +77,8 @@ def release_launcher(template, identity):
 
 
 def sources(files):
-    values = {name: data for name, data in files.items() if ALLOWED.fullmatch(name)}
-    if not REQUIRED.issubset(values) or not 1 <= len(values) <= 64 or any(not isinstance(data, bytes) or len(data) > 1024 * 1024 for data in values.values()):
+    values = {name: data for name, data in files.items() if ALLOWED.fullmatch(name) and name not in BUILD_ONLY}
+    if not REQUIRED.issubset(values) or not 1 <= len(values) <= 66 or any(not isinstance(data, bytes) or len(data) > 1024 * 1024 for data in values.values()):
         raise ValueError("Installer sources are missing or exceed their limits")
     if sum(len(data) for data in values.values()) > 8 * 1024 * 1024:
         raise ValueError("Installer files exceed their total size limit")

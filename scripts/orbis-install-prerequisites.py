@@ -7,6 +7,7 @@ from contextvars import ContextVar
 import fcntl
 import hashlib
 import io
+import importlib.util
 import ipaddress
 import json
 import os
@@ -679,8 +680,9 @@ def host_barrier(root):
     installation=Path(values.get('ORBIS_ROOT',''))
     if not installation.is_absolute() or installation!=installation.resolve(strict=True) or not installation.is_dir():raise PrerequisiteError('The existing Orbis installation cannot be locked safely.')
     private_directory(state)
-    lock=installation.parent/('.'+installation.name+'.orbis-host.lock')
-    descriptor=os.open(lock,os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
+    spec=importlib.util.spec_from_file_location('orbis_layout_for_prerequisites',Path(__file__).with_name('orbis-host-layout.py'))
+    layout=importlib.util.module_from_spec(spec);spec.loader.exec_module(layout)
+    descriptors=layout.open_locks(installation);descriptor=descriptors[0]
     marker=state/'helper-maintenance.json';record={'schema':'orbis.docker-setup-maintenance.v1','setupRoot':str(root)}
     try:
         fcntl.flock(descriptor,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -694,7 +696,7 @@ def host_barrier(root):
         yield
     finally:
         if owned and marker.exists() and read(marker)==record and pending_transaction(root) is None:marker.unlink()
-        if descriptor is not None:os.close(descriptor)
+        for item in reversed(descriptors):os.close(item)
 
 
 def resume_transaction(directory,journal,progress):

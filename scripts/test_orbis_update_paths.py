@@ -92,7 +92,7 @@ class InstallerUpdateTests(unittest.TestCase):
             self.exercise(target={**CURRENT, 'tag': 'v0.1.0-beta.9'})
 
     def test_failed_job_is_not_retried(self):
-        with self.assertRaisesRegex(ValueError, 'storage changed.*Do not retry'):
+        with self.assertRaisesRegex(ValueError, 'storage changed.*Check Updates before trying again'):
             self.exercise(status={'job': {'id': 'owned-plan', 'state': 'failed', 'message': 'storage changed'}})
 
     def test_lost_apply_acknowledgement_observes_the_same_job_without_reapplying(self):

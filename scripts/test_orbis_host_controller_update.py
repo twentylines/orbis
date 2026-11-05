@@ -84,6 +84,46 @@ class ControllerUpdateTests(unittest.TestCase):
         isolation.assert_not_called()
         self.assertEqual(self.record['source']['Mounts'], [])
 
+    def test_adopted_proxy_candidate_is_read_only_and_checks_aliases(self):
+        adoption = C.D.load('orbis-proxy-adoption.py', 'candidate_proxy_test')
+        identity = SimpleNamespace(adoption_selected=lambda root: True, adoption_module=lambda: adoption)
+        config = str(self.root / 'traefik')
+        execution = str(adoption.execution_path(self.root))
+        for structured in (False, True):
+            with self.subTest(structured=structured):
+                host = {'Mounts': [{'Type': 'bind', 'Source': config, 'Target': '/data/traefik'}]} if structured else {'Binds': [config + ':/data/traefik:rw,rprivate']}
+                body = {'HostConfig': host}
+                with mock.patch.object(C.D, 'load', return_value=identity), mock.patch.object(adoption, 'require_aliases') as aliases:
+                    self.updater.proxy_candidate_body(body, transform=True)
+                    self.updater.proxy_candidate_body(body, transform=False)
+                    self.assertFalse(aliases.call_args.args[1][0]['Mounts'][0]['RW'])
+                    self.assertEqual(host['Mounts'][0]['ReadOnly'] if structured else host['Binds'][0], True if structured else execution + ':/data/traefik:rprivate,ro')
+                    bad = copy.deepcopy(body)
+                    bad['HostConfig'].setdefault('Binds', []).append('/other:/data/traefik/nested:rw')
+                    with self.assertRaisesRegex(ValueError, 'overlaps'):
+                        self.updater.proxy_candidate_body(bad, transform=False)
+                    bad = copy.deepcopy(body)
+                    if structured: bad['HostConfig']['Mounts'][0]['ReadOnly'] = False
+                    else: bad['HostConfig']['Binds'][0] = execution + ':/data/traefik:rw'
+                    with self.assertRaisesRegex(ValueError, 'read-only'):
+                        self.updater.proxy_candidate_body(bad, transform=False)
+
+    def test_legacy_proxy_candidate_is_unchanged(self):
+        body = {'HostConfig': {'Binds': ['/legacy:/data/traefik:rw']}}
+        before = copy.deepcopy(body)
+        with mock.patch.object(C.D, 'load', return_value=SimpleNamespace(adoption_selected=lambda root: False)):
+            self.assertEqual(self.updater.proxy_candidate_body(body, transform=True), before)
+
+    def test_adopted_proxy_rejects_writable_source_alias(self):
+        adoption = C.D.load('orbis-proxy-adoption.py', 'candidate_alias_test')
+        identity = SimpleNamespace(adoption_selected=lambda root: True, adoption_module=lambda: adoption)
+        body = {'HostConfig': {'Binds': [str(self.root / 'traefik') + ':/data/traefik:rw',
+                                         str(self.root) + ':/other:rw']}}
+        with mock.patch.object(C.D, 'load', return_value=identity):
+            with self.assertRaises(ValueError):
+                self.updater.proxy_candidate_body(body, transform=True)
+        self.assertTrue(body['HostConfig']['Binds'][0].endswith(':rw'))
+
     def test_optional_reset_reads_verified_external_v4_binding_only(self):
         binding = {'schema': C.RESET.SCHEMA_V4, 'path': '/verified/external/data'}
         @contextmanager
