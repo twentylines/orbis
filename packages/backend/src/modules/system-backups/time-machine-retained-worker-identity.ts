@@ -62,6 +62,7 @@ export async function verifyRetainedWorkerIdentity(options: {
   retainedSource: string;
   payloadSource: string;
   coordinatorImageEnv: readonly string[];
+  preserveLiveProxy?: boolean;
 }) {
   const { original, worker } = options;
   const envMap = (values: readonly string[]) => {
@@ -152,6 +153,13 @@ export async function verifyRetainedWorkerIdentity(options: {
     const workerId = currentNetworks[name]?.NetworkID;
     if (originalId ? originalId !== workerId : original.State.Running) throw fail();
   }
-  verifyRetainedRestoreWorkerMounts(original.Mounts, worker.Mounts, options.restoreId, options.retainedSource, options.payloadSource);
+  verifyRetainedRestoreWorkerMounts(
+    original.Mounts,
+    worker.Mounts,
+    options.restoreId,
+    options.retainedSource,
+    options.payloadSource,
+    options.preserveLiveProxy,
+  );
   return controllerCaptureSocketIdentity('/run/orbis/host.sock');
 }

@@ -60,6 +60,7 @@ export async function verifyRetainedRootWorker(options: { journal: BackupRestore
     retainedSource: sourceFor(`/data/backups/restores/${rootBinding.restoreId}/retained`),
     payloadSource: sourceFor(`/data/backups/restores/${rootBinding.restoreId}/source/payload`),
     coordinatorImageEnv: image.Config.Env,
+    preserveLiveProxy: !journal.state.roots.includes('traefik'),
   });
 }
 
@@ -215,6 +216,7 @@ export async function readRetainedRestoreContext(options: {
         retainedSource,
         payloadSource,
         coordinatorImageEnv: image.Config?.Env ?? [],
+        preserveLiveProxy: options.preserveLiveProxy,
       });
       if (socketIdentity && socketIdentity !== current) throw fail();
       socketIdentity = current;

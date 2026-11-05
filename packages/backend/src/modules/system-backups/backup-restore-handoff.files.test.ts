@@ -460,3 +460,21 @@ it('retains nonsecret ownership before a failed reviewed-source claim so discard
   expect(snapshots.has('3'.repeat(64))).toBe(false);
   assertOriginalUntouched();
 });
+
+it('rejects a read-only proxy before allocation unless the restore explicitly preserves it', async () => {
+  const original = snapshots.get(controller);
+  const proxy = original?.Mounts.find((entry) => entry.Destination === '/data/traefik');
+  if (!proxy) throw new Error('Missing proxy fixture');
+  proxy.RW = false;
+  await expect(prepareRestoreHandoff(options)).rejects.toThrow();
+  expect(create).not.toHaveBeenCalled();
+  expect(await currentJournal()).toBeUndefined();
+  options.preserveLiveProxy = true;
+  const result = await prepareRestoreHandoff(options);
+  expect(result.journal.state.roots).not.toContain('traefik');
+  expect(create).toHaveBeenCalledTimes(2);
+  for (const [plan] of create.mock.calls) {
+    const mounted = (plan as Dockerode.ContainerCreateOptions).HostConfig?.Mounts?.find((entry) => entry.Target === '/data/traefik');
+    expect(mounted?.ReadOnly).toBe(true);
+  }
+});

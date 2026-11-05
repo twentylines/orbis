@@ -437,3 +437,29 @@ describe('dedicated reset authority', () => {
     }
   });
 });
+
+it('allows a read-only proxy only when it is preserved and never widens auxiliary access', () => {
+  const original = production();
+  target(original, '/data/traefik').RW = false;
+  expect(() => deriveRestoreStorageLayout(original)).toThrow();
+  const layout = deriveRestoreStorageLayout(original, true);
+  for (const role of ['worker', 'verifier'] as const) {
+    const planned = role === 'worker' ? layout.workerMounts : layout.verifierMounts;
+    const proxy = planned.find((item) => item.Target === '/data/traefik');
+    expect(proxy?.ReadOnly).toBe(true);
+    const actual = planned.map((item) => mount(item.Target, item.Source, !item.ReadOnly));
+    expect(() => verifyRestoreStorageMounts(original, actual, role, true)).not.toThrow();
+    target(actual, '/data/traefik').RW = true;
+    expect(() => verifyRestoreStorageMounts(original, actual, role, true)).toThrow();
+  }
+  target(original, '/data/state').RW = false;
+  expect(() => deriveRestoreStorageLayout(original, true)).toThrow();
+});
+
+it('refuses non-boolean preservation and read-only parent mounts', () => {
+  const original = production();
+  for (const value of [null, 1, 'true', {}]) expect(() => deriveRestoreStorageLayout(original, value as boolean)).toThrow();
+  target(original, '/data/traefik').Destination = '/data';
+  target(original, '/data').RW = false;
+  expect(() => deriveRestoreStorageLayout(original, true)).toThrow();
+});

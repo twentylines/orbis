@@ -471,7 +471,18 @@ async function context(docker: Dockerode, journal: BackupRestoreJournal, control
   if (!recorded) throw terminalFailure();
   if (ownership.fingerprint !== recorded.identity.original.fingerprint || ownership.image !== recorded.identity.image) throw terminalFailure();
   await proveTerminalRoots(journal, ownership, retained === undefined ? undefined : recorded);
-  if (!protectedTerminal) await proveManagedController(docker, current, ownership, controller, data, recorded.connection, recorded.database, signal);
+  if (!protectedTerminal)
+    await proveManagedController(
+      docker,
+      current,
+      ownership,
+      controller,
+      data,
+      recorded.connection,
+      recorded.database,
+      signal,
+      !journal.state.roots.includes('traefik'),
+    );
   return {
     docker,
     journal,

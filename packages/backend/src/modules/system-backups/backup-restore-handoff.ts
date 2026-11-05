@@ -82,7 +82,7 @@ export async function prepareRestoreHandoff(options: RestoreHandoffOptions) {
   const original = await docker.getContainer(options.controller).inspect();
   let initialOwnership: ReturnType<typeof preflightRestoreControllerOwnership>;
   try {
-    const ownership = preflightRestoreControllerOwnership(original);
+    const ownership = preflightRestoreControllerOwnership(original, options.preserveLiveProxy);
     initialOwnership = ownership;
     await proveManagedController(
       docker,
@@ -93,6 +93,7 @@ export async function prepareRestoreHandoff(options: RestoreHandoffOptions) {
       options.connection,
       options.connection.database,
       AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+      options.preserveLiveProxy,
     );
   } catch {
     throw new BackupRequirementError('This installation cannot restore backups because managed Compose controller support could not be verified.');
@@ -104,7 +105,7 @@ export async function prepareRestoreHandoff(options: RestoreHandoffOptions) {
     throw failed();
   const id = randomUUID();
   const nonce = randomUUID();
-  const plans = restoreAuxiliaryContainerPlans(original, id, nonce);
+  const plans = restoreAuxiliaryContainerPlans(original, id, nonce, options.preserveLiveProxy);
   const environment = path.join(options.directories.data, '.env');
   const environmentSha256 = await restoreTargetEnvironmentDigest(environment, options);
   const apps: RestoreRuntimeIdentity['apps'] = [];
@@ -129,7 +130,7 @@ export async function prepareRestoreHandoff(options: RestoreHandoffOptions) {
     verifier = await docker.createContainer(plans.verifier);
     worker = await docker.createContainer(plans.worker);
     const current = await docker.getContainer(options.controller).inspect();
-    const currentOwnership = preflightRestoreControllerOwnership(current);
+    const currentOwnership = preflightRestoreControllerOwnership(current, options.preserveLiveProxy);
     if (terminalHash(currentOwnership) !== terminalHash(initialOwnership)) throw failed();
     await proveManagedController(
       docker,
@@ -140,6 +141,7 @@ export async function prepareRestoreHandoff(options: RestoreHandoffOptions) {
       options.connection,
       options.connection.database,
       AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+      options.preserveLiveProxy,
     );
     const snapshot = snapshotRestoreContainer(original);
     const identity: RestoreRuntimeIdentity = {

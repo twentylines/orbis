@@ -73,8 +73,8 @@ function specification(mount: RestoreStorageMount, readOnly = !mount.RW): Restor
   return { Type: 'bind', Source: mount.Source, Target: mount.Destination, ReadOnly: readOnly, BindOptions: { Propagation: 'rprivate' } };
 }
 
-export function deriveRestoreStorageLayout(original: readonly RestoreStorageMount[]): RestoreStorageLayout {
-  if (!Array.isArray(original) || original.length > 1024) throw failed();
+export function deriveRestoreStorageLayout(original: readonly RestoreStorageMount[], preserveLiveProxy = false): RestoreStorageLayout {
+  if (!Array.isArray(original) || original.length > 1024 || typeof preserveLiveProxy !== 'boolean') throw failed();
   const destinations = new Set<string>();
   for (const mount of original) {
     if (!mount || !canonical(mount.Destination) || destinations.has(mount.Destination)) throw failed();
@@ -102,11 +102,11 @@ export function deriveRestoreStorageLayout(original: readonly RestoreStorageMoun
       throw failed();
   }
   const selected = new Map<string, RestoreStorageMount>();
-  const resolve = (destination: string) => {
+  const resolve = (destination: string, allowReadOnly = false) => {
     const covering = original
       .filter((mount) => inside(mount.Destination, destination))
       .sort((a, b) => b.Destination.length - a.Destination.length)[0];
-    if (!covering || !covering.RW) throw failed();
+    if (!covering || (!covering.RW && (!allowReadOnly || covering.Destination !== destination))) throw failed();
     bind(covering);
     selected.set(covering.Destination, covering);
     const suffix = path.posix.relative(covering.Destination, destination);
@@ -114,10 +114,9 @@ export function deriveRestoreStorageLayout(original: readonly RestoreStorageMoun
     if (!canonical(source)) throw failed();
     return source;
   };
-  const roots = Object.fromEntries(Object.entries(rootDestinations).map(([name, destination]) => [name, resolve(destination)])) as Record<
-    RestoreTreeName,
-    string
-  >;
+  const roots = Object.fromEntries(
+    Object.entries(rootDestinations).map(([name, destination]) => [name, resolve(destination, name === 'traefik' && preserveLiveProxy)]),
+  ) as Record<RestoreTreeName, string>;
   const auxiliary = Object.fromEntries(Object.entries(auxiliaryDestinations).map(([name, destination]) => [name, resolve(destination)])) as Pick<
     RestoreStorageLayout,
     keyof typeof auxiliaryDestinations
@@ -157,9 +156,10 @@ export function verifyRestoreStorageMounts(
   original: readonly RestoreStorageMount[],
   actual: readonly RestoreStorageMount[],
   role: 'worker' | 'verifier',
+  preserveLiveProxy = false,
 ) {
   if (!['worker', 'verifier'].includes(role) || !Array.isArray(actual)) throw failed();
-  const layout = deriveRestoreStorageLayout(original);
+  const layout = deriveRestoreStorageLayout(original, preserveLiveProxy);
   const expected = role === 'worker' ? layout.workerMounts : layout.verifierMounts;
   if (
     actual.length !== expected.length ||
@@ -182,6 +182,7 @@ export function verifyRetainedRestoreWorkerMounts(
   restoreId: string,
   rootRetainedSource: string,
   rootPayloadSource: string,
+  preserveLiveProxy = false,
 ) {
   if (
     !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(restoreId) ||
@@ -190,7 +191,7 @@ export function verifyRetainedRestoreWorkerMounts(
     !Array.isArray(actual)
   )
     throw failed();
-  const base = deriveRestoreStorageLayout(original).workerMounts;
+  const base = deriveRestoreStorageLayout(original, preserveLiveProxy).workerMounts;
   const socket = original.find((mount) => mount.Destination === '/run/orbis');
   if (!socket) throw failed();
   bind(socket);

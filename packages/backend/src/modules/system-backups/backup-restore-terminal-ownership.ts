@@ -69,8 +69,8 @@ export type TerminalRecordedIdentity = {
 };
 const controllerIdentitySchema = terminalOwnershipSchema.omit('id', 'nonce', 'worker', 'verifier', 'apps', 'connection');
 
-export function preflightRestoreControllerOwnership(original: Dockerode.ContainerInspectInfo) {
-  const physical = deriveRestoreStorageLayout(original.Mounts);
+export function preflightRestoreControllerOwnership(original: Dockerode.ContainerInspectInfo, preserveLiveProxy = false) {
+  const physical = deriveRestoreStorageLayout(original.Mounts, preserveLiveProxy);
   const root = path.dirname(physical.environment);
   const labels = original.Config.Labels ?? {};
   const files = (labels['com.docker.compose.project.config_files'] ?? '').split(',').sort();
@@ -113,7 +113,7 @@ export function controllerOwnership(
   recorded: TerminalRecordedIdentity,
 ): TerminalOwnership {
   const value = terminalOwnershipSchema({
-    ...preflightRestoreControllerOwnership(original),
+    ...preflightRestoreControllerOwnership(original, !journal.state.roots.includes('traefik')),
     id: journal.state.id,
     nonce: journal.state.nonce,
     worker: recorded.identity.worker ? { id: recorded.identity.worker.id, fingerprint: recorded.identity.worker.fingerprint } : undefined,
@@ -244,9 +244,10 @@ export async function proveManagedController(
   connection: { host: string; port: number; user: string },
   database: string,
   signal: AbortSignal,
+  preserveLiveProxy = false,
 ) {
   const labels = current.Config.Labels ?? {};
-  const layout = deriveRestoreStorageLayout(current.Mounts);
+  const layout = deriveRestoreStorageLayout(current.Mounts, preserveLiveProxy);
   const bound = { roots: layout.roots, backups: layout.backups, logs: layout.logs, environment: layout.environment, cache: layout.cache };
   if (
     !/^[a-f0-9]{12,64}$/.test(controller) ||

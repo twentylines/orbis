@@ -160,9 +160,13 @@ export function snapshotRetainedRole(
   return snapshotRestoreContainer({ ...container, Name: previous });
 }
 
-export function verifyRestoreVerifierMounts(original: Dockerode.ContainerInspectInfo, verifier: Dockerode.ContainerInspectInfo) {
+export function verifyRestoreVerifierMounts(
+  original: Dockerode.ContainerInspectInfo,
+  verifier: Dockerode.ContainerInspectInfo,
+  preserveLiveProxy = false,
+) {
   try {
-    verifyRestoreStorageMounts(original.Mounts, verifier.Mounts, 'verifier');
+    verifyRestoreStorageMounts(original.Mounts, verifier.Mounts, 'verifier', preserveLiveProxy);
   } catch {
     throw failed('verifier-mounts');
   }
@@ -379,7 +383,7 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
     if (JSON.stringify(mountIdentity(original.Mounts)) !== JSON.stringify(mountIdentity(candidate.Mounts))) throw failed('candidate-mounts');
     try {
       if (this.retained) await this.retained.verifyWorker(original, worker);
-      else verifyRestoreStorageMounts(original.Mounts, worker.Mounts, 'worker');
+      else verifyRestoreStorageMounts(original.Mounts, worker.Mounts, 'worker', !state.roots.includes('traefik'));
     } catch {
       throw failed('worker-mounts');
     }
@@ -398,7 +402,7 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
       if (!['staging', 'preparing', 'discarded'].includes(state.phase)) throw failed('preparation-phase');
     } else await this.fileRoots();
     if (!verifier.HostConfig.ReadonlyRootfs) throw failed('verifier-filesystem');
-    verifyRestoreVerifierMounts(original, verifier);
+    verifyRestoreVerifierMounts(original, verifier, !state.roots.includes('traefik'));
     if (verifier.HostConfig.Devices?.length || verifier.HostConfig.DeviceRequests?.length || verifier.HostConfig.PidMode === 'host')
       throw failed('verifier-devices');
     return worker.Id;
@@ -477,7 +481,7 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
   }
   private async noOtherWriters(allowKnownRunning = false) {
     const original = await this.owned(this.operation.original);
-    const layout = deriveRestoreStorageLayout(original.Mounts);
+    const layout = deriveRestoreStorageLayout(original.Mounts, !this.journal.state.roots.includes('traefik'));
     const sources = [...Object.values(layout.roots), layout.environment, layout.cache];
     const known = new Set([
       this.journal.state.worker,

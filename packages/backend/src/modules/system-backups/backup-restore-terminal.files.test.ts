@@ -20,6 +20,7 @@ import { waitForRestoreStartup } from './backup-restore-startup';
 import { writeRestoreBootstrap } from './backup-restore-bootstrap';
 import { discardRestorePayload } from './backup-restore-preparation';
 import { withRestoreLease } from './backup-restore-lease';
+import { stabilizeExistingDarwinFixtures } from './darwin-files.fixture';
 
 const coreId = 'a'.repeat(64);
 const workerId = 'c'.repeat(64);
@@ -251,7 +252,11 @@ async function setup(phase: 'completed' | 'rolled-back' | 'discarded' = 'rolled-
   const swaps: BackupDirectorySwap[] = [];
   for (const name of restoreTreeNames) {
     const target = name === 'app-data' ? path.join(root, 'application', 'app-data') : path.join(data, name);
-    if (preserved && name === 'traefik') await fs.writeFile(path.join(target, 'live-network'), 'retained destination network', { mode: 0o600 });
+    if (preserved && name === 'traefik') {
+      const live = path.join(target, 'live-network');
+      await fs.writeFile(live, 'retained destination network', { mode: 0o600 });
+      stabilizeExistingDarwinFixtures(live);
+    }
     const swap = await BackupDirectorySwap.create({
       id,
       root: target,

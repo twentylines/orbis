@@ -57,3 +57,19 @@ it('accepts only the original protected socket and root-bound migration shadow i
     ).toThrow();
   }
 });
+it('binds a preserved read-only proxy to the same source and permissions in the retained worker', () => {
+  const source = original();
+  source.push(mount('/data/traefik', '/protected/proxy', false));
+  const actual = deriveRestoreStorageLayout(source, true).workerMounts.map((item) => mount(item.Target, item.Source, !item.ReadOnly));
+  actual.push(mount('/run/orbis', '/run/orbis-private', false));
+  actual.push(mount(`/data/backups/restores/${id}/retained`, '/var/lib/orbis/verified-migrations', false));
+  actual.push(mount(`/data/backups/restores/${id}/source/payload`, '/var/lib/orbis/verified-source', false));
+  const verify = (preserve: boolean) =>
+    verifyRetainedRestoreWorkerMounts(source, actual, id, '/var/lib/orbis/verified-migrations', '/var/lib/orbis/verified-source', preserve);
+  expect(() => verify(false)).toThrow();
+  expect(() => verify(true)).not.toThrow();
+  const proxy = actual.find((item) => item.Destination === '/data/traefik');
+  if (!proxy) throw new Error('Missing proxy fixture');
+  proxy.RW = true;
+  expect(() => verify(true)).toThrow();
+});
