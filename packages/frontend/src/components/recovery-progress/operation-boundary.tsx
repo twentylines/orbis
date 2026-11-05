@@ -50,7 +50,7 @@ import { openResetOnboarding } from '@/modules/system-reset/reset-completion';
 const stageCopy = {
   preparing: 'Preparing',
   downloading: 'Downloading files',
-  applying: 'Installing release',
+  applying: 'Installing update',
   restarting: 'Restarting',
   verifying: 'Verifying release',
   restoring: 'Restoring your server',
@@ -351,7 +351,7 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
           ? 'Starting Orbis'
           : core?.phase === 'ready' || core?.phase === 'returned'
             ? 'Starting Orbis'
-            : 'Installing release';
+            : 'Installing update';
   const status =
     restoration?.status ??
     (server.state === 'recovery'

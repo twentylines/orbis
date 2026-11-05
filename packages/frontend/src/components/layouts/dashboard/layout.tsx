@@ -349,7 +349,7 @@ function RestartUpdateCover() {
             ? 'Starting Orbis'
             : watch.phase === 'ready' || watch.phase === 'returned'
               ? 'Starting Orbis'
-              : 'Installing release';
+              : 'Installing update';
     return (
       <RecoveryScene
         title={`Orbis ${watch.phase === 'returned' ? watch.returnedTag : watch.targetTag}`}
