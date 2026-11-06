@@ -327,6 +327,8 @@ class CoreCaptureAbort:
             approval_evidence(worker, records.read, manager.root, manager.context, point)
         authority = self.authority(point, request)
         with authority.lease().owner(), self.H.host_lock(manager.root) as descriptor:
+            if persist:
+                manager.require_owned_idle_core()
             reader = worker.CORE.TX.APPS.Docker(manager.context)
             reader.lock_fd = descriptor
             with self.namespace.CaptureNamespace(worker, reader, authority.preparation['controller']) as namespace:
@@ -354,7 +356,6 @@ class CoreCaptureAbort:
     def prepare(self, point, request):
         self.validate_request(point, request)
         with self.manager.service.lock:
-            self.manager.service.require_idle_core()
             return self._prepare(point, request, self.records(point), persist=True)
 
     def completed(self, point, request, records):
@@ -378,7 +379,6 @@ class CoreCaptureAbort:
         self.validate_request(point, request, finish=True)
         worker, manager = self.W, self.manager
         with manager.service.lock:
-            manager.service.require_idle_core()
             records = self.records(point)
             committed = records.read('abort-commit.json', optional=True)[0] is not None
             if committed:
@@ -388,6 +388,7 @@ class CoreCaptureAbort:
                     raise AbortError('The committed abort differs from this continuation')
                 if records.read('abort-source-retired.json', optional=True)[0] is not None:
                     try:
+                        manager.service.require_idle_core()
                         return self.completed(point, request, records)
                     except FileNotFoundError:
                         # Reconciliation is for the still-live committed lease,
@@ -407,6 +408,7 @@ class CoreCaptureAbort:
                     raise AbortError('There is no matching positive root abort approval')
             authority = self.authority(point, request)
             with authority.lease().owner(), self.H.host_lock(manager.root) as descriptor:
+                manager.require_owned_idle_core()
                 reader = worker.CORE.TX.APPS.Docker(manager.context)
                 reader.lock_fd = descriptor
                 with self.namespace.CaptureNamespace(worker, reader, approval['controller']) as namespace:

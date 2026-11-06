@@ -46,6 +46,17 @@ class UnusedAbortTests(unittest.TestCase):
         self.assertEqual(self.subject.status(self.point, self.request), result)
         self.assertEqual(self.settle(), result)
 
+    def test_real_idle_guard_allows_only_owned_unused_abort_settlement(self):
+        R.ReservedCaptureTests.use_real_idle_guard(self)
+        self.service.busy = True
+        with self.assertRaisesRegex(ValueError, 'update'):
+            self.settle()
+        self.assertFalse(self.root_file('abort-unused-commit.json').exists())
+        self.assert_held()
+        self.service.busy = False
+        self.assertEqual(self.settle()['state'], 'complete')
+        self.assertIsNone(self.service.HOST.CORE_CAPTURE_OWNER.get())
+
     def test_bad_terminal_and_downgrades_are_refused(self):
         for change in (lambda x: x.update(schema='orbis.core-capture-source-abort-terminal.v2'),
                        lambda x: x.update(schema='orbis.core-capture-source-abort-terminal.v1'),

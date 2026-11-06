@@ -63,6 +63,16 @@ class PreparationRecoveryTests(unittest.TestCase):
         self.assertFalse((self.manager.capture.base / self.point).exists())
         self.assertEqual(self.case.fixture.docker.calls, [])
 
+    def test_real_service_guard_allows_published_intent_to_reach_reconciler(self):
+        self.pending('lease')
+        self.case.use_real_idle_guard()
+        with mock.patch.object(self.manager, 'finish_reserved_preparation', side_effect=RuntimeError('reconciler reached')):
+            with self.assertRaisesRegex(RuntimeError, 'reconciler reached'):
+                self.manager.reconcile_reserved(self.point, self.case.observation_request())
+        self.assertIsNone(self.case.service.HOST.CORE_CAPTURE_OWNER.get())
+        with self.assertRaisesRegex(ValueError, 'capture'):
+            self.case.service.require_idle_core()
+
     def test_fresh_service_finishes_original_staged_lease_without_second_reservation(self):
         self.pending()
         original = self.stage.stat()

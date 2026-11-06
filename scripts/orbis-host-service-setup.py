@@ -13,6 +13,7 @@ import re
 import shutil
 import socket
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -203,11 +204,15 @@ def run_systemctl(*arguments: str) -> None:
         raise RuntimeError(f"systemctl {arguments[0]} failed; inspect the host journal")
 
 
-def read_socket_status() -> dict:
+def read_socket_status(*, expected_pid: int | None = None) -> dict:
     connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
         connection.settimeout(3)
         connection.connect(str(SOCKET_FILE))
+        if expected_pid is not None:
+            pid, uid, _ = struct.unpack("3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")))
+            if pid != expected_pid or uid != 0:
+                raise ValueError("the host socket listener is not the expected root systemd process")
         connection.sendall(b"GET /v1/status HTTP/1.0\r\nHost: localhost\r\n\r\n")
         parts = []
         while True:
@@ -220,7 +225,10 @@ def read_socket_status() -> dict:
         header, body = b"".join(parts).split(b"\r\n\r\n", 1)
         if not header.startswith(b"HTTP/1.0 200 "):
             raise ValueError("host service status was not healthy")
-        return json.loads(body)
+        value = json.loads(body)
+        if not isinstance(value, dict):
+            raise ValueError("host service status was invalid")
+        return value
     finally:
         connection.close()
 
@@ -235,94 +243,135 @@ def install(root: Path, context: str, source: Path, confirmation: str | None) ->
         return install_locked(root, context, source)
 
 
-def install_locked(root: Path, context: str, source: Path, *, resume: bool = False) -> dict[str, str]:
-    ready = preflight(root, context, source, allow_existing=True) if resume else preflight(root, context, source)
+def _stage_service_files(root: Path, context: str, source: Path, *, resume: bool = False) -> None:
+    """Copy exact root-owned files; callers separately establish their authority."""
     files, unit = source_files(source)
-    for directory in (INSTALL_DIR.parent, ENV_FILE.parent):
+    for directory in (INSTALL_DIR.parent, ENV_FILE.parent, UNIT_FILE.parent):
         if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
             raise ValueError(f"setup directory is unsafe: {directory}")
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         details = directory.stat()
         if details.st_uid != 0 or stat.S_IMODE(details.st_mode) & 0o022:
             raise ValueError(f"setup directory must be root-owned and not writable by other users: {directory}")
-    staged = Path(tempfile.mkdtemp(prefix=".host-service-", dir=INSTALL_DIR.parent))
-    created = []
-    activating = False
-    try:
+    if INSTALL_DIR.exists() or INSTALL_DIR.is_symlink():
+        if not resume or INSTALL_DIR.is_symlink() or not INSTALL_DIR.is_dir() or {file.name for file in INSTALL_DIR.iterdir()} != {file.name for file in files}:
+            raise ValueError("the partial host service directory differs from its reviewed sources")
+        details = INSTALL_DIR.stat()
+        if details.st_uid != 0 or stat.S_IMODE(details.st_mode) != 0o700:
+            raise ValueError("the partial host service directory is not private and root-owned")
+        for file in files:
+            _require_staged_file(INSTALL_DIR / file.name, file.read_bytes(), 0o600)
+    else:
+        staged = Path(tempfile.mkdtemp(prefix=".host-service-", dir=INSTALL_DIR.parent))
         os.chmod(staged, 0o700)
         for file in files:
             shutil.copyfile(file, staged / file.name)
             os.chmod(staged / file.name, 0o600)
-        if resume and INSTALL_DIR.exists():
-            if INSTALL_DIR.is_symlink() or not INSTALL_DIR.is_dir() or {file.name for file in INSTALL_DIR.iterdir()} != {file.name for file in files}:
-                raise ValueError("the partial host service directory differs from its reviewed sources")
-            for file in files:
-                target = INSTALL_DIR / file.name
-                if target.is_symlink() or not target.is_file() or target.read_bytes() != file.read_bytes() or target.stat().st_uid != 0 or stat.S_IMODE(target.stat().st_mode) & 0o077:
-                    raise ValueError("a partial host service source changed; preserve it for review")
-            shutil.rmtree(staged)
-        else:
-            os.replace(staged, INSTALL_DIR)
-            created.append(INSTALL_DIR)
-        environment = (
-            f"ORBIS_SERVICE_SOURCE={systemd_quote(str(INSTALL_DIR / 'orbis-host-service.py'))}\n"
-            f"ORBIS_ROOT={systemd_quote(str(root))}\n"
-            f"ORBIS_DOCKER_CONTEXT={systemd_quote(context)}\n"
-        )
-        for target, expected in ((ENV_FILE, environment.encode()), (UNIT_FILE, unit.read_bytes())):
-            if resume and (target.exists() or target.is_symlink()):
-                if target.is_symlink() or not target.is_file() or target.read_bytes() != expected or target.stat().st_uid != 0 or stat.S_IMODE(target.stat().st_mode) & 0o022:
-                    raise ValueError("a partial host service configuration changed; preserve it for review")
-        descriptor, temporary = tempfile.mkstemp(prefix=".host-service-env-", dir=ENV_FILE.parent)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            os.fchmod(stream.fileno(), 0o600)
-            stream.write(environment)
+            with (staged / file.name).open("rb") as copied:
+                os.fsync(copied.fileno())
+        directory = os.open(staged, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+        os.replace(staged, INSTALL_DIR)
+        directory = os.open(INSTALL_DIR.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    environment = (
+        f"ORBIS_SERVICE_SOURCE={systemd_quote(str(INSTALL_DIR / 'orbis-host-service.py'))}\n"
+        f"ORBIS_ROOT={systemd_quote(str(root))}\n"
+        f"ORBIS_DOCKER_CONTEXT={systemd_quote(context)}\n"
+    ).encode()
+    for target, expected, mode in ((ENV_FILE, environment, 0o600), (UNIT_FILE, unit.read_bytes(), 0o644)):
+        if target.exists() or target.is_symlink():
+            if not resume:
+                raise ValueError("a host service configuration already exists")
+            _require_staged_file(target, expected, mode)
+            continue
+        descriptor, temporary = tempfile.mkstemp(prefix=".host-service-", dir=target.parent)
+        with os.fdopen(descriptor, "wb") as stream:
+            os.fchmod(stream.fileno(), mode)
+            stream.write(expected)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, ENV_FILE)
-        created.append(ENV_FILE)
-        shutil.copyfile(unit, UNIT_FILE)
-        os.chmod(UNIT_FILE, 0o644)
-        created.append(UNIT_FILE)
-        result = subprocess.run(["/usr/bin/systemd-analyze", "verify", str(UNIT_FILE)], capture_output=True, check=False)
-        if result.returncode:
-            raise RuntimeError("systemd rejected the Orbis host service unit")
-        run_systemctl("daemon-reload")
-        activating = True
-        run_systemctl("enable", "--now", "orbis-host.service")
-        deadline = time.monotonic() + 12
-        while time.monotonic() < deadline:
-            try:
-                status = read_socket_status()
-                inside = HOST.docker(
-                    context,
-                    ["exec", "runtipi", "curl", "-fsS", "--unix-socket", str(SOCKET_FILE), "http://localhost/v1/status"],
-                    root,
-                )
-                if (
-                    status.get("enrolled")
-                    and status.get("coreHealth") == "healthy"
-                    and status.get("imageMatches")
-                    and status.get("currentDigest") == ready["digest"]
-                    and inside.returncode == 0
-                    and json.loads(inside.stdout).get("currentDigest") == ready["digest"]
-                ):
-                    return {**ready, "service": "active", "socket": str(SOCKET_FILE)}
-            except (OSError, ValueError, json.JSONDecodeError):
-                pass
-            time.sleep(0.4)
-        raise RuntimeError("host service did not report the enrolled healthy core")
-    except Exception:
-        if activating:
-            subprocess.run(["/usr/bin/systemctl", "disable", "--now", "orbis-host.service"], capture_output=True, check=False)
-        for target in reversed(created):
-            if target.is_dir():
-                shutil.rmtree(target)
-            else:
-                target.unlink(missing_ok=True)
-        shutil.rmtree(staged, ignore_errors=True)
-        subprocess.run(["/usr/bin/systemctl", "daemon-reload"], capture_output=True, check=False)
-        raise
+        os.replace(temporary, target)
+        directory = os.open(target.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    result = subprocess.run(["/usr/bin/systemd-analyze", "verify", str(UNIT_FILE)], capture_output=True, check=False)
+    if result.returncode:
+        raise RuntimeError("systemd rejected the Orbis host service unit")
+
+
+def _require_staged_file(target: Path, expected: bytes, mode: int) -> None:
+    details = target.lstat()
+    if (not stat.S_ISREG(details.st_mode) or details.st_nlink != 1 or details.st_uid != 0
+            or stat.S_IMODE(details.st_mode) != mode or target.read_bytes() != expected):
+        raise ValueError("a partial host service source or configuration changed; preserve it for review")
+
+
+def _start_service() -> None:
+    run_systemctl("daemon-reload")
+    run_systemctl("enable", "--now", "orbis-host.service")
+
+
+def _systemd_main_pid(root: Path, context: str) -> int:
+    properties = ("ActiveState", "SubState", "MainPID", "FragmentPath", "DropInPaths", "User")
+    result = subprocess.run(["/usr/bin/systemctl", "show", "orbis-host.service", *["--property=" + key for key in properties]], capture_output=True, text=True, check=False)
+    values = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+    if (result.returncode or set(values) != set(properties) or values["ActiveState"] != "active"
+            or values["SubState"] != "running" or values["FragmentPath"] != str(UNIT_FILE)
+            or values["DropInPaths"] or values["User"] != "root" or not values["MainPID"].isdigit()):
+        raise ValueError("the expected root systemd host service is not running")
+    pid = int(values["MainPID"])
+    expected = ["/usr/bin/python3", str(INSTALL_DIR / "orbis-host-service.py"), "--root", str(root),
+                "--docker-context", context, "--socket", str(SOCKET_FILE), "--snapshots", "/var/lib/orbis/snapshots", "--state-dir", "/var/lib/orbis/state"]
+    process = Path("/proc") / str(pid)
+    if pid <= 1 or process.stat().st_uid != 0 or (process / "cmdline").read_bytes() != b"\0".join(item.encode() for item in expected) + b"\0":
+        raise ValueError("the systemd host service process does not match the installed helper")
+    return pid
+
+
+def authenticated_socket_status(root: Path, context: str) -> dict:
+    details = SOCKET_FILE.lstat()
+    parent = SOCKET_FILE.parent.lstat()
+    if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or stat.S_IMODE(parent.st_mode) != 0o700
+            or not stat.S_ISSOCK(details.st_mode) or details.st_uid != 0 or stat.S_IMODE(details.st_mode) != 0o600):
+        raise ValueError("the host service socket is not private and root-owned")
+    pid = _systemd_main_pid(root, context)
+    status = read_socket_status(expected_pid=pid)
+    if _systemd_main_pid(root, context) != pid:
+        raise ValueError("the host service process changed during authentication")
+    return status
+
+
+def _verify_service(root: Path, context: str, ready: dict) -> dict:
+    deadline = time.monotonic() + 12
+    while time.monotonic() < deadline:
+        try:
+            status = authenticated_socket_status(root, context)
+            inside = HOST.docker(context, ["exec", "runtipi", "curl", "-fsS", "--unix-socket", str(SOCKET_FILE), "http://localhost/v1/status"], root)
+            if (status.get("enrolled") and status.get("coreHealth") == "healthy" and status.get("imageMatches")
+                    and status.get("currentDigest") == ready["digest"] and inside.returncode == 0
+                    and json.loads(inside.stdout).get("currentDigest") == ready["digest"]):
+                return {**ready, "service": "active", "socket": str(SOCKET_FILE)}
+        except (OSError, ValueError, json.JSONDecodeError):
+            pass
+        time.sleep(0.4)
+    raise RuntimeError("host service did not report the enrolled healthy core")
+
+
+def install_locked(root: Path, context: str, source: Path, *, resume: bool = False) -> dict[str, str]:
+    ready = preflight(root, context, source, allow_existing=True) if resume else preflight(root, context, source)
+    # Interrupted copies remain available for an exact-source resume and diagnosis.
+    _stage_service_files(root, context, source, resume=resume)
+    _start_service()
+    return _verify_service(root, context, ready)
 
 
 def main() -> int:

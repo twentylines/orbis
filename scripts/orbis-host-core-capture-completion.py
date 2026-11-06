@@ -49,6 +49,38 @@ class CompletionError(ValueError):
     pass
 
 
+def require_dependency_ready(worker, reader, identifier, role):
+    if role not in {'controller', 'database', 'queue'}:
+        raise CompletionError('The captured dependency role is invalid')
+    try:
+        worker.CORE.TX.require_healthy(reader, identifier)
+        return
+    except worker.CORE.TX.TransactionError:
+        if role != 'queue':
+            raise
+        before = reader._object(['container', 'inspect', '--format', '{{json .}}', identifier])
+        healthcheck = before['Config'].get('Healthcheck')
+        if healthcheck is not None and healthcheck.get('Test') != ['NONE']:
+            raise
+        state = before['State']
+        if (before['Id'] != identifier or state.get('Status') != 'running' or state.get('Running') is not True
+                or state.get('Restarting') or state.get('Paused') or not isinstance(state.get('StartedAt'), str)
+                or not 1 <= len(state['StartedAt']) <= 128):
+            raise CompletionError('The captured message broker is not running stably')
+        runtime = SimpleNamespace(P=worker.P)
+        definition = worker.CORE.D.DockerRestoreRuntime.definition(runtime, before)
+        # Standard RabbitMQ images do not declare Docker HEALTHCHECK. Probe the broker itself.
+        for check in ('check_running', 'check_local_alarms'):
+            reader._read(['exec', identifier, 'rabbitmq-diagnostics', '-q', check])
+        after = reader._object(['container', 'inspect', '--format', '{{json .}}', identifier])
+        if (after.get('Image') != before.get('Image')
+                or worker.CORE.D.DockerRestoreRuntime.definition(runtime, after) != definition
+                or any(after['State'].get(key) != state.get(key)
+                       for key in ('Status', 'Running', 'Restarting', 'Paused', 'StartedAt'))
+                or after['HostConfig'].get('RestartPolicy') != before['HostConfig'].get('RestartPolicy')):
+            raise CompletionError('The captured message broker changed during its readiness probe')
+
+
 class CoreCaptureCompletion:
     def __init__(self, manager, worker):
         self.manager, self.worker = manager, worker
@@ -147,7 +179,8 @@ class CoreCaptureCompletion:
         for identifier in record['expected']:
             if record['expected'][identifier]['state'] != 'running':
                 raise CompletionError('A captured core dependency is not running')
-            worker.CORE.TX.require_healthy(reader, identifier)
+            require_dependency_ready(worker, reader, identifier, record['checkpoint']['roles'][identifier])
+        manager.capture.verify(reader, record)
         return {'id': actual['id'], 'imageId': actual['imageId'], 'startedAt': actual['startedAt'],
                 'definitionSha256': controller['definitionSha256']}
 

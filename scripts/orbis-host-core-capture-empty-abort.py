@@ -205,6 +205,8 @@ class CoreCaptureEmptyAbort(BASE.CoreCaptureAbort):
             approval_evidence(worker, records.read, manager.root, manager.context, point)
         authority = self.authority(point, request)
         with authority.lease().owner(), self.H.host_lock(manager.root) as descriptor:
+            if persist:
+                manager.require_owned_idle_core()
             reader = worker.CORE.TX.APPS.Docker(manager.context)
             reader.lock_fd = descriptor
             with self.namespace.CaptureNamespace(worker, reader, authority.preparation['controller']) as namespace:
@@ -242,7 +244,6 @@ class CoreCaptureEmptyAbort(BASE.CoreCaptureAbort):
         self.validate_request(point, request, finish=True)
         worker, manager = self.W, self.manager
         with manager.service.lock:
-            manager.service.require_idle_core()
             records = self.records(point)
             committed = records.read('abort-commit.json', optional=True)[0] is not None
             if committed:
@@ -252,6 +253,7 @@ class CoreCaptureEmptyAbort(BASE.CoreCaptureAbort):
                     raise AbortError('The committed early abort differs from this continuation')
                 if records.read('abort-source-settled.json', optional=True)[0] is not None:
                     try:
+                        manager.service.require_idle_core()
                         return self.completed(point, request, records)
                     except FileNotFoundError:
                         commit_evidence(worker, records.read, manager.root, manager.context, point, source_settled=True)
@@ -269,6 +271,7 @@ class CoreCaptureEmptyAbort(BASE.CoreCaptureAbort):
                     raise AbortError('There is no matching positive root early-abort approval')
             authority = self.authority(point, request)
             with authority.lease().owner(), self.H.host_lock(manager.root) as descriptor:
+                manager.require_owned_idle_core()
                 reader = worker.CORE.TX.APPS.Docker(manager.context)
                 reader.lock_fd = descriptor
                 with self.namespace.CaptureNamespace(worker, reader, approval['controller']) as namespace:

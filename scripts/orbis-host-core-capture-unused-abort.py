@@ -177,7 +177,6 @@ class CoreCaptureUnusedAbort(BASE.CoreCaptureAbort):
         self.validate_request(point, request)
         worker, manager = self.W, self.manager
         with manager.service.lock:
-            manager.service.require_idle_core()
             records = self.records(point)
             self.no_prior_abort(records)
             committed = records.read('abort-unused-commit.json', optional=True)[0] is not None
@@ -191,10 +190,12 @@ class CoreCaptureUnusedAbort(BASE.CoreCaptureAbort):
                 except FileNotFoundError:
                     pass
                 else:
+                    manager.service.require_idle_core()
                     return self.completed(point, request, records)
             self.no_operation_authority(point)
             authority = self.authority(point, request)
             with authority.lease().owner(), self.H.host_lock(manager.root) as descriptor:
+                manager.require_owned_idle_core()
                 self.no_operation_authority(point)
                 reader = worker.CORE.TX.APPS.Docker(manager.context)
                 reader.lock_fd = descriptor

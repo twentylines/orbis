@@ -11,6 +11,7 @@ User=root
 Group=root
 UMask=0077
 EnvironmentFile=/etc/orbis/host-service.env
+Environment=PYTHONDONTWRITEBYTECODE=1
 RuntimeDirectory=orbis
 RuntimeDirectoryMode=0700
 RuntimeDirectoryPreserve=yes

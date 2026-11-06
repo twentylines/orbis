@@ -313,5 +313,130 @@ class ReservedCoreCompletionTests(CoreCompletionTests):
         self.invoke.assert_not_called()
 
 
+class ObservedReadinessTests(unittest.TestCase):
+    def setUp(self):
+        self.controller = {'id': 'a' * 64, 'imageId': 'sha256:' + 'b' * 64,
+                           'startedAt': 'original-start', 'definition': {}, 'state': 'running'}
+        self.preparation = {'controller': {**{key: self.controller[key] for key in ('id', 'imageId')},
+            'definitionSha256': W.CORE.TX.APPS.digest(self.controller['definition'])}}
+        self.source = {'configuration': 'captured source'}
+        self.hold = b'original source hold'
+        self.admission = SimpleNamespace(request={'sourceSha256': W.CORE.TX.APPS.digest(self.source)})
+        self.capture = SimpleNamespace(verify=mock.Mock(), source=lambda: self.source,
+                                     observation=lambda *_: copy.deepcopy(self.controller))
+        self.manager = SimpleNamespace(capture=self.capture, controller_marker=lambda _: self.hold)
+        self.subject = M.CoreCaptureCompletion(self.manager, W)
+        self.record = {'expected': {self.controller['id']: copy.deepcopy(self.controller),
+            'database': {'state': 'running'}, 'queue': {'state': 'running'}},
+            'checkpoint': {'roles': {self.controller['id']: 'controller', 'database': 'database', 'queue': 'queue'}}}
+        self.reader = object()
+
+    def test_readiness_uses_captured_roles_and_rechecks_the_full_capture(self):
+        with mock.patch.object(M, 'require_dependency_ready') as readiness:
+            result = self.subject.observed(self.admission, self.reader, self.record, self.preparation, self.hold)
+        self.assertEqual(result['startedAt'], self.controller['startedAt'])
+        self.assertEqual(readiness.call_args_list, [mock.call(W, self.reader, identifier, role)
+            for identifier, role in self.record['checkpoint']['roles'].items()])
+        self.assertEqual(self.capture.verify.call_args_list, [mock.call(self.reader, self.record)] * 2)
+
+    def test_inventory_change_during_readiness_cannot_authorize_completion(self):
+        changed = False
+        def verify(*_):
+            if changed:
+                raise W.CORE.TX.TransactionError('Captured inventory changed')
+        def readiness(*_):
+            nonlocal changed
+            changed = True
+        self.capture.verify.side_effect = verify
+        with mock.patch.object(M, 'require_dependency_ready', side_effect=readiness):
+            with self.assertRaises(W.CORE.TX.TransactionError):
+                self.subject.observed(self.admission, self.reader, self.record, self.preparation, self.hold)
+        self.assertEqual(self.capture.verify.call_count, 2)
+
+
+class DependencyReadinessTests(unittest.TestCase):
+    def setUp(self):
+        self.identifier = 'b' * 64
+        self.raw = {'Id': self.identifier, 'Image': 'sha256:' + 'c' * 64, 'Config': {},
+                    'HostConfig': {'AutoRemove': False, 'RestartPolicy': {'Name': 'unless-stopped'}},
+                    'Mounts': [], 'NetworkSettings': {'Networks': {'fixture': {'NetworkID': 'd' * 64}}},
+                    'State': {'Status': 'running', 'Running': True, 'Restarting': False,
+                              'Paused': False, 'StartedAt': 'original-start'}}
+        self.calls = []
+        self.on_probe = lambda: None
+        def read(arguments):
+            self.calls.append(arguments)
+            self.on_probe()
+            return ''
+        self.reader = SimpleNamespace(_object=lambda arguments: copy.deepcopy(
+            self.raw['State'] if arguments[-2] == '{{json .State}}' else self.raw), _read=read)
+
+    def test_standard_queue_without_docker_healthcheck_uses_real_broker_command(self):
+        M.require_dependency_ready(W, self.reader, self.identifier, 'queue')
+        self.assertEqual(self.calls, [['exec', self.identifier, 'rabbitmq-diagnostics', '-q', check]
+                                     for check in ('check_running', 'check_local_alarms')])
+
+    def test_explicitly_disabled_docker_healthcheck_still_requires_broker_readiness(self):
+        self.raw['Config']['Healthcheck'] = {'Test': ['NONE']}
+        M.require_dependency_ready(W, self.reader, self.identifier, 'queue')
+        self.assertEqual(len(self.calls), 2)
+
+    def test_configured_unhealthy_or_starting_healthcheck_is_never_bypassed(self):
+        self.raw['Config']['Healthcheck'] = {'Test': ['CMD', 'probe']}
+        for state in ('unhealthy', 'starting'):
+            self.raw['State']['Health'] = {'Status': state}
+            with self.subTest(state=state), self.assertRaises(W.CORE.TX.TransactionError):
+                M.require_dependency_ready(W, self.reader, self.identifier, 'queue')
+        self.assertEqual(self.calls, [])
+
+    def test_running_is_not_enough_for_controller_or_database(self):
+        for role in ('controller', 'database'):
+            with self.subTest(role=role), self.assertRaises(W.CORE.TX.TransactionError):
+                M.require_dependency_ready(W, self.reader, self.identifier, role)
+        self.assertEqual(self.calls, [])
+
+    def test_stopped_broker_application_or_resource_alarm_preserves_failure(self):
+        for command in ('check_running', 'check_local_alarms'):
+            self.calls.clear()
+            def failure():
+                if self.calls[-1][-1] == command:
+                    raise W.CORE.TX.APPS.DETECT.InspectionError('Broker probe failed')
+            self.on_probe = failure
+            with self.subTest(command=command), self.assertRaises(W.CORE.TX.APPS.DETECT.InspectionError):
+                M.require_dependency_ready(W, self.reader, self.identifier, 'queue')
+
+    def test_stopped_paused_or_foreign_queue_cannot_be_probed(self):
+        original = copy.deepcopy(self.raw)
+        for change in (lambda: self.raw['State'].update(Status='exited', Running=False),
+                       lambda: self.raw['State'].update(Paused=True),
+                       lambda: self.raw.update(Id='e' * 64)):
+            self.raw = copy.deepcopy(original)
+            change()
+            with self.assertRaises(M.CompletionError):
+                M.require_dependency_ready(W, self.reader, self.identifier, 'queue')
+        self.assertEqual(self.calls, [])
+
+    def test_container_restart_or_definition_change_during_probe_is_rejected(self):
+        original = copy.deepcopy(self.raw)
+        for change in (lambda: self.raw['State'].update(StartedAt='new-start'),
+                       lambda: self.raw.update(Image='sha256:' + 'e' * 64),
+                       lambda: self.raw['HostConfig'].update(RestartPolicy={'Name': 'no'})):
+            self.raw = copy.deepcopy(original)
+            self.on_probe = change
+            with self.assertRaises(M.CompletionError):
+                M.require_dependency_ready(W, self.reader, self.identifier, 'queue')
+
+    def test_declared_healthy_dependency_keeps_existing_health_contract(self):
+        self.raw['State']['Health'] = {'Status': 'healthy'}
+        for role in ('controller', 'database', 'queue'):
+            M.require_dependency_ready(W, self.reader, self.identifier, role)
+        self.assertEqual(self.calls, [])
+
+    def test_unknown_role_is_rejected(self):
+        with self.assertRaises(M.CompletionError):
+            M.require_dependency_ready(W, self.reader, self.identifier, 'app')
+        self.assertEqual(self.calls, [])
+
+
 if __name__ == '__main__':
     unittest.main()

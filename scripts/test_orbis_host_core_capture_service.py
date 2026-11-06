@@ -33,7 +33,8 @@ class CoreAdmissionTests(unittest.TestCase):
         self.enterContext(mock.patch.object(S.C.CoreCapture, 'source', side_effect=lambda: copy.deepcopy(self.fixture.source)))
         self.service = SimpleNamespace(root=self.fixture.root, state_dir=self.fixture.state,
                       snapshots=self.fixture.snapshots, context=self.fixture.docker.context,
-                      lock=threading.Lock(), require_idle_core=mock.Mock())
+                      lock=threading.Lock(), HOST=S.W.SERVICE.HOST, require_idle_core=mock.Mock())
+        self.enterContext(mock.patch.object(self.service.HOST.AUTHORITY, 'OWNER', os.geteuid()))
         self.manager = S.CoreCaptureService(self.service)
         self.capability = self.enterContext(mock.patch.object(self.manager, 'require_publication_capability'))
         self.namespace_access = self.enterContext(mock.patch.object(self.manager, 'require_namespace_access'))

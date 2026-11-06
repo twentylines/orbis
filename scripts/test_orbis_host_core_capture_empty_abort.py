@@ -74,6 +74,18 @@ class EmptyAbortTests(unittest.TestCase):
         self.assertEqual(self.fixture.docker.calls, [])
         self.assert_held()
 
+    def test_real_idle_guard_allows_only_owned_empty_abort_settlement(self):
+        R.ReservedCaptureTests.use_real_idle_guard(self)
+        self.service.busy = True
+        with self.assertRaisesRegex(ValueError, 'update'):
+            self.prepare_abort()
+        self.assertFalse(self.root_file('abort-approval.json').exists())
+        self.assert_held()
+        self.service.busy = False
+        self.ready()
+        self.assertEqual(self.finish()['state'], 'complete')
+        self.assertIsNone(self.service.HOST.CORE_CAPTURE_OWNER.get())
+
     def test_marker_absence_without_positive_terminal_or_abort_never_authorizes(self):
         self.terminal_file.rename(self.terminal_file.with_name('terminal-evidence'))
         with self.assertRaises((ValueError, OSError)): self.prepare_abort()

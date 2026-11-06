@@ -108,6 +108,18 @@ class AbortTests(unittest.TestCase):
         self.assertEqual(self.fixture.docker.calls, [])
         self.assert_held()
 
+    def test_real_idle_guard_allows_only_owned_abort_settlement(self):
+        R.ReservedCaptureTests.use_real_idle_guard(self)
+        self.service.busy = True
+        with self.assertRaisesRegex(ValueError, 'update'):
+            self.prepare_abort()
+        self.assertFalse(self.root_file('abort-approval.json').exists())
+        self.assert_held()
+        self.service.busy = False
+        self.ready()
+        self.assertEqual(self.finish()['state'], 'complete')
+        self.assertIsNone(self.service.HOST.CORE_CAPTURE_OWNER.get())
+
     def test_finish_preserves_marker_before_lease_and_historical_status_needs_no_live_authority(self):
         self.ready()
         lease_identity = B.RETIRE.lease_identity(self.fence().stat())

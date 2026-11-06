@@ -93,6 +93,17 @@ class CoreCaptureService:
         self.capture.child(self.preparations)
         self.sentinel = SENTINEL.SentinelCaptureCustody(self, W, NAMESPACE)
 
+    def require_owned_idle_core(self):
+        grant = H.core_capture_owner(self.root)
+        if grant is None or grant.get('root') != str(self.root) or grant.get('context') != self.context:
+            raise W.AdmissionError('The original capture lease owner is required')
+        lease = W.LEASE.CoreCaptureLease.load(self.service.HOST, self.root)
+        with lease.owner() as service_grant:
+            if (lease.proof != H.CORE_CAPTURE_OWNER.get() or H.core_capture_owner(self.root) != grant
+                    or service_grant != grant):
+                raise W.AdmissionError('The service capture lease owner changed')
+            self.service.require_idle_core()
+
     def directory(self, point):
         return self.preparations / W.identifier(point)
 
@@ -378,11 +389,14 @@ class CoreCaptureService:
                 or not W.HASH.fullmatch(request['pointReservationSha256'])):
             raise W.AdmissionError('Invalid preparation reconciliation')
         with self.service.lock:
-            self.service.require_idle_core()
             intent = W.RESERVED.PreparationIntent(W, self.state, self.root, self.context, point)
             if request['pointReservationSha256'] != intent.preparation['pointReservationSha256']:
                 raise W.AdmissionError('The reconciliation saved point changed')
             with intent.owner(), H.host_lock(self.root) as descriptor:
+                if H.core_capture_owner(self.root) is None:
+                    self.service.require_idle_core()
+                else:
+                    self.require_owned_idle_core()
                 reader = C.TX.APPS.Docker(self.context)
                 reader.lock_fd = descriptor
                 return self.finish_reserved_preparation(reader, point, intent)
@@ -396,11 +410,11 @@ class CoreCaptureService:
                 or not W.HASH.fullmatch(request['pointReservationSha256'])):
             raise W.AdmissionError('Invalid reserved preparation observation')
         with self.service.lock:
-            self.service.require_idle_core()
             authority = W.RESERVED.ReservedPreparation(W, self.state, self.root, self.context, point)
             if request['pointReservationSha256'] != authority.preparation['pointReservationSha256']:
                 raise W.AdmissionError('The observed saved point differs from its reservation')
             with authority.lease().owner(), H.host_lock(self.root) as descriptor:
+                self.require_owned_idle_core()
                 authority.require_undecided()
                 if any(path.exists() or path.is_symlink() for path in
                        (self.state / 'core-capture-admissions' / point, self.capture.base / point)):
@@ -437,22 +451,22 @@ class CoreCaptureService:
                 or not isinstance(request['preparationSha256'], str) or not W.HASH.fullmatch(request['preparationSha256'])):
             raise W.AdmissionError('Invalid reserved capture abort intent')
         with self.service.lock:
-            self.service.require_idle_core()
             authority = W.RESERVED.ReservedPreparation(W, self.state, self.root, self.context, point)
             if request['preparationSha256'] != authority.preparation_sha256:
                 raise W.AdmissionError('The reserved abort preparation changed')
             with authority.lease().owner(), H.host_lock(self.root):
+                self.require_owned_idle_core()
                 decision, body = authority.decide('abort')
             return {'version': 1, 'id': point, 'state': 'abort-intent',
                     'preparationSha256': authority.preparation_sha256, 'decisionSha256': W.digest(body)}
 
     def _admit_reserved(self, point, request):
-        # The caller retains the service lock and unchanged idle-core guard.
         authority = W.RESERVED.ReservedPreparation(W, self.state, self.root, self.context, point)
         if request['preparationSha256'] != authority.preparation_sha256:
             raise W.AdmissionError('The reserved admission preparation changed')
         lease = authority.lease()
         with lease.owner() as grant, H.host_lock(self.root) as descriptor:
+            self.require_owned_idle_core()
             authority.require_undecided()
             reader = C.TX.APPS.Docker(self.context)
             reader.lock_fd = descriptor
@@ -528,10 +542,10 @@ class CoreCaptureService:
                 or any(not isinstance(value, str) or not W.HASH.fullmatch(value) for value in request.values())):
             raise W.AdmissionError('Invalid core capture handoff request')
         with self.service.lock:
-            self.service.require_idle_core()
             preparation, _ = self.read(self.directory(point), 'preparation.json')
             if preparation.get('schema') == W.RESERVED.SCHEMA:
                 return self._admit_reserved(point, request)
+            self.service.require_idle_core()
             with H.host_lock(self.root) as descriptor:
                 preparation, body = self.read(self.directory(point), 'preparation.json')
                 if request['preparationSha256'] != W.digest(body):

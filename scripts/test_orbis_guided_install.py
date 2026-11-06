@@ -620,49 +620,213 @@ class HostEnableTests(unittest.TestCase):
             (self.root / name).write_text("unchanged server configuration\n")
         (self.root / "orbis-compose.yml").write_text(ENABLE.HOST.STAGE.staged_content(MANIFEST))
         self.app = self.root / "app-data.bin"; self.app.write_bytes(b"accepted app data")
+        self.events = []
+        self.status = {"enrolled": True, "coreHealth": "healthy", "imageMatches": True, "currentDigest": MANIFEST["digest"], "job": None}
         stat_method, lstat_method = Path.stat, Path.lstat
         def owned(method, path, *args, **kwargs):
             values = list(method(path, *args, **kwargs)); values[4] = 0; values[5] = 0
             return os.stat_result(values)
-        patches = [mock.patch.object(Path, "stat", autospec=True, side_effect=lambda path, *a, **kw: owned(stat_method, path, *a, **kw)), mock.patch.object(Path, "lstat", autospec=True, side_effect=lambda path, *a, **kw: owned(lstat_method, path, *a, **kw)), mock.patch.object(ENABLE.os, "geteuid", return_value=0), mock.patch.object(ENABLE, "available", return_value=False), mock.patch.object(ENABLE, "healthy_existing", return_value=False), mock.patch.object(ENABLE, "existing_owner", return_value=False), mock.patch.object(ENABLE, "source_hashes", return_value={"source": "a" * 64}), mock.patch.object(ENABLE, "require_scoped_cleanup"), mock.patch.object(ENABLE.HOST, "host_lock", side_effect=lambda root: contextlib.nullcontext()), mock.patch.object(ENABLE.HOST.PLAN, "plan", return_value={}), mock.patch.object(ENABLE.HOST, "current_core", return_value=HEALTHY), mock.patch.object(ENABLE.SETUP.SERVICE, "installed_manifest", return_value=MANIFEST)]
+        patches = [mock.patch.object(Path, "stat", autospec=True, side_effect=lambda path, *a, **kw: owned(stat_method, path, *a, **kw)), mock.patch.object(Path, "lstat", autospec=True, side_effect=lambda path, *a, **kw: owned(lstat_method, path, *a, **kw)), mock.patch.object(ENABLE.os, "geteuid", return_value=0), mock.patch.object(ENABLE, "_require_host"), mock.patch.object(ENABLE, "STATE_DIR", self.parent / "state"), mock.patch.object(ENABLE, "available", return_value=False), mock.patch.object(ENABLE, "healthy_existing", return_value=False), mock.patch.object(ENABLE, "existing_owner", return_value=False), mock.patch.object(ENABLE, "source_hashes", return_value={"source": "a" * 64}), mock.patch.object(ENABLE, "require_scoped_cleanup"), mock.patch.object(ENABLE.HOST, "host_lock", side_effect=lambda root: contextlib.nullcontext()), mock.patch.object(ENABLE.HOST.PLAN, "plan", return_value={}), mock.patch.object(ENABLE.HOST, "current_core", return_value=HEALTHY), mock.patch.object(ENABLE.SETUP.SERVICE, "installed_manifest", return_value=MANIFEST), mock.patch.object(ENABLE.SETUP, "_stage_service_files", side_effect=lambda *a, **kw: self.events.append("staged")), mock.patch.object(ENABLE.SETUP, "_start_service", side_effect=lambda: self.events.append("started")), mock.patch.object(ENABLE.SETUP, "authenticated_socket_status", side_effect=lambda *a: self.authenticated()), mock.patch.object(ENABLE.SETUP, "preflight", return_value={"digest": MANIFEST["digest"]}), mock.patch.object(ENABLE.SETUP, "_verify_service", return_value={"socket": "/run/orbis/host.sock"}), mock.patch.object(ENABLE.HOST, "docker", side_effect=self.docker)]
         for name, path in [("INSTALL_DIR", self.parent / "installed-helper"), ("ENV_FILE", self.parent / "etc/helper.env"), ("UNIT_FILE", self.parent / "units/helper.service"), ("SOCKET_FILE", self.parent / "run/host.sock")]:
             patches.append(mock.patch.object(ENABLE.SETUP, name, path))
         for patch in patches:
             patch.start(); self.addCleanup(patch.stop)
-        before = ENABLE.HOST.installation_fingerprint(self.root, MANIFEST, "test")
-        ENABLE.HOST.write_state(self.root, before)
+        self.before = ENABLE.HOST.installation_fingerprint(self.root, MANIFEST, "test")
+        ENABLE.HOST.write_state(self.root, self.before)
+
+    def authenticated(self):
+        self.events.append("authenticated")
+        return self.status
+
+    def docker(self, context, arguments, root):
+        self.events.append("recreated")
+        self.assertGreaterEqual(self.events.count("authenticated"), 2)
+        self.assertLess(self.events.index("started"), self.events.index("authenticated"))
+        self.assertIn("--no-deps", arguments); self.assertIn("--wait", arguments)
+        self.assertIn("never", arguments); self.assertEqual(arguments[-1], "runtipi")
+        return subprocess.CompletedProcess([], 0)
+
+    def run_enable(self):
+        return ENABLE.enable(self.root, "test", self.parent)
+
+    def record(self):
+        return json.loads(ENABLE.journal_path(self.root, "test").read_text())
+
+    def interrupt_start(self):
+        with mock.patch.object(ENABLE.SETUP, "_start_service", side_effect=Interrupted), self.assertRaises(Interrupted):
+            self.run_enable()
+        self.assertEqual(self.record()["stage"], "service-starting")
+        self.assertFalse((self.root / "orbis-host-compose.yml").exists())
+        self.assertEqual(ENABLE.HOST.saved_state(self.root), self.before)
+        self.assertNotIn("recreated", self.events)
+
+    def test_listener_is_authenticated_before_override_and_controller_recreation(self):
+        original = self.authenticated
+        def observe():
+            if self.events.count("authenticated") == 0:
+                self.assertFalse((self.root / "orbis-host-compose.yml").exists())
+            return original()
+        with mock.patch.object(self, "authenticated", side_effect=observe):
+            self.assertEqual(self.run_enable()["result"], "host-service-active")
+        self.assertEqual(self.record()["schema"], "orbis.host-enable.v2")
+        self.assertEqual(self.record()["stage"], "complete")
+        ENABLE.SETUP.preflight.assert_called_once_with(self.root, "test", self.parent, allow_existing=True)
+        self.assertEqual(self.app.read_bytes(), b"accepted app data")
 
     def test_interrupted_helper_enable_recovers_forward_without_rewinding_app_data(self):
-        with mock.patch.object(ENABLE.HOST, "docker", return_value=subprocess.CompletedProcess([], 0)) as docker, mock.patch.object(ENABLE.SETUP, "install_locked", side_effect=Interrupted):
-            with self.assertRaises(Interrupted):
-                ENABLE.enable(self.root, "test", self.parent)
-        journal = ENABLE.journal_path(self.root, "test")
-        self.assertEqual(json.loads(journal.read_text())["stage"], "installing-service")
-        self.assertEqual(json.loads((self.root / "orbis-host-compose.yml").read_text())["services"]["runtipi"]["volumes"][0]["read_only"], True)
-        self.assertEqual(docker.call_args.args[1][-1], "runtipi")
-        self.assertIn("--no-deps", docker.call_args.args[1])
+        self.interrupt_start()
         self.app.write_bytes(b"accepted after interruption")
-        with mock.patch.object(ENABLE.HOST, "docker", return_value=subprocess.CompletedProcess([], 0)), mock.patch.object(ENABLE.SETUP, "install_locked", return_value={"socket": "/run/orbis/host.sock"}) as setup:
-            self.assertEqual(ENABLE.enable(self.root, "test", self.parent)["result"], "host-service-active")
-            self.assertTrue(setup.call_args.kwargs["resume"])
+        self.run_enable()
         self.assertEqual(self.app.read_bytes(), b"accepted after interruption")
-        self.assertEqual(json.loads(journal.read_text())["stage"], "complete")
+        self.assertEqual(self.record()["stage"], "complete")
+        self.assertTrue(ENABLE.SETUP._stage_service_files.call_args.kwargs["resume"])
+
+    def test_interruption_between_override_and_enrollment_resumes_exact_transition(self):
+        with mock.patch.object(ENABLE.HOST, "write_state", side_effect=Interrupted), self.assertRaises(Interrupted):
+            self.run_enable()
+        self.assertEqual(self.record()["stage"], "attaching")
+        self.assertTrue((self.root / "orbis-host-compose.yml").exists())
+        self.assertEqual(ENABLE.HOST.saved_state(self.root), self.before)
+        self.run_enable()
+        self.assertEqual(ENABLE.HOST.saved_state(self.root), self.record()["after"])
+        self.assertEqual(self.app.read_bytes(), b"accepted app data")
+
+    def test_healthy_existing_v1_helper_reuses_without_journal_or_unit_migration(self):
+        path = ENABLE.journal_path(self.root, "test"); path.parent.mkdir(mode=0o700)
+        old = {"schema": "orbis.host-enable.v1", "stage": "complete", "root": str(self.root), "dockerContext": "test", "sources": {"old": "source"}}
+        ENABLE.APPS.write_journal(path, old)
+        with mock.patch.object(ENABLE, "existing_owner", return_value=True), mock.patch.object(ENABLE, "healthy_existing", return_value=True), mock.patch.object(ENABLE, "source_hashes", side_effect=AssertionError("must not gate healthy older helper reuse")):
+            self.assertEqual(self.run_enable()["result"], "host-service-active")
+        self.assertEqual(self.record(), old)
+        ENABLE.SETUP._start_service.assert_not_called()
+        self.assertNotIn("recreated", self.events)
+
+    def test_interrupted_recreation_can_recover_owned_stopped_controller(self):
+        with mock.patch.object(ENABLE.HOST, "docker", side_effect=Interrupted), self.assertRaises(Interrupted):
+            self.run_enable()
+        self.assertEqual(self.record()["stage"], "restarting-controller")
+        stopped = {**HEALTHY, "state": "exited", "health": "none"}
+        self.status = {**self.status, "coreHealth": "none"}
+        def recreate(context, arguments, root):
+            ENABLE.HOST.current_core.return_value = HEALTHY
+            self.status = {**self.status, "coreHealth": "healthy"}
+            return self.docker(context, arguments, root)
+        with mock.patch.object(ENABLE.HOST, "current_core", return_value=stopped), mock.patch.object(ENABLE.HOST, "docker", side_effect=recreate):
+            self.run_enable()
+        self.assertEqual(self.record()["stage"], "complete")
+        self.assertEqual(self.app.read_bytes(), b"accepted app data")
+
+    def test_resume_never_recreates_absent_or_foreign_controller(self):
+        with mock.patch.object(ENABLE.HOST, "docker", side_effect=Interrupted), self.assertRaises(Interrupted):
+            self.run_enable()
+        for core in ({"state": "absent"}, {**HEALTHY, "image": "foreign@sha256:unknown"}):
+            with self.subTest(core=core), mock.patch.object(ENABLE.HOST, "current_core", return_value=core), mock.patch.object(ENABLE.HOST, "docker") as docker, self.assertRaisesRegex(ValueError, "healthy at its published image"):
+                self.run_enable()
+            docker.assert_not_called()
+
+    def test_post_transition_enrollment_rewind_is_not_adopted(self):
+        with mock.patch.object(ENABLE.HOST, "docker", side_effect=Interrupted), self.assertRaises(Interrupted):
+            self.run_enable()
+        ENABLE.HOST.write_state(self.root, self.before)
+        with mock.patch.object(ENABLE.HOST, "docker") as docker, self.assertRaisesRegex(ValueError, "journal-bound"):
+            self.run_enable()
+        docker.assert_not_called()
+        self.assertEqual(self.app.read_bytes(), b"accepted app data")
+
+    def test_recovery_stage_survives_another_listener_interruption(self):
+        with mock.patch.object(ENABLE.HOST, "docker", side_effect=Interrupted), self.assertRaises(Interrupted):
+            self.run_enable()
+        stopped = {**HEALTHY, "state": "exited", "health": "none"}
+        with mock.patch.object(ENABLE.HOST, "current_core", return_value=stopped), mock.patch.object(ENABLE, "_require_listener", side_effect=[None, Interrupted]), self.assertRaises(Interrupted):
+            self.run_enable()
+        self.assertEqual(self.record()["stage"], "restarting-controller")
+
+    def test_final_healthy_verification_resume_does_not_recreate_again(self):
+        with mock.patch.object(ENABLE.SETUP, "_verify_service", side_effect=Interrupted), self.assertRaises(Interrupted):
+            self.run_enable()
+        count = self.events.count("recreated")
+        self.run_enable()
+        self.assertEqual(self.events.count("recreated"), count)
+        self.assertEqual(self.record()["stage"], "complete")
 
     def test_legacy_image_is_refused_before_socket_configuration_is_written(self):
         with mock.patch.object(ENABLE, "require_scoped_cleanup", SCOPED_CHECK), mock.patch.object(ENABLE.HOST, "docker", return_value=subprocess.CompletedProcess([], 0, stdout="{}")), self.assertRaisesRegex(ValueError, "external-network protection"):
-            ENABLE.enable(self.root, "test", self.parent)
+            self.run_enable()
         self.assertFalse((self.root / "orbis-host-compose.yml").exists())
         self.assertFalse(ENABLE.journal_path(self.root, "test").exists())
         self.assertEqual(self.app.read_bytes(), b"accepted app data")
 
     def test_configuration_drift_after_interruption_refuses_before_another_restart(self):
-        with mock.patch.object(ENABLE.HOST, "docker", return_value=subprocess.CompletedProcess([], 0)), mock.patch.object(ENABLE.SETUP, "install_locked", side_effect=Interrupted):
-            with self.assertRaises(Interrupted):
-                ENABLE.enable(self.root, "test", self.parent)
+        self.interrupt_start()
         (self.root / ".env").write_text("operator changed this configuration")
-        with mock.patch.object(ENABLE.HOST, "docker") as docker, self.assertRaisesRegex(ValueError, "configuration changed"):
-            ENABLE.enable(self.root, "test", self.parent)
-        docker.assert_not_called()
+        with self.assertRaisesRegex(ValueError, "configuration changed"):
+            self.run_enable()
+        self.assertNotIn("recreated", self.events)
+        self.assertEqual(self.app.read_bytes(), b"accepted app data")
+
+    def test_source_drift_and_v1_journal_cannot_resume(self):
+        self.interrupt_start()
+        with mock.patch.object(ENABLE, "source_hashes", return_value={"source": "b" * 64}), self.assertRaisesRegex(ValueError, "original verified"):
+            self.run_enable()
+        record = self.record(); record["schema"] = "orbis.host-enable.v1"
+        ENABLE.APPS.write_journal(ENABLE.journal_path(self.root, "test"), record)
+        with self.assertRaisesRegex(ValueError, "incompatible journals"):
+            self.run_enable()
+        self.assertNotIn("recreated", self.events)
+
+    def test_enrollment_drift_and_unjournaled_override_cannot_resume(self):
+        self.interrupt_start()
+        ENABLE.HOST.write_state(self.root, {**self.before, "digest": "sha256:" + "c" * 64})
+        with self.assertRaisesRegex(ValueError, "original enrollment changed"):
+            self.run_enable()
+        ENABLE.HOST.write_state(self.root, self.before)
+        (self.root / "orbis-host-compose.yml").write_text(ENABLE.content())
+        with self.assertRaisesRegex(ValueError, "original enrollment changed"):
+            self.run_enable()
+        self.assertNotIn("recreated", self.events)
+
+    def test_changed_override_cannot_resume(self):
+        with mock.patch.object(ENABLE.HOST, "write_state", side_effect=Interrupted), self.assertRaises(Interrupted):
+            self.run_enable()
+        (self.root / "orbis-host-compose.yml").write_text("changed")
+        with self.assertRaisesRegex(ValueError, "override changed"):
+            self.run_enable()
+        self.assertNotIn("recreated", self.events)
+
+    def test_missing_spoofed_or_wrong_digest_listener_never_recreates_controller(self):
+        for response in (OSError("absent"), ValueError("spoofed PID"), {**self.status, "currentDigest": "sha256:" + "c" * 64}, {**self.status, "enrolled": False}, {**self.status, "job": {"state": "running"}}):
+            with self.subTest(response=response), mock.patch.object(ENABLE.SETUP, "authenticated_socket_status", side_effect=response if isinstance(response, Exception) else None, return_value=response), mock.patch.object(ENABLE.time, "monotonic", side_effect=[0, 20, 20]), self.assertRaises(RuntimeError):
+                self.run_enable()
+            self.assertNotIn("recreated", self.events)
+            self.assertFalse((self.root / "orbis-host-compose.yml").exists())
+        self.assertEqual(self.app.read_bytes(), b"accepted app data")
+
+    def test_pending_selector_and_retained_enrollment_fail_before_service_start(self):
+        selector = ENABLE.HOST.restore_selector_path(self.root)
+        selector.write_text("pending protected recovery")
+        with self.assertRaisesRegex(ValueError, "pending host operation"):
+            self.run_enable()
+        selector.unlink()
+        with mock.patch.object(ENABLE.HOST, "retained_state", return_value=True), self.assertRaisesRegex(ValueError, "retained host socket"):
+            self.run_enable()
+        ENABLE.SETUP._start_service.assert_not_called()
+        self.assertEqual(self.app.read_bytes(), b"accepted app data")
+
+    def test_existing_job_fails_before_service_start(self):
+        ENABLE.STATE_DIR.mkdir(); (ENABLE.STATE_DIR / "job.json").write_text("existing operation")
+        with self.assertRaisesRegex(ValueError, "pending host operation"):
+            self.run_enable()
+        ENABLE.SETUP._start_service.assert_not_called()
+
+    def test_final_mount_or_digest_failure_preserves_journal_for_diagnosis(self):
+        with mock.patch.object(ENABLE.SETUP, "preflight", side_effect=ValueError("stale host socket mount")), self.assertRaisesRegex(ValueError, "stale host socket mount"):
+            self.run_enable()
+        self.assertEqual(self.record()["stage"], "verifying")
+        self.assertEqual(self.app.read_bytes(), b"accepted app data")
+        with mock.patch.object(ENABLE.SETUP, "_verify_service", side_effect=RuntimeError("digest mismatch")), self.assertRaisesRegex(RuntimeError, "digest mismatch"):
+            self.run_enable()
+        self.assertEqual(self.record()["stage"], "verifying")
+        self.assertTrue((self.root / "orbis-host-compose.yml").exists())
         self.assertEqual(self.app.read_bytes(), b"accepted app data")
 
 

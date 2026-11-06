@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 import threading
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -31,7 +31,8 @@ class ReservedCaptureTests(unittest.TestCase):
         self.enterContext(mock.patch.object(S.W.CHECKPOINT, 'build', return_value={'fixture': 'portable-checkpoint'}))
         self.service = SimpleNamespace(root=self.fixture.root, state_dir=self.fixture.state,
             snapshots=self.fixture.snapshots, context=self.fixture.docker.context,
-            lock=threading.Lock(), require_idle_core=mock.Mock())
+            lock=threading.Lock(), HOST=S.W.SERVICE.HOST, require_idle_core=mock.Mock())
+        self.enterContext(mock.patch.object(self.service.HOST.AUTHORITY, 'OWNER', os.geteuid()))
         self.manager = S.CoreCaptureService(self.service)
         self.enterContext(mock.patch.object(self.manager, 'require_publication_capability'))
         self.enterContext(mock.patch.object(self.manager, 'require_namespace_access'))
@@ -73,6 +74,92 @@ class ReservedCaptureTests(unittest.TestCase):
 
     def abort(self):
         return self.manager.abort_reserved(self.point, {'preparationSha256': self.prepared['preparationSha256']})
+
+    def use_real_idle_guard(self):
+        cls = S.W.SERVICE.HostService
+        for name in ('require_idle_core', 'require_restart_clear', 'require_capture_fence_clear',
+                     'require_package_clear', 'require_core_overlay_clear', 'refresh_retryable'):
+            setattr(self.service, name, MethodType(getattr(cls, name), self.service))
+        for name in ('restart_job_file', 'package_job_file', 'maintenance_file', 'job_file'):
+            setattr(self.service, name, self.fixture.state / ('guard-test-' + name))
+        self.service.busy = False
+
+    def test_real_service_guard_scopes_owner_and_preserves_other_exclusions(self):
+        with S.H.host_lock(self.fixture.root):
+            lease = S.W.LEASE.CoreCaptureLease.reserve(S.H, self.fixture.root, self.service.context, self.point, 'a' * 64)
+        self.use_real_idle_guard()
+        self.assertIsNot(S.H, self.service.HOST)
+        with self.assertRaisesRegex(ValueError, 'capture'):
+            self.service.require_idle_core()
+        with lease.owner():
+            with self.assertRaisesRegex(ValueError, 'capture'):
+                self.service.require_idle_core()
+            self.manager.require_owned_idle_core()
+            self.service.busy = True
+            with self.assertRaisesRegex(ValueError, 'update'):
+                self.manager.require_owned_idle_core()
+            self.service.busy = False
+            self.service.job_file.write_text('{"state":"running"}')
+            with self.assertRaisesRegex(ValueError, 'update'):
+                self.manager.require_owned_idle_core()
+            self.service.job_file.unlink()
+            self.service.package_job_file.write_text('{"state":"running"}')
+            with self.assertRaisesRegex(ValueError, 'package'):
+                self.manager.require_owned_idle_core()
+            self.service.package_job_file.unlink()
+            self.service.restart_job_file.write_text('{}')
+            self.service.restart_status = lambda: {'available': True, 'job': {'state': 'restarting'}}
+            with self.assertRaisesRegex(ValueError, 'restarting'):
+                self.manager.require_owned_idle_core()
+            self.service.restart_job_file.unlink()
+            restore = self.service.HOST.restore_selector_path(self.fixture.root)
+            restore.write_bytes(S.P.canonical({'schema': 'orbis.retained-restore-transaction.v1',
+                'id': self.point, 'root': str(self.fixture.root), 'context': self.service.context}))
+            restore.chmod(0o600)
+            with self.assertRaisesRegex(ValueError, 'restore'):
+                self.manager.require_owned_idle_core()
+            restore.unlink()
+            self.manager.context = 'foreign-context'
+            with self.assertRaisesRegex(ValueError, 'owner'):
+                self.manager.require_owned_idle_core()
+            self.manager.context = self.service.context
+            self.assertIsNone(self.service.HOST.CORE_CAPTURE_OWNER.get())
+        self.assertIsNone(self.service.HOST.CORE_CAPTURE_OWNER.get())
+        with self.assertRaisesRegex(ValueError, 'capture'):
+            self.service.require_idle_core()
+        with self.assertRaisesRegex(ValueError, 'owner'):
+            self.manager.require_owned_idle_core()
+
+    def test_real_service_guard_rejects_replaced_lease_proof(self):
+        with S.H.host_lock(self.fixture.root):
+            lease = S.W.LEASE.CoreCaptureLease.reserve(S.H, self.fixture.root, self.service.context, self.point, 'a' * 64)
+        self.use_real_idle_guard()
+        with lease.owner():
+            replacement = self.fence().with_name('replacement-guard-test')
+            replacement.write_bytes(self.fence().read_bytes())
+            replacement.chmod(0o600)
+            replacement.replace(self.fence())
+            with self.assertRaises(ValueError):
+                self.manager.require_owned_idle_core()
+        self.assertIsNone(self.service.HOST.CORE_CAPTURE_OWNER.get())
+
+    def test_real_service_guard_allows_reserved_observation_and_abort(self):
+        self.prepare()
+        self.use_real_idle_guard()
+        self.assertEqual(self.manager.observe_reserved(self.point, self.observation_request()), self.prepared)
+        self.assertEqual(self.abort()['state'], 'abort-intent')
+        with self.assertRaisesRegex(ValueError, 'capture'):
+            self.service.require_idle_core()
+
+    def test_real_service_guard_allows_reserved_admission_verifier(self):
+        self.prepare()
+        self.use_real_idle_guard()
+        with mock.patch.object(self.manager, 'require_reserved_source', side_effect=RuntimeError('verifier reached')):
+            with self.assertRaisesRegex(RuntimeError, 'verifier reached'):
+                self.manager.admit(self.point, self.request)
+        self.assertIsNone(self.service.HOST.CORE_CAPTURE_OWNER.get())
+        with self.assertRaisesRegex(ValueError, 'capture'):
+            self.service.require_idle_core()
 
     def test_prepare_returns_only_after_real_durable_lease_and_exact_pins(self):
         result = self.prepare()
