@@ -110,7 +110,9 @@ export class TimeMachineController {
     response.once('close', launch);
     if (response.writableFinished || response.destroyed) launch();
   }
-  // No route until preparation reserves the host lease and pre-admission abort can safely resume the source.
+  @Post('core-captures')
+  @HttpCode(202)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
   async captureCore(@Req() request: Request, @Body() body: unknown, @Res({ passthrough: true }) response: Response) {
     const owner = backupOperator(request);
     const { label, experimentalAcknowledged, ...credentials } = object(body);
