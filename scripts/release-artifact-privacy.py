@@ -321,6 +321,7 @@ class MemberReader:
         self.bytes = 0
         self.digest = hashlib.sha256()
         self.failed = False
+        self.prefix = b''
 
     def read(self, size):
         if size < 0:
@@ -332,6 +333,7 @@ class MemberReader:
             raise
         self.bytes += len(chunk)
         self.digest.update(chunk)
+        self.prefix += chunk[:max(0, 512 - len(self.prefix))]
         return chunk
 
     def rejection_identity(self, size, location, budget):
@@ -355,6 +357,7 @@ def scan_tar(source, location, budget, compressed=False, depth=0):
     checked = CheckedReader(decoded, raw, budget)
     public_ranges = []
     public_marker_ranges = []
+    member_ranges = []
     with tarfile.open(fileobj=checked, mode='r|', bufsize=CHUNK) as archive:
         for number, member in enumerate(archive):
             budget.entries += 1
@@ -421,15 +424,30 @@ def scan_tar(source, location, budget, compressed=False, depth=0):
                     if identity is not None and not hasattr(error, 'artifact'):
                         error.artifact = identity
                     raise
+                if stream.bytes == member.size:
+                    kind = ('gzip' if stream.prefix.startswith(b'\x1f\x8b') else
+                            'zip' if stream.prefix.startswith(b'PK\x03\x04') else
+                            'tar' if tar_header(stream.prefix) else 'plain')
+                    member_ranges.append((member.offset_data, member.offset_data + member.size,
+                                          {'memberSha256': stream.digest.hexdigest(), 'memberBytes': member.size,
+                                           'memberCounter': entry, 'memberEncoding': kind}))
             elif not member.isdir():
                 reject('unsupported-archive-entry', entry)
     # Tar readers stop at the end marker; scan any remaining decoded bytes too.
     while checked.read(CHUNK):
         pass
-    if any(not any(start <= left and right <= end for start, end in public_ranges) for left, right in raw.deferred['personal-path']):
-        reject('personal-path', location)
-    if any(not any(start <= left and right <= end for start, end in public_marker_ranges) for left, right in raw.deferred['apk-upgrade-marker']):
-        reject('credential-assignment', location)
+    for rule, ranges, reason in (('personal-path', public_ranges, 'personal-path'),
+                                 ('apk-upgrade-marker', public_marker_ranges, 'credential-assignment')):
+        for left, right in sorted(raw.deferred[rule]):
+            if any(start <= left and right <= end for start, end in ranges):
+                continue
+            error = Rejected(f'{reason} at {location}')
+            error.artifact = {'rawOffset': left, 'rawEnd': right}
+            for start, end, identity in member_ranges:
+                if start <= left and right <= end:
+                    error.artifact.update(identity, memberOffset=left - start)
+                    break
+            raise error
 
 
 class Image:

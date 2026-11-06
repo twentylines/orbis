@@ -6,11 +6,13 @@ import importlib.util
 import io
 import json
 import os
+import struct
 import tarfile
 import tempfile
 import unittest
 import urllib.error
 import zipfile
+import zlib
 from pathlib import Path
 from unittest import mock
 
@@ -377,6 +379,37 @@ class ArtifactTests(unittest.TestCase):
         self.assertEqual(identity['memberBytes'], len(body))
         self.assertNotIn(private.decode(), json.dumps(identity))
         self.assertNotIn('public-file.gz', json.dumps(identity))
+
+    def test_raw_compressed_signal_reports_only_verified_member_identity_and_offsets(self):
+        first = b'https://example.test'
+        second = b'/home/tax/article'
+        payload = first + second
+        deflate = (b'\x00' + struct.pack('<HH', len(first), len(first) ^ 0xffff) + first
+                   + b'\x01' + struct.pack('<HH', len(second), len(second) ^ 0xffff) + second)
+        compressed = (b'\x1f\x8b\x08\x00' + b'\x00' * 4 + b'\x00\xff' + deflate
+                      + struct.pack('<II', zlib.crc32(payload), len(payload)))
+        self.assertEqual(gzip.decompress(compressed), payload)
+        SCAN.scan_body(io.BytesIO(compressed), 'decoded', SCAN.Budget(), 0)
+        for name in ('app/public-file.gz', 'app/' + 'x' * 120 + '.gz'):
+            with self.subTest(pax=len(name) > 100), self.assertRaisesRegex(SCAN.Rejected, 'personal-path at layer') as raised:
+                SCAN.scan_tar(io.BytesIO(layer([(name, compressed)])), 'layer', SCAN.Budget())
+            identity = raised.exception.artifact
+            self.assertEqual(identity['memberSha256'], SCAN.sha(compressed))
+            self.assertEqual(identity['memberBytes'], len(compressed))
+            self.assertEqual(identity['memberCounter'], 'layer.entry0')
+            self.assertEqual(identity['memberEncoding'], 'gzip')
+            self.assertEqual(identity['memberOffset'], compressed.index(second))
+            self.assertEqual(identity['rawEnd'] - identity['rawOffset'], len(b'/home/tax/'))
+            self.assertNotIn(second.decode(), json.dumps(identity))
+            self.assertNotIn(name, json.dumps(identity))
+
+    def test_raw_trailing_signal_has_no_fabricated_member_identity(self):
+        private = '/'.join(['', 'home', 'synthetic-person', 'private-file']).encode()
+        archive = layer([('app/public-file', b'ok')])
+        with self.assertRaisesRegex(SCAN.Rejected, 'personal-path at layer') as raised:
+            SCAN.scan_tar(io.BytesIO(archive + private), 'layer', SCAN.Budget())
+        self.assertEqual(raised.exception.artifact, {'rawOffset': len(archive), 'rawEnd': len(archive) + len(private.rsplit(b'/', 1)[0]) + 1})
+        self.assertNotIn(private.decode(), json.dumps(raised.exception.artifact))
 
     def test_secret_rejections_still_fail_without_exposing_body_or_filename(self):
         token = ('gh' + 'p_' + 'AbCd01234567' * 4).encode()

@@ -1092,9 +1092,10 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     try {
       combined.throwIfAborted();
       const point = await this.owned(id, ownerId);
-      if (point.status !== 'sealed' || point.version !== 2) throw timeMachineConflict('point-integrity-failed');
+      if (point.status !== 'sealed' || ![2, 3].includes(point.version)) throw timeMachineConflict('point-integrity-failed');
       const metadata = await this.store.metadata(point);
-      if (metadata.version !== 2 || !metadata.coverage.dockerImages) throw timeMachineConflict('point-integrity-failed');
+      if (metadata.version !== point.version || !metadata.coverage.dockerImages) throw timeMachineConflict('point-integrity-failed');
+      if (point.version === 3) await this.store.readCoreDraft(point, combined);
       return await this.store.withArchive(point, combined, (source, pointKey) => consume({ point, metadata, source, pointKey, signal: combined }));
     } finally {
       if (this.exporting === operation) this.exporting = undefined;

@@ -1,21 +1,15 @@
-import { verifyAppIcons } from '../system-backups/time-machine-app-icons';
-import { historicalIconLimits } from '@runtipi/common/schemas/time-machine-icons';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
-import {
-  timeMachineMetadataSchema,
-  timeMachineIdSchema,
-  timeMachineHashSchema,
-  type TimeMachineMetadata,
-} from '@runtipi/common/schemas/time-machine';
-import { backupMetadataBytes, backupGcmPlaintextLimit, backupCipherOverhead, decryptBackup } from '../system-backups/backup-crypto';
+import { timeMachineMetadataSchema, type TimeMachineMetadata } from '@runtipi/common/schemas/time-machine';
+import { backupMetadataBytes, decryptBackup } from '../system-backups/backup-crypto';
 import { admitRuntimeFile, type RuntimeAdmissionExpectation } from '../system-backups/time-machine-runtime-reader';
 import { inspectFullBackup } from '../system-backups/backup-import';
 import { verifyCaptureAgainstBackup } from '../system-backups/backup-image-capture';
 import type { BackupDatabaseService } from '../system-backups/backup-database.service';
 import { hashCaptureSnapshotFile } from '../system-backups/time-machine-capture-coherence';
-import { capsuleLimits, type CapsuleManifest } from './capsule';
+import { capsuleLimits, capsuleManifestSchema, type CapsuleManifest } from './capsule';
+import { verifyCapsulePreview } from './capsule-preview';
+import { reviewCoreCapsule, type CoreCapsuleReview } from './core-capsule-review';
 import { capsuleDirectorySeal, inspectCapsuleEntry, readCapsuleEntry, sameCapsuleDirectorySeal } from './verified-source';
 
 declare const verifiedCapsule: unique symbol;
@@ -29,6 +23,14 @@ type Verification = {
   copyTo: (directory: string, signal: AbortSignal) => Promise<void>;
 };
 const verifications = new WeakMap<VerifiedCapsuleContents, Verification>();
+const coreReviews = new WeakMap<VerifiedCapsuleContents, CoreCapsuleReview>();
+/** Read-only review. Core capsules deliberately receive no legacy adoption capability. */
+export async function coreCapsuleReview(token: VerifiedCapsuleContents, signal: AbortSignal) {
+  const review = coreReviews.get(token);
+  if (!review) throw fail();
+  await review.recheck(signal);
+  return review.summary;
+}
 const freeze = <T>(value: T): T => {
   if (value && typeof value === 'object') {
     for (const child of Object.values(value)) freeze(child);
@@ -68,30 +70,17 @@ export async function verifyCapsuleContents(options: {
   const { directory, signal } = options;
   const manifest = freeze(structuredClone(options.manifest));
   if (
-    manifest.schema !== 'orbis.time-machine-capsule-private.v1' ||
-    !timeMachineIdSchema.allows(manifest.capsuleId) ||
-    !timeMachineIdSchema.allows(manifest.pointId) ||
+    !capsuleManifestSchema.allows(manifest) ||
     !Number.isSafeInteger(manifest.createdAt) ||
-    manifest.createdAt < 1 ||
-    !/^[A-Za-z0-9_-]{43}$/.test(manifest.pointKey) ||
-    Object.keys(manifest).sort().join(',') !== 'capsuleId,createdAt,entries,pointId,pointKey,schema' ||
-    ![
-      'backup.orbis,runtime.orbis,metadata.orbis',
-      'backup.orbis,runtime.orbis,metadata.orbis,wallpaper.orbis',
-      'backup.orbis,runtime.orbis,metadata.orbis,icons.orbis',
-      'backup.orbis,runtime.orbis,metadata.orbis,wallpaper.orbis,icons.orbis',
-    ].includes(manifest.entries.map((entry) => entry.name).join(',')) ||
-    manifest.entries.some(
-      (entry) =>
-        Object.keys(entry).sort().join(',') !== 'bytes,name,sha256' ||
-        !Number.isSafeInteger(entry.bytes) ||
-        entry.bytes < 52 ||
-        entry.bytes > backupGcmPlaintextLimit + backupCipherOverhead ||
-        !timeMachineHashSchema.allows(entry.sha256),
-    ) ||
     manifest.entries.reduce((sum, entry) => sum + entry.bytes, 0) > capsuleLimits.bytes
   )
     throw fail();
+  if (manifest.schema === 'orbis.time-machine-capsule-private.v2') {
+    const review = await reviewCoreCapsule({ ...options, manifest });
+    const token = Object.freeze(Object.create(null)) as VerifiedCapsuleContents;
+    coreReviews.set(token, { ...review, summary: freeze(review.summary) });
+    return token;
+  }
   const originalDirectory = await capsuleDirectorySeal(directory);
   const seals = await Promise.all(manifest.entries.map((entry) => inspectCapsuleEntry(directory, entry, signal)));
   const metadataEntry = manifest.entries.find((entry) => entry.name === 'metadata.orbis');
@@ -129,46 +118,7 @@ export async function verifyCapsuleContents(options: {
     metadata.runtime.cipherSha256 !== runtime.sha256
   )
     throw fail();
-  const asset = metadata.preview.available && metadata.preview.wallpaperAsset.available ? metadata.preview.wallpaperAsset : null;
-  const wallpaper = manifest.entries.find((entry) => entry.name === 'wallpaper.orbis');
-  if (
-    Boolean(asset) !== Boolean(wallpaper) ||
-    (asset && wallpaper && (wallpaper.bytes !== asset.bytes + 52 || wallpaper.sha256 !== asset.cipherSha256))
-  )
-    throw fail();
-  if (asset && wallpaper) {
-    const value = await backupMetadataBytes(
-      await readCapsuleEntry(directory, wallpaper, signal, 32 * 1024 ** 2 + 52),
-      manifest.pointKey,
-      true,
-      32 * 1024 ** 2,
-    );
-    try {
-      if (value.length !== asset.bytes || createHash('sha256').update(value).digest('hex') !== asset.identity) throw fail();
-    } finally {
-      value.fill(0);
-    }
-  }
-  const icons = metadata.preview.available ? metadata.preview.appIcons : undefined;
-  const iconEntry = manifest.entries.find((entry) => entry.name === 'icons.orbis');
-  if (
-    Boolean(icons) !== Boolean(iconEntry) ||
-    (icons && iconEntry && (icons.bytes + 52 !== iconEntry.bytes || icons.cipherSha256 !== iconEntry.sha256))
-  )
-    throw fail();
-  if (icons && iconEntry) {
-    const value = await backupMetadataBytes(
-      await readCapsuleEntry(directory, iconEntry, signal, historicalIconLimits.bundleBytes + 52),
-      manifest.pointKey,
-      true,
-      historicalIconLimits.bundleBytes,
-    );
-    try {
-      verifyAppIcons(value, icons);
-    } finally {
-      value.fill(0);
-    }
-  }
+  await verifyCapsulePreview(metadata, manifest, directory, signal);
   const expected = record.runtimeExpectation as RuntimeAdmissionExpectation;
   if (
     !expected ||

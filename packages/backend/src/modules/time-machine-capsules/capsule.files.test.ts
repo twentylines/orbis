@@ -55,9 +55,13 @@ it('exports and reimports every exact inner cipher without a plaintext point key
   const result = await exported();
   expect(result.segments).toBeGreaterThan(1);
   const bytes = await fs.readFile(result.destination);
+  expect(bytes.subarray(0, 8).toString()).toBe('ORBISCP1');
+  expect(JSON.parse(bytes.subarray(12, 12 + bytes.readUInt32BE(8)).toString()).schema).toBe('orbis.time-machine-capsule.v1');
   expect(bytes.includes(Buffer.from(pointKey))).toBe(false);
   expect(bytes.includes(Buffer.from('pointKey'))).toBe(false);
   const verify = vi.fn(async (manifest, directory) => {
+    expect(manifest.schema).toBe('orbis.time-machine-capsule-private.v1');
+    expect(Object.keys(manifest)).not.toContain('sourceOwnerId');
     expect(manifest.pointKey).toBe(pointKey);
     expect(manifest.pointId).toBe(pointId);
     for (const [name, value] of expected) expect(await fs.readFile(path.join(directory, name))).toEqual(value);

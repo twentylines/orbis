@@ -28,13 +28,13 @@ const hash = type('string').narrow((value) => /^[a-f0-9]{64}$/.test(value));
 const id = type('string').narrow((value) => /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value));
 const entry = type({
   '+': 'reject',
-  name: "'backup.orbis' | 'runtime.orbis' | 'metadata.orbis' | 'wallpaper.orbis' | 'icons.orbis'",
+  name: "'backup.orbis' | 'runtime.orbis' | 'core.orbis' | 'capture-draft.orbis' | 'metadata.orbis' | 'wallpaper.orbis' | 'icons.orbis'",
   bytes: `52 <= number.integer <= ${backupGcmPlaintextLimit + backupCipherOverhead}`,
   sha256: hash,
 });
 const headerSchema = type({
   '+': 'reject',
-  schema: "'orbis.time-machine-capsule.v1'",
+  schema: "'orbis.time-machine-capsule.v1' | 'orbis.time-machine-capsule.v2'",
   capsuleId: id,
   segmentBytes: `1024 <= number.integer <= ${capsuleLimits.segmentBytes}`,
   segments: `1 <= number.integer <= ${capsuleLimits.segments}`,
@@ -42,7 +42,7 @@ const headerSchema = type({
   manifestBytes: `52 <= number.integer <= ${capsuleLimits.manifestBytes + backupCipherOverhead}`,
   manifestSha256: hash,
 }).narrow((value) => value.segments === Math.ceil(value.payloadBytes / value.segmentBytes));
-const manifestSchema = type({
+const manifestBase = type({
   '+': 'reject',
   schema: "'orbis.time-machine-capsule-private.v1'",
   capsuleId: id,
@@ -50,7 +50,8 @@ const manifestSchema = type({
   createdAt: 'number.integer > 0',
   pointKey: type('string').narrow((value) => /^[A-Za-z0-9_-]{43}$/.test(value)),
   entries: entry.array().atLeastLength(3).atMostLength(5),
-}).narrow((value) => {
+});
+const legacyManifestSchema = manifestBase.narrow((value) => {
   const names = value.entries.map((entry) => entry.name).join(',');
   return [
     'backup.orbis,runtime.orbis,metadata.orbis',
@@ -59,8 +60,21 @@ const manifestSchema = type({
     'backup.orbis,runtime.orbis,metadata.orbis,wallpaper.orbis,icons.orbis',
   ].includes(names);
 });
+const coreManifestSchema = manifestBase
+  .omit('schema')
+  .merge({ schema: "'orbis.time-machine-capsule-private.v2'", sourceOwnerId: 'number.integer > 0' })
+  .narrow((value) => {
+    const names = value.entries.map((entry) => entry.name).join(',');
+    return [
+      'core.orbis,capture-draft.orbis,metadata.orbis',
+      'core.orbis,capture-draft.orbis,metadata.orbis,wallpaper.orbis',
+      'core.orbis,capture-draft.orbis,metadata.orbis,icons.orbis',
+      'core.orbis,capture-draft.orbis,metadata.orbis,wallpaper.orbis,icons.orbis',
+    ].includes(names);
+  });
+export const capsuleManifestSchema = legacyManifestSchema.or(coreManifestSchema);
 export type CapsuleEntry = typeof entry.infer;
-export type CapsuleManifest = typeof manifestSchema.infer;
+export type CapsuleManifest = typeof capsuleManifestSchema.infer;
 export type CapsuleHeader = typeof headerSchema.infer;
 export type CapsuleSource = CapsuleEntry & ({ file: string; source?: never } | { source: Readable; file?: never });
 const fail = () => new Error('The Time Machine capsule could not be verified. No server state was replaced.');
@@ -127,6 +141,7 @@ function validateEntries(entries: CapsuleEntry[]) {
     capsuleLimits.manifestBytes + backupCipherOverhead
   )
     throw fail();
+  if ((entries.find((entry) => entry.name === 'capture-draft.orbis')?.bytes ?? 0) > capsuleLimits.manifestBytes + backupCipherOverhead) throw fail();
   if ((entries.find((entry) => entry.name === 'icons.orbis')?.bytes ?? 0) > historicalIconLimits.bundleBytes + backupCipherOverhead) throw fail();
   if ((entries.find((entry) => entry.name === 'wallpaper.orbis')?.bytes ?? 0) > 32 * 1024 ** 2 + backupCipherOverhead) throw fail();
 }
@@ -189,6 +204,7 @@ export async function exportCapsule(options: {
   pointId: string;
   createdAt: number;
   pointKey: string;
+  sourceOwnerId?: number;
   entries: CapsuleSource[];
   passphrase: string;
   signal: AbortSignal;
@@ -199,8 +215,10 @@ export async function exportCapsule(options: {
   await privateBackupDirectory(directory);
   const capsuleId = randomUUID();
   const entries = options.entries.map(({ name, bytes, sha256 }) => ({ name, bytes, sha256 }));
-  const manifest = manifestSchema.assert({
-    schema: 'orbis.time-machine-capsule-private.v1',
+  const core = entries[0]?.name === 'core.orbis';
+  const manifest = capsuleManifestSchema.assert({
+    schema: core ? 'orbis.time-machine-capsule-private.v2' : 'orbis.time-machine-capsule-private.v1',
+    ...(core ? { sourceOwnerId: options.sourceOwnerId } : {}),
     capsuleId,
     pointId: options.pointId,
     createdAt: options.createdAt,
@@ -219,7 +237,7 @@ export async function exportCapsule(options: {
     privateBytes = Buffer.alloc(0);
   }
   const header = headerSchema.assert({
-    schema: 'orbis.time-machine-capsule.v1',
+    schema: core ? 'orbis.time-machine-capsule.v2' : 'orbis.time-machine-capsule.v1',
     capsuleId,
     segmentBytes,
     segments: Math.ceil(payloadBytes / segmentBytes),
@@ -347,7 +365,8 @@ export async function importCapsule(options: {
     const encryptedManifest = await read(source.handle, header.manifestBytes, 12 + length);
     if (sha(encryptedManifest) !== header.manifestSha256) throw fail();
     secret = await backupMetadataBytes(encryptedManifest, options.passphrase, true, capsuleLimits.manifestBytes);
-    const manifest = manifestSchema.assert(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(secret)));
+    const manifest = capsuleManifestSchema.assert(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(secret)));
+    if ((header.schema === 'orbis.time-machine-capsule.v2') !== (manifest.schema === 'orbis.time-machine-capsule-private.v2')) throw fail();
     validateEntries(manifest.entries);
     if (manifest.capsuleId !== header.capsuleId || manifest.entries.reduce((sum, entry) => sum + entry.bytes, 0) !== header.payloadBytes)
       throw fail();
