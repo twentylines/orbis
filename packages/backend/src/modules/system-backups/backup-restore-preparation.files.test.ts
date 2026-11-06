@@ -55,6 +55,7 @@ async function fixture(preserveLiveProxy = false, preserveMedia = false) {
   }
   if (preserveMedia) {
     await fs.rm(path.join(source.content, 'data/media'), { recursive: true });
+    if (source.manifest.version === 3) throw new Error('Expected a legacy backup fixture.');
     source.manifest = {
       ...source.manifest,
       version: 2,
@@ -387,7 +388,9 @@ it('does not use changed connection details to remove a prepared database during
     await options.onCreated(test.owner);
     throw new Error('fixture interruption');
   });
-  await expect(prepare(test)).rejects.toThrow();
+  await expect(prepare(test)).rejects.toMatchObject({ preparationCheck: 'database' });
+  expect(prepareRestoreDatabase).toHaveBeenCalledOnce();
+  expect(JSON.parse(await fs.readFile(path.join(test.options.journal.directory, 'database-owner.json'), 'utf8'))).toEqual(test.owner);
   test.options.runtime.connection.host = 'different-server';
   await expect(discard(test)).rejects.toThrow();
   expect(removeRestoreDatabase).not.toHaveBeenCalled();

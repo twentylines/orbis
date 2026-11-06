@@ -10,6 +10,7 @@ import { fullBackupLimits } from './backup-limits';
 import { type BackupContentIntegrity, parseFullBackupManifest } from './backup-import';
 import { readNormalizedBackupDatabase } from './backup-normalized-database';
 import type { BackupDatabaseReview } from './backup-database.service';
+import { backupVolumeContentBudget, verifyBackupVolumeContents } from './backup-volume-contents';
 
 const sha256 = type('string').narrow((value) => /^[a-f0-9]{64}$/.test(value));
 const digest = type({ bytes: 'number.integer > 0 & number <= 9007199254740991', sha256 }).onUndeclaredKey('reject');
@@ -179,6 +180,7 @@ export async function validateBackupSource(options: { directory: string; expecte
     };
     await walk(content);
     if (remaining.size) throw failed();
+    if (manifest.version === 3) await verifyBackupVolumeContents(content, manifest.volumes, signal, backupVolumeContentBudget(manifest));
     const passkeysFile = files.get('data/state/auth/passkeys.json');
     const passkeys = passkeysFile ? await json(path.join(content, passkeysFile.name), signal, 512 * 1024, passkeysFile) : undefined;
     const apps = new Map<string, { id: number; appUrn: string; config: string }>();
@@ -203,8 +205,9 @@ export async function validateBackupSource(options: { directory: string; expecte
       if (container.running) running.add(container.project);
     }
     for (const image of manifest.images) if (!apps.has(image.project)) throw failed();
+    const volumeProjects = new Set(manifest.volumes?.flatMap((volume) => volume.mounts.map((mount) => mount.project)) ?? []);
     const resumeApps: { id: number; appUrn: string }[] = [];
-    for (const project of running) {
+    for (const project of new Set([...running, ...volumeProjects])) {
       const app = apps.get(project);
       if (!app) throw failed();
       const file = files.get(app.config);
@@ -220,7 +223,7 @@ export async function validateBackupSource(options: { directory: string; expecte
         !['docker-compose.yml', 'docker-compose.json'].some((name) => files.has(path.posix.join(path.posix.dirname(app.config), name)))
       )
         throw failed();
-      resumeApps.push({ id: app.id, appUrn: app.appUrn });
+      if (running.has(project)) resumeApps.push({ id: app.id, appUrn: app.appUrn });
     }
     return {
       directory,
@@ -228,6 +231,11 @@ export async function validateBackupSource(options: { directory: string; expecte
       recovery: { jwtSecret: fields.jwtSecret, userSettings: fields.userSettings as Record<string, unknown> },
       source,
       resumeApps,
+      volumeApps: [...volumeProjects].sort().map((project) => {
+        const app = apps.get(project);
+        if (!app) throw failed();
+        return { id: app.id, appUrn: app.appUrn, project };
+      }),
     };
   } catch (error) {
     if (signal.aborted) signal.throwIfAborted();

@@ -217,8 +217,8 @@ def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, exi
                             or str(item.get('Destination', '')).startswith(RESET.TARGET + '/')]
             if reset_mounts:
                 binding = RESET.read_external_enrollment(root, APPS.digest_daemon(reader), reader.context)
-                if binding.get('schema') != RESET.SCHEMA_V4:
-                    raise StorageError('Preserving reset authority requires reviewed v4 enrollment')
+                if binding.get('schema') not in {RESET.SCHEMA_V3, RESET.SCHEMA_V4}:
+                    raise StorageError('Preserving reset authority requires durable enrollment')
                 RESET.verify(root, binding, daemon=APPS.digest_daemon(reader), context=reader.context)
                 RESET.require_runtime(root, mounts, binding)
                 RESET.require_docker_isolation(root, reader, binding, controller_id=row['id'])

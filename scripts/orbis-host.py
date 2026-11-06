@@ -38,6 +38,7 @@ STATE_NAME = ".orbis-host-state.json"
 LOCK_DESCRIPTOR = ContextVar("orbis_host_lock_descriptor", default=None)
 RESTORE_TRANSACTION = ContextVar("orbis_host_retained_restore_transaction", default=None)
 CAPTURE_READ_DEADLINE = ContextVar("orbis_host_capture_read_deadline", default=None)
+CORE_CAPTURE_OWNER = ContextVar("orbis_core_capture_owner", default=None)
 
 
 def capture_fence_path(root: Path) -> Path:
@@ -50,6 +51,32 @@ def host_lock_path(root: Path) -> Path:
 
 def restore_selector_path(root: Path) -> Path:
     return AUTHORITY.LAYOUT.selected_path(root, 'restore-selector')
+
+
+def core_capture_owner(root: Path):
+    proof = CORE_CAPTURE_OWNER.get()
+    if proof is None:
+        return None
+    if not isinstance(proof, tuple) or len(proof) != 3 or not isinstance(proof[0], bytes):
+        raise ValueError('Protected core capture ownership could not be verified')
+    path = capture_fence_path(root)
+    with AUTHORITY.protected_directory(path.parent, private=False) as directory:
+        parent = os.fstat(directory)
+        parent_identity = tuple(getattr(parent, key) for key in ('st_dev', 'st_ino', 'st_uid', 'st_gid', 'st_mode'))
+        with AUTHORITY.protected_file(directory, path.name, 8192) as body:
+            info = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
+            value = IDENTITY.PUBLICATION.metadata(body, byte_limit=8192)
+            if (body != proof[0] or AUTHORITY.seal(info) != proof[1] or parent_identity != proof[2]
+                    or not isinstance(value, dict)
+                    or set(value) != {'schema', 'id', 'root', 'context', 'nonce', 'sourceSha256'}
+                    or value.get('schema') != 'orbis.core-capture-lease.v1' or value.get('root') != str(root)
+                    or not isinstance(value.get('id'), str)
+                    or not re.fullmatch(r'[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}', value['id'])
+                    or not isinstance(value.get('context'), str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*', value['context'])
+                    or any(not isinstance(value.get(key), str) or not re.fullmatch(r'[a-f0-9]{64}', value[key])
+                           for key in ('nonce', 'sourceSha256'))):
+                raise ValueError('Protected core capture ownership could not be verified')
+    return value
 
 
 def require_no_capture_fence(root: Path) -> None:
@@ -66,7 +93,10 @@ def require_no_capture_fence(root: Path) -> None:
             raise ValueError("a protected retained restore requires completion or recovery")
     path = capture_fence_path(root)
     if path.exists() or path.is_symlink():
-        raise ValueError("a protected controller capture requires completion or explicit reconciliation")
+        if core_capture_owner(root) is None:
+            raise ValueError("a protected controller capture requires completion or explicit reconciliation")
+    elif CORE_CAPTURE_OWNER.get() is not None:
+        raise ValueError('Protected core capture ownership could not be verified')
 
 
 @contextmanager

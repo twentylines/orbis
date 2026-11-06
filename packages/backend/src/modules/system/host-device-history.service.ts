@@ -1,3 +1,4 @@
+import { coreCaptureRecoveryRequired } from '@/common/backup-maintenance';
 import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
@@ -65,6 +66,7 @@ export class HostDeviceHistoryService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit() {
+    if (coreCaptureRecoveryRequired()) return;
     if (installationHeld()) return;
     await this.load();
     if (this.closed || this.timer) return;

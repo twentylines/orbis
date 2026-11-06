@@ -1,3 +1,4 @@
+import { coreCaptureRecoveryRequired } from '@/common/backup-maintenance';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -88,6 +89,7 @@ export class BackupDatabaseService implements OnModuleInit, OnModuleDestroy {
     return path.join(this.root(), 'sandbox.json');
   }
   onModuleInit() {
+    if (coreCaptureRecoveryRequired()) return;
     if (restoreStartupRole() === 'verify') return;
     return this.initialize();
   }

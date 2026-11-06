@@ -1,3 +1,4 @@
+import { coreCaptureRecoveryRequired } from '@/common/backup-maintenance';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -43,6 +44,7 @@ export class MetricHistoryService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit() {
+    if (coreCaptureRecoveryRequired()) return;
     if (installationHeld()) return;
     await this.load();
     if (this.closed || this.timer) return;

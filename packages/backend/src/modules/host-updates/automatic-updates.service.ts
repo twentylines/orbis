@@ -1,3 +1,4 @@
+import { coreCaptureRecoveryRequired } from '@/common/backup-maintenance';
 import fs, { constants, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -142,6 +143,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
+    if (coreCaptureRecoveryRequired()) return;
     await this.load();
     this.ensureTimer();
   }

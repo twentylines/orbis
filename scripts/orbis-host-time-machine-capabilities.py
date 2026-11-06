@@ -11,6 +11,7 @@ RESTORE_DOMAIN = b'orbis.retained-restore-capability.v2\n'
 ARCHIVE_DOMAIN = b'orbis.backup-archive-capability.v1\n'
 VOLUME_DOMAIN = b'orbis.backup-volume-capture-capability.v1\n'
 SOURCE_DOMAIN = b'orbis.host-helper-source.v1\n'
+MAX_SOURCE_FILES = 128
 VOLUME_REQUIRED = {'orbis-host-volume-capture.py', 'orbis-host-volume-engine.py', 'orbis-host-volume-inventory.py', 'orbis-host-volume-service.py'}
 NAMES = re.compile(r'(?:orbis-[a-z-]+|install-orbis|migration-preflight)\.py|orbis-host-maintenance-responder\.mjs')
 REQUIRED = {'orbis-host-service.py', 'orbis-host.py', 'orbis-host-identity.py', 'orbis-host-retained-authority.py',
@@ -36,7 +37,7 @@ def source_digest(authority, *, directory=None, extra_required=()):
     with authority.protected_directory(path, private=False) as descriptor:
         import os
         names = sorted(name for name in os.listdir(descriptor) if NAMES.fullmatch(name))
-        if not REQUIRED.union(extra_required) <= set(names) or len(names) > 64: raise fail()
+        if not REQUIRED.union(extra_required) <= set(names) or len(names) > MAX_SOURCE_FILES: raise fail()
         files, total = {}, 0
         for name in names:
             with authority.protected_file(descriptor, name, 1024 * 1024, private=False) as body:

@@ -3,6 +3,17 @@ import { assertNoPrivateBuildPaths } from './scripts/production-artifact-privacy
 import { productionHealthAssets } from './scripts/production-health-assets';
 
 const healthAssets = await productionHealthAssets('./dist');
+const productionExternals = [
+  ...runtimeDependencies,
+  'cpu-features',
+  '@nestjs/typeorm',
+  '@nestjs/mongoose',
+  '@nestjs/sequelize',
+  '@mikro-orm/core',
+  '@fastify/static',
+  '@nestjs/microservices',
+  '@nestjs/websockets',
+];
 
 const result = await Bun.build({
   entrypoints: ['./src/main.ts', './src/restore-worker.ts'],
@@ -20,17 +31,7 @@ const result = await Bun.build({
     identifiers: true,
     syntax: true,
   },
-  external: [
-    ...runtimeDependencies,
-    'cpu-features',
-    '@nestjs/typeorm',
-    '@nestjs/mongoose',
-    '@nestjs/sequelize',
-    '@mikro-orm/core',
-    '@fastify/static',
-    '@nestjs/microservices',
-    '@nestjs/websockets',
-  ],
+  external: productionExternals,
 });
 
 if (!result.success) throw new AggregateError(result.logs, 'Production server build failed');
@@ -56,3 +57,26 @@ const retainedCapability = await Bun.build({
 });
 if (!retainedCapability.success) throw new AggregateError(retainedCapability.logs, 'Retained worker capability build failed');
 await assertNoPrivateBuildPaths(retainedCapability.outputs);
+
+const capturePublication = await Bun.build({
+  entrypoints: [
+    './src/core-capture-publication.ts',
+    './src/core-capture-seal.ts',
+    './src/core-capture-catalog.ts',
+    './src/core-capture-image-inventory.ts',
+  ],
+  outdir: './dist',
+  format: 'esm',
+  splitting: true,
+  naming: { chunk: 'core-publication-[hash].mjs' },
+  target: 'node',
+  env: 'disable',
+  define: { 'process.env.NODE_ENV': JSON.stringify('production') },
+  plugins: [healthAssets.plugin],
+  banner: healthAssets.banner,
+  sourcemap: false,
+  minify: true,
+  external: productionExternals,
+});
+if (!capturePublication.success) throw new AggregateError(capturePublication.logs, 'Core capture publication verifier build failed');
+await assertNoPrivateBuildPaths(capturePublication.outputs);

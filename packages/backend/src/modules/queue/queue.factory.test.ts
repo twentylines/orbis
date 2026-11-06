@@ -1,4 +1,5 @@
 import { setRestoreRecoveryRequired } from '@/common/backup-maintenance';
+import * as maintenance from '@/common/backup-maintenance';
 import { type } from 'arktype';
 import { Connection, type ConsumerHandler } from 'rabbitmq-client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -48,6 +49,584 @@ describe('QueueFactory', () => {
       password: 'guest',
       username: 'guest',
     });
+  });
+
+  async function pausedCapture(signal = new AbortController().signal) {
+    const held = vi.spyOn(maintenance, 'coreCaptureRecoveryRequired').mockReturnValue(false);
+    const factory = new QueueFactory(loggerService, configurationService);
+    const queues = [];
+    for (const queueName of ['app-events-queue', 'repo-queue', 'system-events-queue']) {
+      const queue = await factory.createQueue({ queueName, eventSchema: type({ event: 'string' }) });
+      queue.onEvent(vi.fn());
+      queues.push(queue);
+    }
+    const pause = await factory.pauseForBackup(signal);
+    const release = await maintenance.acquireBackupMaintenance(new AbortController().signal);
+    held.mockReturnValue(true);
+    const started = new Set<string>();
+    for (const [index, result] of rabbit.createConsumer.mock.results.entries()) {
+      const name = (rabbit.createConsumer.mock.calls[index]?.[0] as { queue: string }).queue;
+      result.value.start.mockImplementation(() => started.add(name));
+    }
+    rabbit.queueDeclare.mockImplementation(async ({ queue }: { queue: string }) => ({
+      messageCount: 0,
+      consumerCount: started.has(queue) ? 1 : 0,
+    }));
+    return {
+      factory,
+      pause,
+      queues,
+      held,
+      releaseMaintenance: release,
+      starts: () => rabbit.createConsumer.mock.results.reduce((total, result) => total + result.value.start.mock.calls.length, 0),
+      close: async () => {
+        pause.release();
+        release();
+        held.mockRestore();
+        maintenance.setBackupRecoveryRequired(false);
+        await factory.onModuleDestroy();
+      },
+    };
+  }
+
+  async function failedCaptureSetup() {
+    const held = vi.spyOn(maintenance, 'coreCaptureRecoveryRequired').mockReturnValue(false);
+    const factory = new QueueFactory(loggerService, configurationService);
+    const live = new Set<string>();
+    for (const queueName of ['app-events-queue', 'repo-queue', 'system-events-queue']) {
+      const queue = await factory.createQueue({ queueName, eventSchema: type({ event: 'string' }) });
+      queue.onEvent(vi.fn());
+    }
+    for (const [index, result] of rabbit.createConsumer.mock.results.entries()) {
+      const name = (rabbit.createConsumer.mock.calls[index]?.[0] as { queue: string }).queue;
+      live.add(name);
+      result.value.close.mockImplementation(async () => {
+        live.delete(name);
+      });
+      result.value.start.mockImplementation(() => {
+        live.add(name);
+      });
+    }
+    const reads = async ({ queue }: { queue: string }) => ({ messageCount: 0, consumerCount: live.has(queue) ? 1 : 0 });
+    rabbit.queueDeclare.mockImplementation(reads);
+    const cause = new Error('broker check failed');
+    rabbit.queueDeclare.mockRejectedValueOnce(cause);
+    const failure = await factory.pauseForBackup(new AbortController().signal).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(Error);
+    return {
+      factory,
+      failure,
+      cause,
+      live,
+      reads,
+      close: async () => {
+        await factory.onModuleDestroy();
+        held.mockRestore();
+        maintenance.setBackupRecoveryRequired(false);
+      },
+    };
+  }
+
+  it('seals a genuine unused setup without changing another maintenance lease', async () => {
+    const f = await failedCaptureSetup();
+    const other = await maintenance.acquireBackupMaintenance(new AbortController().signal);
+    try {
+      const scope = f.factory.createCoreCaptureQueueSetup();
+      const proof = await f.factory.verifyCoreCaptureSetupRefusal(scope, new AbortController().signal);
+      expect(proof).toMatchObject({
+        outcome: 'not-entered',
+        queues: expect.arrayContaining([{ name: 'app-events-queue', messages: 0, consumers: 1 }]),
+      });
+      await proof?.recheck();
+      await expect(scope.pauseForBackup(new AbortController().signal)).rejects.toThrow('consumed');
+      expect(maintenance.backupMaintenanceLeaseHeld()).toBe(true);
+      const stranger = new QueueFactory(loggerService, configurationService);
+      await expect(stranger.verifyCoreCaptureSetupRefusal(scope, new AbortController().signal)).rejects.toThrow('does not belong');
+      await expect(f.factory.verifyCoreCaptureSetupRefusal({ ...scope }, new AbortController().signal)).rejects.toThrow('does not belong');
+      await stranger.onModuleDestroy();
+    } finally {
+      other();
+      await f.close();
+    }
+  });
+
+  it('preserves a foreign entity pause even when broker consumer coverage is complete', async () => {
+    const f = await failedCaptureSetup();
+    const registrations = Reflect.get(f.factory, 'queues') as Map<
+      string,
+      { pauseForBackup: () => { release: () => void }; captureSetupIsIdle: () => boolean }
+    >;
+    const app = registrations.get('app-events-queue');
+    if (!app) throw new Error('Missing app queue fixture');
+    const foreign = app.pauseForBackup();
+    try {
+      const scope = f.factory.createCoreCaptureQueueSetup();
+      await expect(scope.pauseForBackup(new AbortController().signal)).rejects.toThrow('already in progress');
+      await expect(f.factory.verifyCoreCaptureSetupRefusal(scope, new AbortController().signal)).rejects.toThrow('cannot be verified');
+      expect(app.captureSetupIsIdle()).toBe(false);
+      expect(f.live.size).toBe(3);
+      foreign.release();
+      expect(await f.factory.verifyCoreCaptureSetupRefusal(scope, new AbortController().signal)).toMatchObject({ outcome: 'queue-refused' });
+    } finally {
+      foreign.release();
+      await f.close();
+    }
+  });
+
+  it('verifies cancellation before the first queue call without fabricating an owned pause', async () => {
+    const f = await failedCaptureSetup();
+    try {
+      const scope = f.factory.createCoreCaptureQueueSetup();
+      await expect(scope.pauseForBackup(AbortSignal.abort())).rejects.toThrow();
+      expect(await f.factory.verifyCoreCaptureSetupRefusal(scope, new AbortController().signal)).toMatchObject({ outcome: 'queue-refused' });
+      expect(f.live.size).toBe(3);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('does not turn an arbitrary failure or an owned returned handle into refusal authority', async () => {
+    const f = await failedCaptureSetup();
+    try {
+      const unknown = f.factory.createCoreCaptureQueueSetup();
+      vi.spyOn(f.factory, 'pauseForBackup').mockRejectedValueOnce(new Error('unbranded failure'));
+      await expect(unknown.pauseForBackup(new AbortController().signal)).rejects.toThrow('unbranded');
+      expect(await f.factory.verifyCoreCaptureSetupRefusal(unknown, new AbortController().signal)).toBeUndefined();
+      const owned = f.factory.createCoreCaptureQueueSetup();
+      const pause = await owned.pauseForBackup(new AbortController().signal);
+      expect(await f.factory.verifyCoreCaptureSetupRefusal(owned, new AbortController().signal)).toBeUndefined();
+      pause.release();
+      expect(await f.factory.verifyCoreCaptureSetupRefusal(owned, new AbortController().signal)).toBeUndefined();
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('pins a selected refusal proof but can inspect a fresh generation before selection', async () => {
+    const f = await failedCaptureSetup();
+    try {
+      const scope = f.factory.createCoreCaptureQueueSetup();
+      Reflect.set(f.factory, 'connectionGeneration', Number(Reflect.get(f.factory, 'connectionGeneration')) + 1);
+      const proof = await f.factory.verifyCoreCaptureSetupRefusal(scope, new AbortController().signal);
+      if (!proof) throw new Error('Missing refusal fixture proof');
+      expect(proof?.generation).toBe(Reflect.get(f.factory, 'connectionGeneration'));
+      Reflect.set(f.factory, 'connectionGeneration', Number(Reflect.get(f.factory, 'connectionGeneration')) + 1);
+      await expect(proof.recheck()).rejects.toThrow('cannot be verified');
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('bounds refusal checks and rejects new work or additional consumers', async () => {
+    const f = await failedCaptureSetup();
+    try {
+      const scope = f.factory.createCoreCaptureQueueSetup();
+      for (const row of [
+        { messageCount: 1, consumerCount: 1 },
+        { messageCount: 0, consumerCount: 2 },
+      ]) {
+        rabbit.queueDeclare.mockResolvedValueOnce(row);
+        await expect(f.factory.verifyCoreCaptureSetupRefusal(scope, new AbortController().signal)).rejects.toThrow('idle original');
+      }
+      const checking = new AbortController();
+      const entered = Promise.withResolvers<void>();
+      rabbit.queueDeclare.mockImplementationOnce(() => {
+        entered.resolve();
+        return new Promise(() => {});
+      });
+      const pending = f.factory.verifyCoreCaptureSetupRefusal(scope, checking.signal);
+      const failure = expect(pending).rejects.toThrow();
+      await entered.promise;
+      checking.abort();
+      await failure;
+      expect(f.live.size).toBe(3);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('positively verifies only its own unwound failed setup without changing foreign maintenance', async () => {
+    const f = await failedCaptureSetup();
+    const releaseOther = await maintenance.acquireBackupMaintenance(new AbortController().signal);
+    try {
+      const proof = await f.factory.verifyCoreCaptureSetupUnwind(f.failure, new AbortController().signal);
+      expect(proof.generation).toBeGreaterThan(0);
+      expect(proof.queues).toEqual(['app-events-queue', 'repo-queue', 'system-events-queue'].map((name) => ({ name, messages: 0, consumers: 1 })));
+      await proof.recheck();
+      expect(maintenance.backupMaintenanceLeaseHeld()).toBe(true);
+      expect(maintenance.coreCaptureRecoveryRequired()).toBe(false);
+      await expect(f.factory.verifyCoreCaptureSetupUnwind(f.cause, new AbortController().signal)).rejects.toThrow('does not belong');
+      await expect(f.factory.verifyCoreCaptureSetupUnwind({ ...(f.failure as object) }, new AbortController().signal)).rejects.toThrow(
+        'does not belong',
+      );
+      const other = new QueueFactory(loggerService, configurationService);
+      try {
+        await expect(other.verifyCoreCaptureSetupUnwind(f.failure, new AbortController().signal)).rejects.toThrow('does not belong');
+      } finally {
+        await other.onModuleDestroy();
+      }
+    } finally {
+      releaseOther();
+      await f.close();
+    }
+  });
+
+  it('verifies a returned drained handle only after its own successful release', async () => {
+    const f = await failedCaptureSetup();
+    try {
+      const pause = await f.factory.pauseForBackup(new AbortController().signal);
+      await expect(f.factory.verifyCoreCaptureSetupUnwind(pause, new AbortController().signal)).rejects.toThrow();
+      pause.release();
+      await expect(f.factory.verifyCoreCaptureSetupUnwind(pause, new AbortController().signal)).resolves.toMatchObject({
+        pauseId: pause.initial.pauseId,
+        generation: pause.initial.generation,
+      });
+      await expect(f.factory.verifyCoreCaptureSetupUnwind(f.failure, new AbortController().signal)).rejects.toThrow();
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('does not let a reused broker error transfer ownership between capture attempts', async () => {
+    const f = await failedCaptureSetup();
+    try {
+      rabbit.queueDeclare.mockRejectedValueOnce(f.cause);
+      const next = await f.factory.pauseForBackup(new AbortController().signal).catch((error: unknown) => error);
+      expect(next).not.toBe(f.failure);
+      await expect(f.factory.verifyCoreCaptureSetupUnwind(next, new AbortController().signal)).resolves.toHaveProperty('pauseId');
+      await expect(f.factory.verifyCoreCaptureSetupUnwind(f.failure, new AbortController().signal)).rejects.toThrow();
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('rejects changed queues, extra consumers or messages before certifying an unwind', async () => {
+    const f = await failedCaptureSetup();
+    try {
+      for (const state of [
+        { messageCount: 1, consumerCount: 1 },
+        { messageCount: 0, consumerCount: 2 },
+      ]) {
+        rabbit.queueDeclare.mockResolvedValueOnce(state);
+        await expect(f.factory.verifyCoreCaptureSetupUnwind(f.failure, new AbortController().signal)).rejects.toThrow('idle consumer coverage');
+      }
+      const proof = await f.factory.verifyCoreCaptureSetupUnwind(f.failure, new AbortController().signal);
+      const declarations = rabbit.queueDeclare.mock.calls.length;
+      const reconnect = rabbit.on.mock.calls.find(([name]) => name === 'connection')?.[1];
+      reconnect?.();
+      await expect(proof.recheck()).rejects.toThrow();
+      expect(rabbit.queueDeclare.mock.calls.length).toBe(declarations);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('cancels a stalled unwind broker check and rejects shutdown without restarting consumers', async () => {
+    const f = await failedCaptureSetup();
+    try {
+      rabbit.queueDeclare.mockImplementationOnce(() => new Promise(() => {}));
+      const cancellation = new AbortController();
+      const pending = f.factory.verifyCoreCaptureSetupUnwind(f.failure, cancellation.signal);
+      await vi.waitFor(() => expect(rabbit.queueDeclare).toHaveBeenCalled());
+      cancellation.abort();
+      await expect(pending).rejects.toThrow();
+      await f.factory.onModuleDestroy();
+      await expect(f.factory.verifyCoreCaptureSetupUnwind(f.failure, new AbortController().signal)).rejects.toThrow();
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('keeps failed consumer restart in recovery without issuing an unwind receipt', async () => {
+    const f = await failedCaptureSetup();
+    try {
+      rabbit.createConsumer.mock.results[0]?.value.start.mockImplementationOnce(() => {
+        throw new Error('restart failed');
+      });
+      rabbit.queueDeclare.mockRejectedValueOnce(new Error('setup failed'));
+      const failure = await f.factory.pauseForBackup(new AbortController().signal).catch((error: unknown) => error);
+      expect(maintenance.backupMaintenanceActive()).toBe(true);
+      await expect(f.factory.verifyCoreCaptureSetupUnwind(failure, new AbortController().signal)).rejects.toThrow('does not belong');
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('refuses a changed queue registration even if broker counts look ready', async () => {
+    const f = await failedCaptureSetup();
+    const queues = Reflect.get(f.factory, 'queues') as Map<string, unknown>;
+    const original = queues.get('app-events-queue');
+    try {
+      queues.set('app-events-queue', {});
+      await expect(f.factory.verifyCoreCaptureSetupUnwind(f.failure, new AbortController().signal)).rejects.toThrow();
+    } finally {
+      queues.set('app-events-queue', original);
+      await f.close();
+    }
+  });
+
+  it('rechecks only its original pause using a live recovery signal after the producer was cancelled', async () => {
+    const producer = new AbortController();
+    const f = await pausedCapture(producer.signal);
+    try {
+      producer.abort();
+      await expect(f.pause.verify()).rejects.toThrow();
+      await expect(f.factory.recheckCoreCapturePause(f.pause, new AbortController().signal)).resolves.toMatchObject({
+        pauseId: f.pause.initial.pauseId,
+        generation: f.pause.initial.generation,
+      });
+      expect(f.starts()).toBe(0);
+      expect(maintenance.backupMaintenanceLeaseHeld()).toBe(true);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('refuses forged, released, cancelled or unheld pause rechecks without restarting consumers', async () => {
+    const f = await pausedCapture();
+    try {
+      await expect(f.factory.recheckCoreCapturePause({ ...f.pause }, new AbortController().signal)).rejects.toThrow('belong');
+      const aborted = new AbortController();
+      aborted.abort();
+      await expect(f.factory.recheckCoreCapturePause(f.pause, aborted.signal)).rejects.toThrow();
+      f.held.mockReturnValue(false);
+      await expect(f.factory.recheckCoreCapturePause(f.pause, new AbortController().signal)).rejects.toThrow('unavailable');
+      f.held.mockReturnValue(true);
+      f.pause.release();
+      await expect(f.factory.recheckCoreCapturePause(f.pause, new AbortController().signal)).rejects.toThrow('changed');
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('refuses pending messages and changed registrations during recovery verification', async () => {
+    const f = await pausedCapture();
+    try {
+      rabbit.queueDeclare.mockResolvedValue({ messageCount: 1, consumerCount: 0 });
+      await expect(f.factory.recheckCoreCapturePause(f.pause, new AbortController().signal)).rejects.toThrow('Queued');
+      rabbit.queueDeclare.mockResolvedValue({ messageCount: 0, consumerCount: 0 });
+      Reflect.get(f.factory, 'queues').delete('repo-queue');
+      await expect(f.factory.recheckCoreCapturePause(f.pause, new AbortController().signal)).rejects.toThrow('changed');
+      expect(f.starts()).toBe(0);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('cancels a recovery verification even when the broker declaration never settles', async () => {
+    const f = await pausedCapture();
+    try {
+      const entered = Promise.withResolvers<void>();
+      rabbit.queueDeclare.mockImplementationOnce(() => {
+        entered.resolve();
+        return new Promise(() => {});
+      });
+      const controller = new AbortController();
+      const pending = f.factory.recheckCoreCapturePause(f.pause, controller.signal);
+      await entered.promise;
+      controller.abort();
+      await expect(pending).rejects.toThrow('cancelled');
+      expect(maintenance.backupMaintenanceLeaseHeld()).toBe(true);
+      expect(f.starts()).toBe(0);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('resumes an exact live capture pause once and proves three consumers without clearing either hold', async () => {
+    const f = await pausedCapture();
+    try {
+      const first = f.factory.resumeCoreCapturePause(f.pause, new AbortController().signal);
+      expect(f.factory.resumeCoreCapturePause(f.pause, new AbortController().signal)).toBe(first);
+      const proof = await first;
+      expect(proof.pauseId).toBe(f.pause.initial.pauseId);
+      expect(proof.queueGeneration).toBe(f.pause.initial.generation);
+      expect(proof.queues).toEqual(['app-events-queue', 'repo-queue', 'system-events-queue'].map((name) => ({ name, messages: 0, consumers: 1 })));
+      expect(f.starts()).toBe(3);
+      await proof.recheck();
+      expect(maintenance.backupMaintenanceActive()).toBe(true);
+      expect(maintenance.coreCaptureRecoveryRequired()).toBe(true);
+      expect((await f.queues[0]?.publish({ event: 'outside' }))?.success).toBe(false);
+      await f.factory.resumeCoreCapturePause(f.pause, new AbortController().signal);
+      expect(f.starts()).toBe(3);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('refuses a copied pause handle and a pause released through the ordinary backup path', async () => {
+    const f = await pausedCapture();
+    try {
+      await expect(f.factory.resumeCoreCapturePause({ ...f.pause }, new AbortController().signal)).rejects.toThrow('belong');
+      expect(f.starts()).toBe(0);
+      f.pause.release();
+      await expect(f.factory.resumeCoreCapturePause(f.pause, new AbortController().signal)).rejects.toThrow('already released');
+      expect(f.starts()).toBe(3);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it.each([
+    { messageCount: 1, consumerCount: 0 },
+    { messageCount: 0, consumerCount: 2 },
+    { messageCount: 0, consumerCount: 1 },
+  ])('does not resume paused consumers with unexpected broker state %j', async (state) => {
+    const f = await pausedCapture();
+    try {
+      rabbit.queueDeclare.mockResolvedValue(state);
+      await expect(f.factory.resumeCoreCapturePause(f.pause, new AbortController().signal)).rejects.toThrow();
+      expect(f.starts()).toBe(0);
+      expect(maintenance.backupMaintenanceActive()).toBe(true);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('refuses a connection generation change after readiness', async () => {
+    const f = await pausedCapture();
+    try {
+      const proof = await f.factory.resumeCoreCapturePause(f.pause, new AbortController().signal);
+      Object.assign(f.factory, { connectionGeneration: f.pause.initial.generation + 1 });
+      await expect(proof.recheck()).rejects.toThrow('changed');
+      expect(f.starts()).toBe(3);
+      expect(maintenance.backupMaintenanceActive()).toBe(true);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('refuses a connection generation change before resuming', async () => {
+    const g = await pausedCapture();
+    try {
+      Object.assign(g.factory, { connectionGeneration: g.pause.initial.generation + 1 });
+      await expect(g.factory.resumeCoreCapturePause(g.pause, new AbortController().signal)).rejects.toThrow('changed');
+      expect(g.starts()).toBe(0);
+    } finally {
+      await g.close();
+    }
+  });
+
+  it('requires the actual mutation lease as well as the recovery flag throughout resumption', async () => {
+    const f = await pausedCapture();
+    try {
+      const proof = await f.factory.resumeCoreCapturePause(f.pause, new AbortController().signal);
+      f.releaseMaintenance();
+      maintenance.setRestoreRecoveryRequired(true);
+      expect(maintenance.coreCaptureRecoveryRequired()).toBe(true);
+      expect(maintenance.backupMaintenanceActive()).toBe(true);
+      await expect(proof.recheck()).rejects.toThrow('changed');
+    } finally {
+      maintenance.setRestoreRecoveryRequired(false);
+      await f.close();
+    }
+  });
+
+  it('keeps a partial consumer restart failed and never retries those starts', async () => {
+    const f = await pausedCapture();
+    try {
+      rabbit.createConsumer.mock.results[1]?.value.start.mockImplementationOnce(() => {
+        throw new Error('fixture start failed');
+      });
+      const running = f.factory.resumeCoreCapturePause(f.pause, new AbortController().signal);
+      await expect(running).rejects.toThrow('resumption failed');
+      expect(f.factory.resumeCoreCapturePause(f.pause, new AbortController().signal)).toBe(running);
+      await expect(running).rejects.toThrow();
+      expect(f.starts()).toBe(3);
+      expect(maintenance.backupMaintenanceActive()).toBe(true);
+      expect(maintenance.coreCaptureRecoveryRequired()).toBe(true);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('cancels stalled broker observations and never restarts consumers during shutdown', async () => {
+    const f = await pausedCapture();
+    try {
+      rabbit.queueDeclare.mockImplementation(() => new Promise(() => undefined));
+      const abort = new AbortController();
+      const running = f.factory.resumeCoreCapturePause(f.pause, abort.signal);
+      const rejected = expect(running).rejects.toThrow();
+      await f.factory.onModuleDestroy();
+      await rejected;
+      expect(f.starts()).toBe(0);
+      expect(maintenance.backupMaintenanceActive()).toBe(true);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('retains capture-held registrations and resumes only those consumers once after clearance', async () => {
+    const held = vi.spyOn(maintenance, 'coreCaptureRecoveryRequired').mockReturnValue(true);
+    try {
+      const factory = new QueueFactory(loggerService, configurationService);
+      for (const name of ['app-events-queue', 'repo-queue', 'system-events-queue']) {
+        const queue = await factory.createQueue({ queueName: name, eventSchema: type({ event: 'string' }) });
+        queue.onEvent(vi.fn());
+      }
+      expect(rabbit.createConsumer).not.toHaveBeenCalled();
+      expect(() => factory.resumeCoreCaptureConsumers()).toThrow('unavailable');
+      expect(rabbit.createConsumer).not.toHaveBeenCalled();
+      held.mockReturnValue(false);
+      factory.resumeCoreCaptureConsumers();
+      factory.resumeCoreCaptureConsumers();
+      expect(rabbit.createConsumer).toHaveBeenCalledTimes(3);
+      expect(rabbit.createConsumer.mock.calls.map(([options]) => (options as { queue: string }).queue)).toEqual([
+        'app-events-queue',
+        'repo-queue',
+        'system-events-queue',
+      ]);
+      await factory.onModuleDestroy();
+      expect(() => factory.resumeCoreCaptureConsumers()).toThrow('unavailable');
+    } finally {
+      held.mockRestore();
+    }
+  });
+
+  it('verifies exact capture consumers under the held connection and refuses a lost hold or generation', async () => {
+    const factory = new QueueFactory(loggerService, configurationService);
+    for (const name of ['app-events-queue', 'repo-queue', 'system-events-queue'])
+      await factory.createQueue({ queueName: name, eventSchema: type({ event: 'string' }) });
+    const release = await maintenance.acquireBackupMaintenance(new AbortController().signal);
+    try {
+      rabbit.queueDeclare.mockResolvedValue({ messageCount: 0, consumerCount: 1 });
+      const proof = await factory.verifyCoreCaptureConsumers(new AbortController().signal);
+      expect(proof.queueGeneration).toBe(1);
+      expect(proof.queues).toEqual(['app-events-queue', 'repo-queue', 'system-events-queue'].map((name) => ({ name, messages: 0, consumers: 1 })));
+      await proof.recheck();
+      Object.assign(factory, { connectionGeneration: 2 });
+      await expect(proof.recheck()).rejects.toThrow('changed');
+      Object.assign(factory, { connectionGeneration: 1 });
+      release();
+      await expect(proof.recheck()).rejects.toThrow('changed');
+    } finally {
+      release();
+      await factory.onModuleDestroy();
+    }
+  });
+
+  it('rejects unexpected capture queue work, duplicate consumers and cancellation without releasing maintenance', async () => {
+    const factory = new QueueFactory(loggerService, configurationService);
+    for (const name of ['app-events-queue', 'repo-queue', 'system-events-queue'])
+      await factory.createQueue({ queueName: name, eventSchema: type({ event: 'string' }) });
+    const release = await maintenance.acquireBackupMaintenance(new AbortController().signal);
+    try {
+      for (const state of [
+        { messageCount: 1, consumerCount: 1 },
+        { messageCount: 0, consumerCount: 2 },
+        { messageCount: 0, consumerCount: true },
+      ]) {
+        rabbit.queueDeclare.mockResolvedValue(state);
+        await expect(factory.verifyCoreCaptureConsumers(new AbortController().signal)).rejects.toThrow('not idle');
+      }
+      const abort = new AbortController();
+      abort.abort();
+      await expect(factory.verifyCoreCaptureConsumers(abort.signal)).rejects.toThrow();
+      expect(maintenance.backupMaintenanceActive()).toBe(true);
+    } finally {
+      release();
+      await factory.onModuleDestroy();
+    }
   });
 
   it('waits for an active worker and its confirmed event before closing resources exactly once', async () => {

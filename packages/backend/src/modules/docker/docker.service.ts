@@ -17,6 +17,8 @@ import {
   writeAppImagePins,
   removeAppImagePins,
 } from './app-image-pins';
+import { readAppVolumeAuthority } from './app-volume-authority';
+import { prepareAppVolumeInvocation, readEffectiveAppCompose } from './app-volume-invocation';
 import { AppFilesManager } from '../apps/app-files-manager';
 import { AppsService } from '../apps/apps.service';
 
@@ -139,8 +141,25 @@ export class DockerService {
     if (options?.imagePins === 'explicit-update' && !guard) throw new Error('Explicit image replacement needs a retained app update transaction.');
     const retained = options?.imagePins === 'explicit-update' ? null : await this.readAppImagePins(appUrn, options?.imagePinUpdate);
     if (retained) args.push('--file', retained.path);
-    return { args, isCustomConfig, retainedImages: Boolean(retained) };
+    const volumes = await readAppVolumeAuthority(this.config.get('directories').dataDir, {
+      appUrn,
+      project: appUrn.replace(':', '_'),
+    });
+    return { args, isCustomConfig, retainedImages: Boolean(retained), volumePins: volumes?.pins, projectDirectory: path.dirname(composeFile.path) };
   };
+
+  private async prepareVolumeInvocation(base: Awaited<ReturnType<DockerService['getBaseComposeArgsApp']>>, signal?: AbortSignal) {
+    if (!base.volumePins) return undefined;
+    signal?.throwIfAborted();
+    const effective = await readEffectiveAppCompose(base.args, signal);
+    signal?.throwIfAborted();
+    return prepareAppVolumeInvocation({
+      effective,
+      pins: base.volumePins,
+      projectDirectory: base.projectDirectory,
+      directory: path.join(this.config.get('directories').dataDir, 'state', 'app-volume-invocations'),
+    });
+  }
 
   public getBaseComposeArgsRuntipi = async () => {
     const { dataDir } = this.config.get('directories');
@@ -170,7 +189,8 @@ export class DockerService {
     command: string,
     options?: { imagePins?: 'explicit-update'; imagePinUpdate?: string; signal?: AbortSignal },
   ) {
-    let { args, isCustomConfig, retainedImages } = await this.getBaseComposeArgsApp(appUrn, options);
+    const base = await this.getBaseComposeArgsApp(appUrn, options);
+    let { args, isCustomConfig, retainedImages } = base;
     const operation = command.split(' ').filter(Boolean);
     if (retainedImages) {
       if (operation[0] === 'pull' || operation[0] === 'build' || operation[0] === 'run' || operation.some((part) => part === '--build'))
@@ -184,77 +204,94 @@ export class DockerService {
         operation.push('--pull', 'never');
       }
     }
-    args.push(...operation);
-    args = args.filter(Boolean);
+    const frozen = await this.prepareVolumeInvocation(base, options?.signal);
+    try {
+      if (frozen) args = frozen.args;
+      args.push(...operation);
+      args = args.filter(Boolean);
 
-    this.logger.info(`Running docker compose with args ${args.join(' ')}`);
+      this.logger.info(`Running docker compose with args ${args.join(' ')}`);
 
-    options?.signal?.throwIfAborted();
-    const cmd = spawn('docker-compose', args);
-    const stdout: string[] = [];
-    const stderr: string[] = [];
+      options?.signal?.throwIfAborted();
+      const cmd = frozen ? spawn('docker-compose', args, { stdio: ['pipe', 'pipe', 'pipe', frozen.fd] }) : spawn('docker-compose', args);
+      const stdout: string[] = [];
+      const stderr: string[] = [];
 
-    const exitCode = await new Promise<number | null>((resolve, reject) => {
-      let escalation: ReturnType<typeof setTimeout> | undefined;
-      const abort = () => {
-        cmd.kill('SIGTERM');
-        escalation = setTimeout(() => cmd.kill('SIGKILL'), 5000);
-        escalation.unref();
-      };
-      const cleanup = () => {
-        options?.signal?.removeEventListener('abort', abort);
-        if (escalation) clearTimeout(escalation);
-      };
-      cmd.stdout.on('data', (data) => {
-        this.logger.debug(`docker-compose: ${String(data).trim()}`);
-        stdout.push(String(data).trim());
+      const exitCode = await new Promise<number | null>((resolve, reject) => {
+        let escalation: ReturnType<typeof setTimeout> | undefined;
+        const abort = () => {
+          cmd.kill('SIGTERM');
+          escalation = setTimeout(() => cmd.kill('SIGKILL'), 5000);
+          escalation.unref();
+        };
+        const cleanup = () => {
+          options?.signal?.removeEventListener('abort', abort);
+          if (escalation) clearTimeout(escalation);
+        };
+        cmd.stdout?.on('data', (data) => {
+          this.logger.debug(`docker-compose: ${String(data).trim()}`);
+          stdout.push(String(data).trim());
+        });
+        cmd.stderr?.on('data', (data) => {
+          this.logger.debug(`docker-compose: ${String(data).trim()}`);
+          stderr.push(String(data).trim());
+        });
+        cmd.once('error', (error) => {
+          cleanup();
+          reject(error);
+        });
+        cmd.once('close', (code) => {
+          cleanup();
+          if (options?.signal?.aborted) reject(options.signal.reason);
+          else resolve(code);
+        });
+        options?.signal?.addEventListener('abort', abort, { once: true });
+        if (options?.signal?.aborted) abort();
       });
-      cmd.stderr.on('data', (data) => {
-        this.logger.debug(`docker-compose: ${String(data).trim()}`);
-        stderr.push(String(data).trim());
-      });
-      cmd.once('error', (error) => {
-        cleanup();
-        reject(error);
-      });
-      cmd.once('close', (code) => {
-        cleanup();
-        if (options?.signal?.aborted) reject(options.signal.reason);
-        else resolve(code);
-      });
-      options?.signal?.addEventListener('abort', abort, { once: true });
-      if (options?.signal?.aborted) abort();
-    });
 
-    if (exitCode !== 0) {
-      this.logger.info(`Docker-compose exited with code ${exitCode}`);
-      if (isCustomConfig) {
-        this.logger.warn('User-config detected, please make sure your configuration is correct before opening an issue');
+      if (exitCode !== 0) {
+        this.logger.info(`Docker-compose exited with code ${exitCode}`);
+        if (isCustomConfig) {
+          this.logger.warn('User-config detected, please make sure your configuration is correct before opening an issue');
+        }
+        const error = stderr.pop();
+        throw new Error(error);
       }
-      const error = stderr.pop();
-      throw new Error(error);
-    }
 
-    return { success: true, stdout: stdout.join(''), stderr: stderr.join('') };
+      return { success: true, stdout: stdout.join(''), stderr: stderr.join('') };
+    } finally {
+      await frozen?.release();
+    }
   }
 
   public getLogsStream = async (maxLines: number, appUrn?: AppUrn) => {
+    let frozen: Awaited<ReturnType<DockerService['prepareVolumeInvocation']>>;
     try {
-      const { args } = appUrn ? await this.getBaseComposeArgsApp(appUrn) : await this.getBaseComposeArgsRuntipi();
+      const base = appUrn ? await this.getBaseComposeArgsApp(appUrn) : undefined;
+      frozen = base ? await this.prepareVolumeInvocation(base) : undefined;
+      const args = frozen?.args ?? (base ?? (await this.getBaseComposeArgsRuntipi())).args;
 
       args.push('logs', '--follow', '-n', maxLines.toString());
 
-      const logs = spawn('docker-compose', args, { stdio: 'pipe' });
+      const logs = frozen
+        ? spawn('docker-compose', args, { stdio: ['pipe', 'pipe', 'pipe', frozen.fd] })
+        : spawn('docker-compose', args, { stdio: 'pipe' });
+      logs.once('close', () => {
+        void frozen?.release();
+      });
 
       logs.on('error', () => {
         logs.kill('SIGINT');
+        void frozen?.release();
       });
+      if (!logs.stdout) throw new Error('App log stream is unavailable.');
 
       return {
         on: logs.stdout.on.bind(logs.stdout),
         kill: () => logs.kill('SIGINT'),
       };
     } catch (error) {
+      await frozen?.release();
       this.logger.error('Error getting log stream', error);
       Sentry.captureException(error, { tags: { source: 'docker log stream', appUrn } });
       throw new InternalServerErrorException('Error getting log stream');

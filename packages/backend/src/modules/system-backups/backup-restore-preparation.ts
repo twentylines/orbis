@@ -227,7 +227,7 @@ export async function prepareRestorePayload(options: {
     progress.stage = 'sealing';
     check = 'sealing';
     options.progress({ ...progress });
-    for (const [name, swap] of swaps) await swap.seal(signal, { allowAppDataLinks: source.manifest.version === 2 && name === 'app-data' });
+    for (const [name, swap] of swaps) await swap.seal(signal, { allowAppDataLinks: source.manifest.version !== 1 && name === 'app-data' });
     const { connection, ...containers } = runtime;
     check = 'runtime';
     const operation = await writeRestoreOperation(journal, {

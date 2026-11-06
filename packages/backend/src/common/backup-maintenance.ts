@@ -1,6 +1,22 @@
 import type { NextFunction, Request, Response } from 'express';
 import { Injectable, ServiceUnavailableException, type CallHandler, type ExecutionContext, type NestInterceptor } from '@nestjs/common';
 import { finalize } from 'rxjs';
+import {
+  useVerifiedCoreCompletion,
+  type VerifiedCoreCompletion,
+  type CoreCaptureCompletionDetails,
+} from '../modules/host-updates/host-core-capture-completion-client';
+import { canonicalPublicationJson } from '../modules/host-updates/host-controller-publication';
+import {
+  useVerifiedCoreAbortComplete,
+  type VerifiedCoreAbortComplete,
+  type CoreCaptureAbortDetails,
+} from '../modules/host-updates/host-core-capture-abort-client';
+import {
+  useVerifiedCoreEmptyAbortComplete,
+  type VerifiedCoreEmptyAbortComplete,
+  type CoreCaptureEmptyAbortDetails,
+} from '../modules/host-updates/host-core-capture-empty-abort-client';
 
 let held = false;
 let acquiring = false;
@@ -9,15 +25,35 @@ let recoveryRequired = process.env.NODE_ENV === 'production';
 let restoreRecoveryRequired = false;
 let resetRecoveryRequired = process.env.NODE_ENV === 'production';
 let settingsRestoreRecoveryRequired = false;
+let captureRecoveryRequired = false;
+let captureInitializing = false;
+let initializedCaptureApproval: CoreCaptureCompletionDetails | undefined;
+export const coreCaptureRecoveryRequired = () => captureRecoveryRequired;
+export const backupMaintenanceLeaseHeld = () => held;
+export const holdCoreCaptureRecovery = () => {
+  captureRecoveryRequired = true;
+};
 let active = 0;
 const drained = new Set<() => void>();
 const available = new Set<() => void>();
 const requests = new WeakMap<Request, { release: () => void; entered: boolean; disconnected: boolean }>();
 
 export const backupMaintenanceActive = () =>
-  held || recoveryRequired || restoreRecoveryRequired || resetRecoveryRequired || settingsRestoreRecoveryRequired;
+  held ||
+  recoveryRequired ||
+  restoreRecoveryRequired ||
+  resetRecoveryRequired ||
+  settingsRestoreRecoveryRequired ||
+  captureRecoveryRequired ||
+  captureInitializing;
 export const backupMaintenanceOutsideResetActive = () =>
-  held || acquiring || recoveryRequired || restoreRecoveryRequired || settingsRestoreRecoveryRequired;
+  held ||
+  acquiring ||
+  recoveryRequired ||
+  restoreRecoveryRequired ||
+  settingsRestoreRecoveryRequired ||
+  captureRecoveryRequired ||
+  captureInitializing;
 export const setSettingsRestoreRecoveryRequired = (required: boolean) => {
   settingsRestoreRecoveryRequired = required;
   if (!backupMaintenanceActive()) for (const notify of available) notify();
@@ -35,6 +71,126 @@ export const setRestoreRecoveryRequired = (required: boolean) => {
   restoreRecoveryRequired = required;
   if (!backupMaintenanceActive()) for (const notify of available) notify();
 };
+
+const captureApprovalIdentity = (details: CoreCaptureCompletionDetails) =>
+  canonicalPublicationJson({
+    id: details.id,
+    sourceSha256: details.sourceSha256,
+    sourceHoldSha256: details.sourceHoldSha256,
+    completionSha256: details.completionSha256,
+    pointReservationSha256: details.pointReservationSha256,
+    controller: details.controller,
+  });
+
+export async function initializeCoreCaptureRecovery<T>(
+  token: VerifiedCoreCompletion,
+  work: (details: CoreCaptureCompletionDetails) => Promise<T>,
+): Promise<T> {
+  try {
+    return await useVerifiedCoreCompletion(token, async (details) => {
+      if (!captureRecoveryRequired || !held || active !== 0 || captureInitializing) throw new Error('Core capture initialization is not available.');
+      captureInitializing = true;
+      captureRecoveryRequired = false;
+      initializedCaptureApproval = details;
+      return work(details);
+    });
+  } catch (error) {
+    // An authenticated callback may have started mutating even when the socket post-check failed.
+    if (captureInitializing) captureRecoveryRequired = true;
+    throw error;
+  }
+}
+
+export async function settleCoreCaptureRecovery(token: VerifiedCoreCompletion, continuationSha256?: string, signal?: AbortSignal): Promise<void> {
+  const verify = (details: CoreCaptureCompletionDetails) => {
+    signal?.throwIfAborted();
+    if (
+      details.state !== 'complete' ||
+      (continuationSha256 !== undefined && details.continuationSha256 !== continuationSha256) ||
+      !initializedCaptureApproval ||
+      captureApprovalIdentity(details) !== captureApprovalIdentity(initializedCaptureApproval) ||
+      !held ||
+      !captureInitializing ||
+      captureRecoveryRequired ||
+      active !== 0 ||
+      recoveryRequired ||
+      restoreRecoveryRequired ||
+      resetRecoveryRequired ||
+      settingsRestoreRecoveryRequired
+    )
+      throw new Error('Core capture continuation is not available.');
+  };
+  let completed: CoreCaptureCompletionDetails | undefined;
+  await useVerifiedCoreCompletion(token, async (details) => {
+    verify(details);
+    completed = details;
+  });
+  if (!completed) throw new Error('Core capture continuation is not available.');
+  verify(completed);
+  // Clear only after the authenticated callback and its socket post-check both succeeded.
+  captureInitializing = false;
+  initializedCaptureApproval = undefined;
+}
+
+export async function settleCoreCaptureAbortRecovery(
+  token: VerifiedCoreAbortComplete,
+  verifySource: (details: CoreCaptureAbortDetails) => Promise<void>,
+): Promise<void> {
+  const check = () => {
+    if (
+      !held ||
+      active !== 0 ||
+      !captureRecoveryRequired ||
+      captureInitializing ||
+      initializedCaptureApproval ||
+      recoveryRequired ||
+      restoreRecoveryRequired ||
+      resetRecoveryRequired ||
+      settingsRestoreRecoveryRequired
+    )
+      throw new Error('Core capture cancellation is not ready to settle.');
+  };
+  check();
+  await useVerifiedCoreAbortComplete(token, async (details) => {
+    check();
+    if (details.state !== 'complete' || !details.continuationSha256) throw new Error('Core capture cancellation is not committed.');
+    await verifySource(details);
+    check();
+  });
+  check();
+  // The source still owns the mutation lease until its caller releases it synchronously.
+  captureRecoveryRequired = false;
+}
+
+export async function settleCoreCaptureEmptyAbortRecovery(
+  token: VerifiedCoreEmptyAbortComplete,
+  verifySource: (details: CoreCaptureEmptyAbortDetails) => Promise<void>,
+) {
+  const check = () => {
+    if (
+      !held ||
+      active !== 0 ||
+      !captureRecoveryRequired ||
+      captureInitializing ||
+      initializedCaptureApproval ||
+      recoveryRequired ||
+      restoreRecoveryRequired ||
+      resetRecoveryRequired ||
+      settingsRestoreRecoveryRequired
+    )
+      throw new Error('Early capture cancellation is not ready to settle.');
+  };
+  check();
+  await useVerifiedCoreEmptyAbortComplete(token, async (details) => {
+    check();
+    if (details.version !== 2 || details.state !== 'complete' || details.sourceMarker !== 'absent' || !details.continuationSha256)
+      throw new Error('Early capture cancellation is not committed.');
+    await verifySource(details);
+    check();
+  });
+  check();
+  captureRecoveryRequired = false;
+}
 
 export async function waitForBackupMutation() {
   let release = enterBackupMutation();
@@ -113,7 +269,16 @@ export async function acquireBackupMaintenance(signal: AbortSignal): Promise<() 
 export function backupMaintenanceMiddleware(request: Request, response: Response, next: NextFunction) {
   const pathname = request.originalUrl.split('?')[0] ?? '';
   if (pathname.startsWith('/api/system-backups')) response.setHeader('Cache-Control', 'no-store');
-  if (!pathname.startsWith('/api/') || /^\/api\/(?:health\/?$|system-backups(?:\/|$))/.test(pathname)) return next();
+  if (!pathname.startsWith('/api/') || /^\/api\/health\/?$/.test(pathname)) return next();
+  if (captureRecoveryRequired || captureInitializing) {
+    if (request.method === 'POST' && /^\/api\/auth\/(?:login|logout|verify-totp|passkeys\/login\/(?:options|verify))\/?$/.test(pathname))
+      return next();
+    if (request.method === 'GET' && /^\/api\/auth\/passkeys\/availability\/?$/.test(pathname)) return next();
+    response.setHeader('Cache-Control', 'no-store');
+    response.setHeader('Retry-After', '2');
+    return response.status(503).json({ statusCode: 503, code: 'ORBIS_CAPTURE_RECOVERY_REQUIRED', message: 'Capture recovery requires review.' });
+  }
+  if (/^\/api\/system-backups(?:\/|$)/.test(pathname)) return next();
   // Reset acquires and retains the same drain itself; counting its admission request would deadlock it.
   if (request.method === 'POST' && /^\/api\/system-reset(?:\/(?:recover|passkey-options))?\/?$/.test(pathname)) return next();
   // A held restore must still admit fresh operator authentication for protected recovery.

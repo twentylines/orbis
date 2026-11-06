@@ -8,10 +8,12 @@ import type Dockerode from 'dockerode';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { DOCKERODE } from '../docker/docker.module';
 import { BackupRequirementError } from './backup-files';
+import { BackupDockerVolumes, type BackupVolumeArchive, type BackupVolumeInventory, type BackupVolumePlan } from './backup-docker-volumes';
 
 export type BackupContainer = { id: string; project: string; running: boolean };
 export type BackupRuntimePlan = {
   databaseId: string;
+  volumePlan?: BackupVolumePlan;
   containers: BackupContainer[];
   images: { project: string; image: string }[];
   preservedMedia?: { roots: string[]; bindings: { id: string; source: string; destination: string; rw: boolean }[] };
@@ -20,12 +22,18 @@ const below = (root: string, value: string) => value === root || value.startsWit
 
 @Injectable()
 export class BackupRuntimeService {
+  private readonly volumes: BackupDockerVolumes;
+
   constructor(
     private readonly config: ConfigurationService,
     @Inject(DOCKERODE) private readonly docker: Dockerode,
-  ) {}
+  ) {
+    this.volumes = new BackupDockerVolumes(docker);
+  }
 
-  async plan(projects: string[], includeMedia = true): Promise<BackupRuntimePlan> {
+  async plan(projects: string[], includeMedia = true, volumePolicy?: 'capture-local-volumes.v1'): Promise<BackupRuntimePlan> {
+    if (volumePolicy !== undefined && volumePolicy !== 'capture-local-volumes.v1')
+      throw new BackupRequirementError('The app volume backup policy is invalid.');
     if (typeof includeMedia !== 'boolean') throw new BackupRequirementError('The media backup policy is invalid.');
     const self = await this.docker.getContainer(os.hostname()).inspect();
     const database = this.config.get('database');
@@ -96,6 +104,7 @@ export class BackupRuntimeService {
         // These are the same host runtime endpoints used by this controller,
         // not app data. A read-only socket bind still permits Docker API writes.
         if (runtimeMount(mount)) continue;
+        if (volumePolicy === 'capture-local-volumes.v1' && mount.Type === 'volume') continue;
         if (!includeMedia && mount.Type === 'bind' && mediaRoots.some((root) => below(root, mount.Source))) {
           if (typeof mount.RW !== 'boolean' || !path.posix.isAbsolute(mount.Destination))
             throw new BackupRequirementError('The shared media mount could not be identified safely.');
@@ -112,12 +121,29 @@ export class BackupRuntimeService {
     }
     if (databases.length !== 1) throw new BackupRequirementError('The configured PostgreSQL container could not be identified safely.');
     preservedMedia.bindings.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
-    return { databaseId: databases[0] as string, containers, images, ...(includeMedia ? {} : { preservedMedia }) };
+    const volumePlan =
+      volumePolicy === 'capture-local-volumes.v1'
+        ? await this.volumes.plan(
+            containers.map(({ id, project }) => ({ id, project })),
+            new AbortController().signal,
+          )
+        : undefined;
+    return {
+      databaseId: databases[0] as string,
+      containers,
+      images,
+      ...(includeMedia ? {} : { preservedMedia }),
+      ...(volumePlan ? { volumePlan } : {}),
+    };
   }
 
   async verifyStopped(plan: BackupRuntimePlan, signal: AbortSignal) {
     signal.throwIfAborted();
-    const current = await this.plan([...new Set(plan.containers.map((item) => item.project))], plan.preservedMedia === undefined);
+    const current = await this.plan(
+      [...new Set(plan.containers.map((item) => item.project))],
+      plan.preservedMedia === undefined,
+      plan.volumePlan === undefined ? undefined : 'capture-local-volumes.v1',
+    );
     signal.throwIfAborted();
     const identities = (value: BackupRuntimePlan) =>
       JSON.stringify(value.containers.map(({ id, project }) => ({ id, project })).sort((a, b) => a.id.localeCompare(b.id)));
@@ -127,10 +153,28 @@ export class BackupRuntimeService {
       identities(current) !== identities(plan) ||
       images(current) !== images(plan) ||
       JSON.stringify(current.preservedMedia) !== JSON.stringify(plan.preservedMedia) ||
+      JSON.stringify(current.volumePlan) !== JSON.stringify(plan.volumePlan) ||
       current.containers.some((item) => item.running)
     )
       throw new BackupRequirementError('App, database or writer state changed during the snapshot.');
+    if (plan.volumePlan !== undefined) await this.volumes.verifyStopped(plan.volumePlan, signal);
     return current.containers;
+  }
+
+  async captureVolumes(
+    plan: BackupRuntimePlan,
+    inventories: readonly BackupVolumeInventory[],
+    options: {
+      content: string;
+      maximumBytes: number;
+      baseline: { entries: number; pathBytes: number };
+      signal: AbortSignal;
+      progress: (bytes: number) => void;
+    },
+  ): Promise<BackupVolumeArchive[]> {
+    if (plan.volumePlan === undefined) throw new BackupRequirementError('The app volume backup plan was not issued for capture.');
+    await this.verifyStopped(plan, options.signal);
+    return this.volumes.capture({ ...options, plan: plan.volumePlan, inventories });
   }
 
   async stop(container: BackupContainer) {

@@ -89,6 +89,7 @@ async function run(
 
 it.skipIf(process.platform !== 'linux')('Linux reconstructs a manifest-only link after files and rejects a later link replacement', async () => {
   const test = await fixture();
+  if (test.source.manifest.version === 3) throw new Error('Expected a legacy backup fixture.');
   test.source.manifest = {
     ...test.source.manifest,
     version: 2,
@@ -112,6 +113,7 @@ it.skipIf(process.platform !== 'linux')('Linux reconstructs a manifest-only link
 
 it.skipIf(process.platform !== 'linux')('Linux rejects a replaced parent immediately after creating a staged link', async () => {
   const test = await fixture();
+  if (test.source.manifest.version === 3) throw new Error('Expected a legacy backup fixture.');
   test.source.manifest = {
     ...test.source.manifest,
     version: 2,
@@ -135,6 +137,7 @@ it.skipIf(process.platform !== 'linux').each(['symlink', 'lchown', 'lutimes'] as
   'Linux keeps outside staging untouched when the parent is replaced before %s',
   async (operation) => {
     const test = await fixture();
+    if (test.source.manifest.version === 3) throw new Error('Expected a legacy backup fixture.');
     test.source.manifest = {
       ...test.source.manifest,
       version: 2,
@@ -204,6 +207,7 @@ it.skipIf(process.platform !== 'linux').each(['symlink', 'lchown', 'lutimes'] as
 
 it.skipIf(process.platform === 'linux')('fails closed for link reconstruction without a Linux descriptor root', async () => {
   const test = await fixture();
+  if (test.source.manifest.version === 3) throw new Error('Expected a legacy backup fixture.');
   test.source.manifest = {
     ...test.source.manifest,
     version: 2,
@@ -223,6 +227,7 @@ it('preserves existing destination media without materializing or accounting an 
   const test = await fixture();
   expect(restoreTreesForManifest(test.source.manifest)).toContain('media');
   await fs.rm(path.join(test.source.content, 'data/media'), { recursive: true });
+  if (test.source.manifest.version === 3) throw new Error('Expected a legacy backup fixture.');
   test.source.manifest = {
     ...test.source.manifest,
     version: 2,

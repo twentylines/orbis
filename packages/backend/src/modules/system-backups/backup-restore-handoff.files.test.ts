@@ -220,6 +220,7 @@ const assertOriginalUntouched = () => {
 it('binds preserved media into the staged journal only after authenticating the v2 source manifest', async () => {
   options.claimReviewedSource = async (journal, accept) => {
     const source = await makeReviewedBackupFixture(root);
+    if (source.manifest.version === 3) throw new Error('Expected a legacy backup fixture.');
     source.manifest = { ...source.manifest, version: 2, mediaPolicy: 'preserve-destination' };
     const bytes = Buffer.from(JSON.stringify(source.manifest));
     await fs.writeFile(path.join(source.content, 'manifest.json'), bytes);

@@ -1,3 +1,4 @@
+import { coreCaptureRecoveryRequired } from '@/common/backup-maintenance';
 import http from 'node:http';
 import path from 'node:path';
 import { isIP } from 'node:net';
@@ -21,6 +22,7 @@ export class NearbyDiscoveryService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    if (coreCaptureRecoveryRequired()) return;
     if (!this.socketPath || this.config.get('demoMode')) return;
     void this.reconcile();
     this.timer = setInterval(() => void this.reconcile(), 60_000);

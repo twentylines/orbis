@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import { createGunzip } from 'node:zlib';
 
-export type ArchiveEntry = { path: string; type: string; linkTarget?: string };
+export type TarAttributes = { uid: number; gid: number; mode: number; mtime: number };
+export type ArchiveEntry = { path: string; type: string; linkTarget?: string; attributes?: TarAttributes };
 export type TarEntry = ArchiveEntry & { size: number };
 export type TarReaderOptions = {
   strict?: boolean;
+  attributes?: boolean;
   maxEntries?: number;
   maxExpandedBytes?: number;
   collectEntries?: boolean;
@@ -28,7 +30,34 @@ const sizeOf = (field: Buffer) => {
   return Number(value);
 };
 
-const paxFields = (data: Buffer, strict = false) => {
+const attributeNumber = (field: Buffer, max: number, signed = false) => {
+  let value: bigint;
+  const first = field[0] ?? 0;
+  if (first & 0x80) {
+    if (!signed && first & 0x40) throw invalid();
+    value = BigInt(first & 0x7f);
+    for (const byte of field.subarray(1)) value = value * 256n + BigInt(byte);
+    if (first & 0x40) value -= 1n << BigInt(field.length * 8 - 1);
+  } else {
+    const raw = field.toString('latin1');
+    if (!/^ *[0-7]+[ \0]*$/.test(raw)) throw invalid();
+    value = BigInt(`0o${raw.replace(/[ \0]/g, '')}`);
+  }
+  if (value > BigInt(max) || value < BigInt(-max)) throw invalid();
+  return Number(value);
+};
+
+const paxAttribute = (key: string, value: string) => {
+  if (value.length > 64 || !(key === 'mtime' ? /^-?[0-9]+(?:\.[0-9]+)?$/ : /^[0-9]+$/).test(value)) throw invalid();
+  const number = Number(value);
+  const max = key === 'mtime' ? 8_640_000_000_000 : 0xffffffff;
+  if (!Number.isFinite(number) || number > max || number < (key === 'mtime' ? -max : 0)) throw invalid();
+  const [integer = '', fraction = ''] = value.replace(/^-/, '').split('.');
+  if (BigInt(integer) > BigInt(max) || (BigInt(integer) === BigInt(max) && /[1-9]/.test(fraction))) throw invalid();
+  return number;
+};
+
+const paxFields = (data: Buffer, strict = false, attributes = false) => {
   const fields: Record<string, string> = {};
   let offset = 0;
   while (offset < data.length) {
@@ -52,6 +81,11 @@ const paxFields = (data: Buffer, strict = false) => {
     if (['path', 'linkpath', 'size'].includes(key)) {
       const value = record.slice(equal + 1);
       if (value.length > (key === 'size' ? 32 : 4096) || (key === 'size' && !/^(0|[1-9][0-9]*)$/.test(value))) throw invalid();
+      fields[key] = value;
+    }
+    if (attributes && ['uid', 'gid', 'mtime'].includes(key)) {
+      const value = record.slice(equal + 1);
+      paxAttribute(key, value);
       fields[key] = value;
     }
     offset += length;
@@ -110,8 +144,8 @@ export async function readTarArchive(file: string, gzip: boolean, signal?: Abort
           offset += count;
           if (!remaining && extension) {
             const payload = Buffer.concat(extension.chunks);
-            if (extension.kind === 'g') global = { ...global, ...paxFields(payload, options.strict) };
-            else if (extension.kind === 'x') local = { ...local, ...paxFields(payload, options.strict) };
+            if (extension.kind === 'g') global = { ...global, ...paxFields(payload, options.strict, options.attributes) };
+            else if (extension.kind === 'x') local = { ...local, ...paxFields(payload, options.strict, options.attributes) };
             else local[extension.kind === 'L' ? 'path' : 'linkpath'] = text(payload).replace(/\n$/, '');
             extension = null;
           }
@@ -155,8 +189,22 @@ export async function readTarArchive(file: string, gzip: boolean, signal?: Abort
           if (options.strict && type === 'd' && size !== 0) throw invalid();
           if (entryCount++ >= (options.maxEntries ?? Number.MAX_SAFE_INTEGER) || size > (options.maxExpandedBytes ?? Number.MAX_SAFE_INTEGER))
             throw invalid();
-          if (options.collectEntries !== false) entries.push({ path, type, ...(type === 'l' || type === 'h' ? { linkTarget } : {}) });
-          await options.onEntry?.({ path, type, size, ...(type === 'l' || type === 'h' ? { linkTarget } : {}) });
+          let attributes: TarAttributes | undefined;
+          if (options.attributes) {
+            const mode = attributeNumber(header.subarray(100, 108), 0o7777);
+            const uid = attributeNumber(header.subarray(108, 116), 0xffffffff);
+            const gid = attributeNumber(header.subarray(116, 124), 0xffffffff);
+            const mtime = attributeNumber(header.subarray(136, 148), 8_640_000_000_000, true);
+            attributes = {
+              mode,
+              uid: fields.uid === undefined ? uid : paxAttribute('uid', fields.uid),
+              gid: fields.gid === undefined ? gid : paxAttribute('gid', fields.gid),
+              mtime: fields.mtime === undefined ? mtime : paxAttribute('mtime', fields.mtime),
+            };
+          }
+          const entry = { path, type, ...(type === 'l' || type === 'h' ? { linkTarget } : {}), ...(attributes ? { attributes } : {}) };
+          if (options.collectEntries !== false) entries.push(entry);
+          await options.onEntry?.({ ...entry, size });
           payloadBytes = size;
           currentEntry = true;
           remaining = Math.ceil(size / 512) * 512;

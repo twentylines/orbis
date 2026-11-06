@@ -20,7 +20,7 @@ import YAML from 'yaml';
 import { installationMode } from './common/installation-mode';
 import { retainedBootstrapStartup, retainedSettledStartup } from './modules/system-backups/backup-restore-startup';
 import { QueueFactory } from './modules/queue/queue.factory';
-import { backupMaintenanceActive } from './common/backup-maintenance';
+import { backupMaintenanceActive, coreCaptureRecoveryRequired } from './common/backup-maintenance';
 import { restoreStartupRole } from './modules/system-backups/backup-restore-startup';
 import { ResetService } from './modules/system-reset/reset.service';
 import { controllerOverlayStartup } from './common/controller-overlay-startup';
@@ -29,6 +29,11 @@ import { controllerOverlayStartup } from './common/controller-overlay-startup';
 export class AppService {
   private retainedPreparation?: Promise<void>;
   private retainedTimersInstalled = false;
+  private coreCapturePreparation?: Promise<void>;
+  private coreCapturePrepared = false;
+  private coreCaptureTimersAttempted = false;
+  private coreCaptureTimersError?: unknown;
+  private coreCaptureTimersFailed = false;
   constructor(
     private readonly cache: CacheService,
     private readonly configuration: ConfigurationService,
@@ -48,6 +53,10 @@ export class AppService {
   ) {}
 
   public async bootstrap(prepareRecovery: () => Promise<void> = async () => undefined) {
+    if (coreCaptureRecoveryRequired()) {
+      this.logger.warn('Core capture recovery requires review. App startup remains held.');
+      return;
+    }
     const installation = installationMode();
     const preserveControllerNetwork = controllerOverlayStartup();
     if (!retainedBootstrapStartup() && !retainedSettledStartup()) await this.databaseService.migrate();
@@ -123,6 +132,47 @@ export class AppService {
       this.logger.error(e);
       Sentry.captureException(e, { tags: { source: 'bootstrap' } });
       if (installation.phase === 'resume' || preserveControllerNetwork) throw e;
+    }
+  }
+
+  private requireCoreCaptureHold() {
+    if (installationMode().phase !== 'normal' || coreCaptureRecoveryRequired() !== false || backupMaintenanceActive() !== true)
+      throw new Error('Core capture presentation requires normal mode and the maintenance hold.');
+  }
+
+  public prepareCoreCapturePresentation(): Promise<void> {
+    this.coreCapturePreparation ??= Promise.resolve().then(async () => {
+      this.requireCoreCaptureHold();
+      const { version, userSettings } = this.configuration.getConfig();
+      this.configuration.initSentry({ release: version, allowSentry: userSettings.allowErrorMonitoring });
+      this.requireCoreCaptureHold();
+      await this.marketplaceService.initialize({ refreshRepositories: false });
+      this.requireCoreCaptureHold();
+      const statuses = await this.appStatusSyncService.syncAllAppStatuses();
+      this.requireCoreCaptureHold();
+      if (!statuses.success) throw new Error('App status reconciliation failed during core capture startup.');
+      this.coreCapturePrepared = true;
+    });
+    return this.coreCapturePreparation;
+  }
+
+  public activateCoreCaptureTimers(): void {
+    this.requireCoreCaptureHold();
+    if (!this.coreCapturePrepared) throw new Error('Core capture presentation is not prepared.');
+    if (this.coreCaptureTimersAttempted) {
+      if (this.coreCaptureTimersFailed) throw this.coreCaptureTimersError;
+      return;
+    }
+    this.coreCaptureTimersAttempted = true;
+    try {
+      if (this.configuration.getConfig().__prod__) this.repoQueue.publishRepeatable({ command: 'update_all' }, '*/15 * * * *');
+      this.requireCoreCaptureHold();
+      this.systemEventsQueue.publishRepeatable({ command: 'sync_app_statuses' }, '*/5 * * * *');
+      this.requireCoreCaptureHold();
+    } catch (error) {
+      this.coreCaptureTimersFailed = true;
+      this.coreCaptureTimersError = error;
+      throw error;
     }
   }
 

@@ -1,3 +1,4 @@
+import { coreCaptureRecoveryRequired } from '@/common/backup-maintenance';
 import {
   BadRequestException,
   ConflictException,
@@ -76,6 +77,7 @@ export class ClusterSyncService implements OnModuleInit, OnModuleDestroy {
     private readonly logger: LoggerService,
   ) {}
   onModuleInit() {
+    if (coreCaptureRecoveryRequired()) return;
     this.timer = setInterval(() => {
       void this.tick();
     }, 60_000);

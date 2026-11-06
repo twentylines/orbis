@@ -13,12 +13,14 @@ import { DriveHealthService } from './drive-health.service';
 import { HostDeviceHistoryService } from './host-device-history.service';
 import { MonitoringActivityModule } from '@/core/monitoring/monitoring-activity.module';
 import { OrbisReleaseChannelsService } from './orbis-release-channels.service';
+import { SentinelService } from './sentinel.service';
 
 @Module({
   imports: [DockerModule, AppsModule, MonitoringActivityModule],
   controllers: [SystemController],
   providers: [
     SystemService,
+    SentinelService,
     OrbisReleaseService,
     OrbisReleaseChannelsService,
     ContainerTelemetryService,

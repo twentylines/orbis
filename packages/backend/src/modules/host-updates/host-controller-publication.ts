@@ -92,7 +92,12 @@ export function copyControllerPublicationExpectation(raw: ControllerPublicationE
   return immutable(structuredClone(value));
 }
 
-function metadata(bytes: Buffer, maximum = controllerPublicationLimits.metadataBytes, maximumString = 65536): Record<string, unknown> {
+function metadata(
+  bytes: Buffer,
+  maximum = controllerPublicationLimits.metadataBytes,
+  maximumString = 65536,
+  bounds = { nodes: 50_000, array: 2048, safeInteger: false },
+): Record<string, unknown> {
   if (!bytes.length || bytes.length > maximum) throw invalid();
   let text: string;
   let parsed: unknown;
@@ -119,7 +124,7 @@ function metadata(bytes: Buffer, maximum = controllerPublicationLimits.metadataB
     return result;
   };
   const visit = (depth: number) => {
-    if (++nodes > 50_000 || depth > 32) throw invalid();
+    if (++nodes > bounds.nodes || depth > 32) throw invalid();
     space();
     if (text[cursor] === '{') {
       cursor++;
@@ -144,7 +149,7 @@ function metadata(bytes: Buffer, maximum = controllerPublicationLimits.metadataB
       let count = 0;
       if (text[cursor] !== ']') {
         for (;;) {
-          if (++count > 2048) throw invalid();
+          if (++count > bounds.array) throw invalid();
           visit(depth + 1);
           space();
           if (text[cursor++] !== ',') break;
@@ -156,9 +161,10 @@ function metadata(bytes: Buffer, maximum = controllerPublicationLimits.metadataB
       while (cursor < text.length && !/[\t\n\r ,\]}]/.test(text[cursor] ?? '')) cursor++;
       const token = text.slice(start, cursor);
       if (!['true', 'false', 'null'].includes(token)) {
-        if (!/^-?(?:0|[1-9][0-9]*)$/.test(token)) throw invalid();
+        if (token.length > (bounds.safeInteger ? 17 : 21) || !/^-?(?:0|[1-9][0-9]*)$/.test(token)) throw invalid();
         const number = BigInt(token);
         if (number < -(2n ** 63n) || number >= 2n ** 64n) throw invalid();
+        if (bounds.safeInteger && (number < -9007199254740991n || number > 9007199254740991n)) throw invalid();
       }
     }
   };
@@ -169,6 +175,9 @@ function metadata(bytes: Buffer, maximum = controllerPublicationLimits.metadataB
 }
 export function parseControllerPublicationResponse(bytes: Buffer) {
   return metadata(bytes, controllerPublicationLimits.receiptBytes, 1398104);
+}
+export function parseBackupVolumeCaptureResponse(bytes: Buffer) {
+  return metadata(bytes, 64 * 1024 * 1024, 4096, { nodes: 2_500_000, array: 250_000, safeInteger: true });
 }
 const ociIndex = 'application/vnd.oci.image.index.v1+json';
 const dockerIndex = 'application/vnd.docker.distribution.manifest.list.v2+json';

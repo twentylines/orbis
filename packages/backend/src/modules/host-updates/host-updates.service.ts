@@ -1,4 +1,6 @@
 import { decodeBackupArchiveCapability, decodeCaptureV6Capability, decodeRestoreV6Capability } from './host-v6-capabilities';
+import { decodeBackupVolumeCapability, decodeHostVolumePlan, decodeHostVolumeInventories, decodeHostVolumeStopped } from './host-volume-capture';
+import type { BackupVolumePlan } from '../system-backups/backup-docker-volumes';
 import { decodeProxyHostIdentity, type ProxyHostIdentity } from './host-proxy-identity';
 import { appRuntimeEntryLimit, appRuntimeImageBindings, decodeAppRuntimeCapture } from '../system-backups/time-machine-app-runtime-capture';
 import { pipeline } from 'node:stream/promises';
@@ -61,6 +63,7 @@ import {
   copyControllerPublicationExpectation,
   decodeControllerPublicationReceipt,
   parseControllerPublicationResponse,
+  parseBackupVolumeCaptureResponse,
   type ControllerPublicationExpectation,
   type ControllerPublicationReceipt,
 } from './host-controller-publication';
@@ -236,6 +239,10 @@ export class HostUpdatesService {
       | '/v3/controller-capture-authority/capability'
       | '/v1/retained-restore/capability'
       | '/v1/backup-archive/capability'
+      | '/v1/backup-volumes/capability'
+      | `/v1/backup-volumes/${string}/prepare`
+      | `/v1/backup-volumes/${string}/inventory`
+      | `/v1/backup-volumes/${string}/verify`
       | '/v1/proxy-host-identity'
       | `/v3/controller-capture-authority/${string}/prepare`
       | `/v3/controller-capture-authority/${string}/recover`
@@ -254,6 +261,9 @@ export class HostUpdatesService {
   ): Promise<T> {
     const socketPath = this.requireSocket();
     const payload = body === undefined ? undefined : JSON.stringify(body);
+    const volumeEndpoint = endpoint.startsWith('/v1/backup-volumes/');
+    const volumeTimeout = volumeEndpoint && endpoint.endsWith('/inventory') ? 330_000 : 30_000;
+    const volumeLimit = endpoint.endsWith('/inventory') ? 64 * 1024 * 1024 : endpoint.endsWith('/prepare') ? 4 * 1024 * 1024 : 4096;
     const response = await new Promise<{ status: number; data: unknown }>((resolve, reject) => {
       const request = http.request(
         {
@@ -266,16 +276,24 @@ export class HostUpdatesService {
             endpoint.startsWith('/v2/controller-capture-authority/') ||
             endpoint.startsWith('/v3/controller-capture-authority/') ||
             endpoint === '/v1/backup-archive/capability' ||
+            endpoint.startsWith('/v1/backup-volumes/') ||
             endpoint === '/v1/proxy-host-identity'
               ? AbortSignal.any([
-                  AbortSignal.timeout(endpoint === '/v1/controller-publication/prepare' ? controllerPublicationLimits.deadlineMs : 30_000),
+                  AbortSignal.timeout(
+                    volumeEndpoint
+                      ? volumeTimeout
+                      : endpoint === '/v1/controller-publication/prepare'
+                        ? controllerPublicationLimits.deadlineMs
+                        : 30_000,
+                  ),
                   ...(cancellation ? [cancellation] : []),
                 ])
               : undefined,
           path: endpoint,
           method: payload === undefined ? 'GET' : 'POST',
-          timeout:
-            endpoint === '/v1/controller-publication/prepare'
+          timeout: volumeEndpoint
+            ? volumeTimeout
+            : endpoint === '/v1/controller-publication/prepare'
               ? controllerPublicationLimits.deadlineMs
               : endpoint === '/v1/controller-config/capture'
                 ? 30_000
@@ -298,36 +316,55 @@ export class HostUpdatesService {
         (res) => {
           const chunks: Buffer[] = [];
           let size = 0;
+          res.on('error', reject);
+          res.on('aborted', () => reject(new Error('Host service response was interrupted.')));
+          if (
+            volumeEndpoint &&
+            (res.statusCode ?? 502) < 300 &&
+            (res.statusCode ?? 502) >= 200 &&
+            (res.headers['content-type'] !== 'application/json' ||
+              res.headers['cache-control'] !== 'no-store' ||
+              typeof res.headers['content-length'] !== 'string' ||
+              !/^(?:0|[1-9][0-9]*)$/.test(res.headers['content-length']) ||
+              Number(res.headers['content-length']) > volumeLimit ||
+              res.headers['transfer-encoding'] !== undefined)
+          ) {
+            res.destroy(new Error('Host storage response headers could not be verified.'));
+            return;
+          }
           res.on('data', (chunk: Buffer) => {
             size += chunk.length;
             if (
               size >
-              (endpoint === '/v1/controller-publication/prepare'
-                ? controllerPublicationLimits.receiptBytes
-                : endpoint === '/v1/controller-config/capture'
-                  ? 6 * 1024 * 1024
-                  : endpoint === '/v1/packages'
-                    ? 1024 * 1024
-                    : endpoint === '/v1/packages/plan'
-                      ? 256 * 1024
-                      : MAX_RESPONSE_BYTES)
+              (volumeEndpoint
+                ? volumeLimit
+                : endpoint === '/v1/controller-publication/prepare'
+                  ? controllerPublicationLimits.receiptBytes
+                  : endpoint === '/v1/controller-config/capture'
+                    ? 6 * 1024 * 1024
+                    : endpoint === '/v1/packages'
+                      ? 1024 * 1024
+                      : endpoint === '/v1/packages/plan'
+                        ? 256 * 1024
+                        : MAX_RESPONSE_BYTES)
             ) {
               res.destroy(new Error('Host service response was too large'));
               return;
             }
             chunks.push(chunk);
           });
-          res.on('error', reject);
           res.on('end', () => {
             try {
+              if (volumeEndpoint && res.headers['content-length'] !== String(size)) throw new Error('Truncated host storage response.');
               const bytes = Buffer.concat(chunks);
               resolve({
                 status: res.statusCode ?? 502,
-                data:
-                  endpoint.startsWith('/v1/controller-publication/') ||
-                  endpoint === '/v3/controller-capture-authority/capability' ||
-                  endpoint === '/v1/backup-archive/capability' ||
-                  endpoint === '/v1/retained-restore/capability'
+                data: endpoint.startsWith('/v1/backup-volumes/')
+                  ? parseBackupVolumeCaptureResponse(bytes)
+                  : endpoint.startsWith('/v1/controller-publication/') ||
+                      endpoint === '/v3/controller-capture-authority/capability' ||
+                      endpoint === '/v1/backup-archive/capability' ||
+                      endpoint === '/v1/retained-restore/capability'
                     ? parseControllerPublicationResponse(bytes)
                     : JSON.parse(bytes.toString('utf-8')),
               });
@@ -541,6 +578,15 @@ export class HostUpdatesService {
     let proxyHostIdentity: ProxyHostIdentity | undefined;
     let appRuntimeBinding: { entrySha256: string; daemonSha256: string; appRuntime: ReturnType<typeof decodeAppRuntimeCapture> } | undefined;
     let preparingAppRuntime = false;
+    let volumeBusy = false;
+    let volumeCapture:
+      | {
+          plan: BackupVolumePlan;
+          binding: { pointId: string; appRuntimeSha256: string; volumeContractSha256: string };
+          payload: typeof authorityBinding & { appRuntimeSha256: string; volumeContractSha256: string };
+          planSha256: string;
+        }
+      | undefined;
     const authorityVersion = appRuntimePolicy ? 3 : proxyPolicy ? 2 : 1;
     const authorityBinding = {
       token,
@@ -548,10 +594,23 @@ export class HostUpdatesService {
       preparationSha256: proof.preparationSha256,
       publicationProofSha256: createHash('sha256').update(receipt.read()).digest('hex'),
     };
+    const requireVolumeCapture = async () => {
+      if (
+        released ||
+        !volumeCapture ||
+        !appRuntimeBinding ||
+        preparingAppRuntime ||
+        volumeCapture.binding.appRuntimeSha256 !== appRuntimeBinding.entrySha256 ||
+        (await controllerCaptureSocketIdentity(socket)) !== socketIdentity
+      )
+        throw new ServiceUnavailableException('App storage capture is no longer available.');
+      return volumeCapture;
+    };
     return Object.freeze({
       prepareProxyHostIdentity: async (cancellation?: AbortSignal) => {
-        if (!proxyPolicy || released || (await controllerCaptureSocketIdentity(socket)) !== socketIdentity)
+        if (!proxyPolicy || released || volumeBusy || (await controllerCaptureSocketIdentity(socket)) !== socketIdentity)
           throw new ServiceUnavailableException('Protected proxy capture preparation is unavailable.');
+        volumeCapture = undefined;
         const response = await this.call<{ version: number; pointId: string; proxyHostIdentity: unknown; proxyPreparationSha256: string }>(
           `/v2/controller-capture-authority/${identity.pointId}/prepare`,
           authorityBinding,
@@ -569,10 +628,11 @@ export class HostUpdatesService {
         return structuredClone(proxyHostIdentity);
       },
       prepareAppRuntime: async (cancellation?: AbortSignal) => {
-        if (!appRuntimePolicy || released || preparingAppRuntime)
+        if (!appRuntimePolicy || released || preparingAppRuntime || volumeBusy)
           throw new ServiceUnavailableException('Protected app capture preparation is unavailable.');
         preparingAppRuntime = true;
         appRuntimeBinding = undefined;
+        volumeCapture = undefined;
         proxyHostIdentity = undefined;
         try {
           if ((await controllerCaptureSocketIdentity(socket)) !== socketIdentity)
@@ -665,6 +725,55 @@ export class HostUpdatesService {
           preparingAppRuntime = false;
         }
       },
+      prepareVolumes: async (plan: BackupVolumePlan, cancellation?: AbortSignal) => {
+        if (!appRuntimePolicy || !capability || !appRuntimeBinding || preparingAppRuntime || released || volumeBusy)
+          throw new ServiceUnavailableException('Prepare app data before capturing its storage.');
+        const independent = structuredClone(plan);
+        const app = appRuntimeBinding;
+        volumeBusy = true;
+        volumeCapture = undefined;
+        try {
+          if ((await controllerCaptureSocketIdentity(socket)) !== socketIdentity) throw new Error('Host socket changed.');
+          const support = decodeBackupVolumeCapability(
+            await this.call('/v1/backup-volumes/capability', undefined, cancellation),
+            capability.sourceSha256,
+          );
+          const binding = { pointId: identity.pointId, appRuntimeSha256: app.entrySha256, volumeContractSha256: support.contractSha256 };
+          const payload = { ...authorityBinding, appRuntimeSha256: binding.appRuntimeSha256, volumeContractSha256: binding.volumeContractSha256 };
+          const response = await this.call(`/v1/backup-volumes/${identity.pointId}/prepare`, payload, cancellation);
+          if (released || appRuntimeBinding !== app || (await controllerCaptureSocketIdentity(socket)) !== socketIdentity)
+            throw new Error('App storage preparation changed.');
+          const planSha256 = decodeHostVolumePlan(response, binding, independent);
+          volumeCapture = { plan: independent, binding, payload, planSha256 };
+          return Object.freeze({ planSha256, volumeCount: independent.volumes.length });
+        } finally {
+          volumeBusy = false;
+        }
+      },
+      inventoryVolumes: async (cancellation?: AbortSignal) => {
+        if (volumeBusy) throw new ServiceUnavailableException('App storage capture is already running.');
+        volumeBusy = true;
+        try {
+          const captured = await requireVolumeCapture();
+          const response = await this.call(`/v1/backup-volumes/${identity.pointId}/inventory`, captured.payload, cancellation);
+          if ((await requireVolumeCapture()) !== captured) throw new Error('App storage capture changed.');
+          return decodeHostVolumeInventories(response, captured.binding, captured.plan);
+        } finally {
+          volumeBusy = false;
+        }
+      },
+      verifyVolumesStopped: async (cancellation?: AbortSignal) => {
+        if (volumeBusy) throw new ServiceUnavailableException('App storage capture is already running.');
+        volumeBusy = true;
+        try {
+          const captured = await requireVolumeCapture();
+          const response = await this.call(`/v1/backup-volumes/${identity.pointId}/verify`, captured.payload, cancellation);
+          if ((await requireVolumeCapture()) !== captured) throw new Error('App storage capture changed.');
+          decodeHostVolumeStopped(response, captured.binding);
+        } finally {
+          volumeBusy = false;
+        }
+      },
       renew: async (cancellation?: AbortSignal) => {
         if (released) throw new ServiceUnavailableException('Controller capture fence is no longer held.');
         if ((await controllerCaptureSocketIdentity(socket)) !== socketIdentity)
@@ -683,6 +792,7 @@ export class HostUpdatesService {
         if (released) return;
         await releaseAttempt();
         released = true;
+        volumeCapture = undefined;
       },
       finalizeControllerArchive: async (image: RetainedImage, open: () => Promise<Readable>, cancellation?: AbortSignal) => {
         if (released || (await controllerCaptureSocketIdentity(socket)) !== socketIdentity)

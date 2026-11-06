@@ -246,7 +246,7 @@ class RecoveryTests(unittest.TestCase):
             with mock.patch.object(P,'host'),mock.patch.object(P,'pending_transaction',return_value=(root,{'phase':'recovery-required','action':{'kind':'install'}})),mock.patch.object(P,'inspect',return_value={'kind':'ready'}),mock.patch.object(P,'tools_required',return_value=False),self.assertRaisesRegex(P.PrerequisiteError,'Inspection'):
                 P.prepare('default',root,inspect_only=True)
     def test_foreign_containerd_workloads_block_before_package_or_container_changes(self):
-        with mock.patch.object(P.shutil,'which',return_value='/usr/bin/ctr'),mock.patch.object(P,'run',return_value='moby\nk8s.io') as execute,self.assertRaisesRegex(P.PrerequisiteError,'Other workloads share'):
+        with mock.patch.object(Path,'exists',return_value=False),mock.patch.object(P.shutil,'which',side_effect=lambda name: '/usr/bin/ctr' if name == 'ctr' else None),mock.patch.object(P,'run',return_value='moby\nk8s.io') as execute,self.assertRaisesRegex(P.PrerequisiteError,'Other workloads share'):
             P.require_exclusive_engine({'containerd.io':'1'})
         self.assertEqual(execute.call_count,1)
 

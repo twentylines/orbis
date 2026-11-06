@@ -223,10 +223,12 @@ let payload: unknown;
 let status: number;
 let capability: unknown;
 let archiveCapability: unknown;
+let volumeCapability: unknown;
 let archiveStatus: number;
 let afterRead: (() => void | Promise<void>) | undefined;
 let rawBody: Buffer | undefined;
 let dropResponse = false;
+let alterVolumeReply: ((response: http.ServerResponse) => void) | undefined;
 const requests: { path: string; body: unknown }[] = [];
 const requestHeaders: http.IncomingHttpHeaders[] = [];
 const originalSocket = process.env.ORBIS_HOST_SOCKET;
@@ -259,14 +261,21 @@ beforeAll(async () => {
       return;
     }
     response.statusCode = request.url === '/v1/backup-archive/capability' ? archiveStatus : status;
-    if (request.url?.endsWith('/app-runtime')) {
+    if (request.url?.endsWith('/app-runtime') || request.url?.startsWith('/v1/backup-volumes/')) {
       response.setHeader('Content-Type', 'application/json');
       response.setHeader('Cache-Control', 'no-store');
     }
+    if (request.url?.startsWith('/v1/backup-volumes/') && request.url.endsWith('/inventory')) alterVolumeReply?.(response);
     response.end(
       rawBody ??
         JSON.stringify(
-          request.url === '/v1/backup-archive/capability' ? archiveCapability : request.url?.endsWith('/capability') ? capability : payload,
+          request.url === '/v1/backup-archive/capability'
+            ? archiveCapability
+            : request.url === '/v1/backup-volumes/capability'
+              ? volumeCapability
+              : request.url?.endsWith('/capability')
+                ? capability
+                : payload,
         ),
     );
   });
@@ -281,6 +290,7 @@ beforeEach(() => {
   afterRead = undefined;
   rawBody = undefined;
   dropResponse = false;
+  alterVolumeReply = undefined;
   capability = { version: 1, capability: 'controller-publication.v1' };
   archiveStatus = 200;
   archiveCapability = archiveContract();
@@ -810,6 +820,15 @@ it.each([
   'daemon-drift',
   'lost-finalize-reply',
   'concurrent',
+  'volume',
+  'volume-foreign-source',
+  'volume-foreign-plan',
+  'volume-cacheable',
+  'volume-content-type',
+  'volume-chunked',
+  'volume-invalid-inventory',
+  'volume-cancelled-inventory',
+  'volume-released-inventory',
 ] as const)('binds protected app preparation and final receipt: %s', async (change) => {
   const fixture = authorityFixture();
   const policyDescriptor = {
@@ -843,6 +862,46 @@ it.each([
     networkDefinitions: [],
   };
   const blob = encode({ ...appDescriptor, sha256: sha(`orbis.app-runtime-capture.v1\n${canonical(appDescriptor)}`) });
+  const volumeCase = change.startsWith('volume');
+  const plan = {
+    version: 1 as const,
+    volumes: [
+      {
+        key: 'd'.repeat(64),
+        sourceName: 'source',
+        mounts: [{ containerId: 'b'.repeat(64), project: 'app_store', service: 'app', ordinal: 1, target: '/data', readOnly: false }],
+      },
+    ],
+  };
+  const volumeUnsigned = {
+    version: 1,
+    schema: 'orbis.backup-volume-capture.v1',
+    manifestVersion: 3,
+    appRuntimeSchema: 'orbis.app-runtime-capture.v1',
+    inventorySchema: 'orbis.backup-volume-inventory.v1',
+    authority: 'root-controller-capture-fence.v2',
+    scope: 'orbis-managed-writers.v1',
+    sourceSha256: (change === 'volume-foreign-source' ? 'f' : 'a').repeat(64),
+  };
+  volumeCapability = { ...volumeUnsigned, contractSha256: sha(`orbis.backup-volume-capture-capability.v1\n${canonical(volumeUnsigned)}`) };
+  const volumeBinding = {
+    version: 1,
+    pointId: appDescriptor.pointId,
+    appRuntimeSha256: sha(blob),
+    volumeContractSha256: (volumeCapability as { contractSha256: string }).contractSha256,
+  };
+  const captureUnsigned = {
+    version: 3,
+    runtimeSchema: 'orbis.time-machine-runtime.v6',
+    imageCaptureSchema: 'orbis.time-machine-image-capture.v2',
+    controllerAuthoritySchema: 'orbis.controller-capture-authority.v4',
+    appRuntimeSchema: 'orbis.app-runtime-capture.v1',
+    proxyHostIdentitySchema: 'orbis.proxy-host-identity-policy.v1',
+    coherenceSchema: 'orbis.capture-coherence.v1',
+    sourceSha256: 'a'.repeat(64),
+  };
+  if (volumeCase) capability = { ...captureUnsigned, contractSha256: sha(`orbis.controller-capture-capability.v3\n${canonical(captureUnsigned)}`) };
+  const selection = volumeCase ? await service.requireV6CaptureCapability() : undefined;
   const { authoritySha256: _old, ...old } = fixture.authority;
   const descriptor = {
     ...old,
@@ -861,11 +920,39 @@ it.each([
   const resumePromise = new Promise<void>((resolve) => {
     resume = resolve;
   });
+  let inventoryEntered = () => {};
+  let resumeInventory = () => {};
+  const inventoryStarted = new Promise<void>((resolve) => {
+    inventoryEntered = resolve;
+  });
+  const inventoryResume = new Promise<void>((resolve) => {
+    resumeInventory = resolve;
+  });
   afterRead = async () => {
     const last = requests.at(-1);
     rawBody = undefined;
     if (last?.path.endsWith('/acquire'))
-      payload = { version: 1, token: (last.body as { clientKey: string }).clientKey, expiresAt: Date.now() / 1000 + 120 };
+      payload = volumeCase
+        ? {
+            version: 2,
+            token: (last.body as { clientKey: string }).clientKey,
+            expiresAt: Date.now() / 1000 + 120,
+            captureContractSha256: selection?.contractSha256,
+          }
+        : { version: 1, token: (last.body as { clientKey: string }).clientKey, expiresAt: Date.now() / 1000 + 120 };
+    else if (last?.path.startsWith('/v1/backup-volumes/') && last.path.endsWith('/prepare')) {
+      const returned = change === 'volume-foreign-plan' ? { version: 1, volumes: [] } : plan;
+      payload = { ...volumeBinding, plan: returned, planSha256: sha(canonical(returned)) };
+    } else if (last?.path.endsWith('/inventory')) {
+      inventoryEntered();
+      await inventoryResume;
+      payload = {
+        ...volumeBinding,
+        inventories: [{ key: plan.volumes[0]?.key, sourceName: 'source', containerId: 'b'.repeat(64), entries: [{ name: '.', kind: 'directory' }] }],
+      };
+      if (change === 'volume-invalid-inventory') rawBody = Buffer.from('{"inventories":[],"inventories":[]}');
+    } else if (last?.path.endsWith('/renew')) payload = { version: 1, expiresAt: Date.now() / 1000 + 120 };
+    else if (last?.path.endsWith('/verify')) payload = { ...volumeBinding, stopped: true };
     else if (last?.path.endsWith('/prepare')) {
       payload = {
         version: 3,
@@ -895,7 +982,54 @@ it.each([
     } else if (last?.path.endsWith('/recover')) payload = { version: 3, state: 'finalized', authority };
     else payload = { version: 1, released: true };
   };
-  const fence = await service.acquireControllerCaptureFence(current.expected, fixture.receipt, undefined, undefined, true, true);
+  const fence = await service.acquireControllerCaptureFence(current.expected, fixture.receipt, undefined, undefined, true, true, selection);
+  if (volumeCase) {
+    await expect(fence.inventoryVolumes()).rejects.toThrow();
+    await expect(fence.prepareVolumes(plan)).rejects.toThrow();
+    await fence.prepareAppRuntime();
+    if (change === 'volume-foreign-source' || change === 'volume-foreign-plan') {
+      await expect(fence.prepareVolumes(plan)).rejects.toThrow();
+      if (change === 'volume-foreign-source')
+        expect(requests.some((r) => r.path.startsWith('/v1/backup-volumes/') && r.path.endsWith('/prepare'))).toBe(false);
+      await expect(fence.inventoryVolumes()).rejects.toThrow();
+    } else {
+      expect(await fence.prepareVolumes(plan)).toEqual({ planSha256: sha(canonical(plan)), volumeCount: 1 });
+      const firstVolume = plan.volumes[0];
+      if (!firstVolume) throw new Error('Missing volume fixture');
+      firstVolume.sourceName = 'changed';
+      const inventoryCancellation = new AbortController();
+      alterVolumeReply = (reply) => {
+        if (change === 'volume-cacheable') reply.setHeader('Cache-Control', 'public, max-age=60');
+        if (change === 'volume-content-type') reply.setHeader('Content-Type', 'text/plain');
+        if (change === 'volume-chunked') reply.setHeader('Transfer-Encoding', 'chunked');
+      };
+      const pendingInventory = fence.inventoryVolumes(inventoryCancellation.signal);
+      const rejectedInventory = change === 'volume' ? undefined : expect(pendingInventory).rejects.toThrow();
+      await inventoryStarted;
+      await expect(fence.inventoryVolumes()).rejects.toThrow();
+      await fence.renew();
+      if (change === 'volume-cancelled-inventory') inventoryCancellation.abort();
+      if (change === 'volume-released-inventory') await fence.release();
+      resumeInventory();
+      if (rejectedInventory) {
+        await rejectedInventory;
+        await fence.release();
+        return;
+      }
+      const inventories = await pendingInventory;
+      expect(inventories[0]?.sourceName).toBe('source');
+      expect(Object.isFrozen(inventories)).toBe(true);
+      expect(Object.isFrozen(inventories[0]?.entries[0])).toBe(true);
+      await fence.verifyVolumesStopped();
+      const cancelled = new AbortController();
+      cancelled.abort();
+      await expect(fence.prepareAppRuntime(cancelled.signal)).rejects.toThrow();
+      await expect(fence.inventoryVolumes()).rejects.toThrow();
+    }
+    await fence.release();
+    await expect(fence.verifyVolumesStopped()).rejects.toThrow();
+    return;
+  }
   if (change === 'substituted-blob' || change === 'truncated-blob' || change === 'oversized-blob' || change === 'bad-summary') {
     await expect(fence.prepareAppRuntime()).rejects.toThrow();
     await expect(fence.finalizeControllerArchive(fixture.image, async () => Readable.from([fixture.bytes]))).rejects.toThrow();

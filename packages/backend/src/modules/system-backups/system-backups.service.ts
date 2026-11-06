@@ -1,3 +1,4 @@
+import { coreCaptureRecoveryRequired } from '@/common/backup-maintenance';
 import {
   createCaptureCoherenceReceipt,
   hashCaptureSnapshotFile,
@@ -7,6 +8,9 @@ import {
 import { QueueFactory } from '../queue/queue.factory';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
+import { requireLegacyBackupVolumePolicy, type BackupVolumeArchive } from './backup-docker-volumes';
+import { backupVolumeContentBudget, verifyBackupVolumeContents } from './backup-volume-contents';
+import { parseFullBackupManifest } from './backup-import';
 import path from 'node:path';
 import type { Readable } from 'node:stream';
 import type { Request } from 'express';
@@ -80,6 +84,10 @@ export type LocalCaptureHooks = {
   maximumPlaintextBytes: number;
   hostPreflight: (signal: AbortSignal) => Promise<void>;
   beforeQuiesce: (plan: LocalCapturePlan, signal: AbortSignal) => Promise<void>;
+  volumeCapture?: Pick<
+    Awaited<ReturnType<HostUpdatesService['acquireControllerCaptureFence']>>,
+    'prepareVolumes' | 'inventoryVolumes' | 'verifyVolumesStopped'
+  >;
 };
 
 const backupStartupErrorCodes = new Set(['ENOENT', 'EACCES', 'EPERM', 'EIO', 'ENOSPC', 'EROFS', 'EBUSY', 'ENOTEMPTY', 'EMFILE', 'ENFILE']);
@@ -183,6 +191,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
     }
   }
   onModuleInit() {
+    if (coreCaptureRecoveryRequired()) return;
     if (restoreStartupRole() === 'verify') return;
     return this.initialize();
   }
@@ -374,10 +383,16 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
   }
 
   // Server-only capture seam; its controller performs operator/session authorization.
-  async startLocalCapture(ownerId: number, passphrase: string, snapshot: (value: LocalBackupSnapshot) => Promise<void>, hooks?: LocalCaptureHooks) {
+  async startLocalCapture(
+    ownerId: number,
+    passphrase: string,
+    snapshot: (value: LocalBackupSnapshot) => Promise<void>,
+    hooks?: LocalCaptureHooks,
+    includeMedia = false,
+  ) {
     await this.initialize();
     if (this.closing) throw new ConflictException('Wait for Orbis to finish restarting before capturing.');
-    const job = await this.begin(ownerId, passphrase, snapshot, hooks);
+    const job = await this.begin(ownerId, passphrase, snapshot, hooks, includeMedia);
     const operation = this.active?.id === job.id ? this.active.done : Promise.resolve();
     return {
       id: job.id,
@@ -454,6 +469,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
     let queuePause: Awaited<ReturnType<QueueFactory['pauseForBackup']>> | undefined;
     const directory = this.directory(job.id);
     const content = path.join(directory, 'content');
+    const volumeCapture = hooks?.volumeCapture;
     const stage = (name: Job['stage'], message: string) => {
       job.stage = name;
       job.message = message;
@@ -471,6 +487,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       const expectedRoots = Object.fromEntries(dataRoots.map((name) => [name, path.join(this.config.get('directories').dataDir, name)]));
       expectedRoots['app-data'] = this.config.get('directories').appDataDir;
       const selectedDataRoots = dataRoots.filter((name) => includeMedia || name !== 'media');
+      await requireLegacyBackupVolumePolicy(this.config.get('directories').dataDir);
       if (!includeMedia) {
         try {
           const media = await fs.lstat(expectedRoots.media as string);
@@ -495,10 +512,16 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       const apps = await this.apps.getApps();
       if (apps.some((app) => !['running', 'stopped', 'missing'].includes(app.status)))
         throw new BackupRequirementError('Wait for apps to reach a stable state before creating a full backup.');
-      const plan = await this.runtime.plan(
-        apps.map((app) => `${app.appName}_${app.appStoreSlug}`),
-        includeMedia,
-      );
+      const projects = apps.map((app) => `${app.appName}_${app.appStoreSlug}`);
+      const plan = volumeCapture
+        ? await this.runtime.plan(projects, includeMedia, 'capture-local-volumes.v1')
+        : await this.runtime.plan(projects, includeMedia);
+      if ((volumeCapture && (!snapshot || !plan.volumePlan)) || (plan.volumePlan && !volumeCapture))
+        throw new BackupRequirementError('Protected app volume capture is not prepared.');
+      // Until volumes have an explicit media classification, only an opted-in
+      // capture can include them. A default backup must not silently add a library.
+      if (plan.volumePlan?.volumes.length && !includeMedia)
+        throw new BackupRequirementError('App storage needs review before shared media can be excluded. No backup was created.');
       if (
         apps.some(
           (app) => app.status === 'running' && !plan.containers.some((container) => container.project === `${app.appName}_${app.appStoreSlug}`),
@@ -527,6 +550,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
           },
           signal,
         );
+      if (volumeCapture && plan.volumePlan) await volumeCapture.prepareVolumes(plan.volumePlan, signal);
       const storage = await fs.statfs(directory);
       if (storage.bavail * storage.bsize < 3 * (estimate.totalBytes + databaseBytes) + 256 * 1024 * 1024)
         throw new BackupRequirementError('There is not enough free storage for the full backup and its encrypted output.');
@@ -538,6 +562,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
         await this.runtime.stop(container);
       }
       await this.runtime.verifyStopped(plan, signal);
+      if (volumeCapture) await volumeCapture.verifyVolumesStopped(signal);
       await fs.mkdir(content, { mode: 0o700 });
       stage('database', 'Saving the Orbis database.');
       await this.runtime.dumpDatabase(plan.databaseId, path.join(content, 'database.dump'), signal, (bytes) => {
@@ -547,27 +572,76 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       stage('inventory', 'Checking the stopped apps’ data.');
       const inventory = await inventoryBackup(roots, signal, excludedDirectories, { allowAppDataLinksAndSockets: true });
       const files = await copyBackupFiles(inventory, content, signal, (value) => Object.assign(job, value));
+      const directories = [...inventory.directories];
+      let volumes: BackupVolumeArchive[] = [];
+      if (volumeCapture && plan.volumePlan) {
+        const inventories = await volumeCapture.inventoryVolumes(signal);
+        const free = await fs.statfs(directory);
+        const available = free.bavail * free.bsize;
+        const existingBytes = files.reduce((total, file) => total + file.bytes, 0) + (await fs.stat(path.join(content, 'database.dump'))).size;
+        const maximumBytes = Math.floor(
+          Math.min(
+            (available - fullBackupLimits.reserveBytes) / 3,
+            (hooks?.maximumPlaintextBytes ?? 0) - existingBytes - fullBackupLimits.manifestBytes - 1024 * 1024,
+          ),
+        );
+        const minimumBytes = inventories.reduce(
+          (total, inventory) => total + inventory.entries.reduce((sum, entry) => sum + (entry.kind === 'file' ? entry.bytes : 0), 0),
+          0,
+        );
+        if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1024 || !Number.isSafeInteger(minimumBytes) || minimumBytes > maximumBytes)
+          throw new BackupRequirementError('There is not enough free storage for app volumes and their encrypted backup.');
+        stage('copying', 'Saving app volume data.');
+        volumes = await this.runtime.captureVolumes(plan, inventories, {
+          content,
+          maximumBytes,
+          baseline: backupVolumeContentBudget({ ...inventory, files }),
+          signal,
+          progress: (bytes) => {
+            job.completedBytes = bytes;
+          },
+        });
+        if (volumes.length !== plan.volumePlan.volumes.length)
+          throw new BackupRequirementError('The app volume snapshot is incomplete. No partial backup is available.');
+        if (volumes.length) {
+          const details = await fs.lstat(path.join(content, 'volumes'));
+          directories.push({ name: 'volumes', mode: 0o700, uid: details.uid, gid: details.gid, mtime: details.mtimeMs });
+          for (const volume of volumes)
+            for (const entry of [volume.archive, volume.inventory])
+              files.push({ name: entry.name, bytes: entry.bytes, sha256: entry.sha256, mode: 0o600, uid: details.uid, gid: details.gid, mtime: 0 });
+        }
+        await volumeCapture.verifyVolumesStopped(signal);
+      }
       await fs.writeFile(
         path.join(content, 'recovery.json'),
         JSON.stringify({ jwtSecret: this.config.get('jwtSecret'), userSettings: this.config.get('userSettings') }),
         { mode: 0o600, flag: 'wx' },
       );
-      const manifest = JSON.stringify({
+      const manifestValue = parseFullBackupManifest({
         format: 'orbis-full-backup',
-        version: 2,
+        version: volumes.length ? 3 : 2,
         mediaPolicy: includeMedia ? 'included' : 'preserve-destination',
         createdAt: job.createdAt,
         orbisVersion: process.env.ORBIS_VERSION ?? 'development',
         runtipiVersion: this.config.get('version'),
         architecture: this.config.get('architecture'),
         files,
-        directories: inventory.directories,
+        directories,
         symlinks: inventory.symlinks,
         excludedRuntimeSockets: inventory.excludedRuntimeSockets,
         containers: plan.containers,
         images: plan.images,
         exclusions: ['logs', 'cache', 'previous-backups', 'container-images', 'restore-recovery-files'],
+        ...(volumes.length ? { volumes } : {}),
       });
+      const verifyVolumes = async (ownSignal: AbortSignal) => {
+        if (!volumeCapture) return;
+        await volumeCapture.verifyVolumesStopped(ownSignal);
+        if (manifestValue.version === 3)
+          await verifyBackupVolumeContents(content, manifestValue.volumes, ownSignal, backupVolumeContentBudget(manifestValue));
+      };
+      await verifyVolumes(signal);
+      const manifest = JSON.stringify(manifestValue);
       if (Buffer.byteLength(manifest) > fullBackupLimits.manifestBytes)
         throw new BackupRequirementError('The backup inventory exceeds the supported manifest size. No partial export is available.');
       await fs.writeFile(path.join(content, 'manifest.json'), manifest, { mode: 0o600, flag: 'wx' });
@@ -595,6 +669,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
             if (coherenceSealed || !hooks || !release || !releaseRestore || !queuePause || !databaseSeal || !backupMaintenanceActive())
               throw new BackupRequirementError('Capture write barriers are no longer held.');
             const stopped = await this.runtime.verifyStopped(plan, check);
+            await verifyVolumes(check);
             if ((await this.tasks.read()).tasks.some((task) => ['queued', 'running', 'unconfirmed'].includes(task.status)))
               throw new BackupRequirementError('App tasks changed during the snapshot.');
             const databaseNow = await hashCaptureSnapshotFile(path.join(content, 'database.dump'), check);
@@ -634,6 +709,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
         });
       if (hooks && !coherenceSealed) throw new BackupRequirementError('The capture coherence checks did not complete.');
       await this.runtime.verifyStopped(plan, signal);
+      await verifyVolumes(signal);
       await queuePause.verify();
       // Release the app outage before compressing/encrypting the immutable snapshot.
       stage('resuming', 'Restarting apps that were running before the backup.');

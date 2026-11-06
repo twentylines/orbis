@@ -3,6 +3,7 @@
 
 import argparse
 import ast
+import io
 from functools import cmp_to_key
 import importlib.util
 import json
@@ -11,6 +12,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from urllib.error import HTTPError
 
 
 def load(name):
@@ -26,6 +28,8 @@ POLICY = load("orbis-release-policy")
 BASE = "https://github.com/twentylines/orbis/releases/"
 LEGACY_CHANNEL_BOOTSTRAPS = {"v0.1.0-beta.125": "5b0a23548769d6046d12e0273e135fddbcbf1a63f2d1c537ccc7987da59d892f"}
 LIMITS = {"install-orbis.py": 1024 * 1024, "release-manifest.json": 16 * 1024, BUILD.MANIFEST: 64 * 1024, BUILD.ARCHIVE: 8 * 1024 * 1024}
+HISTORY = 'installer-history.json'
+PAGES = 'https://twentylines.github.io/orbis/'
 
 
 class NoPublishedRelease(ValueError):
@@ -68,32 +72,11 @@ def head_commit(repository):
 
 
 def required_sources(source):
-    tree = ast.parse(source["scripts/orbis-installer-bundle.py"])
-    result = None
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "REQUIRED" for target in node.targets):
-            if result is not None: raise ValueError("Published source has no unique installer file list")
-            value = ast.literal_eval(node.value)
-            if not isinstance(value, set) or any(not isinstance(name, str) for name in value): raise ValueError("Invalid installer file list")
-            result = set(value)
-        elif isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name) and node.target.id == 'REQUIRED':
-            if result is None or not isinstance(node.op, ast.BitOr): raise ValueError("Invalid installer file list update")
-            value = ast.literal_eval(node.value)
-            if not isinstance(value, set) or any(not isinstance(name, str) for name in value): raise ValueError("Invalid installer file list update")
-            result.update(value)
-    if not result or len(result) > 66: raise ValueError("Published source has no bounded installer file list")
-    return result
+    return BUILD.source_required(source)
 
 
 def packaged_sources(source):
-    tree = ast.parse(source['scripts/orbis-installer-bundle.py'])
-    assignments = [node.value for node in tree.body if isinstance(node, ast.Assign)
-                   and any(isinstance(target, ast.Name) and target.id == 'BUILD_ONLY' for target in node.targets)]
-    if len(assignments) > 1: raise ValueError('Ambiguous installer build tools')
-    excluded = ast.literal_eval(assignments[0]) if assignments else set()
-    if not isinstance(excluded, set) or any(not isinstance(name, str) or not BUILD.ALLOWED.fullmatch(name) for name in excluded):
-        raise ValueError('Invalid installer build tools')
-    if excluded & required_sources(source): raise ValueError('Installer build tools overlap required runtime files')
+    excluded = BUILD.source_excluded(source)
     return {name: body for name, body in source.items() if BUILD.ALLOWED.fullmatch(name) and name not in excluded}
 
 
@@ -141,7 +124,80 @@ def site(repository, releases, output, fetch=BOOT.fetch, *, channel="stable"):
     return {"channel": channel, "tag": tag, "commit": release["commit"], "launcherSha256": BUILD.sha(downloaded[BUILD.LAUNCHER])}
 
 
-def channel_site(repository, releases, output, fetch=BOOT.fetch):
+def previous_installers(fetch):
+    def optional(url, limit):
+        try:
+            return fetch(url, limit)
+        except HTTPError as error:
+            if error.code != 404:
+                raise
+            error.close()
+            return None
+    data = optional(PAGES + HISTORY, 128 * 1024)
+    if data is not None:
+        value = json.loads(data)
+        if not isinstance(value, dict) or set(value) != {'schema', 'installers'} or value['schema'] != 'orbis.installer-history.v1':
+            raise ValueError('The existing installer history is invalid')
+        records = value['installers']
+    else:
+        bootstrap = optional(PAGES + 'install', 1024 * 1024)
+        if bootstrap is None:
+            return {}
+        assignments = [node.value for node in ast.parse(bootstrap).body if isinstance(node, ast.Assign)
+                       and any(isinstance(target, ast.Name) and target.id == 'INSTALLER' for target in node.targets)]
+        if not assignments:
+            return {}
+        if len(assignments) != 1:
+            raise ValueError('The existing installer has ambiguous source identity')
+        identity = ast.literal_eval(assignments[0])
+        if identity is None:
+            return {}
+        if not isinstance(identity, dict) or set(identity) != {'commit', 'manifestSha256'}:
+            raise ValueError('The existing installer identity is invalid')
+        records = {identity['commit']: identity['manifestSha256']}
+    if (not isinstance(records, dict) or len(records) > 512 or any(
+            not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}', commit)
+            or not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest) for commit, digest in records.items())):
+        raise ValueError('The existing installer history exceeds its contract')
+    return records
+
+
+def preserve_installers(repository, staged, records, fetch):
+    privacy = load('release-artifact-privacy')
+    budget = privacy.Budget()
+    total = 0
+    for commit, digest in sorted(records.items()):
+        subprocess.run(['git', 'merge-base', '--is-ancestor', commit, 'HEAD'], cwd=repository, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        source = BUILD.committed_files(repository, commit)
+        _, schema = BUILD.source_contract(source)
+        if schema is None:
+            raise ValueError('Retained installer source has no independent format')
+        base = BOOT.INSTALLER_BASE_URL + commit + '/'
+        manifest_bytes = fetch(base + BUILD.MANIFEST, LIMITS[BUILD.MANIFEST])
+        manifest = BOOT.verify_installer_manifest(manifest_bytes, {'commit': commit, 'manifestSha256': digest}, required=required_sources(source))
+        if manifest['schema'] != schema:
+            raise ValueError('Retained installer format differs from its source')
+        archive = fetch(base + BUILD.ARCHIVE, manifest['archiveBytes'])
+        verified = BOOT.verify_files(archive, manifest)
+        if verified != packaged_sources(source):
+            raise ValueError('Retained installer differs from its committed source')
+        total += len(manifest_bytes) + len(archive)
+        if total > 256 * 1024 * 1024:
+            raise ValueError('Retained installer storage exceeds its publication limit')
+        privacy.scan_stream(io.BytesIO(manifest_bytes), 'retained.manifest', budget)
+        privacy.scan_stream(io.BytesIO(archive), 'retained.archive', budget)
+        privacy.scan_tar(io.BytesIO(archive), 'retained.archive', budget, True)
+        folder = staged / 'installer' / commit
+        folder.mkdir(parents=True, exist_ok=True)
+        for name, body in ((BUILD.MANIFEST, manifest_bytes), (BUILD.ARCHIVE, archive)):
+            destination = folder / name
+            if destination.exists() and destination.read_bytes() != body:
+                raise ValueError('An immutable installer path has different bytes')
+            destination.write_bytes(body)
+
+
+def channel_site(repository, releases, output, fetch=BOOT.fetch, *, previous_fetch=None):
     catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": None, "nightly": None}}
     with tempfile.TemporaryDirectory(prefix="orbis-channel-site-") as folder:
         staged = Path(folder) / "public"
@@ -160,6 +216,7 @@ def channel_site(repository, releases, output, fetch=BOOT.fetch):
         head_files = BUILD.committed_files(repository, head)
         source = head_files["scripts/install-orbis.py"]
         installer_identity = None
+        history = previous_installers(previous_fetch) if previous_fetch is not None else {}
         if source.count(b"INSTALLER = None") == 1:
             if source.count(b"EXPECTED_RELEASE = None") != 1:
                 raise ValueError("The committed installer does not support source-bound installation")
@@ -172,6 +229,8 @@ def channel_site(repository, releases, output, fetch=BOOT.fetch):
             installer_dir.mkdir(parents=True)
             for name, data in assets.items():
                 (installer_dir / name).write_bytes(data)
+            if head in history and history[head] != installer_identity['manifestSha256']:
+                raise ValueError('The current installer path is already pinned to different bytes')
         else:
             if source.count(b"CHANNEL_CATALOG = None") != 1 or source.count(b"EXPECTED_RELEASE = None") != 1:
                 if source.count(b"CHANNEL_CATALOG = None") == 0 and source.count(b"EXPECTED_RELEASE = None") == 1 and LEGACY_CHANNEL_BOOTSTRAPS.get(record["tag"]) == BUILD.sha(source):
@@ -179,6 +238,13 @@ def channel_site(repository, releases, output, fetch=BOOT.fetch):
                 raise ValueError("The committed installer does not support channel selection")
             bootstrap = source.replace(b"CHANNEL_CATALOG = None", ("CHANNEL_CATALOG = " + repr(catalog)).encode())
         compile(bootstrap, "install", "exec")
+        if previous_fetch is not None:
+            preserve_installers(repository, staged, history, previous_fetch)
+        if installer_identity is not None:
+            history[head] = installer_identity['manifestSha256']
+        if len(history) > 512:
+            raise ValueError('Installer history exceeds its publication limit')
+        (staged / HISTORY).write_text(json.dumps({'schema': 'orbis.installer-history.v1', 'installers': history}, sort_keys=True, indent=2) + '\n')
         (staged / "install").write_bytes(bootstrap)
         (staged / "channels.json").write_text(json.dumps(catalog, indent=2) + "\n")
         (staged / ".nojekyll").touch()
@@ -196,13 +262,17 @@ def main(argv=None):
     parser.add_argument("output", type=Path, help="new directory containing only the public installer endpoint")
     parser.add_argument("--channel", choices=("stable", "nightly"), default="stable", help="select Stable (default) or Nightly")
     parser.add_argument("--channels", action="store_true", help="publish one interactive installer and both verified channel endpoints")
+    parser.add_argument("--preserve-installers", action="store_true", help="verify and retain URLs pinned by existing independent installers")
     parser.add_argument("--if-available", action="store_true", help="preserve the deployed endpoint when this channel has no release yet")
     parser.add_argument("--github-output", type=Path, help="append the verified availability flag to a workflow output file")
     args = parser.parse_args(argv)
     try:
         repository = Path(__file__).resolve().parent.parent
         releases = json.loads(args.releases.read_text())
-        checked = channel_site(repository, releases, args.output) if args.channels else site(repository, releases, args.output, channel=args.channel)
+        if args.preserve_installers and not args.channels:
+            raise ValueError('Installer preservation requires the combined endpoint')
+        checked = (channel_site(repository, releases, args.output, previous_fetch=BOOT.fetch) if args.preserve_installers
+                   else channel_site(repository, releases, args.output)) if args.channels else site(repository, releases, args.output, channel=args.channel)
         result = {"available": True, **checked}
     except NoPublishedRelease as error:
         if not args.if_available:

@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import { gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { readTarArchive, readTarMetadata } from '@/core/archive/tar-metadata';
@@ -26,7 +27,7 @@ const pax = (name: string, value: string) => {
 describe('bounded structured tar metadata', () => {
   let root: string;
   beforeEach(async () => {
-    root = await fs.mkdtemp('/tmp/orbis-tar-metadata-');
+    root = await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-tar-metadata-'));
   });
   afterEach(async () => {
     await fs.rm(root, { recursive: true, force: true });

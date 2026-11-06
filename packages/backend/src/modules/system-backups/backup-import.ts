@@ -7,6 +7,9 @@ import { gt, valid } from 'semver';
 import { BackupRequirementError, privateBackupDirectory, validateBackupLinks, type BackupLink } from './backup-files';
 import { fullBackupLimits } from './backup-limits';
 import { BackupExtractionBudget } from './backup-extraction-budget';
+import type { BackupVolumeArchive } from './backup-docker-volumes';
+import { validateBackupVolumeCatalog } from './backup-volume-catalog';
+import { backupVolumeContentBudget, verifyBackupVolumeContents } from './backup-volume-contents';
 import { resetScopes } from '../system-reset/reset-contract';
 
 const maxEntries = fullBackupLimits.entries + 10;
@@ -53,15 +56,23 @@ export type FullBackupManifest = {
   images: { project: string; image: string }[];
   exclusions: string[];
 } & (
-  | { version: 1; mediaPolicy?: never; symlinks?: never; excludedRuntimeSockets?: never }
-  | { version: 2; mediaPolicy: 'included' | 'preserve-destination'; symlinks?: BackupLink[]; excludedRuntimeSockets?: string[] }
+  | { version: 1; mediaPolicy?: never; symlinks?: never; excludedRuntimeSockets?: never; volumes?: never }
+  | { version: 2; mediaPolicy: 'included' | 'preserve-destination'; symlinks?: BackupLink[]; excludedRuntimeSockets?: string[]; volumes?: never }
+  | {
+      version: 3;
+      mediaPolicy: 'included' | 'preserve-destination';
+      symlinks?: BackupLink[];
+      excludedRuntimeSockets?: string[];
+      volumes: BackupVolumeArchive[];
+    }
 );
 export function backupMediaPolicy(manifest: FullBackupManifest) {
-  return manifest.version === 2 ? manifest.mediaPolicy : 'included';
+  return manifest.version === 1 ? 'included' : manifest.mediaPolicy;
 }
 export type FullBackupReview = {
   hostIdentityPolicy: 'preserve-destination';
-  formatVersion: 1 | 2;
+  formatVersion: 1 | 2 | 3;
+  volumeCount?: number;
   mediaPolicy: 'included' | 'preserve-destination';
   createdAt: number;
   orbisVersion: string;
@@ -73,7 +84,11 @@ export type FullBackupReview = {
   manifestSha256: string;
   databaseValidation: 'pending' | 'validated';
   databaseRecords?: number;
-  compatibility: { compatible: boolean; blockers: ('runtipi-version' | 'newer-orbis' | 'unknown-orbis-version')[]; architectureChanged: boolean };
+  compatibility: {
+    compatible: boolean;
+    blockers: ('runtipi-version' | 'newer-orbis' | 'unknown-orbis-version' | 'volume-restore-support')[];
+    architectureChanged: boolean;
+  };
 };
 export type BackupContentIntegrity = Record<'manifest' | 'recovery' | 'database', { bytes: number; sha256: string }>;
 
@@ -114,6 +129,7 @@ export function parseFullBackupManifest(value: unknown): FullBackupManifest {
           'mediaPolicy',
           'symlinks',
           'excludedRuntimeSockets',
+          'volumes',
           'createdAt',
           'orbisVersion',
           'runtipiVersion',
@@ -126,7 +142,8 @@ export function parseFullBackupManifest(value: unknown): FullBackupManifest {
         ].includes(key),
     ) ||
     source.format !== 'orbis-full-backup' ||
-    ![1, 2].includes(source.version as number) ||
+    ![1, 2, 3].includes(source.version as number) ||
+    (source.version !== 3 && Object.hasOwn(source, 'volumes')) ||
     (source.version === 1
       ? ['mediaPolicy', 'symlinks', 'excludedRuntimeSockets'].some((key) => Object.hasOwn(source, key))
       : typeof source.mediaPolicy !== 'string' || !['included', 'preserve-destination'].includes(source.mediaPolicy)) ||
@@ -194,8 +211,14 @@ export function parseFullBackupManifest(value: unknown): FullBackupManifest {
   }
   const manifest = source as unknown as FullBackupManifest;
   for (const entry of [...manifest.files, ...manifest.directories]) rejectResetRecoveryMember(entry.name);
-  if (manifest.version === 2)
+  const volumePins = 'data/state/app-volume-pins';
+  if ([...manifest.files, ...manifest.directories].some((entry) => entry.name === volumePins || entry.name.startsWith(`${volumePins}/`)))
+    throw invalid();
+  if (manifest.version !== 1)
     validateBackupLinks(manifest.symlinks ?? [], manifest.excludedRuntimeSockets ?? [], manifest.files, manifest.directories);
+  if (manifest.version === 3) validateBackupVolumeCatalog(manifest.volumes, manifest);
+  else if ([...manifest.files, ...manifest.directories].some((entry) => entry.name === 'volumes' || entry.name.startsWith('volumes/')))
+    throw invalid();
   if (
     backupMediaPolicy(manifest) === 'preserve-destination' &&
     [...manifest.files, ...manifest.directories].some((entry) => entry.name === 'data/media' || entry.name.startsWith('data/media/'))
@@ -216,6 +239,8 @@ export function parseFullBackupManifest(value: unknown): FullBackupManifest {
 function allowedMember(name: string, type: string) {
   if (!['-', 'd'].includes(type)) return false;
   if (name === '.' || name === 'data' || name === 'app-data') return type === 'd';
+  if (name === 'volumes') return type === 'd';
+  if (name.startsWith('volumes/')) return type === '-' && /^volumes\/[a-f0-9]{64}\.(tar|inventory\.json)$/.test(name);
   if (specialFiles.has(name) || name === 'data/.env') return type === '-';
   const parts = name.split('/');
   if (
@@ -320,6 +345,7 @@ export async function inspectFullBackup(options: {
       if (member.type === '-' ? !expected.has(name) : !expectedDirectories.has(name)) throw invalid();
     }
     for (const name of expectedDirectories) if (members.get(name)?.type !== 'd') throw invalid();
+    if (manifest.version === 3) await verifyBackupVolumeContents(destination, manifest.volumes, signal, backupVolumeContentBudget(manifest));
     const database = await fs.open(path.join(destination, 'database.dump'), constants.O_RDONLY | constants.O_NOFOLLOW);
     const magic = Buffer.alloc(5);
     try {
@@ -338,6 +364,7 @@ export async function inspectFullBackup(options: {
       throw invalid();
     record(recovery.userSettings);
     const blockers: FullBackupReview['compatibility']['blockers'] = [];
+    if (manifest.version === 3 && manifest.volumes.length) blockers.push('volume-restore-support');
     if ((valid(manifest.runtipiVersion) ?? manifest.runtipiVersion) !== (valid(target.runtipiVersion) ?? target.runtipiVersion))
       blockers.push('runtipi-version');
     if (manifest.orbisVersion !== target.orbisVersion) {
@@ -357,6 +384,7 @@ export async function inspectFullBackup(options: {
       review: {
         hostIdentityPolicy: 'preserve-destination',
         formatVersion: manifest.version,
+        ...(manifest.version === 3 ? { volumeCount: manifest.volumes.length } : {}),
         mediaPolicy: backupMediaPolicy(manifest),
         createdAt: manifest.createdAt,
         orbisVersion: manifest.orbisVersion,

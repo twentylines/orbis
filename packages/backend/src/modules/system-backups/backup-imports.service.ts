@@ -1,3 +1,4 @@
+import { coreCaptureRecoveryRequired } from '@/common/backup-maintenance';
 import type { decodeAppRuntimeCapture } from './time-machine-app-runtime-capture';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -138,6 +139,7 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
     }
   }
   onModuleInit() {
+    if (coreCaptureRecoveryRequired()) return;
     if (restoreStartupRole() === 'verify') return;
     return this.initialize();
   }

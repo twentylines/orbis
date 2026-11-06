@@ -402,6 +402,7 @@ export async function finalizeProtectedImageCaptureV2(options: {
   }
   if (hash(manifestBytes) !== options.manifestSha256) throw fail();
   const manifest = parseFullBackupManifest(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes)));
+  if (manifest.version === 3) throw fail();
   if (manifest.architecture !== state.platform.architecture) throw fail();
   const baseline = (items: readonly Readonly<ProtectedImageContainerV2>[]) =>
     items.map((item) => ({ ...item, running: item.role === 'app' ? false : item.running }));

@@ -5,7 +5,7 @@ import { BackupRestoreActivationService } from './backup-restore-activation.serv
 import { readRestoreOperation } from './backup-restore-runtime';
 import { captureRestoreStartupRole, restoreStartupRole, retainedBootstrapStartup } from './backup-restore-startup';
 import { releaseRestoreInstallationMode } from '@/common/installation-mode';
-import { acquireBackupMaintenance } from '@/common/backup-maintenance';
+import { acquireBackupMaintenance, coreCaptureRecoveryRequired } from '@/common/backup-maintenance';
 import { readRootRestorationState } from '@/common/restoration-root-status';
 import { RetainedRootTransaction } from './time-machine-retained-root-client';
 import { finishRetainedNormalBootstrap } from './backup-retained-normal-bootstrap';
@@ -24,7 +24,11 @@ vi.mock('@/common/installation-mode', () => ({
   releaseRestoreInstallationMode: vi.fn(),
   installationMode: vi.fn().mockReturnValue({ phase: 'normal', transactionId: null }),
 }));
-vi.mock('@/common/backup-maintenance', () => ({ acquireBackupMaintenance: vi.fn(), setRestoreRecoveryRequired: vi.fn() }));
+vi.mock('@/common/backup-maintenance', () => ({
+  acquireBackupMaintenance: vi.fn(),
+  setRestoreRecoveryRequired: vi.fn(),
+  coreCaptureRecoveryRequired: vi.fn().mockReturnValue(false),
+}));
 vi.mock('./time-machine-retained-root-client', () => ({ RetainedRootTransaction: { read: vi.fn() } }));
 vi.mock('./backup-retained-normal-bootstrap', () => ({ finishRetainedNormalBootstrap: vi.fn() }));
 vi.mock('./time-machine-retained-app-result', () => ({ verifyRetainedCandidateApps: vi.fn() }));
@@ -79,6 +83,7 @@ function createService(
 }
 
 beforeEach(() => {
+  vi.mocked(coreCaptureRecoveryRequired).mockReturnValue(false);
   vi.mocked(restoreStartupRole).mockReturnValue('candidate');
   vi.mocked(BackupRestoreJournal.active).mockResolvedValue(journal() as never);
   vi.mocked(BackupRestoreJournal.latest).mockResolvedValue(undefined);
@@ -86,6 +91,16 @@ beforeEach(() => {
   vi.mocked(readRestoreOperation).mockResolvedValue({ resumeApps: [selected] } as never);
   vi.mocked(releaseRestoreInstallationMode).mockReturnValue(true);
   vi.spyOn(os, 'hostname').mockReturnValue(candidateId.slice(0, 12));
+});
+
+it('keeps restore activation polling stopped during a core capture hold', () => {
+  vi.useFakeTimers();
+  vi.mocked(coreCaptureRecoveryRequired).mockReturnValue(true);
+  const { service } = createService();
+  service.onModuleInit();
+  expect(vi.getTimerCount()).toBe(0);
+  expect(BackupRestoreJournal.active).not.toHaveBeenCalled();
+  service.onModuleDestroy();
 });
 
 afterEach(() => {

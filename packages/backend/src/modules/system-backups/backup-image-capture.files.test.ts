@@ -333,6 +333,27 @@ it('checks backed-up image pins and the container-image exclusion against captur
   await result.preparation.dispose();
 });
 
+it.each(['capture', 'verify'] as const)('does not interpret a v3 backup using the old image %s contract', async (operation) => {
+  const test = await fixture();
+  const result = operation === 'verify' ? await capture(test) : undefined;
+  const bytes = Buffer.from(JSON.stringify({ ...JSON.parse(test.manifest.toString()), version: 3, mediaPolicy: 'included', volumes: [] }));
+  await fs.writeFile(path.join(test.content, 'manifest.json'), bytes);
+  test.options.manifestSha256 = sha(bytes);
+  if (result) {
+    await expect(
+      verifyCaptureAgainstBackup({
+        capture: { ...result.capture, backupManifestSha256: sha(bytes) } as unknown as Record<string, unknown>,
+        content: test.content,
+        manifestSha256: sha(bytes),
+        signal: test.options.signal,
+      }),
+    ).rejects.toThrow();
+    await result.dispose();
+    await result.preparation.dispose();
+  } else await expect(capture(test)).rejects.toThrow();
+  await clean(test);
+});
+
 it('binds private deduplicated app/controller/service image evidence to unchanged legacy bytes without claiming restore readiness', async () => {
   const test = await fixture();
   const captured = await capture(test);
@@ -1071,7 +1092,7 @@ it('rejects a forged v2 runtime object before reading Docker', async () => {
   await clean(test);
 });
 
-it.each(['valid', 'app-still-running', 'saved-file-changed', 'archive-changed'] as const)(
+it.each(['valid', 'app-still-running', 'saved-file-changed', 'archive-changed', 'unsupported-backup-format'] as const)(
   'finalizes v2 only after stopped runtime, saved files and archive are consistent: %s',
   async (kind) => {
     const test = await fixture();
@@ -1080,6 +1101,7 @@ it.each(['valid', 'app-still-running', 'saved-file-changed', 'archive-changed'] 
     const original = required(test.values.get(test.ids.app));
     if (kind !== 'app-still-running') original.running = false;
     const manifest = JSON.parse(test.manifest.toString());
+    if (kind === 'unsupported-backup-format') Object.assign(manifest, { version: 3, mediaPolicy: 'included', volumes: [] });
     manifest.containers.push({ id: 'b'.repeat(64), project: 'demo_store', running: false });
     manifest.images.push({ project: 'demo_store', image: 'nginx:v1' });
     const bytes = Buffer.from(JSON.stringify(manifest));

@@ -82,6 +82,13 @@ class CapabilityTests(unittest.TestCase):
         self.assertEqual(self.capability(), before)
         with self.assertRaises(ValueError): self.capability('untrusted-feature')
 
+    def test_expanded_source_inventory_is_still_bounded(self):
+        for index in range(M.MAX_SOURCE_FILES + 1 - len(M.REQUIRED)):
+            suffix = chr(97 + index // 26) + chr(97 + index % 26)
+            file = self.path / ('orbis-test-padding-' + suffix + '.py')
+            file.write_bytes(b'# fixture source\n'); file.chmod(0o600)
+        with self.assertRaises(ValueError): self.capability()
+
     def test_volume_support_has_an_independent_domain_and_requires_its_complete_closure(self):
         with self.assertRaises(ValueError): self.capability('volume')
         for name in M.VOLUME_REQUIRED:
@@ -107,7 +114,7 @@ class CapabilityTests(unittest.TestCase):
             for kind in ('capture', 'restore', 'volume'):
                 value = M.capability(kind, A, directory=destination)
                 self.assertEqual(len(value['sourceSha256']), 64)
-            self.assertLessEqual(len(list(destination.iterdir())), 64)
+            self.assertLessEqual(len(list(destination.iterdir())), M.MAX_SOURCE_FILES)
             layout = destination / 'orbis-host-layout.py'
             layout_body = layout.read_bytes()
             layout.unlink()

@@ -4,7 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { SystemBackupsService } from './system-backups.service';
+import { SystemBackupsService, type LocalBackupSnapshot, type LocalCaptureHooks } from './system-backups.service';
+import { addBackupVolumeFixture, volumeFixtureHash } from './backup-volume.fixture';
+import { inspectFullBackup, type FullBackupManifest } from './backup-import';
 import { BackupRequirementError } from './backup-files';
 import { backupMaintenanceActive, setBackupRecoveryRequired } from '@/common/backup-maintenance';
 import { decryptBackup as decryptBackupFile, encryptBackup } from './backup-crypto';
@@ -37,7 +39,7 @@ const auth = { verifySensitiveAction: vi.fn().mockResolvedValue({ id: 1 }), oper
 const apps = { getApps: vi.fn().mockResolvedValue([{ appName: 'fixture', appStoreSlug: 'store', status: 'running' }]) };
 const tasks = { read: vi.fn().mockResolvedValue({ tasks: [] }) };
 const host = { status: vi.fn().mockResolvedValue({ available: false }) };
-const runtime = { plan: vi.fn(), stop: vi.fn(), resume: vi.fn(), dumpDatabase: vi.fn(), verifyStopped: vi.fn() };
+const runtime = { plan: vi.fn(), stop: vi.fn(), resume: vi.fn(), dumpDatabase: vi.fn(), verifyStopped: vi.fn(), captureVolumes: vi.fn() };
 const queueBase = {
   pauseId: randomUUID(),
   generation: 1,
@@ -98,6 +100,7 @@ beforeEach(async () => {
   runtime.plan.mockResolvedValue({ databaseId: 'b'.repeat(64), containers: [container], images: [] });
   runtime.stop.mockResolvedValue(undefined);
   runtime.resume.mockResolvedValue(undefined);
+  runtime.captureVolumes.mockReset();
   runtime.dumpDatabase.mockImplementation(async (_id, file, signal, progress) => {
     signal.throwIfAborted();
     await fs.writeFile(file, 'PGDMPdisposable database fixture', { mode: 0o600 });
@@ -256,8 +259,9 @@ it.each([false, true])('exports shared media only after explicit includeMedia=%s
   const media = path.join(directory, 'data/media');
   await fs.mkdir(media);
   await fs.writeFile(path.join(media, 'jellyfin-movie.mkv'), 'shared library fixture');
+  stabilizeExistingDarwinFixtures(media);
   const job = await terminal((await (includeMedia ? service.start(1, credentials, passphrase, true) : service.start(1, credentials, passphrase))).id);
-  expect(job?.status).toBe('succeeded');
+  expect(job?.status, job?.message).toBe('succeeded');
   if (!job) throw new Error('Missing export');
   const archive = path.join(directory, 'media-policy.tar.gz');
   await decryptBackup({ source: path.join(directory, 'data/backups/full', job.id, 'backup.orbis'), destination: archive, passphrase });
@@ -404,6 +408,183 @@ it('fails before stopping apps when external data cannot be included', async () 
   expect(runtime.stop).not.toHaveBeenCalled();
   expect(backupMaintenanceActive()).toBe(false);
 });
+
+function protectedVolumeFixture(empty = false) {
+  const sourceName = 'disposable-app-volume';
+  const key = volumeFixtureHash(`orbis.backup-volume.v1\n${sourceName}`);
+  const volumePlan = {
+    version: 1 as const,
+    volumes: empty
+      ? []
+      : [
+          {
+            key,
+            sourceName,
+            mounts: [{ containerId: container.id, project: container.project, service: 'app', ordinal: 1, target: '/config', readOnly: false }],
+          },
+        ],
+  };
+  const plan = { databaseId: 'b'.repeat(64), containers: [container], images: [], volumePlan };
+  runtime.plan.mockResolvedValue(plan);
+  const inventory = {
+    key,
+    sourceName,
+    containerId: container.id,
+    entries: [
+      { name: '.', kind: 'directory' as const },
+      { name: 'current', kind: 'symlink' as const, target: 'settings' },
+      { name: 'empty', kind: 'directory' as const },
+      { name: 'settings', kind: 'file' as const, bytes: 22, sha256: volumeFixtureHash('disposable volume data') },
+      { name: 'runtime.sock', kind: 'socket' as const },
+    ],
+  };
+  const volumeCapture = {
+    prepareVolumes: vi.fn(async () => ({ planSha256: 'a'.repeat(64), volumeCount: volumePlan.volumes.length })),
+    inventoryVolumes: vi.fn(async () => (empty ? [] : [inventory])),
+    verifyVolumesStopped: vi.fn(async () => undefined),
+  };
+  const hooks: LocalCaptureHooks = {
+    maximumPlaintextBytes: 256 * 1024 * 1024,
+    hostPreflight: vi.fn(async () => undefined),
+    beforeQuiesce: vi.fn(async () => undefined),
+    volumeCapture,
+  };
+  runtime.captureVolumes.mockImplementation(async (_plan, inventories, { content, maximumBytes, baseline }) => {
+    expect(backupMaintenanceActive()).toBe(true);
+    expect(runtime.stop).toHaveBeenCalledWith(container);
+    expect(inventories).toEqual(empty ? [] : [inventory]);
+    expect(maximumBytes).toBeGreaterThan(1024);
+    expect(baseline.entries).toBeGreaterThan(0);
+    if (empty) return [];
+    const base: FullBackupManifest = {
+      format: 'orbis-full-backup',
+      version: 2,
+      mediaPolicy: 'included',
+      createdAt: Date.now(),
+      orbisVersion: '1.0.0',
+      runtipiVersion: '4.10.1',
+      architecture: 'arm64',
+      containers: [container],
+      images: [],
+      files: [],
+      directories: [],
+      exclusions: [],
+    };
+    const fixture = await addBackupVolumeFixture(content, base);
+    await fs.rm(path.join(path.dirname(content), 'volume-fixture-source'), { recursive: true });
+    return [fixture.volume];
+  });
+  const seal = async (snapshot: LocalBackupSnapshot) => {
+    expect(backupMaintenanceActive()).toBe(true);
+    if (!snapshot.sealCoherence) throw new Error('Missing capture coherence seam');
+    await snapshot.sealCoherence(
+      {
+        pointId: randomUUID(),
+        publicationProofSha256: 'a'.repeat(64),
+        imageCaptureSha256: 'b'.repeat(64),
+        imageInventorySha256: 'c'.repeat(64),
+        controllerAuthoritySha256: 'd'.repeat(64),
+        hostFence: { configurationSetSha256: 'e'.repeat(64), preparationSha256: 'f'.repeat(64), verifiedAt: Date.now() },
+      },
+      new AbortController().signal,
+    );
+  };
+  return { hooks, volumeCapture, plan, key, seal };
+}
+
+async function captureResult(hooks: LocalCaptureHooks, snapshot: (value: LocalBackupSnapshot) => Promise<void>, includeMedia: boolean) {
+  const capture = await service.startLocalCapture(1, passphrase, snapshot, hooks, includeMedia);
+  const ready = capture.ready.then(
+    (opened) => {
+      opened.stream.destroy();
+      return true;
+    },
+    () => false,
+  );
+  return { id: capture.id, job: await terminal(capture.id), ready: await ready };
+}
+
+it('exports protected volume bytes in format3 and preserves the unsupported-restore gate', async () => {
+  const fixture = protectedVolumeFixture();
+  const result = await captureResult(
+    fixture.hooks,
+    async (snapshot) => {
+      const manifest = JSON.parse(await fs.readFile(path.join(snapshot.content, 'manifest.json'), 'utf8'));
+      expect(manifest.version).toBe(3);
+      expect(manifest.mediaPolicy).toBe('included');
+      expect(manifest.volumes[0].key).toBe(fixture.key);
+      expect(manifest.files.filter((file: { name: string }) => file.name.startsWith('volumes/'))).toHaveLength(2);
+      await fixture.seal(snapshot);
+    },
+    true,
+  );
+  expect(result.job?.status).toBe('succeeded');
+  expect(result.ready).toBe(true);
+  expect(fixture.volumeCapture.prepareVolumes).toHaveBeenCalledWith(fixture.plan.volumePlan, expect.any(AbortSignal));
+  expect(runtime.plan).toHaveBeenCalledWith(['fixture_store'], true, 'capture-local-volumes.v1');
+  const jobDirectory = path.join(directory, 'data/backups/full', result.id);
+  const archive = path.join(directory, 'volume-inspection.tar.gz');
+  await decryptBackup({ source: path.join(jobDirectory, 'backup.orbis'), destination: archive, passphrase });
+  const reviewed = await inspectFullBackup({
+    archive,
+    destination: path.join(directory, 'volume-inspected'),
+    signal: new AbortController().signal,
+    maxExpandedBytes: 16 * 1024 * 1024,
+    target: { orbisVersion: 'development', runtipiVersion: '4.10.1', architecture: 'arm64' },
+  });
+  expect(reviewed.review.formatVersion).toBe(3);
+  expect(reviewed.review.compatibility.blockers).toContain('volume-restore-support');
+  expect(await fs.readdir(jobDirectory)).toEqual(['backup.orbis', 'job.json']);
+});
+
+it('keeps a protected empty-volume capture on format2 without opting into shared media', async () => {
+  const fixture = protectedVolumeFixture(true);
+  const result = await captureResult(
+    fixture.hooks,
+    async (snapshot) => {
+      expect(JSON.parse(await fs.readFile(path.join(snapshot.content, 'manifest.json'), 'utf8')).version).toBe(2);
+      await fixture.seal(snapshot);
+    },
+    false,
+  );
+  expect(result.job?.status).toBe('succeeded');
+  expect(result.ready).toBe(true);
+});
+
+it.each(['media', 'missing-plan', 'root-plan'] as const)('rejects unprepared protected volume capture before stopping apps: %s', async (failure) => {
+  const fixture = protectedVolumeFixture();
+  if (failure === 'missing-plan') runtime.plan.mockResolvedValue({ ...fixture.plan, volumePlan: undefined });
+  if (failure === 'root-plan') fixture.volumeCapture.prepareVolumes.mockRejectedValue(new Error('fixture root plan differs'));
+  const result = await captureResult(fixture.hooks, fixture.seal, failure !== 'media');
+  expect(result.job?.status).toBe('failed');
+  expect(result.ready).toBe(false);
+  expect(runtime.stop).not.toHaveBeenCalled();
+  expect(runtime.captureVolumes).not.toHaveBeenCalled();
+});
+
+it.each(['inventory', 'capacity', 'incomplete', 'changed-after-seal'] as const)(
+  'recovers apps without a partial archive after volume failure: %s',
+  async (failure) => {
+    const fixture = protectedVolumeFixture();
+    if (failure === 'inventory') fixture.volumeCapture.inventoryVolumes.mockRejectedValue(new Error('fixture inventory unavailable'));
+    if (failure === 'capacity') fixture.hooks.maximumPlaintextBytes = 1024;
+    if (failure === 'incomplete') runtime.captureVolumes.mockResolvedValue([]);
+    const result = await captureResult(
+      fixture.hooks,
+      async (snapshot) => {
+        await fixture.seal(snapshot);
+        if (failure === 'changed-after-seal') await fs.appendFile(path.join(snapshot.content, `volumes/${fixture.key}.tar`), 'changed');
+      },
+      true,
+    );
+    expect(result.job?.status).toBe('failed');
+    expect(result.ready).toBe(false);
+    expect(runtime.resume).toHaveBeenCalled();
+    expect(backupMaintenanceActive()).toBe(false);
+    expect(await fs.readdir(path.join(directory, 'data/backups/full', result.id))).toEqual(['job.json']);
+    if (failure === 'capacity') expect(runtime.captureVolumes).not.toHaveBeenCalled();
+  },
+);
 
 it('checks available space before stopping apps', async () => {
   vi.spyOn(fs, 'statfs').mockResolvedValueOnce({ bavail: 0, bsize: 4096 } as Awaited<ReturnType<typeof fs.statfs>>);

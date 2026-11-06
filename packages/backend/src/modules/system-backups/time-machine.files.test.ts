@@ -1309,7 +1309,7 @@ it('enforces combined cipher capacity before retaining bytes and leaves apps res
 
 it('keeps genuine version-one retained points readable and explicitly incomplete after the v2 writer is introduced', async () => {
   const current = await capture();
-  if (!current.metadata) throw new Error('Missing fixture capture');
+  if (!current.metadata || current.metadata.version === 3) throw new Error('Missing legacy fixture capture');
   const retained = store();
   const legacy = await retained.create(1);
   const { runtime: _runtime, ...base } = current.metadata.version === 2 ? current.metadata : { ...current.metadata, runtime: undefined };

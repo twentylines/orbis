@@ -187,7 +187,7 @@ describe('autonomous private host device history service', () => {
     const disconnect = activity.connect();
     await service.collect();
     disconnect();
-    await until(async () => (await fs.stat(file()).catch(() => null))?.size !== undefined);
+    await until(async () => (await create().read('5m', selected)).points[0]?.samples === 1);
     expect((await create().read('5m', selected)).points).toMatchObject([{ samples: 1 }]);
     expect(host.read).toHaveBeenCalledOnce();
   });

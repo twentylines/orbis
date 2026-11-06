@@ -1,0 +1,125 @@
+name: Orbis candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'New immutable candidate tag, for example v0.8.0-rc.1'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yml
+
+  integration:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/integration-tests.yml
+
+  publish:
+    needs: [verify, integration]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    concurrency:
+      group: orbis-release-${{ inputs.tag }}
+      cancel-in-progress: false
+    env:
+      RELEASE_DIR: ${{ github.workspace }}/.orbis-candidate-artifacts
+      TMPDIR: ${{ github.workspace }}/.orbis-candidate-artifacts/tmp
+      DOCKER_CONFIG: ${{ github.workspace }}/.orbis-candidate-auth/docker
+      DOCKER_BUILD_RECORD_UPLOAD: 'false'
+      DOCKER_BUILD_SUMMARY: 'false'
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Validate candidate identity
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]
+
+      - name: Prepare local candidate files
+        run: |
+          umask 077
+          mkdir -p "$RELEASE_DIR" "$TMPDIR" "$DOCKER_CONFIG"
+          sudo apt-get update -qq
+          sudo apt-get install --no-install-recommends -y skopeo
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build both platforms into a local OCI archive
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+          outputs: type=oci,dest=${{ env.RELEASE_DIR }}/image.oci.tar,compression=gzip
+          tags: ghcr.io/${{ github.repository }}:${{ env.RELEASE_TAG }}
+          build-args: |
+            TIPI_VERSION=4.10.1
+            LOCAL=true
+            ORBIS_VERSION=${{ env.RELEASE_TAG }}
+            ORBIS_COMMIT=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.RELEASE_TAG }}
+
+      - name: Read the local multi-platform image identity
+        id: identity
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: python3 scripts/release-artifact-privacy.py identity --oci "$RELEASE_DIR/image.oci.tar" --tag "$RELEASE_TAG" --commit "$RELEASE_SHA" --github-output "$GITHUB_OUTPUT"
+
+      - name: Record candidate metadata
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+          IMAGE_DIGEST: ${{ steps.identity.outputs.digest }}
+        run: |
+          jq -n \
+            --arg schema 'orbis.release.v1' \
+            --arg image "$IMAGE" \
+            --arg tag "$RELEASE_TAG" \
+            --arg commit "$RELEASE_SHA" \
+            --arg digest "$IMAGE_DIGEST" \
+            --arg updatePriority normal \
+            --arg criticalThrough '' \
+            --argjson criticalFixes '[]' \
+            --arg migrationFingerprint "$(python3 scripts/orbis-migration-fingerprint.py)" \
+            -f scripts/release-manifest.jq > release-manifest.json
+          printf 'Orbis snapshot preparation and recovery updates.\n\nImage: %s@%s\n' "$IMAGE" "$IMAGE_DIGEST" > release-notes.md
+
+      - name: Package the source-bound installer for inspection
+        run: python3 scripts/orbis-installer-bundle.py release-manifest.json installer-assets
+
+      - name: Inspect every image layer and installer asset before upload
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: python3 scripts/release-artifact-privacy.py scan --oci "$RELEASE_DIR/image.oci.tar" --tag "$RELEASE_TAG" --commit "$RELEASE_SHA" --manifest release-manifest.json --installer installer-assets --notes release-notes.md --report "$RELEASE_DIR/privacy-receipt.json"
+
+      - name: Log in to GitHub Container Registry after inspection
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish the scanned candidate without a release or Git tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: python3 scripts/release-artifact-privacy.py publish-candidate --oci "$RELEASE_DIR/image.oci.tar" --tag "$RELEASE_TAG" --commit "$RELEASE_SHA" --manifest release-manifest.json --installer installer-assets --notes release-notes.md --report "$RELEASE_DIR/privacy-receipt.json" --registry-auth "$DOCKER_CONFIG/config.json"
+
+      - name: Report candidate product metadata
+        run: cat release-manifest.json

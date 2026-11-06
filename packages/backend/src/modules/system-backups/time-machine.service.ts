@@ -1,3 +1,4 @@
+import { coreCaptureRecoveryRequired } from '@/common/backup-maintenance';
 import { snapshotAppIcons } from './time-machine-app-icons';
 import { readTimeMachineStorage } from './time-machine-storage';
 import fs from 'node:fs/promises';
@@ -5,7 +6,9 @@ import type { Readable } from 'node:stream';
 import { hashCaptureSnapshotFile } from './time-machine-capture-coherence';
 import { captureHasControllerVersion, versionMatchesControllerAuthority } from './time-machine-controller-version';
 import { verifyCaptureAgainstBackup } from './backup-image-capture';
-import { Injectable, NotFoundException, Optional, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Optional, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { sql } from 'drizzle-orm';
+import { DATABASE, type Database } from '@/core/database/database.module';
 import {
   timeMachineCaptureSchema,
   timeMachinePreferencesUpdateSchema,
@@ -19,8 +22,13 @@ import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { AuthService } from '../auth/auth.service';
 import { AccountSecurityService } from '../auth/account-security.service';
+import { AppsRepository } from '../apps/apps.repository';
+import { QueueFactory } from '../queue/queue.factory';
+import { HostCoreCaptureReservedStartClient } from '../host-updates/host-core-capture-reserved-start-client';
+import { authorizeCoreCaptureOperator, CoreCaptureProducer } from './time-machine-core-producer';
+import { buildCoreCaptureDraft } from './time-machine-core-draft-builder';
 import { authorizeBackupActionSession } from './backup-session-authorization';
-import { backupCredentials } from './backup-access';
+import { backupCredentials, optionalBackupCredentials } from './backup-access';
 import { SystemBackupsService } from './system-backups.service';
 import { TimeMachineStore, type StoredTimeMachinePoint, type TimeMachineDraftMetadata } from './time-machine-store';
 import { historicalHomePreview, captureBreakdown } from './time-machine-preview';
@@ -89,7 +97,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     progress?: { stage: string; completedBytes: number; totalBytes: number | null };
   };
   constructor(
-    config: ConfigurationService,
+    private readonly config: ConfigurationService,
     private readonly backups: SystemBackupsService,
     private readonly auth: AuthService,
     private readonly logger: LoggerService,
@@ -100,6 +108,9 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     private readonly captureRuntime: TimeMachineCaptureRuntime,
     @Optional() private readonly onboarding?: DesktopPreferencesService,
     @Optional() security?: AccountSecurityService,
+    @Optional() private readonly coreQueue?: QueueFactory,
+    @Optional() @Inject(DATABASE) private readonly coreDatabase?: Database,
+    @Optional() private readonly coreApps?: AppsRepository,
   ) {
     this.dataDirectory = config.get('directories').dataDir;
     this.captureSecurity = security ?? new AccountSecurityService(config);
@@ -107,6 +118,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     this.restoreDirectory = path.join(config.get('directories').dataDir, 'backups', 'restores');
   }
   onModuleInit() {
+    if (coreCaptureRecoveryRequired()) return;
     if (restoreStartupRole() === 'verify') return;
     return this.initialize();
   }
@@ -170,8 +182,10 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     return this.store.updatePreferences(input);
   }
   private async publicPoint(point: StoredTimeMachinePoint): Promise<TimeMachinePoint> {
+    const finishing = this.active?.id === point.id && this.active.started;
+    const status = finishing ? 'capturing' : point.status;
     let metadata: TimeMachinePoint['metadata'] = null;
-    if (point.status === 'sealed') {
+    if (status === 'sealed') {
       metadata = await this.store.metadata(point);
     }
     const progress =
@@ -183,11 +197,11 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     return {
       id: point.id,
       createdAt: point.createdAt,
-      status: point.status,
-      stage: progress?.stage ?? (point.status === 'sealed' ? 'complete' : 'preparing'),
+      status,
+      stage: progress?.stage ?? (status === 'sealed' ? 'complete' : 'preparing'),
       completedBytes: progress?.completedBytes ?? 0,
       totalBytes: progress?.totalBytes ?? null,
-      issue: point.issue ? timeMachineIssue(point.issue) : null,
+      issue: status !== 'capturing' && point.issue ? timeMachineIssue(point.issue) : null,
       backupJobId: point.backupJobId,
       metadata,
     };
@@ -213,7 +227,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     const active = this.active;
     if (!active?.id || active.ownerId !== ownerId) return { version: 1 as const, point: null };
     const point = await this.store.load(active.id);
-    if (point.ownerId !== ownerId || point.status !== 'capturing') return { version: 1 as const, point: null };
+    if (point.ownerId !== ownerId) return { version: 1 as const, point: null };
     return { version: 1 as const, point: await this.publicPoint(point) };
   }
   private async owned(id: string, ownerId: number) {
@@ -275,6 +289,102 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
       await this.auth.verifySensitiveAction(ownerId, proof.password, proof.totpCode);
     }
     return this.prepareCapture(ownerId, request);
+  }
+
+  async captureCore(ownerId: number, credentials: unknown, input: unknown, request: Request) {
+    await this.initialize();
+    this.available();
+    if (!timeMachineCaptureSchema.allows(input)) throw timeMachineConflict('invalid-request');
+    const socket = process.env.ORBIS_HOST_SOCKET;
+    const queue = this.coreQueue;
+    const database = this.coreDatabase;
+    const apps = this.coreApps;
+    if (!socket || !queue || !database || !apps || process.platform !== 'linux') throw timeMachineConflict('host-capture-support-required');
+    if (this.active || this.reviewing || this.exporting || this.removing) throw timeMachineConflict('operation-busy');
+    let settle: () => void = () => undefined;
+    let setupDone: () => void = () => undefined;
+    const done = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
+    const setup = new Promise<void>((resolve) => {
+      setupDone = resolve;
+    });
+    const active: NonNullable<TimeMachineService['active']> = {
+      id: '',
+      ownerId,
+      abort: new AbortController(),
+      done,
+      setup,
+      setupDone,
+      settle,
+      started: false,
+      backupJobId: null,
+    };
+    this.active = active;
+    try {
+      const preferences = await this.store.preferences();
+      if (!preferences.enabled) throw timeMachineConflict('invalid-request');
+      if ((await this.store.list()).some((point) => point.status === 'interrupted' || point.status === 'capturing'))
+        throw timeMachineConflict('capture-recovery-required');
+      await this.docker.requireNoPendingAppImageUpdates();
+      const grant = await authorizeCoreCaptureOperator({
+        auth: this.auth,
+        security: this.captureSecurity,
+        request,
+        ownerId,
+        credentials: optionalBackupCredentials(credentials),
+      });
+      const producer = new CoreCaptureProducer({
+        dataDirectory: this.dataDirectory,
+        store: this.store,
+        client: new HostCoreCaptureReservedStartClient(socket),
+        queue,
+        grant,
+        onStage: (stage) => {
+          active.progress = { stage, completedBytes: 0, totalBytes: null };
+        },
+        buildDraft: async (point, signal) => {
+          signal.throwIfAborted();
+          const version = await database.execute(sql`select current_setting('server_version_num') as version`);
+          const number = Number(version.rows[0]?.version);
+          const major = Math.floor(number / 10_000);
+          if (!Number.isSafeInteger(number) || major < 10 || major > 99) throw timeMachineConflict('capture-failed');
+          const architecture = this.config.get('architecture');
+          return buildCoreCaptureDraft({
+            dataDirectory: this.dataDirectory,
+            store: this.store,
+            point,
+            label: input.label,
+            signal,
+            software: { orbis: process.env.ORBIS_VERSION ?? 'development', runtipi: this.config.get('version'), architecture },
+            compatibility: { os: 'linux', architecture, database: { engine: 'postgresql', major }, storageFormat: 'physical-pgdata.v1' },
+            apps: (await apps.getApps()).map((app) => ({
+              urn: `${app.appName}:${app.appStoreSlug}`,
+              name: app.appName,
+              running: app.status === 'running',
+            })),
+          });
+        },
+      });
+      const point = await producer.reserve(active.abort.signal);
+      active.id = point.id;
+      active.start = async () => {
+        try {
+          await producer.start(active.abort.signal);
+        } catch {
+          if (!this.closing) this.logger.warn('Snapshot capture stopped. Its recovery state was kept.');
+        }
+      };
+      return await this.publicPoint(point);
+    } catch (error) {
+      active.abort.abort();
+      if (this.active === active) this.active = undefined;
+      settle();
+      if (error && typeof error === 'object' && 'getResponse' in error) throw error;
+      throw timeMachineConflict('capture-failed');
+    } finally {
+      setupDone();
+    }
   }
 
   async beginOnboardingCapture(ownerId: number, id: unknown, label: unknown) {

@@ -61,7 +61,7 @@ class BundleTests(unittest.TestCase):
                  if file.is_file() and BUILD.ALLOWED.fullmatch(str(file.relative_to(repository)))}
         unit = 'packaging/systemd/orbis-host.service'; files[unit] = (repository / unit).read_bytes()
         values = BUILD.sources(files)
-        self.assertLessEqual(len(values), 66)
+        self.assertLessEqual(len(values), 128)
         self.assertFalse(BUILD.BUILD_ONLY & set(values))
         self.assertTrue(expected <= set(values))
         for name in expected:
@@ -74,10 +74,10 @@ class BundleTests(unittest.TestCase):
         with self.assertRaises(ValueError): BUILD.sources(missing)
         files = dict(self.files)
         index = 0
-        while len(files) < 66:
+        while len(files) < 128:
             files['scripts/orbis-fixture-' + 'a' * (index + 1) + '.py'] = b'# fixture\n'
             index += 1
-        self.assertEqual(66, len(BUILD.sources(files)))
+        self.assertEqual(128, len(BUILD.sources(files)))
         files['scripts/orbis-one-too-many.py'] = b'# fixture\n'
         with self.assertRaises(ValueError): BUILD.sources(files)
 

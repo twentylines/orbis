@@ -492,6 +492,87 @@ class ArtifactTests(unittest.TestCase):
         self.assertEqual(self.cli('scan')[0], 1)
         self.assertFalse(self.report.exists())
 
+    def test_candidate_cli_requires_scan_receipt_and_rejects_create_tag(self):
+        with mock.patch.dict(globals(), {'TAG': 'v0.6.0-rc.1'}):
+            self.installer(self.image())
+            with mock.patch.object(SCAN, 'publish_image') as publish:
+                self.assertEqual(self.cli('publish-candidate')[0], 1)
+                self.assertEqual(self.cli('scan')[0], 0)
+                self.assertEqual(self.cli('publish-candidate')[0], 0)
+                publish.assert_called_once()
+                self.notes.write_text('changed')
+                self.assertEqual(self.cli('publish-candidate')[0], 1)
+                self.assertEqual(publish.call_count, 1)
+            args = ['publish-candidate', '--oci', str(self.oci), '--tag', TAG, '--commit', COMMIT, '--create-tag']
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(SCAN.main(args), 1)
+
+    def test_candidate_publication_requires_current_main_and_absent_git_tag(self):
+        auth = self.root / 'auth.json'
+        auth.write_text('{}')
+        tag = 'v0.6.0-rc.1'
+        main = {'ref': 'refs/heads/main', 'object': {'type': 'commit', 'sha': COMMIT}}
+        missing = lambda: urllib.error.HTTPError('https://example.test', 404, 'absent', {}, None)
+        token = lambda: contextlib.nullcontext(io.BytesIO(encoded({'token': 'synthetic'})))
+        env = {'GH_TOKEN': 'synthetic', 'GITHUB_REF': 'refs/heads/main', 'GITHUB_SHA': COMMIT}
+        for ref, sha, remote, existing in [('refs/heads/other', COMMIT, main, None),
+                                            ('refs/heads/main', 'b' * 40, main, None),
+                                            ('refs/heads/main', COMMIT, {'ref': 'refs/heads/main', 'object': {'type': 'commit', 'sha': 'b' * 40}}, None),
+                                            ('refs/heads/main', COMMIT, main, {'ref': 'refs/tags/' + tag})]:
+            with self.subTest(ref=ref, sha=sha, remote=remote, existing=existing), \
+                    mock.patch.dict(os.environ, {**env, 'GITHUB_REF': ref, 'GITHUB_SHA': sha}), \
+                    mock.patch.object(SCAN.urllib.request, 'urlopen', side_effect=[missing(), token(), missing()]), \
+                    mock.patch.object(SCAN, 'github_json', side_effect=[remote, existing]), \
+                    mock.patch.object(SCAN.subprocess, 'run') as run, self.assertRaises(SCAN.Rejected):
+                SCAN.publish_image(self.oci, 'sha256:' + 'b' * 64, tag, auth, COMMIT, candidate=True)
+            run.assert_not_called()
+
+        raw = b'candidate index'
+        with mock.patch.dict(os.environ, env), \
+                mock.patch.object(SCAN.urllib.request, 'urlopen', side_effect=[missing(), token(), missing()]), \
+                mock.patch.object(SCAN, 'github_json', side_effect=[main, None]) as api, \
+                mock.patch.object(SCAN.subprocess, 'run', side_effect=[mock.Mock(returncode=0), mock.Mock(returncode=0, stdout=raw)]) as run:
+            SCAN.publish_image(self.oci, 'sha256:' + SCAN.sha(raw), tag, auth, COMMIT, candidate=True)
+        self.assertEqual(api.call_args_list, [mock.call('git/ref/heads/main', 'synthetic'),
+                                              mock.call('git/ref/tags/' + tag, 'synthetic', missing=True)])
+        self.assertIn('--all', run.call_args_list[0].args[0])
+        self.assertIn('--preserve-digests', run.call_args_list[0].args[0])
+        self.assertIn('oci-archive:' + str(self.oci.resolve()), run.call_args_list[0].args[0])
+        with mock.patch.dict(os.environ, env), \
+                mock.patch.object(SCAN.urllib.request, 'urlopen', side_effect=[missing(), token(), missing()]), \
+                mock.patch.object(SCAN, 'github_json', side_effect=[main, None]), \
+                mock.patch.object(SCAN.subprocess, 'run', side_effect=[mock.Mock(returncode=0), mock.Mock(returncode=0, stdout=b'changed')]), \
+                self.assertRaisesRegex(SCAN.Rejected, 'published-index-digest-mismatch'):
+            SCAN.publish_image(self.oci, 'sha256:' + SCAN.sha(raw), tag, auth, COMMIT, candidate=True)
+
+    def test_candidate_rejects_unknown_or_existing_release_registry_and_git_states(self):
+        auth = self.root / 'auth.json'
+        auth.write_text('{}')
+        tag = 'v0.6.0-rc.1'
+        missing = lambda: urllib.error.HTTPError('https://example.test', 404, 'absent', {}, None)
+        failure = lambda status: urllib.error.HTTPError('https://example.test', status, 'failure', {}, None)
+        token = lambda: contextlib.nullcontext(io.BytesIO(encoded({'token': 'synthetic'})))
+        main = {'ref': 'refs/heads/main', 'object': {'type': 'commit', 'sha': COMMIT}}
+        env = {'GH_TOKEN': 'synthetic', 'GITHUB_REF': 'refs/heads/main', 'GITHUB_SHA': COMMIT}
+        for replies, git in [([contextlib.nullcontext(io.BytesIO())], []), ([failure(401)], []),
+                             ([TimeoutError()], []), ([missing(), token(), contextlib.nullcontext(io.BytesIO())], []),
+                             ([missing(), token(), failure(403)], []), ([missing(), token(), TimeoutError()], []),
+                             ([missing(), token(), missing()], [main, SCAN.Rejected('git-reference-unverified')])]:
+            with self.subTest(replies=replies, git=git), mock.patch.dict(os.environ, env), \
+                    mock.patch.object(SCAN.urllib.request, 'urlopen', side_effect=replies), \
+                    mock.patch.object(SCAN, 'github_json', side_effect=git), \
+                    mock.patch.object(SCAN.subprocess, 'run') as run, self.assertRaises((SCAN.Rejected, TimeoutError)):
+                SCAN.publish_image(self.oci, 'sha256:' + 'b' * 64, tag, auth, COMMIT, candidate=True)
+            run.assert_not_called()
+        for invalid in ['v0.6.0-beta.1', 'v0.6.0', 'v0.6.0-rc.1-extra']:
+            with self.assertRaises(SCAN.Rejected):
+                SCAN.publish_image(self.oci, 'sha256:' + 'b' * 64, invalid, auth, COMMIT, candidate=True)
+        for status in [401, 403, 500]:
+            with mock.patch.object(SCAN.urllib.request, 'urlopen', side_effect=failure(status)), self.assertRaises(SCAN.Rejected):
+                SCAN.github_json('git/ref/tags/' + tag, 'synthetic', missing=True)
+        with mock.patch.object(SCAN.urllib.request, 'urlopen', side_effect=missing()):
+            self.assertIsNone(SCAN.github_json('git/ref/tags/' + tag, 'synthetic', missing=True))
+
     def test_registry_and_release_unknown_or_existing_states_do_not_copy(self):
         auth = self.root / 'auth.json'
         auth.write_text('{}')
@@ -577,6 +658,19 @@ class ArtifactTests(unittest.TestCase):
         self.assertIn('--prerelease --latest=false', workflow)
         self.assertIn('workflow_dispatch:', workflow)
         self.assertIn('RELEASE_TAG: ${{ inputs.tag || github.ref_name }}', workflow)
+        self.assertIn('DOCKER_BUILD_RECORD_UPLOAD: \'false\'', workflow)
+
+    def test_candidate_workflow_cannot_create_release_or_git_refs(self):
+        workflow = (Path(__file__).resolve().parent.parent / '.github/workflows/candidate.yml').read_text()
+        self.assertIn('needs: [verify, integration]', workflow)
+        self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
+        self.assertIn('ref: ${{ github.sha }}', workflow)
+        self.assertIn('contents: read', workflow)
+        for forbidden in ('contents: write', 'gh release', 'git tag', '--create-tag', 'push: true', 'upload-artifact'):
+            self.assertNotIn(forbidden, workflow)
+        self.assertLess(workflow.index('privacy.py scan '), workflow.index('uses: docker/login-action'))
+        self.assertLess(workflow.index('privacy.py scan '), workflow.index('privacy.py publish-candidate '))
+        self.assertIn('outputs: type=oci,', workflow)
         self.assertIn('DOCKER_BUILD_RECORD_UPLOAD: \'false\'', workflow)
 
 

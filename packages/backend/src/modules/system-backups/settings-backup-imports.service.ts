@@ -80,16 +80,17 @@ export class SettingsBackupImportsService implements OnModuleDestroy {
     return job;
   }
   private publicJob(job: Job) {
+    const publishingReview = job.status === 'reviewed' && this.active?.id === job.id && this.active.kind === 'review';
     return settingsBackupImportJobSchema.assert({
       id: job.id,
-      status: job.status,
+      status: publishingReview ? 'reviewing' : job.status,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
       uploadedBytes: job.uploadedBytes,
       completedBytes: job.completedBytes,
       totalBytes: job.totalBytes,
       message: job.message,
-      ...(job.status === 'reviewed' && job.review ? { review: job.review.summary } : {}),
+      ...(job.status === 'reviewed' && !publishingReview && job.review ? { review: job.review.summary } : {}),
     });
   }
   private async checkedDirectory(job: Job) {

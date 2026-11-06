@@ -16,6 +16,7 @@ import { parseHostHistorySelection } from './host-device-history.model';
 import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/schemas';
 import { requireReleaseChannel } from './orbis-release-channel';
 import { OrbisReleaseChannelsService } from './orbis-release-channels.service';
+import { SentinelService } from './sentinel.service';
 
 @Controller('system')
 export class SystemController {
@@ -30,6 +31,7 @@ export class SystemController {
     private readonly sensors: HostSensorsService,
     private readonly drives: DriveHealthService,
     private readonly channels: OrbisReleaseChannelsService,
+    private readonly sentinel: SentinelService,
   ) {}
 
   @UseGuards(AuthGuard)
@@ -105,6 +107,12 @@ export class SystemController {
       imageDigest: process.env.ORBIS_IMAGE_DIGEST || null,
       runtipiCompatibility: process.env.TIPI_VERSION || null,
     };
+  }
+
+  @UseGuards(AuthGuard)
+  @Get('/sentinel')
+  sentinelStatus() {
+    return this.sentinel.read();
   }
 
   @UseGuards(AuthGuard)

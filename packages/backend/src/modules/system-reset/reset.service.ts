@@ -1,3 +1,4 @@
+import { coreCaptureRecoveryRequired } from '@/common/backup-maintenance';
 import { createHash, randomUUID } from 'node:crypto';
 import os from 'node:os';
 import { BadRequestException, ConflictException, Inject, Injectable, Optional } from '@nestjs/common';
@@ -59,6 +60,7 @@ export class ResetService {
     this.store = store ?? new ResetState(config.get('directories').dataDir);
   }
   async onModuleInit() {
+    if (coreCaptureRecoveryRequired()) return;
     try {
       const journal = await this.store.active();
       setResetRecoveryRequired(Boolean(journal && journal.phase !== 'complete'));

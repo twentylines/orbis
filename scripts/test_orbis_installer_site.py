@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 import tempfile
 import unittest
+from urllib.error import HTTPError
 from unittest import mock
 
 
@@ -18,7 +19,7 @@ SPEC.loader.exec_module(SITE)
 
 class InstallerEndpointTests(unittest.TestCase):
     def test_literal_required_updates_are_included_without_executing_published_source(self):
-        values = {'scripts/orbis-installer-bundle.py': b"REQUIRED = {'scripts/install-orbis.py'}\nREQUIRED |= {'scripts/orbis-host-volume-engine.py'}\nraise Exception('must not execute')\n"}
+        values = {'scripts/orbis-installer-bundle.py': b"SCHEMA = 'orbis.installer-bundle.v1'\nINSTALLER_SCHEMA = 'orbis.installer-bundle.v2'\nREQUIRED = {'scripts/install-orbis.py'}\nREQUIRED |= {'scripts/orbis-host-volume-engine.py'}\nraise Exception('must not execute')\n"}
         self.assertEqual(SITE.required_sources(values), {'scripts/install-orbis.py', 'scripts/orbis-host-volume-engine.py'})
         for body in [b"REQUIRED = {'one'}\nREQUIRED |= callback()", b"REQUIRED = {'one'}\nREQUIRED += {'two'}"]:
             with self.assertRaises(ValueError): SITE.required_sources({'scripts/orbis-installer-bundle.py': body})
@@ -34,11 +35,20 @@ class InstallerEndpointTests(unittest.TestCase):
             with self.subTest(source=name):
                 self.assertTrue(any(fnmatch.fnmatchcase(name, pattern) for pattern in paths), name)
 
+    def test_installer_publication_waits_for_full_checks_of_the_same_source(self):
+        workflow = (Path(__file__).resolve().parent.parent / '.github/workflows/installer-site.yml').read_text()
+        self.assertIn('uses: ./.github/workflows/ci.yml', workflow)
+        self.assertIn('uses: ./.github/workflows/integration-tests.yml', workflow)
+        self.assertIn('needs: [verify, integration]', workflow)
+        self.assertIn('ref: ${{ github.sha }}', workflow)
+        self.assertNotIn('ref: main', workflow)
+        self.assertLess(workflow.index('git/ref/heads/main'), workflow.index('scripts/publish-installer-site.py "$INSTALLER_WORK/'))
+
     def setUp(self):
         self.release = {"schema": "orbis.release.v1", "image": "ghcr.io/twentylines/orbis", "tag": "v1.0.0", "commit": "a" * 40, "digest": "sha256:" + "b" * 64, "installationProtocol": "orbis.installation-state.v1", "runtipiCompatibility": "4.10.1"}
         self.files = {name: b"# public source\n" for name in SITE.BUILD.REQUIRED}
         self.files["scripts/install-orbis.py"] = Path(__file__).with_name("install-orbis.py").read_bytes()
-        self.files["scripts/orbis-installer-bundle.py"] = ("REQUIRED = " + repr(SITE.BUILD.REQUIRED) + "\nBUILD_ONLY = " + repr(SITE.BUILD.BUILD_ONLY)).encode()
+        self.files["scripts/orbis-installer-bundle.py"] = ("SCHEMA = " + repr(SITE.BUILD.SCHEMA) + "\nINSTALLER_SCHEMA = " + repr(SITE.BUILD.INSTALLER_SCHEMA) + "\nREQUIRED = " + repr(SITE.BUILD.REQUIRED) + "\nBUILD_ONLY = " + repr(SITE.BUILD.BUILD_ONLY)).encode()
         self.assets = {**SITE.BUILD.build(self.files, json.dumps(self.release).encode()), "release-manifest.json": json.dumps(self.release).encode()}
         self.selected = self.record(self.release["tag"])
         self.selected["assets"] = [{"name": name, "browser_download_url": SITE.BASE + "download/" + self.selected["tag_name"] + "/" + name, "state": "uploaded", "size": len(data), "digest": "sha256:" + SITE.BUILD.sha(data)} for name, data in self.assets.items()]
@@ -130,7 +140,7 @@ class InstallerEndpointTests(unittest.TestCase):
     def test_older_source_bound_packages_use_their_original_required_file_list(self):
         required = SITE.BUILD.REQUIRED - {"scripts/orbis-install-ui.py"}
         del self.files["scripts/orbis-install-ui.py"]
-        self.files["scripts/orbis-installer-bundle.py"] = ("REQUIRED = " + repr(required)).encode()
+        self.files["scripts/orbis-installer-bundle.py"] = ("SCHEMA = " + repr(SITE.BUILD.SCHEMA) + "\nINSTALLER_SCHEMA = " + repr(SITE.BUILD.INSTALLER_SCHEMA) + "\nREQUIRED = " + repr(required)).encode()
         with mock.patch.object(SITE.BUILD, "REQUIRED", required), mock.patch.object(SITE.BUILD, 'BUILD_ONLY', set()):
             assets = {**SITE.BUILD.build(self.files, self.assets["release-manifest.json"]), "release-manifest.json": self.assets["release-manifest.json"]}
         selected = copy.deepcopy(self.selected)
@@ -276,7 +286,55 @@ class CombinedChannelEndpointTests(unittest.TestCase):
         self.assertEqual(SITE.BOOT.verify_files((installer / SITE.BUILD.ARCHIVE).read_bytes(), manifest), {name: data for name, data in self.files.items() if SITE.BUILD.ALLOWED.fullmatch(name) and name not in SITE.BUILD.BUILD_ONLY})
         self.assertEqual((self.output / "stable/install").read_bytes(), self.assets["install-orbis.py"])
         self.assertEqual((self.output / "nightly/install").read_bytes(), self.assets["install-orbis.py"])
-        self.assertEqual({p.name for p in self.output.iterdir()}, {"install", "channels.json", "stable", "nightly", "installer", "index.html", ".nojekyll"})
+        self.assertEqual({p.name for p in self.output.iterdir()}, {"install", "channels.json", "stable", "nightly", "installer", "index.html", ".nojekyll", SITE.HISTORY})
+
+    def test_saved_bootstrap_keeps_its_exact_package_after_head_changes(self):
+        self.combined()
+        old_bootstrap = (self.output / 'install').read_bytes()
+        old_package = {p.name: p.read_bytes() for p in (self.output / 'installer' / ('b' * 40)).iterdir()}
+        changed = dict(self.files)
+        changed['scripts/orbis-install-ui.py'] += b'\n# updated installer\n'
+        new_output = Path(self.temp.name) / 'next-site'
+        def previous(url, limit):
+            relative = url.removeprefix(SITE.PAGES)
+            value = (self.output / relative).read_bytes()
+            self.assertLessEqual(len(value), limit)
+            return value
+        def current(url, limit): return self.assets[url.rsplit('/', 1)[1]]
+        def source(_, commit): return changed if commit == 'c' * 40 else self.files
+        with mock.patch.object(SITE, 'head_commit', return_value='c' * 40), \
+                mock.patch.object(SITE, 'tag_commit', return_value=self.release['commit']), \
+                mock.patch.object(SITE.BUILD, 'committed_files', side_effect=source), \
+                mock.patch.object(SITE.subprocess, 'run'):
+            SITE.channel_site(Path(self.temp.name), [self.selected], new_output, current, previous_fetch=previous)
+        self.assertEqual({p.name: p.read_bytes() for p in (new_output / 'installer' / ('b' * 40)).iterdir()}, old_package)
+        namespace = {'__name__': 'saved_bootstrap'}
+        exec(compile(old_bootstrap, 'saved-bootstrap', 'exec'), namespace)
+        manifest = namespace['verify_installer_manifest'](old_package[SITE.BUILD.MANIFEST], namespace['INSTALLER'])
+        self.assertEqual(namespace['verify_files'](old_package[SITE.BUILD.ARCHIVE], manifest), SITE.packaged_sources(self.files))
+        records = json.loads((new_output / SITE.HISTORY).read_text())['installers']
+        self.assertEqual(set(records), {'b' * 40, 'c' * 40})
+
+    def test_history_migrates_from_the_existing_pinned_bootstrap_without_execution(self):
+        self.combined()
+        def previous(url, limit):
+            if url.endswith(SITE.HISTORY): raise HTTPError(url, 404, 'missing', {}, None)
+            return (self.output / 'install').read_bytes() + b"\nraise Exception('must not execute')\n"
+        self.assertEqual(SITE.previous_installers(previous), {'b' * 40: json.loads((self.output / SITE.HISTORY).read_text())['installers']['b' * 40]})
+
+    def test_history_errors_never_drop_old_pins_or_publish_unverified_bytes(self):
+        def unavailable(url, limit): raise HTTPError(url, 503, 'unavailable', {}, None)
+        with self.assertRaises(HTTPError): SITE.previous_installers(unavailable)
+        for value in ({'schema': 'orbis.installer-history.v1', 'installers': {'not-a-commit': 'a' * 64}},
+                      {'schema': 'unknown', 'installers': {}}):
+            with self.assertRaises(ValueError): SITE.previous_installers(lambda *_: json.dumps(value).encode())
+        assets = SITE.BUILD.build_installer(self.files, 'b' * 40)
+        root = Path(self.temp.name) / 'retained'
+        root.mkdir()
+        with mock.patch.object(SITE.subprocess, 'run'), mock.patch.object(SITE.BUILD, 'committed_files', return_value=self.files):
+            with self.assertRaises(ValueError):
+                SITE.preserve_installers(Path(self.temp.name), root, {'b' * 40: 'f' * 64}, lambda url, _: assets[url.rsplit('/', 1)[1]])
+        self.assertEqual(list(root.iterdir()), [])
 
     def test_bootstrap_uses_committed_head_while_release_assets_use_release_commit(self):
         repository = Path(self.temp.name) / "repository"

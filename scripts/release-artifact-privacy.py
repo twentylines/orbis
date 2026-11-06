@@ -654,7 +654,9 @@ def ensure_release_tag(tag, commit, token, create):
         reject('release-tag-mismatch')
 
 
-def publish_image(oci, digest, tag, authfile, commit, create_tag=False):
+def publish_image(oci, digest, tag, authfile, commit, create_tag=False, candidate=False):
+    if candidate and (create_tag or not re.fullmatch(r'v\d+\.\d+\.\d+-rc\.\d+', tag)):
+        reject('invalid-candidate-publication')
     if not authfile or authfile.is_symlink() or not authfile.is_file():
         reject('missing-registry-authentication')
     token = os.environ.get('GH_TOKEN')
@@ -684,7 +686,17 @@ def publish_image(oci, digest, tag, authfile, commit, create_tag=False):
         error.close()
         if error.code != 404:
             reject('registry-absence-unverified')
-    ensure_release_tag(tag, commit, token, create_tag)
+    if candidate:
+        if os.environ.get('GITHUB_REF') != 'refs/heads/main' or os.environ.get('GITHUB_SHA') != commit:
+            reject('candidate-must-use-main')
+        main = github_json('git/ref/heads/main', token)
+        target = main.get('object', {})
+        if main.get('ref') != 'refs/heads/main' or target.get('type') != 'commit' or target.get('sha') != commit:
+            reject('main-advanced-before-publication')
+        if github_json('git/ref/tags/' + tag, token, missing=True) is not None:
+            reject('candidate-git-tag-already-exists')
+    else:
+        ensure_release_tag(tag, commit, token, create_tag)
     target = f'docker://ghcr.io/twentylines/orbis:{tag}'
     result = subprocess.run(
         ['skopeo', 'copy', '--all', '--preserve-digests', '--authfile', str(authfile), 'oci-archive:' + str(oci.resolve()), target],
@@ -699,7 +711,7 @@ def publish_image(oci, digest, tag, authfile, commit, create_tag=False):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=['identity', 'scan', 'verify', 'publish'])
+    parser.add_argument('mode', choices=['identity', 'scan', 'verify', 'publish', 'publish-candidate'])
     parser.add_argument('--oci', type=Path, required=True)
     parser.add_argument('--tag', required=True)
     parser.add_argument('--commit', required=True)
@@ -714,6 +726,8 @@ def main(argv=None):
     image = None
     stage = 'image-read'
     try:
+        if args.mode == 'publish-candidate' and (args.create_tag or not re.fullmatch(r'v\d+\.\d+\.\d+-rc\.\d+', args.tag)):
+            reject('invalid-candidate-publication')
         if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-(?:beta|rc)\.\d+)?', args.tag) or not re.fullmatch(r'[a-f0-9]{40}', args.commit):
             reject('invalid-release-identity')
         archive_sha = file_hash(args.oci)
@@ -735,7 +749,7 @@ def main(argv=None):
             if file_hash(args.oci) != archive_sha:
                 reject('scanned-artifact-changed')
             result.update(artifacts=artifacts, passed=True)
-            if args.mode in {'verify', 'publish'}:
+            if args.mode in {'verify', 'publish', 'publish-candidate'}:
                 stage = 'scan-receipt'
                 prior = json.loads(args.report.read_bytes())
                 if prior != result:
@@ -746,6 +760,9 @@ def main(argv=None):
             if args.mode == 'publish':
                 stage = 'image-publication'
                 publish_image(args.oci, digest, args.tag, args.registry_auth, args.commit, args.create_tag)
+            elif args.mode == 'publish-candidate':
+                stage = 'image-publication'
+                publish_image(args.oci, digest, args.tag, args.registry_auth, args.commit, candidate=True)
         if args.github_output:
             with args.github_output.open('a') as output:
                 output.write(f'digest={digest}\n')

@@ -217,6 +217,7 @@ export async function verifyCaptureAgainstBackup(options: {
   const bytes = await readBounded(options.content, 'manifest.json', fullBackupLimits.manifestBytes, options.signal);
   if (sha(bytes) !== options.manifestSha256) throw fail();
   const manifest = parseFullBackupManifest(JSON.parse(bytes.toString('utf8')));
+  if (manifest.version === 3) throw fail();
   if (options.capture.schema === 'orbis.time-machine-image-capture.v2') {
     if (!options.appRuntime) throw fail();
     await verifyV2CaptureAgainstBackup(
@@ -762,6 +763,7 @@ export async function captureTimeMachineImages(input: {
   const manifestBytes = await readBounded(options.snapshotContent, 'manifest.json', fullBackupLimits.manifestBytes, signal);
   if (sha(manifestBytes) !== options.manifestSha256) throw fail();
   const manifest = parseFullBackupManifest(JSON.parse(manifestBytes.toString('utf8')));
+  if (manifest.version === 3) throw fail();
   if (
     manifest.architecture !== options.platform.architecture ||
     !manifest.exclusions.includes('container-images') ||

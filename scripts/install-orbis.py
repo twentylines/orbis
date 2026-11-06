@@ -49,6 +49,24 @@ REQUIRED |= {
     "scripts/orbis-app-volume-authority.py",
 }
 
+LEGACY_REQUIRED = frozenset(REQUIRED)
+REQUIRED |= {
+    "scripts/orbis-release-policy.py", "scripts/orbis-host-service.py", "scripts/orbis-host-service-setup.py", "scripts/orbis-host-sentinel-observer.py",
+    "scripts/orbis-host-observer-profile.py",
+    "scripts/orbis-host-time-machine-core.py", "scripts/orbis-host-core-storage-map.py", "scripts/orbis-host-core-checkpoint.py",
+    "scripts/orbis-host-core-capture-reader.py", "scripts/orbis-host-core-capture-service.py", "scripts/orbis-host-core-capture-worker.py",
+    "scripts/orbis-host-sentinel-capture.py",
+    "scripts/orbis-host-sentinel-publication.py",
+    "scripts/orbis-host-sentinel-auto-publication.py",
+    "scripts/orbis-host-sentinel-reader.py",
+    "scripts/orbis-host-core-capture-lease.py", "scripts/orbis-host-core-capture-reservation.py", "scripts/orbis-host-core-capture-reserved.py",
+    "scripts/orbis-host-core-capture-supervisor.py", "scripts/orbis-host-core-capture-completion.py", "scripts/orbis-host-core-capture-retirement.py",
+    "scripts/orbis-host-core-capture-namespace.py",
+    "scripts/orbis-host-core-capture-abort.py", "scripts/orbis-host-core-capture-empty-abort.py", "scripts/orbis-host-core-capture-unused-abort.py",
+}
+FILE_LIMITS = {"orbis.installer-bundle.v1": 66, "orbis.installer-bundle.v2": 66,
+               "orbis.installer-bundle.v3": 128, "orbis.installer-bundle.v4": 128}
+
 
 def require_supported_host():
     if sys.platform != "linux" or os.geteuid() != 0 or sys.version_info < (3, 10):
@@ -154,13 +172,18 @@ def fetch(url, limit):
         return data
 
 
-def verify_files_manifest(value, required):
+def verify_files_manifest(value, required=None):
+    schema = value.get('schema')
+    if not isinstance(schema, str) or schema not in FILE_LIMITS:
+        raise ValueError('Installer format is unsupported')
+    if required is None:
+        required = LEGACY_REQUIRED if schema in {'orbis.installer-bundle.v1', 'orbis.installer-bundle.v2'} else REQUIRED
     if type(value.get("archiveBytes")) is not int or not 0 < value["archiveBytes"] <= 8 * 1024 * 1024:
         raise ValueError("Installer archive size is invalid")
     if not re.fullmatch(r"[0-9a-f]{64}", str(value.get("archiveSha256", ""))):
         raise ValueError("Installer package hash is invalid")
     files = value.get("files")
-    if not isinstance(required, set) or not required or not isinstance(files, dict) or not required.issubset(files) or not 1 <= len(files) <= 66:
+    if not isinstance(required, (set, frozenset)) or not required or not isinstance(files, dict) or not required.issubset(files) or not 1 <= len(files) <= FILE_LIMITS[schema]:
         raise ValueError("Installer file list is incomplete")
     total = 0
     for name, record in files.items():
@@ -171,13 +194,13 @@ def verify_files_manifest(value, required):
         raise ValueError("Installer files exceed their total size limit")
 
 
-def verify_manifest(data, identity, *, required=REQUIRED):
+def verify_manifest(data, identity, *, required=None):
     if not isinstance(identity, dict) or not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?", str(identity.get("tag", ""))) or not re.fullmatch(r"[0-9a-f]{40}", str(identity.get("commit", ""))):
         raise ValueError("Use the installer published with an Orbis release")
     if sha(data) != identity.get("manifestSha256"):
         raise ValueError("Installer manifest does not match this release launcher")
     value = json.loads(data)
-    if not isinstance(value, dict) or value.get("schema") != "orbis.installer-bundle.v1" or any(value.get(key) != identity[key] for key in ("tag", "commit")) or value.get("archive") != ARCHIVE:
+    if not isinstance(value, dict) or value.get("schema") not in {"orbis.installer-bundle.v1", "orbis.installer-bundle.v3"} or any(value.get(key) != identity[key] for key in ("tag", "commit")) or value.get("archive") != ARCHIVE:
         raise ValueError("Installer package has a different release identity")
     if not re.fullmatch(r"[0-9a-f]{64}", str(value.get("releaseManifestSha256", ""))):
         raise ValueError("Installer package hash is invalid")
@@ -185,19 +208,22 @@ def verify_manifest(data, identity, *, required=REQUIRED):
     return value
 
 
-def verify_installer_manifest(data, identity, *, required=REQUIRED):
+def verify_installer_manifest(data, identity, *, required=None):
     if not isinstance(identity, dict) or set(identity) != {"commit", "manifestSha256"} or not re.fullmatch(r"[0-9a-f]{40}", str(identity.get("commit", ""))) or not re.fullmatch(r"[0-9a-f]{64}", str(identity.get("manifestSha256", ""))):
         raise ValueError("The published installer identity is invalid")
     if sha(data) != identity["manifestSha256"]:
         raise ValueError("Installer manifest does not match this installer launcher")
     value = json.loads(data)
-    if not isinstance(value, dict) or value.get("schema") != "orbis.installer-bundle.v2" or value.get("installerCommit") != identity["commit"] or value.get("archive") != ARCHIVE:
+    if not isinstance(value, dict) or value.get("schema") not in {"orbis.installer-bundle.v2", "orbis.installer-bundle.v4"} or value.get("installerCommit") != identity["commit"] or value.get("archive") != ARCHIVE:
         raise ValueError("Installer package has a different source identity")
     verify_files_manifest(value, required)
     return value
 
 
 def verify_files(data, manifest):
+    if not isinstance(manifest, dict) or not isinstance(manifest.get('files'), dict):
+        raise ValueError('Installer file list is invalid')
+    verify_files_manifest(manifest, set(manifest['files']))
     if len(data) != manifest["archiveBytes"] or sha(data) != manifest["archiveSha256"]:
         raise ValueError("Installer archive does not match its manifest")
     result = {}

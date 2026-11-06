@@ -24,6 +24,8 @@ import { MarketplaceService } from '@/modules/marketplace/marketplace.service';
 import { RepoEventsQueue } from '@/modules/queue/entities/repo-events';
 import { SystemEventsQueue } from '@/modules/queue/entities/system-events';
 import * as controllerStartup from '@/common/controller-overlay-startup';
+import * as maintenance from '@/common/backup-maintenance';
+import * as installation from '@/common/installation-mode';
 
 const TRAEFIK_CONFIG = `api:
   dashboard: true
@@ -100,6 +102,90 @@ describe('AppService', () => {
     marketplace.initialize.mockResolvedValue(undefined);
     repoQueue = moduleRef.get(RepoEventsQueue);
     systemQueue = moduleRef.get(SystemEventsQueue);
+  });
+
+  describe('core capture presentation', () => {
+    beforeEach(() => {
+      vi.spyOn(maintenance, 'backupMaintenanceActive').mockReturnValue(true);
+      vi.spyOn(maintenance, 'coreCaptureRecoveryRequired').mockReturnValue(false);
+      vi.spyOn(installation, 'installationMode').mockReturnValue({ phase: 'normal' } as ReturnType<typeof installation.installationMode>);
+      configurationService.getConfig.mockReturnValue(fromPartial({ version: '5.0.0', userSettings: { allowErrorMonitoring: true }, __prod__: true }));
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    it('performs only capture presentation work and installs timers once', async () => {
+      const copy = vi.spyOn(appService, 'copyAssets');
+      const tls = vi.spyOn(appService, 'generateTlsCertificates');
+      const first = appService.prepareCoreCapturePresentation();
+      expect(appService.prepareCoreCapturePresentation()).toBe(first);
+      await first;
+      appService.activateCoreCaptureTimers();
+      appService.activateCoreCaptureTimers();
+      expect(configurationService.initSentry).toHaveBeenCalledExactlyOnceWith({ release: '5.0.0', allowSentry: true });
+      expect(marketplace.initialize).toHaveBeenCalledExactlyOnceWith({ refreshRepositories: false });
+      expect(appStatusSyncService.syncAllAppStatuses).toHaveBeenCalledOnce();
+      expect(repoQueue.publishRepeatable).toHaveBeenCalledExactlyOnceWith({ command: 'update_all' }, '*/15 * * * *');
+      expect(systemQueue.publishRepeatable).toHaveBeenCalledExactlyOnceWith({ command: 'sync_app_statuses' }, '*/5 * * * *');
+      expect(databaseService.migrate).not.toHaveBeenCalled();
+      expect(repoQueue.publish).not.toHaveBeenCalled();
+      expect(pruneNetworks).not.toHaveBeenCalled();
+      expect(appLifecycleService.recoverInterruptedRestores).not.toHaveBeenCalled();
+      expect(appLifecycleService.restartRunningApps).not.toHaveBeenCalled();
+      expect(copy).not.toHaveBeenCalled();
+      expect(tls).not.toHaveBeenCalled();
+    });
+
+    it.each(['mode', 'hold', 'capture'] as const)('rejects preparation and activation with invalid %s', async (fault) => {
+      if (fault === 'mode')
+        vi.mocked(installation.installationMode).mockReturnValue({ phase: 'resume' } as ReturnType<typeof installation.installationMode>);
+      if (fault === 'hold') vi.mocked(maintenance.backupMaintenanceActive).mockReturnValue(false);
+      if (fault === 'capture') vi.mocked(maintenance.coreCaptureRecoveryRequired).mockReturnValue(true);
+      await expect(appService.prepareCoreCapturePresentation()).rejects.toThrow();
+      expect(() => appService.activateCoreCaptureTimers()).toThrow();
+      expect(marketplace.initialize).not.toHaveBeenCalled();
+      expect(systemQueue.publishRepeatable).not.toHaveBeenCalled();
+    });
+
+    it('retains failed preparation and does not activate timers', async () => {
+      marketplace.initialize.mockRejectedValueOnce(new Error('marketplace unavailable'));
+      await expect(appService.prepareCoreCapturePresentation()).rejects.toThrow('marketplace unavailable');
+      await expect(appService.prepareCoreCapturePresentation()).rejects.toThrow('marketplace unavailable');
+      expect(marketplace.initialize).toHaveBeenCalledOnce();
+      expect(appStatusSyncService.syncAllAppStatuses).not.toHaveBeenCalled();
+      expect(() => appService.activateCoreCaptureTimers()).toThrow();
+      expect(systemQueue.publishRepeatable).not.toHaveBeenCalled();
+    });
+
+    it('rejects unsuccessful status reconciliation and does not activate timers', async () => {
+      appStatusSyncService.syncAllAppStatuses.mockResolvedValue({ success: false, message: 'failed', syncedCount: 0, skippedCount: 0, totalApps: 0 });
+      await expect(appService.prepareCoreCapturePresentation()).rejects.toThrow('App status reconciliation failed');
+      expect(() => appService.activateCoreCaptureTimers()).toThrow();
+      expect(systemQueue.publishRepeatable).not.toHaveBeenCalled();
+    });
+
+    it('rechecks the hold before activating and does not register production repo timers outside production', async () => {
+      configurationService.getConfig.mockReturnValue(
+        fromPartial({ version: '5.0.0', userSettings: { allowErrorMonitoring: false }, __prod__: false }),
+      );
+      await appService.prepareCoreCapturePresentation();
+      vi.mocked(maintenance.backupMaintenanceActive).mockReturnValue(false);
+      expect(() => appService.activateCoreCaptureTimers()).toThrow();
+      vi.mocked(maintenance.backupMaintenanceActive).mockReturnValue(true);
+      appService.activateCoreCaptureTimers();
+      expect(repoQueue.publishRepeatable).not.toHaveBeenCalled();
+      expect(systemQueue.publishRepeatable).toHaveBeenCalledOnce();
+    });
+
+    it('does not retry a partially failed timer installation', async () => {
+      await appService.prepareCoreCapturePresentation();
+      systemQueue.publishRepeatable.mockImplementationOnce(() => {
+        throw new Error('timer failure');
+      });
+      expect(() => appService.activateCoreCaptureTimers()).toThrow('timer failure');
+      expect(() => appService.activateCoreCaptureTimers()).toThrow('timer failure');
+      expect(repoQueue.publishRepeatable).toHaveBeenCalledOnce();
+      expect(systemQueue.publishRepeatable).toHaveBeenCalledOnce();
+    });
   });
 
   it('keeps account secrets and private configuration out of startup diagnostics', async () => {

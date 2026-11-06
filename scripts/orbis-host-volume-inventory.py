@@ -61,6 +61,21 @@ def _scan(fd, maximum_entries, maximum_path_bytes, maximum_bytes, cancelled):
     def named(parent, component):
         return _seal(os.stat(component, dir_fd=parent, follow_symlinks=False))
 
+    def symlink_target(parent, component, before):
+        if sys.platform != 'linux' or not hasattr(os, 'O_PATH'):
+            raise ValueError()
+        pinned = os.open(component, os.O_PATH | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent)
+        try:
+            if _seal(os.fstat(pinned)) != before:
+                raise ValueError()
+            # Pinning prevents an unlinked inode from being reused during the read.
+            target = os.readlink('', dir_fd=pinned)
+            if _seal(os.fstat(pinned)) != before or named(parent, component) != before:
+                raise ValueError()
+            return target
+        finally:
+            os.close(pinned)
+
     def visit(directory, name, initial, depth):
         nonlocal total
         if depth > _MAX_DEPTH or not stat.S_ISDIR(os.fstat(directory).st_mode) or _seal(os.fstat(directory)) != initial:
@@ -130,7 +145,7 @@ def _scan(fd, maximum_entries, maximum_path_bytes, maximum_bytes, cancelled):
                 finally:
                     os.close(pinned)
             elif stat.S_ISLNK(info.st_mode):
-                target = os.readlink(component, dir_fd=directory)
+                target = symlink_target(directory, component, before)
                 _text(target, 4096)
                 if target.startswith('/'):
                     raise ValueError()

@@ -1,3 +1,4 @@
+import { coreCaptureRecoveryRequired } from '@/common/backup-maintenance';
 import { Inject, Injectable, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common';
 import os from 'node:os';
 import path from 'node:path';
@@ -40,6 +41,7 @@ export class BackupRestoreActivationService implements OnModuleInit, OnModuleDes
     this.continuation = continuation;
   }
   onModuleInit() {
+    if (coreCaptureRecoveryRequired()) return;
     if (restoreStartupRole() !== 'candidate' || !this.transactionId) return;
     this.timer = setInterval(() => {
       void this.releaseWhenComplete().catch(() => undefined);

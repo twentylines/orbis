@@ -95,6 +95,8 @@ COPY --from=builder /app/packages/frontend/dist/client ./assets/frontend
 
 EXPOSE 3000
 
-RUN mv main.js main.mjs && mv restore-worker.js restore-worker.mjs && mv retained-worker-capability.js retained-worker-capability.mjs
+RUN mv main.js main.mjs && mv restore-worker.js restore-worker.mjs && mv retained-worker-capability.js retained-worker-capability.mjs && \
+    mv core-capture-publication.js core-capture-publication.mjs && mv core-capture-seal.js core-capture-seal.mjs && \
+    mv core-capture-catalog.js core-capture-catalog.mjs && mv core-capture-image-inventory.js core-capture-image-inventory.mjs
 
 CMD ["node", "./main.mjs"]

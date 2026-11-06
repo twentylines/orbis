@@ -193,12 +193,22 @@ class InstallationStorageTests(unittest.TestCase):
                 mock.patch.object(STORAGE.RESET, 'require_runtime') as runtime, \
                 mock.patch.object(STORAGE.RESET, 'require_docker_isolation') as isolation, \
                 mock.patch.object(STORAGE.RESET, 'binding_path', return_value=reset):
-            reviewed = STORAGE.review(self.root, self.docker, self.bundle, scope=STORAGE.LIVE_PROXY_SCOPE)
-            self.assertNotIn(str(reset), [item['source'] for item in reviewed['resources']])
-            read.assert_called_once_with(self.root, STORAGE.APPS.digest_daemon(self.docker), self.docker.context)
-            verify.assert_called_once()
-            runtime.assert_called_once()
-            isolation.assert_called_once_with(self.root, self.docker, binding, controller_id=self.docker.controller_id)
+            for schema in (STORAGE.RESET.SCHEMA_V3, STORAGE.RESET.SCHEMA_V4):
+                binding['schema'] = schema
+                for check in (read, verify, runtime, isolation): check.reset_mock()
+                reviewed = STORAGE.review(self.root, self.docker, self.bundle, scope=STORAGE.LIVE_PROXY_SCOPE)
+                self.assertNotIn(str(reset), [item['source'] for item in reviewed['resources']])
+                read.assert_called_once_with(self.root, STORAGE.APPS.digest_daemon(self.docker), self.docker.context)
+                verify.assert_called_once()
+                runtime.assert_called_once()
+                isolation.assert_called_once_with(self.root, self.docker, binding, controller_id=self.docker.controller_id)
+            for schema in (STORAGE.RESET.SCHEMA, STORAGE.RESET.SCHEMA_V2, 'unknown'):
+                binding['schema'] = schema
+                verify.reset_mock()
+                with self.subTest(schema=schema), self.assertRaisesRegex(STORAGE.StorageError, 'durable enrollment'):
+                    STORAGE.review(self.root, self.docker, self.bundle, scope=STORAGE.LIVE_PROXY_SCOPE)
+                verify.assert_not_called()
+            binding['schema'] = STORAGE.RESET.SCHEMA_V4
             with mock.patch.object(STORAGE.RESET, 'read_external_enrollment', side_effect=ValueError('unverified reset binding')):
                 with self.assertRaisesRegex(ValueError, 'unverified'):
                     STORAGE.review(self.root, self.docker, self.bundle, scope=STORAGE.LIVE_PROXY_SCOPE)

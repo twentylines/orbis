@@ -42,6 +42,7 @@ it.skipIf(process.platform !== 'linux')(
     const inventory = await inventoryBackup([{ name: 'app-data', source: live }], signal, [], { allowAppDataLinksAndSockets: true });
     const files = await copyBackupFiles(inventory, source.content, signal, () => undefined);
     await fs.writeFile(path.join(source.content, 'data/.env'), 'TZ=UTC\n', { mode: 0o600 });
+    if (source.manifest.version === 3) throw new Error('Expected a legacy backup fixture.');
     const manifest = {
       ...source.manifest,
       version: 2 as const,

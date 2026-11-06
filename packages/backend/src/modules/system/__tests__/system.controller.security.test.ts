@@ -16,6 +16,7 @@ import { HostProcessesService } from '../host-processes.service';
 import { HostSensorsService } from '../host-sensors.service';
 import { HostDeviceHistoryService } from '../host-device-history.service';
 import { DriveHealthService } from '../drive-health.service';
+import { SentinelService } from '../sentinel.service';
 
 describe('SystemController certificate security', () => {
   let app: INestApplication;
@@ -30,6 +31,7 @@ describe('SystemController certificate security', () => {
   const sensors = mock<HostSensorsService>();
   const hostHistory = mock<HostDeviceHistoryService>();
   const drives = mock<DriveHealthService>();
+  const sentinel = mock<SentinelService>();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -43,6 +45,7 @@ describe('SystemController certificate security', () => {
         { provide: HostSensorsService, useValue: sensors },
         { provide: HostDeviceHistoryService, useValue: hostHistory },
         { provide: DriveHealthService, useValue: drives },
+        { provide: SentinelService, useValue: sentinel },
         { provide: OrbisReleaseService, useValue: orbisReleases },
         { provide: OrbisReleaseChannelsService, useValue: releaseChannels },
         {
@@ -74,6 +77,7 @@ describe('SystemController certificate security', () => {
     systemService.getLocalCertificate.mockReset();
     orbisReleases.latest.mockReset();
     drives.read.mockReset();
+    sentinel.read.mockReset();
     releaseChannels.read.mockReset().mockResolvedValue({ version: 1, channel: 'stable', revision: 'a65a9a64-f57e-4c73-9dc8-8d35d0b5b5a1' });
     releaseChannels.status.mockReset().mockResolvedValue({
       phase: 'development',
@@ -86,6 +90,17 @@ describe('SystemController certificate security', () => {
         { id: 'nightly', available: true },
       ],
     });
+  });
+
+  it('authenticates Sentinel status and preserves explicit unavailability', async () => {
+    const status = { available: false, installedVersion: null, availableVersion: null, state: 'unknown' as const };
+    sentinel.read.mockResolvedValue(status);
+    expect((await request(app.getHttpServer()).get('/system/sentinel')).status).toBe(401);
+    expect(sentinel.read).not.toHaveBeenCalled();
+    const response = await request(app.getHttpServer()).get('/system/sentinel').set('Authorization', 'Bearer cli-token');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(status);
+    expect(sentinel.read).toHaveBeenCalledOnce();
   });
 
   it('allows unauthenticated certificate downloads', async () => {

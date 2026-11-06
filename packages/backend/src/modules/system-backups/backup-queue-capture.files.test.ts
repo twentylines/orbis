@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { type } from 'arktype';
-import { Queue, QueueLifecycle } from '../queue/queue.entity';
+import { Queue } from '../queue/queue.entity';
 import { QueueFactory } from '../queue/queue.factory';
 import { setBackupRecoveryRequired } from '@/common/backup-maintenance';
 
@@ -36,13 +36,14 @@ function fixture() {
     queue.onEvent(vi.fn());
     return queue;
   });
-  const factory = Object.create(QueueFactory.prototype) as QueueFactory;
+  const initialize = vi.spyOn(QueueFactory.prototype, 'initializeConnection').mockResolvedValue(undefined);
+  const factory = new QueueFactory({} as never, {} as never);
+  initialize.mockRestore();
   Object.assign(factory, {
     rabbit,
     isInitialized: true,
     connectionGeneration: 1,
     captureHeld: false,
-    lifecycle: new QueueLifecycle(),
     queues: new Map(names.map((name, index) => [name, queues[index]])),
   });
   return { factory, queues, consumers, rpc, rabbit };

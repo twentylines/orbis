@@ -95,6 +95,26 @@ class OrbisHostServiceUpgradeTests(unittest.TestCase):
         (self.base / "orbis-host-packages.py").write_text("new helper")
         self.assertNotEqual(before, UPGRADE.digest_files(self.base))
 
+    def test_installed_old_helper_is_not_required_to_have_new_capture_modules(self):
+        installed = self.base / 'installed'
+        installed.mkdir()
+        for name in UPGRADE.LEGACY_SCRIPTS:
+            (installed / name).write_text('# installed legacy helper\n')
+        root = self.base / 'installation'
+        environment = self.base / 'helper.env'
+        unit = self.base / 'helper.service'
+        unit.write_text((Path(__file__).parent.parent / 'packaging/systemd/orbis-host.service').read_text())
+        def systemctl(*args):
+            return str(unit) if 'FragmentPath' in args else '' if 'DropInPaths' in args else 'no' if 'NeedDaemonReload' in args else 'active'
+        with mock.patch.object(UPGRADE.SETUP, 'INSTALL_DIR', installed), mock.patch.object(UPGRADE.SETUP, 'ENV_FILE', environment), \
+                mock.patch.object(UPGRADE.SETUP, 'UNIT_FILE', unit), mock.patch.object(UPGRADE, 'STATE_DIR', self.base), \
+                mock.patch.object(UPGRADE, 'require_root_owned') as inspected, mock.patch.object(UPGRADE, 'systemctl_output', side_effect=systemctl):
+            environment.write_text(UPGRADE.exact_environment(root, 'legacy'))
+            UPGRADE.require_installed(root, 'legacy')
+        checked = {call.args[0] for call in inspected.call_args_list}
+        self.assertTrue({installed / name for name in UPGRADE.LEGACY_SCRIPTS} <= checked)
+        self.assertNotIn(installed / 'orbis-host-core-capture-reader.py', checked)
+
 
 if __name__ == "__main__":
     unittest.main()

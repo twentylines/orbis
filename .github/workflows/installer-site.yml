@@ -12,6 +12,10 @@ on:
       - 'packaging/systemd/orbis-host.service'
       - 'scripts/test_orbis_installer_site.py'
       - 'scripts/test_orbis_installer_bundle.py'
+      - 'scripts/test_orbis_installer_contract.py'
+      - 'scripts/test_orbis_host_dependency_closure.py'
+      - 'scripts/test_orbis_host_observer_profile.py'
+      - 'scripts/test_orbis_host_service_upgrade.py'
       - 'scripts/test_orbis_install_ui.py'
   workflow_run:
     workflows: ['Orbis release']
@@ -26,7 +30,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository)
+    uses: ./.github/workflows/ci.yml
+
+  integration:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository)
+    uses: ./.github/workflows/integration-tests.yml
+
   publish:
+    needs: [verify, integration]
     if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     permissions:
@@ -41,16 +54,21 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 0
+      - name: Require the verified source to remain current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" = "$GITHUB_SHA"
       - name: Prepare installer working files
         run: |
           umask 077
           mkdir -p "$INSTALLER_WORK/tmp"
       - name: Check endpoint selection and verification
+        working-directory: scripts
         env:
           TMPDIR: ${{ github.workspace }}/.orbis-installer-endpoint/tmp
-        run: python3 -m unittest discover -s scripts -p 'test_orbis_installer_site.py' -v
+        run: python3 -m unittest test_orbis_installer_site test_orbis_installer_bundle test_orbis_installer_contract test_orbis_host_dependency_closure test_orbis_host_observer_profile test_orbis_host_service_upgrade -v
       - name: Verify the newest published installer
         id: installer
         env:
@@ -58,7 +76,7 @@ jobs:
           TMPDIR: ${{ github.workspace }}/.orbis-installer-endpoint/tmp
         run: |
           gh api 'repos/twentylines/orbis/releases?per_page=100' > "$INSTALLER_WORK/releases.json"
-          python3 scripts/publish-installer-site.py "$INSTALLER_WORK/releases.json" "$INSTALLER_WORK/public" --channels --if-available --github-output "$GITHUB_OUTPUT"
+          python3 scripts/publish-installer-site.py "$INSTALLER_WORK/releases.json" "$INSTALLER_WORK/public" --channels --preserve-installers --if-available --github-output "$GITHUB_OUTPUT"
       - uses: actions/configure-pages@v6
         if: steps.installer.outputs.available == 'true'
       - uses: actions/upload-pages-artifact@v5

@@ -6,7 +6,7 @@ import { type } from 'arktype';
 import { scheduleCron, validateCronPattern, type ScheduledCronTask } from './cron-scheduler';
 import type { EventPublisher } from './event.publisher';
 import { INSTALLATION_MESSAGE, installationHeld, installationMode } from '@/common/installation-mode';
-import { backupMaintenanceActive, enterBackupMutation, waitForBackupMutation } from '@/common/backup-maintenance';
+import { backupMaintenanceActive, coreCaptureRecoveryRequired, enterBackupMutation, waitForBackupMutation } from '@/common/backup-maintenance';
 
 export type ArkTypeSchema<TOut = unknown, TIn = unknown> = {
   (data: TIn): TOut | type.errors;
@@ -17,6 +17,13 @@ export type ArkTypeSchema<TOut = unknown, TIn = unknown> = {
 type Infer<T extends { infer: unknown }> = T['infer'];
 type InferIn<T extends { infer: unknown; inferIn?: unknown }> = T extends { inferIn: infer I } ? I : T['infer'];
 export type QueueObserver<T> = { queued: (event: T) => Promise<void>; unconfirmed: (event: T) => Promise<void> };
+const captureRefusals = new WeakSet<object>();
+export const queueCaptureWasRefused = (error: unknown) => !!error && typeof error === 'object' && captureRefusals.has(error);
+function refuseCapture(message: string) {
+  const error = new Error(message);
+  captureRefusals.add(error);
+  return error;
+}
 
 export class QueueLifecycle {
   public stopping = false;
@@ -61,7 +68,7 @@ export class QueueLifecycle {
 }
 
 export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: boolean; message: string }>> {
-  private enabled = installationMode().phase === 'normal';
+  private enabled = installationMode().phase === 'normal' && !coreCaptureRecoveryRequired();
   private deferredConsumer?: () => void;
   private consumer?: Consumer;
   private backupPaused = false;
@@ -72,8 +79,8 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
   private resourcesClose?: Promise<void>;
 
   public pauseForBackup() {
-    if (this.lifecycle.stopping) throw new Error('Queue is shutting down.');
-    if (this.backupPaused) throw new Error('Queue capture is already in progress.');
+    if (this.lifecycle.stopping) throw refuseCapture('Queue is shutting down.');
+    if (this.backupPaused) throw refuseCapture('Queue capture is already in progress.');
     this.backupPaused = true;
     let released = false;
     return {
@@ -113,6 +120,10 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
     };
   }
 
+  public captureSetupIsIdle() {
+    return !this.backupPaused && !this.lifecycle.stopping && !this.consumerClose && !this.resourcesClose && this.enabled && !!this.consumer;
+  }
+
   constructor(
     private rabbit: Connection,
     private rpcClient: RPCClient,
@@ -127,9 +138,19 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
   ) {}
 
   public resumeAfterInstallation() {
-    if (this.lifecycle.stopping) return;
+    if (this.lifecycle.stopping || coreCaptureRecoveryRequired()) return;
     if (installationMode().phase !== 'resume' || this.enabled) return;
     this.deferredConsumer?.();
+    this.deferredConsumer = undefined;
+    this.enabled = true;
+  }
+
+  public resumeAfterCoreCapture() {
+    if (this.lifecycle.stopping || coreCaptureRecoveryRequired() || this.backupPaused || installationMode().phase !== 'normal')
+      throw new Error('Capture queue continuation is unavailable.');
+    if (this.enabled) return;
+    if (!this.deferredConsumer) throw new Error('Capture queue consumer was not registered.');
+    this.deferredConsumer();
     this.deferredConsumer = undefined;
     this.enabled = true;
   }
@@ -152,6 +173,11 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
     if (this.lifecycle.stopping) throw new Error('Queue is shutting down.');
     if (this.backupPaused) throw new Error('Queue consumers cannot be added during capture.');
     if (installationHeld()) return;
+    if (coreCaptureRecoveryRequired()) {
+      this.enabled = false;
+      this.deferredConsumer = () => this.createConsumer(callback);
+      return;
+    }
     if (!this.enabled) {
       this.deferredConsumer = () => this.createConsumer(callback);
       return;

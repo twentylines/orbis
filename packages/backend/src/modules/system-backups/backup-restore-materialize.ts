@@ -17,6 +17,10 @@ import { backupMediaPolicy, type FullBackupManifest } from './backup-import';
 export const restoreTreeNames = ['state', 'apps', 'repos', 'media', 'user-config', 'traefik', 'app-data'] as const;
 export type RestoreTreeName = (typeof restoreTreeNames)[number];
 export function restoreTreesForManifest(manifest: FullBackupManifest, preserveLiveProxy = false) {
+  if (manifest.version === 3 && manifest.volumes.length)
+    throw new BackupRequirementError(
+      'This backup needs app volume recovery support before it can be restored. Your current server data has not been replaced.',
+    );
   return restoreTreeNames.filter(
     (name) => (!preserveLiveProxy || name !== 'traefik') && (backupMediaPolicy(manifest) === 'included' || name !== 'media'),
   );
@@ -225,7 +229,7 @@ export async function materializeBackupSource(options: {
       ),
       ...(preserved?.directories.filter((entry) => !options.preserveLiveProxy || entry.root !== 'traefik') ?? []),
     ];
-    const links = source.manifest.version === 2 ? (source.manifest.symlinks ?? []) : [];
+    const links = source.manifest.version !== 1 ? (source.manifest.symlinks ?? []) : [];
     if (generatedPins?.length) {
       const uid = process.getuid?.() ?? 0;
       const gid = process.getgid?.() ?? 0;

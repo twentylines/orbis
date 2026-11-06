@@ -3,7 +3,7 @@ import { verifyAppIcons, type CapturedAppIcons } from './time-machine-app-icons'
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import fs, { type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
-import type { Readable } from 'node:stream';
+import { Transform, type Readable } from 'node:stream';
 import { type } from 'arktype';
 import {
   defaultTimeMachinePreferences,
@@ -13,6 +13,8 @@ import {
   timeMachineAssetLimit,
   timeMachineWallpaperAssetSchema,
   timeMachineMetadataSchema,
+  timeMachineCoreMetadataSchema,
+  timeMachineCoreSummarySchema,
   timeMachinePreferencesSchema,
   timeMachineReasonSchema,
   type TimeMachineMetadata,
@@ -21,6 +23,7 @@ import {
   type TimeMachineReason,
   type TimeMachineWallpaperAsset,
   type TimeMachineRuntimeSummary,
+  type TimeMachineCoreMetadata,
 } from '@runtipi/common/schemas/time-machine';
 import { backupMetadataBytes, encryptBackupStream, backupCipherOverhead } from './backup-crypto';
 import { runtimePayload, runtimePayloadLimits, type CapturedRuntimeInput } from './time-machine-runtime-payload';
@@ -28,9 +31,12 @@ import { admitRuntimeFile, type RuntimeAdmissionExpectation } from './time-machi
 import { privateBackupDirectory } from './backup-files';
 import { timeMachineConflict } from './time-machine-policy';
 import { capturedWallpaper, type CapturedWallpaper } from './time-machine-assets';
-import { requireV6SealAdmission, reviewV6SealArchive, type V6SealAdmission } from './time-machine-v6-seal-admission';
+import type { V6SealAdmission } from './time-machine-v6-seal-admission';
+import type { CoreCatalogPublication } from './time-machine-core-catalog-worker';
 import { withVerifiedCapsuleContents, type VerifiedCapsuleContents, type VerifiedCapsuleBinding } from '../time-machine-capsules/verify';
 import { inspectCapsuleEntry } from '../time-machine-capsules/verified-source';
+import { withCorePayload, type VerifiedCorePayload } from './time-machine-core-payload';
+import { canonicalPublicationJson } from '../host-updates/host-controller-publication';
 
 const envelopeSchema = type({
   version: '1',
@@ -66,7 +72,24 @@ const runtimeStoredPointSchema = legacyStoredPointSchema
     configurationSetSha256: timeMachineHashSchema.or('null'),
   })
   .onUndeclaredKey('reject');
-const storedPointSchema = legacyStoredPointSchema.or(runtimeStoredPointSchema);
+const coreStoredPointSchema = legacyStoredPointSchema
+  .omit('version')
+  .merge({
+    version: '3',
+    kind: "'orbis-core'",
+    coreFormat: "'orbis.time-machine-core.v1'",
+    core: timeMachineCoreSummarySchema.or('null'),
+  })
+  .onUndeclaredKey('reject')
+  .narrow((point) =>
+    point.status === 'sealed'
+      ? point.core !== null &&
+        point.metadataSha256 !== null &&
+        point.core.cipherBytes === point.archiveBytes &&
+        point.core.cipherSha256 === point.archiveSha256
+      : point.core === null && point.archiveBytes === 0 && point.archiveSha256 === null && point.metadataSha256 === null,
+  );
+const storedPointSchema = legacyStoredPointSchema.or(runtimeStoredPointSchema).or(coreStoredPointSchema);
 const portableImportMarkerSchema = type({
   version: '1',
   operationId: timeMachineIdSchema,
@@ -76,10 +99,15 @@ const portableImportMarkerSchema = type({
   metadataSha256: timeMachineHashSchema,
 }).onUndeclaredKey('reject');
 export type StoredTimeMachinePoint = typeof storedPointSchema.infer;
+type StoredLegacyTimeMachinePoint = typeof legacyStoredPointSchema.infer | typeof runtimeStoredPointSchema.infer;
+export type StoredCoreTimeMachinePoint = typeof coreStoredPointSchema.infer;
 type Draft<T> = T extends unknown ? Omit<T, 'archiveBytes' | 'archiveSha256' | 'runtime'> : never;
 export type TimeMachineDraftMetadata = Draft<TimeMachineMetadata>;
+export type TimeMachineCoreDraftMetadata = Omit<TimeMachineCoreMetadata, 'archiveBytes' | 'archiveSha256' | 'manifestSha256' | 'core'>;
 const sameStat = (first: Awaited<ReturnType<FileHandle['stat']>>, second: Awaited<ReturnType<FileHandle['stat']>>) =>
   ['ino', 'dev', 'size', 'mode', 'nlink', 'uid', 'mtimeMs', 'ctimeMs'].every((key) => Reflect.get(first, key) === Reflect.get(second, key));
+const sameCoreDataStat = (first: Awaited<ReturnType<FileHandle['stat']>>, second: Awaited<ReturnType<FileHandle['stat']>>) =>
+  ['ino', 'dev', 'size', 'mode', 'nlink', 'uid', 'gid', 'mtimeMs'].every((key) => Reflect.get(first, key) === Reflect.get(second, key));
 
 export class TimeMachineStore {
   private queue: Promise<unknown> = Promise.resolve();
@@ -558,7 +586,9 @@ export class TimeMachineStore {
     await this.atomic(file, JSON.stringify({ version: 1, id, ownerId, machineId, state: 'ready' }), true);
   }
 
-  create(ownerId: number, version: 1 | 2 = 1, onboardingAttemptId?: string) {
+  create(ownerId: number, version: 3, onboardingAttemptId?: undefined): Promise<{ point: StoredCoreTimeMachinePoint; passphrase: string }>;
+  create(ownerId: number, version?: 1 | 2, onboardingAttemptId?: string): Promise<{ point: StoredLegacyTimeMachinePoint; passphrase: string }>;
+  create(ownerId: number, version: 1 | 2 | 3 = 1, onboardingAttemptId?: string) {
     return this.serialize(async () => {
       if (!Number.isSafeInteger(ownerId) || ownerId < 1) throw timeMachineConflict('invalid-request');
       if (onboardingAttemptId !== undefined && (version !== 2 || !timeMachineIdSchema.allows(onboardingAttemptId)))
@@ -601,6 +631,7 @@ export class TimeMachineStore {
               configurationSetSha256: null,
             }
           : {}),
+        ...(version === 3 ? { kind: 'orbis-core', coreFormat: 'orbis.time-machine-core.v1', core: null } : {}),
       });
       if (onboardingAttemptId) {
         const destination = this.pointDirectory(id);
@@ -630,6 +661,7 @@ export class TimeMachineStore {
     const linked: string[] = [];
     let output: FileHandle | undefined;
     try {
+      if (point.version === 3 || metadata.version === 3) throw timeMachineConflict('point-integrity-failed');
       if ((await this.load(point.id)).status !== 'capturing' || !Number.isSafeInteger(bytes) || bytes < 52)
         throw timeMachineConflict('point-integrity-failed');
       if (point.version !== metadata.version || (point.version === 2) !== Boolean(runtime)) throw timeMachineConflict('point-integrity-failed');
@@ -638,7 +670,7 @@ export class TimeMachineStore {
         : null;
       planned?.stream.destroy();
       if (planned?.manifest.schema === 'orbis.time-machine-runtime.v6' && runtime)
-        requireV6SealAdmission(runtime.admission, runtime.input, point, planned.manifest);
+        (await import('./time-machine-v6-seal-admission')).requireV6SealAdmission(runtime.admission, runtime.input, point, planned.manifest);
       const runtimeEstimate = planned ? planned.bytes + backupCipherOverhead : 0;
       const retained = (await this.list()).reduce(
         (sum, item) => sum + item.archiveBytes + (item.assetBytes ?? 0) + (item.version === 2 ? item.runtimeBytes : 0),
@@ -684,7 +716,7 @@ export class TimeMachineStore {
         const payload = runtimePayload(runtime.input, { bytes, cipherSha256: archiveSha256, manifestSha256: metadata.manifestSha256 }, signal);
         if (payload.manifest.schema === 'orbis.time-machine-runtime.v6' || planned.manifest.schema === 'orbis.time-machine-runtime.v6') {
           try {
-            requireV6SealAdmission(runtime.admission, runtime.input, point, payload.manifest);
+            (await import('./time-machine-v6-seal-admission')).requireV6SealAdmission(runtime.admission, runtime.input, point, payload.manifest);
           } catch (error) {
             payload.stream.destroy();
             throw error;
@@ -724,7 +756,7 @@ export class TimeMachineStore {
       if (planned?.manifest.schema === 'orbis.time-machine-runtime.v6' && runtime?.admission && runtimeExpectation) {
         const current = runtimePayload(runtime.input, { bytes, cipherSha256: archiveSha256, manifestSha256: metadata.manifestSha256 }, signal);
         current.stream.destroy();
-        requireV6SealAdmission(runtime.admission, runtime.input, point, current.manifest);
+        (await import('./time-machine-v6-seal-admission')).requireV6SealAdmission(runtime.admission, runtime.input, point, current.manifest);
         const staging = path.join(this.root(), 'staging');
         await privateBackupDirectory(staging);
         const admitted = await admitRuntimeFile({
@@ -748,7 +780,15 @@ export class TimeMachineStore {
             admitted.coherence.database.bytes !== runtime.input.coherence.database.bytes
           )
             throw timeMachineConflict('point-integrity-failed');
-          await reviewV6SealArchive(runtime.admission, runtime.input, point, temporary, admitted.capture, archiveSha256, signal);
+          await (await import('./time-machine-v6-seal-admission')).reviewV6SealArchive(
+            runtime.admission,
+            runtime.input,
+            point,
+            temporary,
+            admitted.capture,
+            archiveSha256,
+            signal,
+          );
         } finally {
           await admitted.dispose();
         }
@@ -811,6 +851,516 @@ export class TimeMachineStore {
       await fs.rm(runtimeTemporary, { force: true });
     }
   }
+  private validateCoreDraft(point: StoredCoreTimeMachinePoint, draft: unknown): TimeMachineCoreDraftMetadata {
+    if (!draft || typeof draft !== 'object' || Array.isArray(draft)) throw timeMachineConflict('point-integrity-failed');
+    for (const field of ['archiveBytes', 'archiveSha256', 'manifestSha256', 'core']) {
+      if (Object.hasOwn(draft, field)) throw timeMachineConflict('point-integrity-failed');
+    }
+    const hash = '0'.repeat(64);
+    const complete = {
+      ...draft,
+      archiveBytes: 52,
+      archiveSha256: hash,
+      manifestSha256: hash,
+      core: {
+        version: 1,
+        format: 'orbis.time-machine-core.v1',
+        cipherBytes: 52,
+        cipherSha256: hash,
+        manifestSha256: hash,
+        sourceSha256: hash,
+        checkpointSha256: hash,
+        captureReceiptSha256: hash,
+        imageInventorySha256: hash,
+        imageCount: 1,
+        resourceCount: 1,
+      },
+    };
+    if (!timeMachineCoreMetadataSchema.allows(complete) || complete.id !== point.id || complete.createdAt !== point.createdAt)
+      throw timeMachineConflict('point-integrity-failed');
+    const { archiveBytes: _bytes, archiveSha256: _archive, manifestSha256: _manifest, core: _core, ...validated } = complete;
+    return validated;
+  }
+
+  private async checkCoreDraftPoint(point: StoredCoreTimeMachinePoint, signal: AbortSignal, creating: boolean) {
+    signal.throwIfAborted();
+    if (!coreStoredPointSchema.allows(point) || (creating ? point.status !== 'capturing' : !['capturing', 'sealed'].includes(point.status)))
+      throw timeMachineConflict('point-integrity-failed');
+    const current = await this.load(point.id);
+    signal.throwIfAborted();
+    if (canonicalPublicationJson(current) !== canonicalPublicationJson(point)) throw timeMachineConflict('point-integrity-failed');
+  }
+
+  private async checkCoreDraftAssets(point: StoredCoreTimeMachinePoint, draft: TimeMachineCoreDraftMetadata, signal: AbortSignal) {
+    signal.throwIfAborted();
+    if (draft.preview.available) {
+      if (draft.preview.wallpaperAsset.available) {
+        const wallpaper = await this.wallpaper(point, draft.preview.wallpaperAsset);
+        wallpaper.data.fill(0);
+        signal.throwIfAborted();
+      }
+      if (draft.preview.appIcons) {
+        (await this.appIcons(point, draft.preview.appIcons)).fill(0);
+        signal.throwIfAborted();
+      }
+    }
+  }
+
+  async readCoreDraft(point: StoredCoreTimeMachinePoint, signal: AbortSignal): Promise<TimeMachineCoreDraftMetadata> {
+    await this.checkCoreDraftPoint(point, signal, false);
+    const ciphertext = await this.read(path.join(this.pointDirectory(point.id), 'capture-draft.orbis'), timeMachineLimits.metadataBytes + 52);
+    signal.throwIfAborted();
+    const plaintext = await backupMetadataBytes(ciphertext, await this.unwrap(point), true, timeMachineLimits.metadataBytes);
+    signal.throwIfAborted();
+    let record: unknown;
+    try {
+      record = JSON.parse(plaintext.toString());
+    } finally {
+      plaintext.fill(0);
+    }
+    if (
+      !record ||
+      typeof record !== 'object' ||
+      Array.isArray(record) ||
+      Object.keys(record).sort().join(',') !== 'binding,draft,version' ||
+      !('version' in record) ||
+      record.version !== 1 ||
+      !('binding' in record) ||
+      !('draft' in record) ||
+      canonicalPublicationJson(record.binding) !==
+        canonicalPublicationJson({ id: point.id, ownerId: point.ownerId, createdAt: point.createdAt, envelope: point.envelope })
+    )
+      throw timeMachineConflict('point-integrity-failed');
+    const draft = this.validateCoreDraft(point, record.draft);
+    await this.checkCoreDraftAssets(point, draft, signal);
+    await this.checkCoreDraftPoint(point, signal, false);
+    return draft;
+  }
+
+  saveCoreDraft(point: StoredCoreTimeMachinePoint, draft: TimeMachineCoreDraftMetadata, signal: AbortSignal): Promise<void> {
+    return this.serialize(async () => {
+      await this.checkCoreDraftPoint(point, signal, true);
+      const validated = this.validateCoreDraft(point, structuredClone(this.validateCoreDraft(point, draft)));
+      await this.checkCoreDraftAssets(point, validated, signal);
+      const binding = { id: point.id, ownerId: point.ownerId, createdAt: point.createdAt, envelope: point.envelope };
+      const plaintext = Buffer.from(JSON.stringify({ version: 1, binding, draft: validated }));
+      if (plaintext.length > timeMachineLimits.metadataBytes) throw timeMachineConflict('capacity-exceeded');
+      let ciphertext: Buffer;
+      try {
+        ciphertext = await backupMetadataBytes(plaintext, await this.unwrap(point), false, timeMachineLimits.metadataBytes);
+      } finally {
+        plaintext.fill(0);
+      }
+      signal.throwIfAborted();
+      await this.checkCoreDraftPoint(point, signal, true);
+      try {
+        await this.atomic(path.join(this.pointDirectory(point.id), 'capture-draft.orbis'), ciphertext, false);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        const existing = await this.readCoreDraft(point, signal);
+        if (canonicalPublicationJson(existing) !== canonicalPublicationJson(validated)) throw timeMachineConflict('point-integrity-failed');
+      }
+      signal.throwIfAborted();
+      await this.checkCoreDraftPoint(point, signal, true);
+    });
+  }
+
+  adoptPublishedCorePoint(point: StoredCoreTimeMachinePoint, sourceDirectory: string, publication: CoreCatalogPublication, signal: AbortSignal) {
+    return this.serialize(async () => {
+      const fail = () => timeMachineConflict('point-integrity-failed');
+      const json = canonicalPublicationJson;
+      const hash = (value: Buffer | string) => createHash('sha256').update(value).digest('hex');
+      const destination = this.pointDirectory(point.id);
+      const root = this.root();
+      if (
+        !path.isAbsolute(sourceDirectory) ||
+        path.resolve(sourceDirectory) !== sourceDirectory ||
+        !sourceDirectory.startsWith(`${root}/`) ||
+        sourceDirectory === destination ||
+        destination.startsWith(`${sourceDirectory}/`) ||
+        sourceDirectory.startsWith(`${destination}/`) ||
+        !coreStoredPointSchema.allows(point) ||
+        !['capturing', 'sealed'].includes(point.status)
+      )
+        throw fail();
+      const dirs = [this.dataDir, path.join(this.dataDir, 'backups'), root, path.join(root, 'points'), destination, path.join(root, 'keys')];
+      for (let dir = sourceDirectory; dir !== root; dir = path.dirname(dir)) dirs.push(dir);
+      const directorySeals = await Promise.all(
+        [...new Set(dirs)].map(async (dir) => {
+          const stat = await fs.lstat(dir);
+          const shared = dir === this.dataDir || dir === path.join(this.dataDir, 'backups');
+          if (
+            !stat.isDirectory() ||
+            stat.uid !== process.getuid?.() ||
+            (shared ? (stat.mode & 0o7022) !== 0 : (stat.mode & 0o7777) !== 0o700) ||
+            (await fs.realpath(dir)) !== dir
+          )
+            throw fail();
+          return { dir, stat };
+        }),
+      );
+      const checkDirectories = async () => {
+        for (const { dir, stat } of directorySeals) {
+          const current = await fs.lstat(dir);
+          if (
+            !['dev', 'ino', 'mode', 'uid', 'gid'].every((key) => Reflect.get(stat, key) === Reflect.get(current, key)) ||
+            (await fs.realpath(dir)) !== dir
+          )
+            throw fail();
+        }
+      };
+      const allowed = ['point.json', 'metadata.orbis', 'core.orbis', 'capture-draft.orbis', 'wallpaper.orbis', 'icons.orbis'];
+      const fileNames = Object.keys(publication.files).sort();
+      if (
+        publication.schema !== 'orbis.core-capture-catalog-publication.v1' ||
+        fileNames.some((name) => !allowed.includes(name)) ||
+        !['point.json', 'metadata.orbis', 'core.orbis', 'capture-draft.orbis'].every((name) => fileNames.includes(name))
+      )
+        throw fail();
+      const maxFor = (name: string) =>
+        name === 'point.json'
+          ? 32768
+          : name === 'core.orbis'
+            ? timeMachineLimits.bytes
+            : name === 'wallpaper.orbis'
+              ? timeMachineAssetLimit + 52
+              : name === 'icons.orbis'
+                ? historicalIconLimits.bundleBytes + 52
+                : timeMachineLimits.metadataBytes + 52;
+      for (const name of fileNames) {
+        const entry = publication.files[name];
+        if (!entry || !Number.isSafeInteger(entry.bytes) || entry.bytes < 1 || entry.bytes > maxFor(name) || !/^[a-f0-9]{64}$/.test(entry.sha256))
+          throw fail();
+      }
+      // Hash through a no-follow descriptor and bind it to the pathname before and after reading.
+      const verifiedFiles = new Set<string>();
+      const inspect = async (file: string, name: string, links = 1) => {
+        const before = await fs.lstat(file);
+        if (
+          !before.isFile() ||
+          before.uid !== process.getuid?.() ||
+          ![0o400, 0o600].includes(before.mode & 0o7777) ||
+          before.nlink !== links ||
+          before.size !== publication.files[name]?.bytes ||
+          (await fs.realpath(file)) !== file
+        )
+          throw fail();
+        const handle = await fs.open(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+        try {
+          if (!sameStat(before, await handle.stat())) throw fail();
+          const signature = json([
+            name,
+            publication.files[name]?.sha256,
+            ...['dev', 'ino', 'size', 'mode', 'nlink', 'uid', 'gid', 'mtimeMs', 'ctimeMs'].map((key) => Reflect.get(before, key)),
+          ]);
+          if (!verifiedFiles.has(signature)) {
+            const digest = createHash('sha256');
+            const buffer = Buffer.alloc(64 * 1024);
+            let offset = 0;
+            while (offset < before.size) {
+              signal.throwIfAborted();
+              const { bytesRead } = await handle.read(buffer, 0, Math.min(buffer.length, before.size - offset), offset);
+              if (!bytesRead) throw fail();
+              digest.update(buffer.subarray(0, bytesRead));
+              offset += bytesRead;
+            }
+            if (digest.digest('hex') !== publication.files[name]?.sha256) throw fail();
+          }
+          const after = await handle.stat();
+          const named = await fs.lstat(file);
+          if (
+            !sameStat(before, after) ||
+            before.gid !== after.gid ||
+            !sameStat(before, named) ||
+            before.gid !== named.gid ||
+            (await fs.realpath(file)) !== file
+          )
+            throw fail();
+          verifiedFiles.add(signature);
+          return before;
+        } finally {
+          await handle.close();
+        }
+      };
+      const exists = async (file: string) => {
+        try {
+          await fs.lstat(file);
+          return true;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+          throw error;
+        }
+      };
+      signal.throwIfAborted();
+      const sourceNames = (await fs.readdir(sourceDirectory)).sort();
+      const destinationNames = (await fs.readdir(destination)).sort();
+      if (
+        sourceNames.some((name) => !fileNames.includes(name)) ||
+        destinationNames.some((name) => !fileNames.includes(name)) ||
+        !sourceNames.includes('point.json') ||
+        !destinationNames.includes('point.json')
+      )
+        throw fail();
+      const pointFile = path.join(sourceDirectory, 'point.json');
+      await inspect(pointFile, 'point.json');
+      const pointBytes = await this.read(pointFile, 32768);
+      if (hash(pointBytes) !== publication.files['point.json']?.sha256) throw fail();
+      const sealed: unknown = JSON.parse(pointBytes.toString());
+      if (!coreStoredPointSchema.allows(sealed) || sealed.status !== 'sealed' || !sealed.core) throw fail();
+      const sealedCore = sealed.core;
+      const reservation = (value: StoredCoreTimeMachinePoint) => ({
+        version: value.version,
+        id: value.id,
+        ownerId: value.ownerId,
+        createdAt: value.createdAt,
+        envelope: value.envelope,
+      });
+      const core = publication.core;
+      if (
+        json(reservation(point)) !== json(reservation(sealed)) ||
+        core.schema !== 'orbis.core-capture-publication.v1' ||
+        core.pointId !== point.id ||
+        core.ownerId !== point.ownerId ||
+        core.createdAt !== point.createdAt ||
+        core.pointReservationSha256 !== hash(json(reservation(point))) ||
+        core.pointSha256 !== hash(pointBytes) ||
+        core.metadataSha256 !== sealed.metadataSha256 ||
+        core.metadataSha256 !== publication.files['metadata.orbis']?.sha256 ||
+        core.cipherSha256 !== sealed.archiveSha256 ||
+        core.cipherSha256 !== publication.files['core.orbis']?.sha256 ||
+        core.cipherBytes !== sealed.archiveBytes ||
+        core.cipherBytes !== publication.files['core.orbis']?.bytes ||
+        !/^[a-f0-9]{64}$/.test(core.checkpoint.sha256) ||
+        !Number.isSafeInteger(core.checkpoint.bytes) ||
+        core.checkpoint.bytes < 1 ||
+        ['manifestSha256', 'imageInventorySha256', 'captureReceiptSha256', 'sourceSha256', 'checkpointSha256', 'resourceCount', 'imageCount'].some(
+          (key) => Reflect.get(core, key) !== Reflect.get(sealedCore, key),
+        )
+      )
+        throw fail();
+      const keyFile = path.join(root, 'keys/master-v1.key');
+      const keyStat = await fs.lstat(keyFile);
+      if (
+        !keyStat.isFile() ||
+        keyStat.nlink !== 1 ||
+        keyStat.uid !== process.getuid?.() ||
+        ![0o400, 0o600].includes(keyStat.mode & 0o7777) ||
+        keyStat.size !== 32 ||
+        (await fs.realpath(keyFile)) !== keyFile
+      )
+        throw fail();
+      const key = await this.masterKey(false);
+      try {
+        if (hash(key) !== publication.keyId || publication.keyId !== point.envelope.keyId) throw fail();
+      } finally {
+        key.fill(0);
+      }
+      if (!sameStat(keyStat, await fs.lstat(keyFile))) throw fail();
+      const localPointStat = await fs.lstat(path.join(destination, 'point.json'));
+      if (
+        !localPointStat.isFile() ||
+        localPointStat.nlink !== 1 ||
+        localPointStat.uid !== process.getuid?.() ||
+        ![0o400, 0o600].includes(localPointStat.mode & 0o7777)
+      )
+        throw fail();
+      const current = await this.load(point.id);
+      if (
+        current.version !== 3 ||
+        (current.status === 'sealed'
+          ? json(current) !== json(sealed) || !pointBytes.equals(await this.read(path.join(destination, 'point.json'), 32768))
+          : json(current) !== json(point))
+      )
+        throw fail();
+      const draft = await this.readCoreDraft(current, signal);
+      // Retained draft and preview assets are independently captured and must match the published bytes.
+      for (const name of fileNames.filter((name) => !['point.json', 'core.orbis', 'metadata.orbis'].includes(name))) {
+        await inspect(path.join(sourceDirectory, name), name);
+        await inspect(path.join(destination, name), name);
+      }
+      const expectedAssets = draft.preview.available
+        ? [...(draft.preview.wallpaperAsset.available ? ['wallpaper.orbis'] : []), ...(draft.preview.appIcons ? ['icons.orbis'] : [])]
+        : [];
+      if (json(fileNames.filter((name) => ['wallpaper.orbis', 'icons.orbis'].includes(name)).sort()) !== json(expectedAssets.sort())) throw fail();
+      const samePromotion = (a: Awaited<ReturnType<typeof fs.lstat>>, b: Awaited<ReturnType<typeof fs.lstat>>) =>
+        ['dev', 'ino', 'mode', 'uid', 'gid', 'size', 'mtimeMs'].every((key) => Reflect.get(a, key) === Reflect.get(b, key));
+      const promotionIdentities = new Map<string, Awaited<ReturnType<typeof fs.lstat>>>();
+      for (const name of ['metadata.orbis', 'core.orbis']) {
+        const src = path.join(sourceDirectory, name);
+        const dst = path.join(destination, name);
+        const hasSource = await exists(src);
+        const hasDestination = await exists(dst);
+        if (!hasSource && !hasDestination) throw fail();
+        if (hasSource && hasDestination) {
+          const a = await inspect(src, name, 2);
+          const b = await inspect(dst, name, 2);
+          if (a.dev !== b.dev || a.ino !== b.ino) throw fail();
+          promotionIdentities.set(name, a);
+        } else promotionIdentities.set(name, await inspect(hasSource ? src : dst, name));
+      }
+      // Finish an already verified interrupted metadata link so metadataRecord can open a single-link file.
+      const metadataSource = path.join(sourceDirectory, 'metadata.orbis');
+      const metadataDestination = path.join(destination, 'metadata.orbis');
+      if ((await exists(metadataSource)) && (await exists(metadataDestination))) {
+        const source = await inspect(metadataSource, 'metadata.orbis', 2);
+        const target = await inspect(metadataDestination, 'metadata.orbis', 2);
+        const original = promotionIdentities.get('metadata.orbis');
+        if (!original || source.dev !== target.dev || source.ino !== target.ino || !samePromotion(source, original)) throw fail();
+        await checkDirectories();
+        await fs.unlink(metadataSource);
+        await inspect(metadataDestination, 'metadata.orbis');
+        await this.sync(destination);
+        await this.sync(sourceDirectory);
+      }
+      const metadataDirectory = (await exists(metadataSource)) ? sourceDirectory : destination;
+      const { metadata } = await this.metadataRecord(sealed, metadataDirectory);
+      if (metadata.version !== 3) throw fail();
+      const { archiveBytes: _bytes, archiveSha256: _sha, manifestSha256: _manifest, core: _core, ...metadataDraft } = metadata;
+      if (json(metadataDraft) !== json(draft)) throw fail();
+      await checkDirectories();
+      for (const name of ['metadata.orbis', 'core.orbis']) {
+        const src = path.join(sourceDirectory, name);
+        const dst = path.join(destination, name);
+        if (await exists(src)) {
+          if (!(await exists(dst))) {
+            await inspect(src, name);
+            await fs.link(src, dst);
+          }
+          const a = await inspect(src, name, 2);
+          const b = await inspect(dst, name, 2);
+          const original = promotionIdentities.get(name);
+          if (!original || a.dev !== b.dev || a.ino !== b.ino || !samePromotion(a, original)) throw fail();
+          await checkDirectories();
+          await fs.unlink(src);
+        }
+        const result = await inspect(dst, name);
+        const original = promotionIdentities.get(name);
+        if (!original || !samePromotion(result, original)) throw fail();
+      }
+      await this.sync(destination);
+      await this.sync(sourceDirectory);
+      await checkDirectories();
+      if (
+        json(await this.load(point.id)) !== json(current) ||
+        !sameStat(localPointStat, await fs.lstat(path.join(destination, 'point.json'))) ||
+        json((await fs.readdir(destination)).sort()) !== json(fileNames) ||
+        json((await fs.readdir(sourceDirectory)).sort()) !== json(fileNames.filter((name) => !['metadata.orbis', 'core.orbis'].includes(name)))
+      )
+        throw fail();
+      for (const name of fileNames.filter((name) => name !== 'point.json')) await inspect(path.join(destination, name), name);
+      if (current.status !== 'sealed') await this.atomic(path.join(destination, 'point.json'), pointBytes, true);
+      if (
+        !pointBytes.equals(await this.read(path.join(destination, 'point.json'), 32768)) ||
+        json(await this.load(point.id)) !== json(sealed) ||
+        json((await fs.readdir(destination)).sort()) !== json(fileNames)
+      )
+        throw fail();
+      for (const name of fileNames) await inspect(path.join(destination, name), name);
+      await checkDirectories();
+      signal.throwIfAborted();
+    });
+  }
+
+  sealCore(point: StoredTimeMachinePoint, payload: VerifiedCorePayload, draft: TimeMachineCoreDraftMetadata, signal: AbortSignal) {
+    return this.serialize(async () => {
+      if (
+        point.version !== 3 ||
+        point.status !== 'capturing' ||
+        point.backupJobId !== null ||
+        point.core !== null ||
+        draft.version !== 3 ||
+        draft.id !== point.id ||
+        draft.createdAt !== point.createdAt
+      )
+        throw timeMachineConflict('point-integrity-failed');
+      const current = await this.load(point.id);
+      if (JSON.stringify(current) !== JSON.stringify(point)) throw timeMachineConflict('point-integrity-failed');
+      const directory = this.pointDirectory(point.id);
+      const temporary = path.join(directory, `.core-${randomUUID()}.partial`);
+      const linked: string[] = [];
+      const assetBytes = draft.preview.available
+        ? (draft.preview.wallpaperAsset.available ? draft.preview.wallpaperAsset.bytes + 52 : 0) +
+          (draft.preview.appIcons ? draft.preview.appIcons.bytes + 52 : 0)
+        : 0;
+      try {
+        const metadata = await withCorePayload(payload, signal, async ({ source, bytes, manifest, manifestSha256 }) => {
+          if (manifest.pointId !== point.id || canonicalPublicationJson(manifest.compatibility) !== canonicalPublicationJson(draft.compatibility))
+            throw timeMachineConflict('point-integrity-failed');
+          const retained = (await this.list()).reduce(
+            (sum, item) => sum + item.archiveBytes + (item.assetBytes ?? 0) + (item.version === 2 ? item.runtimeBytes : 0),
+            0,
+          );
+          const space = await fs.statfs(directory);
+          if (
+            retained + bytes + backupCipherOverhead + assetBytes > timeMachineLimits.bytes ||
+            space.bavail * space.bsize < bytes + backupCipherOverhead + 256 * 1024 * 1024
+          )
+            throw timeMachineConflict('capacity-exceeded');
+          const encrypted = await encryptBackupStream({
+            source,
+            plaintextBytes: bytes,
+            destination: temporary,
+            passphrase: await this.unwrap(point),
+            signal,
+          });
+          return timeMachineCoreMetadataSchema.assert({
+            ...draft,
+            archiveBytes: encrypted.bytes,
+            archiveSha256: encrypted.sha256,
+            manifestSha256,
+            core: {
+              version: 1,
+              format: 'orbis.time-machine-core.v1',
+              cipherBytes: encrypted.bytes,
+              cipherSha256: encrypted.sha256,
+              manifestSha256,
+              sourceSha256: manifest.sourceSha256,
+              checkpointSha256: manifest.checkpointSha256,
+              captureReceiptSha256: manifest.captureReceiptSha256,
+              imageInventorySha256: manifest.imageInventorySha256,
+              imageCount: manifest.inventory.images.length,
+              resourceCount: manifest.resourceCount,
+            },
+          });
+        });
+        const json = Buffer.from(JSON.stringify(metadata));
+        if (json.length > timeMachineLimits.metadataBytes) throw timeMachineConflict('capacity-exceeded');
+        const ciphertext = await backupMetadataBytes(json, await this.unwrap(point), false, timeMachineLimits.metadataBytes);
+        signal.throwIfAborted();
+        const metadataFile = path.join(directory, 'metadata.orbis');
+        await this.atomic(metadataFile, ciphertext, false);
+        linked.push(metadataFile);
+        const coreFile = path.join(directory, 'core.orbis');
+        await fs.link(temporary, coreFile);
+        linked.push(coreFile);
+        await fs.rm(temporary);
+        await this.sync(directory);
+        if (JSON.stringify(await this.load(point.id)) !== JSON.stringify(point)) throw timeMachineConflict('point-integrity-failed');
+        await this.update({
+          ...point,
+          status: 'sealed',
+          issue: null,
+          archiveBytes: metadata.archiveBytes,
+          archiveSha256: metadata.archiveSha256,
+          metadataSha256: createHash('sha256').update(ciphertext).digest('hex'),
+          assetBytes,
+          core: metadata.core,
+        });
+        return metadata;
+      } catch (error) {
+        let latest: StoredTimeMachinePoint | undefined;
+        try {
+          latest = await this.load(point.id);
+        } catch {
+          /* An unreadable commit remains protected for reconciliation. */
+        }
+        if (latest && latest.status !== 'sealed') for (const file of linked) await fs.rm(file, { force: true });
+        throw error;
+      } finally {
+        await fs.rm(temporary, { force: true });
+      }
+    });
+  }
   private async metadataRecord(point: StoredTimeMachinePoint, directory = this.pointDirectory(point.id)) {
     if (point.status !== 'sealed' || !point.metadataSha256) throw timeMachineConflict('point-not-found');
     const source = path.join(directory, 'metadata.orbis');
@@ -837,6 +1387,8 @@ export class TimeMachineStore {
       : 0;
     if ((point.assetBytes ?? 0) !== expectedAssetBytes) throw timeMachineConflict('point-integrity-failed');
     if (parsed.version !== point.version) throw timeMachineConflict('point-integrity-failed');
+    if (point.version === 3 && parsed.version === 3 && canonicalPublicationJson(point.core) !== canonicalPublicationJson(parsed.core))
+      throw timeMachineConflict('point-integrity-failed');
     if (point.version === 2 && parsed.version === 2) {
       const runtime = parsed.runtime;
       if (
@@ -921,7 +1473,7 @@ export class TimeMachineStore {
   async verifyArchive(point: StoredTimeMachinePoint, signal?: AbortSignal) {
     if (point.status !== 'sealed' || !point.archiveSha256 || point.archiveBytes < 52 || point.archiveBytes > timeMachineLimits.bytes)
       throw timeMachineConflict('point-integrity-failed');
-    const file = path.join(this.pointDirectory(point.id), 'backup.orbis');
+    const file = path.join(this.pointDirectory(point.id), point.version === 3 ? 'core.orbis' : 'backup.orbis');
     await this.directory(path.dirname(file));
     const handle = await fs.open(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
     try {
@@ -939,7 +1491,10 @@ export class TimeMachineStore {
         signal?.throwIfAborted();
         hash.update(chunk);
       }
-      if (hash.digest('hex') !== point.archiveSha256 || !sameStat(stat, await handle.stat())) throw timeMachineConflict('point-integrity-failed');
+      const after = await handle.stat();
+      if (hash.digest('hex') !== point.archiveSha256 || !(point.version === 3 ? sameCoreDataStat(stat, after) : sameStat(stat, after)))
+        throw timeMachineConflict('point-integrity-failed');
+      if (point.version === 3 && !sameCoreDataStat(after, await fs.lstat(file))) throw timeMachineConflict('point-integrity-failed');
       if (point.version === 2) {
         const runtime = await fs.open(
           path.join(this.pointDirectory(point.id), 'runtime.orbis'),
@@ -990,6 +1545,7 @@ export class TimeMachineStore {
     signal: AbortSignal,
     consume: (source: Readable, passphrase: string) => Promise<T>,
   ): Promise<T> {
+    if (point.version === 3) return this.withCoreArchive(point, signal, consume);
     const proof = await this.verifyArchive(point, signal);
     const file = path.join(this.pointDirectory(point.id), 'backup.orbis');
     await this.directory(path.dirname(file));
@@ -1006,6 +1562,56 @@ export class TimeMachineStore {
       signal.throwIfAborted();
       return result;
     } finally {
+      source?.destroy();
+      await handle.close();
+    }
+  }
+  private async withCoreArchive<T>(
+    point: StoredCoreTimeMachinePoint,
+    signal: AbortSignal,
+    consume: (source: Readable, passphrase: string) => Promise<T>,
+  ): Promise<T> {
+    const proof = await this.verifyArchive(point, signal);
+    const file = path.join(this.pointDirectory(point.id), 'core.orbis');
+    await this.directory(path.dirname(file));
+    const handle = await fs.open(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+    let raw: ReturnType<FileHandle['createReadStream']> | undefined;
+    let source: Transform | undefined;
+    try {
+      if (!sameCoreDataStat(proof, await handle.stat())) throw timeMachineConflict('point-integrity-failed');
+      const passphrase = await this.unwrap(point);
+      signal.throwIfAborted();
+      const digest = createHash('sha256');
+      let received = 0;
+      source = new Transform({
+        transform(chunk, _encoding, done) {
+          const bytes = Buffer.from(chunk);
+          digest.update(bytes);
+          received += bytes.length;
+          done(null, bytes);
+        },
+      });
+      raw = handle.createReadStream({ autoClose: false, start: 0, end: point.archiveBytes - 1, signal });
+      raw.on('error', (error) => source?.destroy(error));
+      source.on('error', (error) => raw?.destroy(error));
+      raw.pipe(source);
+      const result = await consume(source, passphrase);
+      const after = await handle.stat();
+      // Ciphertext is data, not an operation grant: authenticate the delivered bytes.
+      if (
+        !source.readableEnded ||
+        !raw.readableEnded ||
+        received !== point.archiveBytes ||
+        raw.bytesRead !== point.archiveBytes ||
+        digest.digest('hex') !== point.archiveSha256 ||
+        !sameCoreDataStat(proof, after) ||
+        !sameCoreDataStat(after, await fs.lstat(file))
+      )
+        throw timeMachineConflict('point-integrity-failed');
+      signal.throwIfAborted();
+      return result;
+    } finally {
+      raw?.destroy();
       source?.destroy();
       await handle.close();
     }
@@ -1075,6 +1681,7 @@ export class TimeMachineStore {
     });
   }
   async fail(point: StoredTimeMachinePoint, issue: TimeMachineReason) {
+    if (point.version === 3 && (await this.load(point.id)).status === 'sealed') throw timeMachineConflict('operation-busy');
     await this.update({ ...point, status: issue === 'capture-interrupted' ? 'interrupted' : 'failed', issue });
     for (const name of [
       'backup.orbis',
@@ -1085,6 +1692,7 @@ export class TimeMachineStore {
       'icons.orbis',
       'runtime.orbis',
       'runtime.partial',
+      'core.orbis',
     ])
       await fs.rm(path.join(this.pointDirectory(point.id), name), { force: true });
   }

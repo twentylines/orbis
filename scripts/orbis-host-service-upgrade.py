@@ -29,6 +29,7 @@ def load_setup():
 
 
 SETUP = load_setup()
+PROFILE = SETUP.load_script('orbis-host-observer-profile.py', 'orbis_observer_profile_for_upgrade')
 HOST = SETUP.HOST
 SERVICE = SETUP.SERVICE
 STATE_DIR = Path("/var/lib/orbis/state")
@@ -85,7 +86,7 @@ def validate_unit(unit: str) -> None:
         raise ValueError("helper unit is missing its fixed environment, runtime directory, or command")
 
 
-def require_installed(root: Path, context: str) -> None:
+def require_installed(root: Path, context: str) -> dict | None:
     for directory in (SETUP.INSTALL_DIR.parent, SETUP.ENV_FILE.parent, STATE_DIR):
         require_root_owned(directory, directory=True, private=True)
     require_root_owned(SETUP.INSTALL_DIR, directory=True, private=True)
@@ -100,10 +101,32 @@ def require_installed(root: Path, context: str) -> None:
     validate_unit(SETUP.UNIT_FILE.read_text(encoding="utf-8"))
     if systemctl_output("show", "-p", "FragmentPath", "--value", "orbis-host.service") != str(SETUP.UNIT_FILE):
         raise ValueError("systemd is not using the expected Orbis helper unit")
-    if systemctl_output("show", "-p", "DropInPaths", "--value", "orbis-host.service"):
-        raise ValueError("Orbis helper unit has unreviewed systemd drop-ins")
+    profile = PROFILE.configuration(SETUP.UNIT_FILE, systemctl_output, HOST.AUTHORITY)
+    PROFILE.require_support(SETUP.INSTALL_DIR, profile)
     if systemctl_output("is-active", "orbis-host.service") != "active":
         raise ValueError("installed Orbis helper must be active before upgrade")
+    return profile
+
+
+def require_profile(expected, directory=None, *, loaded=True):
+    if PROFILE.configuration(SETUP.UNIT_FILE, systemctl_output, HOST.AUTHORITY, loaded=loaded) != expected:
+        raise ValueError('Sentinel observer configuration changed during helper maintenance')
+    if directory is not None:
+        PROFILE.require_support(directory, expected)
+
+
+def stop_service(profile):
+    if profile is None:
+        SETUP.run_systemctl('stop', 'orbis-host.service')
+        return
+    if systemctl_output('show', '-p', 'KillMode', '--value', 'orbis-host.service') != 'control-group':
+        raise ValueError('Sentinel observer helper stop policy needs review')
+    # An open activation socket could restart the helper while scripts are swapped.
+    SETUP.run_systemctl('stop', PROFILE.SOCKET, 'orbis-host.service')
+    for name in (PROFILE.SOCKET, 'orbis-host.service'):
+        if (systemctl_output('show', '-p', 'ActiveState', '--value', name) != 'inactive'
+                or systemctl_output('show', '-p', 'SubState', '--value', name) != 'dead'):
+            raise ValueError('Sentinel observer helper stop has not completed')
 
 
 def job_identity() -> tuple[str, str] | None:
@@ -138,11 +161,11 @@ def digest_files(directory: Path) -> str:
     return digest.hexdigest()
 
 
-def preflight(root: Path, context: str, source: Path) -> dict[str, str]:
+def preflight(root: Path, context: str, source: Path) -> dict:
     if MAINTENANCE.exists() or MAINTENANCE.is_symlink():
         raise ValueError("a helper upgrade needs recovery before another upgrade")
     ready = SETUP.preflight(root, context, source, allow_existing=True)
-    require_installed(root, context)
+    profile = require_installed(root, context)
     if HOST.retained_state(root):
         HOST.resolve_current_identity(root, context)
         for name in ("orbis-host-identity.py", "orbis-host-retained-authority.py"):
@@ -151,12 +174,14 @@ def preflight(root: Path, context: str, source: Path) -> dict[str, str]:
     source_files, source_unit = SETUP.source_files(source)
     validate_candidate_scripts(source_files)
     validate_unit(source_unit.read_text(encoding="utf-8"))
+    PROFILE.require_support(source, profile)
     return {
         **ready,
         "installedScriptsSha256": digest_files(SETUP.INSTALL_DIR),
         "candidateScriptsSha256": digest_files(source_files[0].parent),
         "installedUnitSha256": hashlib.sha256(SETUP.UNIT_FILE.read_bytes()).hexdigest(),
         "candidateUnitSha256": hashlib.sha256(source_unit.read_bytes()).hexdigest(),
+        "observerProfile": profile,
     }
 
 
@@ -224,7 +249,12 @@ def verify_service(digest: str, root: Path, context: str) -> None:
 
 
 def workspace_from_record(record: dict, root: Path, context: str) -> Path:
-    if record.get("schema") != "orbis.helper-upgrade.v1" or record.get("root") != str(root) or record.get("dockerContext") != context:
+    schema = record.get('schema')
+    profile = record.get('observerProfile')
+    if (schema not in ('orbis.helper-upgrade.v1', 'orbis.helper-upgrade.v2')
+            or (schema == 'orbis.helper-upgrade.v1' and profile is not None)
+            or (schema == 'orbis.helper-upgrade.v2' and not isinstance(profile, dict))
+            or record.get("root") != str(root) or record.get("dockerContext") != context):
         raise ValueError("helper maintenance record does not match this installation")
     raw = record.get("workspace")
     if not isinstance(raw, str):
@@ -248,10 +278,14 @@ def require_maintenance_identity(root, context):
 
 def restore_previous(workspace: Path, digest: str, root: Path, context: str) -> None:
     require_maintenance_identity(root, context)
-    SETUP.run_systemctl("stop", "orbis-host.service")
+    record = SERVICE.read_private(MAINTENANCE)
+    profile = record.get('observerProfile') if record else None
     previous = workspace / "previous"
-    if previous.exists():
+    if previous.exists() or previous.is_symlink():
         require_root_owned(previous, directory=True, private=True)
+    require_profile(profile, previous if previous.exists() else SETUP.INSTALL_DIR, loaded=False)
+    stop_service(profile)
+    if previous.exists():
         failed = workspace / "failed"
         if failed.exists():
             shutil.rmtree(failed)
@@ -266,8 +300,10 @@ def restore_previous(workspace: Path, digest: str, root: Path, context: str) -> 
         raise RuntimeError("old helper scripts are missing; preserve the upgrade workspace")
     atomic_copy(workspace / "previous-unit", SETUP.UNIT_FILE, 0o644)
     SETUP.run_systemctl("daemon-reload")
+    require_profile(profile, SETUP.INSTALL_DIR)
     SETUP.run_systemctl("start", "orbis-host.service")
     verify_service(digest, root, context)
+    require_profile(profile, SETUP.INSTALL_DIR)
 
 
 def finish(workspace: Path) -> None:
@@ -277,7 +313,7 @@ def finish(workspace: Path) -> None:
     sync_directory(workspace.parent)
 
 
-def upgrade(root: Path, context: str, source: Path, confirmation: str | None) -> dict[str, str]:
+def upgrade(root: Path, context: str, source: Path, confirmation: str | None) -> dict:
     if os.geteuid() != 0:
         raise ValueError("helper upgrade requires root privileges")
     root = root.resolve(strict=True)
@@ -307,18 +343,20 @@ def upgrade(root: Path, context: str, source: Path, confirmation: str | None) ->
             if checked.returncode:
                 raise ValueError("systemd rejected the candidate Orbis helper unit")
             record = {
-                "schema": "orbis.helper-upgrade.v1",
+                "schema": "orbis.helper-upgrade.v2" if ready['observerProfile'] is not None else "orbis.helper-upgrade.v1",
                 "root": str(root),
                 "dockerContext": context,
                 "workspace": str(workspace),
                 "previousDigest": ready["digest"],
                 "stage": "prepared",
+                "observerProfile": ready["observerProfile"],
             }
             if HOST.retained_state(root):
                 record["retainedSource"] = HOST.retained_descriptor(root, context)
             SERVICE.write_private(MAINTENANCE, record)
             require_maintenance_identity(root, context)
-            SETUP.run_systemctl("stop", "orbis-host.service")
+            require_profile(ready['observerProfile'], new)
+            stop_service(ready['observerProfile'])
             if job_identity() != previous_job:
                 raise ValueError("a core update was accepted while stopping the old helper; retry after resolving it")
             record["stage"] = "stopped"
@@ -333,8 +371,10 @@ def upgrade(root: Path, context: str, source: Path, confirmation: str | None) ->
             record["stage"] = "replaced"
             SERVICE.write_private(MAINTENANCE, record)
             SETUP.run_systemctl("daemon-reload")
+            require_profile(ready['observerProfile'], SETUP.INSTALL_DIR)
             SETUP.run_systemctl("start", "orbis-host.service")
             verify_service(ready["digest"], root, context)
+            require_profile(ready['observerProfile'], SETUP.INSTALL_DIR)
             record["stage"] = "verified"
             SERVICE.write_private(MAINTENANCE, record)
         except Exception as error:
@@ -365,9 +405,12 @@ def recover(root: Path, context: str, confirmation: str | None) -> dict[str, str
             raise ValueError("helper maintenance record has an invalid release digest")
         job_identity()
         require_maintenance_identity(root, context)
+        require_profile(record.get('observerProfile'), loaded=False)
         if record.get("stage") == "verified":
             try:
+                require_profile(record.get('observerProfile'), SETUP.INSTALL_DIR)
                 verify_service(digest, root, context)
+                require_profile(record.get('observerProfile'), SETUP.INSTALL_DIR)
             except RuntimeError:
                 restore_previous(workspace, digest, root, context)
         else:

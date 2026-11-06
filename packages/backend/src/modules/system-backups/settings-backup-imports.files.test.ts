@@ -66,6 +66,40 @@ async function reviewed(id: string) {
   if (!job?.review) throw new Error('review failed');
   return { version: 1, reviewId: job.review.reviewId, archiveSha256: job.review.archiveSha256, contents: job.review.available };
 }
+it('does not expose a review until its durable save and reservation release finish', async () => {
+  const id = await uploaded(await bundle());
+  const internal = service as unknown as { save: (job: { status: string }) => Promise<void> };
+  const save = internal.save.bind(service);
+  let enter!: () => void;
+  let release!: () => void;
+  const saving = new Promise<void>((resolve) => {
+    enter = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const spy = vi.spyOn(internal, 'save').mockImplementation(async (job) => {
+    if (job.status === 'reviewed') {
+      enter();
+      await gate;
+    }
+    await save(job);
+  });
+  const review = await service.review(id, 1, request, credentials, passphrase);
+  try {
+    await saving;
+    const pending = (await service.list(1)).jobs.find((job) => job.id === id);
+    expect(pending?.status).toBe('reviewing');
+    expect(pending?.review).toBeUndefined();
+  } finally {
+    release();
+    await review.start;
+    spy.mockRestore();
+  }
+  const ready = (await service.list(1)).jobs.find((job) => job.id === id);
+  expect(ready?.status).toBe('reviewed');
+  expect(ready?.review).toBeDefined();
+});
 it('uploads and reviews an actual export, and holds the job through a one-shot callback without holding the disk admission', async () => {
   const id = await uploaded(await bundle());
   const selection = await reviewed(id);

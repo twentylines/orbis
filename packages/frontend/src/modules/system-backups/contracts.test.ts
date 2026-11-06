@@ -78,6 +78,24 @@ test('unknown states, invalid hash/IDs and unsafe byte counts fail closed', () =
     expect(() => parseBackupResponse(importJobSchema, value)).toThrow('unsupported backup response');
 });
 
+test('volume-aware backup reviews expose unavailable recovery without enabling a partial restore', () => {
+  const value = {
+    ...reviewed,
+    review: {
+      ...reviewed.review,
+      formatVersion: 3,
+      mediaPolicy: 'preserve-destination',
+      volumeCount: 1,
+      compatibility: { compatible: false, blockers: ['volume-restore-support'], architectureChanged: false },
+    },
+  };
+  const job = parseBackupResponse(importJobSchema, value);
+  expect(job.review?.volumeCount).toBe(1);
+  expect(canRestore(job, 1)).toBe(false);
+  for (const change of [{ volumeCount: undefined }, { volumeCount: -1 }, { volumeCount: 1025 }, { formatVersion: 2 }])
+    expect(() => parseBackupResponse(importJobSchema, { ...value, review: { ...value.review, ...change } })).toThrow();
+});
+
 test('progress never promises completion for transferred bytes until server confirmation', () => {
   expect(progressPercent(0, 100)).toBe(0);
   expect(progressPercent(51, 100)).toBe(51);

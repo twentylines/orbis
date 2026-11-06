@@ -72,6 +72,24 @@ it('validates manifest-only app links without allowing archive paths to traverse
     expect(() => parseFullBackupManifest(bad)).toThrow();
 });
 
+it.each([1, 2])('refuses external-volume binding sidecars in format v%s without captured volume data', async (version) => {
+  const fixture = await fullBackupFixture(root);
+  const manifest = { ...fixture.manifest, version, ...(version === 2 ? { mediaPolicy: 'included' } : {}) };
+  for (const name of ['data/state/app-volume-pins', `data/state/app-volume-pins/${'a'.repeat(64)}.json`])
+    expect(() =>
+      parseFullBackupManifest({
+        ...manifest,
+        files: [...manifest.files, { name, bytes: 4, sha256: 'b'.repeat(64), mode: 0o600, uid: 0, gid: 0, mtime: 0 }],
+      }),
+    ).toThrow();
+  expect(() =>
+    parseFullBackupManifest({
+      ...manifest,
+      directories: [...manifest.directories, { name: 'data/state/app-volume-pins', mode: 0o777, uid: 0, gid: 0, mtime: 0 }],
+    }),
+  ).toThrow();
+});
+
 const resetStage = '.orbis-reset-stage-11111111-1111-4111-8111-111111111111';
 const resetRecoveryNames = [
   'data/orbis-reset',
@@ -83,12 +101,13 @@ const resetRecoveryNames = [
   'data/state/desktop/.orbis-reset-stage-malformed/file',
 ];
 
-it.each([1, 2])('rejects declared reset recovery trees in format v%s', async (version) => {
+it.each([1, 2, 3])('rejects declared reset recovery trees in format v%s', async (version) => {
   const fixture = await fullBackupFixture(root);
   const manifest = {
     ...fixture.manifest,
     version,
     ...(version >= 2 ? { mediaPolicy: 'included' } : {}),
+    ...(version === 3 ? { volumes: [] } : {}),
   };
   expect(parseFullBackupManifest(manifest).version).toBe(version);
   Object.assign(fixture.manifest, manifest);

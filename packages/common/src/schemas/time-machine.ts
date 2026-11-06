@@ -166,6 +166,60 @@ export const timeMachineRuntimeSummarySchema = type({
   'coherenceSha256?': timeMachineHashSchema,
 }).onUndeclaredKey('reject');
 export type TimeMachineRuntimeSummary = typeof timeMachineRuntimeSummarySchema.infer;
+export const timeMachineCoreSummarySchema = type({
+  version: '1',
+  format: "'orbis.time-machine-core.v1'",
+  cipherBytes: `52 <= number.integer <= ${timeMachineLimits.bytes}`,
+  cipherSha256: timeMachineHashSchema,
+  manifestSha256: timeMachineHashSchema,
+  sourceSha256: timeMachineHashSchema,
+  checkpointSha256: timeMachineHashSchema,
+  captureReceiptSha256: timeMachineHashSchema,
+  imageInventorySha256: timeMachineHashSchema,
+  imageCount: '1 <= number.integer <= 3',
+  resourceCount: '1 <= number.integer <= 4096',
+}).onUndeclaredKey('reject');
+export type TimeMachineCoreSummary = typeof timeMachineCoreSummarySchema.infer;
+export const timeMachineCoreMetadataSchema = timeMachineLegacyMetadataSchema
+  .omit('version', 'source', 'coverage', 'excludedApps')
+  .merge({
+    version: '3',
+    kind: "'orbis-core'",
+    coreFormat: "'orbis.time-machine-core.v1'",
+    source: type.enumerated('manual', 'scheduled', 'pre-update', 'pre-restart'),
+    coverage: type({
+      database: 'true',
+      configuration: 'true',
+      appearance: 'true',
+      controllerConfiguration: 'true',
+      controllerVersion: 'true',
+      dockerImages: 'true',
+      appData: 'false',
+      cluster: "'local-only'",
+    }).onUndeclaredKey('reject'),
+    excludedApps: appUrn.array().atMostLength(0),
+    restorePolicy: type({
+      managedApps: "'preserve-current'",
+      proxy: "'preserve-current'",
+      recoveryAuthority: "'preserve-current'",
+      queue: "'current-drained'",
+    }).onUndeclaredKey('reject'),
+    compatibility: type({
+      os: "'linux'",
+      architecture: type.enumerated('amd64', 'arm64'),
+      database: type({ engine: "'postgresql'", major: '1 <= number.integer <= 99' }).onUndeclaredKey('reject'),
+      storageFormat: "'physical-pgdata.v1'",
+    }).onUndeclaredKey('reject'),
+    core: timeMachineCoreSummarySchema,
+  })
+  .onUndeclaredKey('reject')
+  .narrow(
+    (metadata) =>
+      metadata.core.cipherBytes === metadata.archiveBytes &&
+      metadata.core.cipherSha256 === metadata.archiveSha256 &&
+      metadata.core.manifestSha256 === metadata.manifestSha256,
+  );
+export type TimeMachineCoreMetadata = typeof timeMachineCoreMetadataSchema.infer;
 const retainedMetadata = timeMachineLegacyMetadataSchema
   .omit('version', 'coverage')
   .merge({
@@ -183,7 +237,7 @@ const retainedMetadata = timeMachineLegacyMetadataSchema
     runtime: timeMachineRuntimeSummarySchema,
   })
   .onUndeclaredKey('reject');
-export const timeMachineMetadataSchema = timeMachineLegacyMetadataSchema.or(retainedMetadata);
+export const timeMachineMetadataSchema = timeMachineLegacyMetadataSchema.or(retainedMetadata).or(timeMachineCoreMetadataSchema);
 export type TimeMachineMetadata = typeof timeMachineMetadataSchema.infer;
 export type TimeMachinePoint = {
   id: string;

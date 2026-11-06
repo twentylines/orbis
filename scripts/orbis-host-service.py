@@ -23,9 +23,10 @@ import subprocess
 import sys
 import tempfile
 import threading
+from types import SimpleNamespace
 import time
 import uuid
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 from pathlib import Path
 from typing import Callable
 from urllib.parse import parse_qs, urlsplit
@@ -51,6 +52,8 @@ HOST = UPDATE.HOST
 CAPTURE_AUTHORITY = load_script("orbis-host-capture-authority.py", "orbis_capture_authority_for_service")
 CAPTURE_AUTHORITY.AUTHORITY = HOST.AUTHORITY
 TIME_MACHINE_CAPABILITIES = load_script("orbis-host-time-machine-capabilities.py", "orbis_native_time_machine_capabilities")
+CORE_CAPTURE_READER = load_script('orbis-host-core-capture-reader.py', 'orbis_native_core_capture_reader')
+SENTINEL_OBSERVER_ACTIVATION = 'orbis-observer-v1'
 PLAN = HOST.PLAN
 CHECK = UPDATE.CHECK
 POLICY = PLAN.POLICY
@@ -1792,6 +1795,26 @@ class HostService:
             public.update(UPDATE.safe_download(journal))
         return {"version": 1, "job": public}
 
+    def sentinel_observer_progress(self):
+        # Keep the job inode pinned across journal inspection. Observation never
+        # reconciles terminal jobs, cleans routing, or releases maintenance holds.
+        with HOST.AUTHORITY.protected_directory(self.job_file.parent) as directory:
+            with ExitStack() as stack:
+                absent = False
+                try:
+                    stack.enter_context(HOST.AUTHORITY.protected_file(directory, self.job_file.name, 1024 * 1024))
+                except FileNotFoundError:
+                    absent = True
+                result = self.core_operation_progress()
+                if absent:
+                    try:
+                        os.stat(self.job_file.name, dir_fd=directory, follow_symlinks=False)
+                    except FileNotFoundError:
+                        pass
+                    else:
+                        raise ValueError('The core operation changed during observation')
+                return result
+
     def status(self) -> dict:
         saved = HOST.saved_state(self.root)
         enrolled = self.state_matches(saved)
@@ -2094,6 +2117,109 @@ def trusted_capture_peer(connection):
     return pid > 0 and uid == os.geteuid() == 0
 
 
+def core_capture_reader(service):
+    reader = getattr(service, '_core_capture_reader', None)
+    if reader is not None:
+        return reader
+    # Load the worker lazily: it imports this service's installed-manifest parser.
+    with service.lock:
+        reader = getattr(service, '_core_capture_reader', None)
+        if reader is None:
+            worker = load_script('orbis-host-core-capture-worker.py', 'orbis_native_core_read_worker')
+            reader = CORE_CAPTURE_READER.CoreCaptureReader(worker, service.state_dir)
+            service._core_capture_reader = reader
+        return reader
+
+
+def core_capture_admission(service):
+    admission = getattr(service, '_core_capture_admission', None)
+    if admission is not None:
+        return admission
+    with service.lock:
+        admission = getattr(service, '_core_capture_admission', None)
+        if admission is None:
+            module = load_script('orbis-host-core-capture-service.py', 'orbis_native_core_admission_service')
+            admission = (module, module.CoreCaptureService(service))
+            service._core_capture_admission = admission
+        return admission
+
+
+CORE_CAPTURE_START_CAPABILITY = {
+    'schema': 'orbis.core-capture-start-capability.v1', 'version': 1, 'preparationVersion': 2,
+    'pointVersion': 3, 'sourceHoldVersion': 2, 'scope': 'controller-live-proxy.v1',
+    'operations': ['prepare', 'admit'], 'admissionReplay': 'forbidden', 'publication': 'controller-restart.v1',
+}
+CORE_CAPTURE_SENTINEL_START_CAPABILITY = {
+    **CORE_CAPTURE_START_CAPABILITY, 'schema': 'orbis.core-capture-sentinel-start-capability.v1',
+    'operations': ['prepare-sentinel', 'admit'], 'publication': 'sentinel.v1',
+    'automaticPublication': 'supervisor-terminal.v1',
+}
+CORE_CAPTURE_RESERVED_START_CAPABILITY = {
+    **CORE_CAPTURE_START_CAPABILITY, 'schema': 'orbis.core-capture-reserved-start-capability.v1',
+    'preparationVersion': 3, 'operations': ['prepare-reserved', 'prepare-reserved-sentinel', 'admit'],
+    'reservation': 'before-source-drain', 'abort': 'positive-source-evidence.v1',
+    'sentinelSelection': 'sentinel-start-capability.v1',
+}
+
+
+def core_capture_abort(service, kind):
+    classes = {
+        'complete': ('orbis-host-core-capture-abort.py', 'CoreCaptureAbort'),
+        'empty': ('orbis-host-core-capture-empty-abort.py', 'CoreCaptureEmptyAbort'),
+        'unused': ('orbis-host-core-capture-unused-abort.py', 'CoreCaptureUnusedAbort'),
+        'setup': ('orbis-host-core-capture-unused-abort.py', 'CoreCaptureSetupAbort'),
+        'refused': ('orbis-host-core-capture-unused-abort.py', 'CoreCaptureRefusedAbort'),
+    }
+    filename, name = classes[kind]
+    cached = getattr(service, '_core_capture_abort', {})
+    if kind in cached:
+        return cached[kind]
+    admission, manager = core_capture_admission(service)
+    with service.lock:
+        cached = getattr(service, '_core_capture_abort', {})
+        if kind not in cached:
+            module = admission.W.load(filename, 'core_capture_abort_' + kind)
+            cached[kind] = getattr(module, name)(manager, admission.W)
+            service._core_capture_abort = cached
+        return cached[kind]
+
+
+def sentinel_start_available(service):
+    worker = load_script('orbis-host-core-capture-worker.py', 'sentinel_start_profile_worker')
+    custody = worker.load('orbis-host-sentinel-capture.py', 'sentinel_start_profile')
+    profile = custody.SentinelCaptureCustody(SimpleNamespace(state=Path(service.state_dir)), worker, None)._profile()
+    return profile is not None and profile['schema'] == 'orbis.host.sentinel-capture-profile.v2'
+CORE_CAPTURE_PREPARATION_RECOVERY_CAPABILITY = {
+    'schema': 'orbis.core-capture-preparation-recovery-capability.v1', 'version': 1,
+    'preparationVersion': 3, 'intentVersion': 1, 'operations': ['reconcile-preparation', 'preparation'],
+    'createsReservation': False, 'releasesCapture': False, 'admissionReplay': 'forbidden',
+}
+
+
+def core_capture_completion(service):
+    completion = getattr(service, '_core_capture_completion', None)
+    if completion is not None:
+        return completion
+    admission, manager = core_capture_admission(service)
+    with service.lock:
+        completion = getattr(service, '_core_capture_completion', None)
+        if completion is None:
+            completion = admission.COMPLETION.CoreCaptureCompletion(manager, admission.W)
+            service._core_capture_completion = completion
+        return completion
+
+
+def core_capture_sentinel_reader(service):
+    cached = getattr(service, '_core_capture_sentinel_reader', None)
+    if cached is not None:
+        return cached
+    admission, manager = core_capture_admission(service)
+    module = load_script('orbis-host-sentinel-reader.py', 'orbis_native_sentinel_reader')
+    result = module, module.SentinelPublicationReader(manager, admission.W)
+    service._core_capture_sentinel_reader = result
+    return result
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     server: UnixHTTPServer
 
@@ -2120,6 +2246,52 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return data
 
     def do_GET(self) -> None:
+        if self.path == '/v1/sentinel-observer/capability':
+            if not trusted_capture_peer(self.connection):
+                self.send_json(403, {'error': 'Observer capability is unavailable'})
+                return
+            self.send_json(200, {'version': 1, 'capability': 'sentinel-observer.v1', 'activation': 'orbis-observer-v1'})
+            return
+        if self.path == '/v1/core-captures/capabilities':
+            if not trusted_capture_peer(self.connection):
+                self.send_json(403, {'error': 'Capture transfer is unavailable.'})
+                return
+            self.send_json(200, CORE_CAPTURE_START_CAPABILITY)
+            return
+        if self.path == '/v1/core-captures/sentinel-start-capability':
+            if not trusted_capture_peer(self.connection):
+                self.send_json(403, {'error': 'Capture transfer is unavailable.'})
+                return
+            try:
+                self.send_json(200, {**CORE_CAPTURE_SENTINEL_START_CAPABILITY,
+                                     'available': sentinel_start_available(self.server.service)})
+            except (OSError, ValueError, RuntimeError, TypeError, KeyError):
+                self.send_json(503, {'error': 'The snapshot publisher is unavailable.'})
+            return
+        if self.path in {'/v1/core-captures/reserved-start-capability', '/v1/core-captures/refused-abort-capability'}:
+            if not trusted_capture_peer(self.connection):
+                self.send_json(403, {'error': 'Capture transfer is unavailable.'})
+                return
+            if self.path.endswith('/reserved-start-capability'):
+                result = CORE_CAPTURE_RESERVED_START_CAPABILITY
+            else:
+                module = load_script('orbis-host-core-capture-unused-abort.py', 'core_capture_refused_capability')
+                result = module.REFUSED_CAPABILITY
+            self.send_json(200, result)
+            return
+        if self.path == '/v1/core-captures/sentinel-publication-capability':
+            if not trusted_capture_peer(self.connection):
+                self.send_json(403, {'error': 'Capture transfer is unavailable.'})
+                return
+            module = load_script('orbis-host-sentinel-reader.py', 'orbis_native_sentinel_reader_capability')
+            self.send_json(200, module.CAPABILITY)
+            return
+        if self.path == '/v1/core-captures/preparation-recovery-capability':
+            if not trusted_capture_peer(self.connection):
+                self.send_json(403, {'error': 'Capture transfer is unavailable.'})
+                return
+            self.send_json(200, CORE_CAPTURE_PREPARATION_RECOVERY_CAPABILITY)
+            return
         if self.path == "/v1/core-operation/progress":
             if not trusted_capture_peer(self.connection):
                 self.send_json(403, {"error": "core operation peer is unavailable"})
@@ -2258,6 +2430,120 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json(503, {"error": "package changelog is unavailable"})
 
     def do_POST(self) -> None:
+        if self.path.startswith('/v1/core-captures/'):
+            self.close_connection = True
+            started = False
+            try:
+                self.connection.settimeout(15)
+                if not trusted_capture_peer(self.connection):
+                    started = True
+                    self.send_json(403, {'error': 'Capture transfer is unavailable.'})
+                    return
+                match = re.fullmatch(r'/v1/core-captures/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})/(status|checkpoint|completion|continuation|prepare|prepare-sentinel|prepare-reserved|prepare-reserved-sentinel|admit|preparation|reconcile-preparation|sentinel-publication|sentinel-file|abort-intent(?:/status)?|abort-(?:prepare|status|finish)|abort-empty-(?:prepare|status|finish)|abort-(?:unused|setup|refused)-(?:settle|status))', self.path)
+                length = self.headers.get('Content-Length', '')
+                if (not match or self.headers.get('Transfer-Encoding') is not None
+                        or self.headers.get('Content-Encoding') is not None
+                        or len(self.headers.get_all('Content-Length', [])) != 1
+                        or len(self.headers.get_all('Content-Type', [])) != 1
+                        or self.headers.get('Content-Type') != 'application/json'
+                        or not length.isascii() or not length.isdecimal() or not 1 <= int(length) <= 1024):
+                    raise ValueError('Invalid capture transfer request')
+                request = CONTROLLER_IDENTITY.metadata(self.rfile.read(int(length)), byte_limit=1024)
+                if match[2].startswith('abort-'):
+                    operation = match[2]
+                    fields = ({'preparationSha256'} if operation.startswith('abort-intent') else
+                              {'preparationSha256', 'decisionSha256', 'terminalSha256'} |
+                              ({'approvalSha256', 'continuationSha256'} if operation.endswith('-finish') else set()))
+                    if (not isinstance(request, dict) or set(request) != fields
+                            or any(type(value) is not str or not re.fullmatch(r'[a-f0-9]{64}', value)
+                                   for value in request.values())):
+                        raise ValueError('Invalid fixed capture cancellation request')
+                    if operation == 'abort-intent':
+                        _, manager = core_capture_admission(self.server.service)
+                        result = manager.abort_reserved(match[1], request)
+                    elif operation == 'abort-intent/status':
+                        result = core_capture_abort(self.server.service, 'complete').intent_status(match[1], request)
+                    else:
+                        parts = operation.split('-')
+                        kind = parts[1] if len(parts) == 3 else 'complete'
+                        handler = core_capture_abort(self.server.service, kind)
+                        result = getattr(handler, parts[-1])(match[1], request)
+                    started = True
+                    self.send_json(200, result)
+                elif match[2] in {'preparation', 'reconcile-preparation'}:
+                    if (not isinstance(request, dict) or set(request) != {'pointReservationSha256'}
+                            or type(request['pointReservationSha256']) is not str
+                            or not re.fullmatch(r'[a-f0-9]{64}', request['pointReservationSha256'])):
+                        raise ValueError('Invalid reserved preparation observation')
+                    _, manager = core_capture_admission(self.server.service)
+                    operation = manager.observe_reserved if match[2] == 'preparation' else manager.reconcile_reserved
+                    result = operation(match[1], request)
+                    started = True
+                    self.send_json(200, result)
+                elif match[2] in {'prepare', 'prepare-sentinel', 'prepare-reserved', 'prepare-reserved-sentinel', 'admit'}:
+                    if match[2] != 'admit' and request != {}:
+                        raise ValueError('Invalid capture preparation request')
+                    if match[2] == 'admit' and (set(request) != {'preparationSha256', 'sourceHoldSha256'}
+                            or any(type(value) is not str or not re.fullmatch(r'[a-f0-9]{64}', value) for value in request.values())):
+                        raise ValueError('Invalid capture admission request')
+                    _, manager = core_capture_admission(self.server.service)
+                    if match[2] in {'prepare-sentinel', 'prepare-reserved-sentinel'}:
+                        if not sentinel_start_available(self.server.service):
+                            raise ValueError('Independent snapshot publication is not configured')
+                        prepare = manager.prepare_reserved if match[2] == 'prepare-reserved-sentinel' else manager.prepare_bound
+                        result = prepare(match[1], publication='sentinel.v1')
+                    elif match[2] == 'prepare-reserved':
+                        result = manager.prepare_reserved(match[1])
+                    else:
+                        result = manager.prepare_bound(match[1]) if match[2] == 'prepare' else manager.admit(match[1], request)
+                    started = True
+                    self.send_json(200, result)
+                elif match[2] in {'sentinel-publication', 'sentinel-file'}:
+                    _, reader = core_capture_sentinel_reader(self.server.service)
+                    if match[2] == 'sentinel-publication':
+                        result = reader.status(match[1], request)
+                        started = True
+                        self.send_json(200, result)
+                    else:
+                        with reader.open_file(match[1], request) as stream:
+                            self.connection.settimeout(30)
+                            started = True
+                            self.send_response(200)
+                            self.send_header('Content-Type', 'application/octet-stream')
+                            self.send_header('Content-Length', str(stream.bytes))
+                            self.send_header('Cache-Control', 'no-store')
+                            self.end_headers()
+                            while block := stream.read(65536):
+                                self.wfile.write(block)
+                            self.wfile.flush()
+                elif match[2] in {'completion', 'continuation'}:
+                    completion = core_capture_completion(self.server.service)
+                    operation = completion.status if match[2] == 'completion' else completion.finish
+                    result = operation(match[1], request)
+                    started = True
+                    self.send_json(200, result)
+                elif match[2] == 'status':
+                    reader = core_capture_reader(self.server.service)
+                    result = reader.status(match[1], request)
+                    started = True
+                    self.send_json(200, result)
+                else:
+                    reader = core_capture_reader(self.server.service)
+                    with reader.open_checkpoint(match[1], request) as checkpoint:
+                        self.connection.settimeout(30)
+                        started = True
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/octet-stream')
+                        self.send_header('Content-Length', str(checkpoint.bytes))
+                        self.send_header('Cache-Control', 'no-store')
+                        self.end_headers()
+                        while block := checkpoint.read(65536):
+                            self.wfile.write(block)
+                        self.wfile.flush()
+            except (OSError, ValueError, RuntimeError, TypeError, KeyError, subprocess.SubprocessError):
+                if not started:
+                    self.send_json(409, {'error': 'The captured checkpoint could not be verified.'})
+            return
         if self.path.startswith('/v1/backup-volumes/'):
             self.close_connection = True
             try:
@@ -2649,13 +2935,26 @@ def main() -> int:
     parser.add_argument("--snapshots", required=True, type=Path)
     parser.add_argument("--state-dir", required=True, type=Path)
     args = parser.parse_args()
+    observer = observer_thread = None
     try:
+        if os.environ.get('LISTEN_PID') == str(os.getpid()):
+            module = load_script('orbis-host-sentinel-observer.py', 'orbis_sentinel_observer_for_service')
+            observer = module.activated_observer(lambda: service.sentinel_observer_progress())
         service = HostService(args.root, args.docker_context, args.snapshots, args.state_dir)
+        if observer is not None:
+            observer_thread = threading.Thread(target=observer.serve_forever, name='orbis-progress-observer', daemon=True)
+            observer_thread.start()
         serve(args.socket, service)
         return 0
     except (OSError, ValueError, RuntimeError) as error:
         print(f"Orbis host service failed: {error}", file=sys.stderr)
         return 2
+    finally:
+        if observer is not None:
+            if observer_thread is not None and observer_thread.ident is not None:
+                observer.shutdown()
+                observer_thread.join(timeout=3)
+            observer.server_close()
 
 
 if __name__ == "__main__":
