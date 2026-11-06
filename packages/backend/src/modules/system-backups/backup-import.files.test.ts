@@ -72,6 +72,79 @@ it('validates manifest-only app links without allowing archive paths to traverse
     expect(() => parseFullBackupManifest(bad)).toThrow();
 });
 
+const resetStage = '.orbis-reset-stage-11111111-1111-4111-8111-111111111111';
+const resetRecoveryNames = [
+  'data/orbis-reset',
+  'data/state/orbis-reset',
+  'data/state/orbis-reset/journal.json',
+  `data/${resetStage}`,
+  `data/state/${resetStage}/binding.json`,
+  ...['desktop', 'onboarding', 'theme-settings', 'theme-packs', 'wallpapers'].map((scope) => `data/state/${scope}/${resetStage}/binding.json`),
+  'data/state/desktop/.orbis-reset-stage-malformed/file',
+];
+
+it.each([1, 2])('rejects declared reset recovery trees in format v%s', async (version) => {
+  const fixture = await fullBackupFixture(root);
+  const manifest = {
+    ...fixture.manifest,
+    version,
+    ...(version >= 2 ? { mediaPolicy: 'included' } : {}),
+  };
+  expect(parseFullBackupManifest(manifest).version).toBe(version);
+  Object.assign(fixture.manifest, manifest);
+  await fixture.write();
+  expect((await inspect(fixture.archive)).review.formatVersion).toBe(version);
+  for (const name of resetRecoveryNames) {
+    const metadata = { name, mode: 0o600, uid: 0, gid: 0, mtime: 0 };
+    expect(() => parseFullBackupManifest({ ...manifest, files: [...manifest.files, { ...metadata, bytes: 1, sha256: 'a'.repeat(64) }] })).toThrow(
+      'Reset recovery files cannot be restored. No server data has been changed.',
+    );
+    expect(() => parseFullBackupManifest({ ...manifest, directories: [...manifest.directories, metadata] })).toThrow(
+      'Reset recovery files cannot be restored. No server data has been changed.',
+    );
+  }
+});
+
+it.each(resetRecoveryNames)('rejects undeclared reset recovery member %s before extraction', async (name) => {
+  const outside = path.join(root, 'outside');
+  await fs.writeFile(outside, 'preserve');
+  for (const kind of ['0', '5']) {
+    const archive = path.join(root, `reset-${kind}.tar.gz`);
+    const destination = path.join(root, `reset-${kind}`);
+    await fs.writeFile(
+      archive,
+      gzipSync(Buffer.concat([tarMember(name, kind, kind === '0' ? Buffer.from('recovery') : Buffer.alloc(0)), Buffer.alloc(1024)])),
+    );
+    await expect(inspect(archive, destination)).rejects.toThrow('Reset recovery files cannot be restored. No server data has been changed.');
+    await expect(fs.lstat(path.join(destination, name))).rejects.toMatchObject({ code: 'ENOENT' });
+  }
+  expect(await fs.readFile(outside, 'utf8')).toBe('preserve');
+});
+
+it('preserves ordinary paths that resemble reset recovery names', async () => {
+  const fixture = await fullBackupFixture(root);
+  for (const name of [`app-data/${resetStage}`, 'app-data/orbis-reset', `data/state/other/${resetStage}`, 'data/state/orbis-reset-notes']) {
+    const file = path.join(fixture.content, name);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, 'ordinary');
+    const stat = await fs.stat(file);
+    fixture.manifest.files.push({
+      name,
+      bytes: 8,
+      sha256: createHash('sha256').update('ordinary').digest('hex'),
+      mode: stat.mode & 0o777,
+      uid: stat.uid,
+      gid: stat.gid,
+      mtime: stat.mtimeMs,
+    });
+  }
+  const stat = await fs.stat(path.join(fixture.content, 'data/state/other'));
+  fixture.manifest.directories.push({ name: 'data/state/other', mode: stat.mode & 0o777, uid: stat.uid, gid: stat.gid, mtime: stat.mtimeMs });
+  await fixture.write();
+  expect((await inspect(fixture.archive)).review.formatVersion).toBe(1);
+  expect(await fs.readFile(path.join(root, 'inspected/app-data', resetStage), 'utf8')).toBe('ordinary');
+});
+
 it('stops tiny-file expansion before its allocated-block quota is exhausted', async () => {
   const fixture = await fullBackupFixture(root);
   const hash = createHash('sha256').update('x').digest('hex');

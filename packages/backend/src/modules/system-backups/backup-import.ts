@@ -7,6 +7,7 @@ import { gt, valid } from 'semver';
 import { BackupRequirementError, privateBackupDirectory, validateBackupLinks, type BackupLink } from './backup-files';
 import { fullBackupLimits } from './backup-limits';
 import { BackupExtractionBudget } from './backup-extraction-budget';
+import { resetScopes } from '../system-reset/reset-contract';
 
 const maxEntries = fullBackupLimits.entries + 10;
 const manifestLimit = fullBackupLimits.manifestBytes;
@@ -14,6 +15,14 @@ const dataRoots = new Set(['state', 'apps', 'repos', 'media', 'user-config', 'tr
 const specialFiles = new Set(['manifest.json', 'recovery.json', 'database.dump']);
 const invalid = () => new BackupRequirementError('This file is not a complete, supported Orbis backup. No server data has been changed.');
 const controls = (value: string) => Array.from(value).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127);
+
+function rejectResetRecoveryMember(name: string) {
+  const parts = name.split('/');
+  const journal = parts[0] === 'data' && (parts[1] === 'orbis-reset' || (parts[1] === 'state' && parts[2] === 'orbis-reset'));
+  const stageIndex = parts[0] === 'data' && parts[1] === 'state' ? (resetScopes.some((scope) => scope === parts[2]) ? 3 : 2) : 1;
+  const stage = parts[0] === 'data' && parts[stageIndex]?.startsWith('.orbis-reset-stage-');
+  if (journal || stage) throw new BackupRequirementError('Reset recovery files cannot be restored. No server data has been changed.');
+}
 
 export function backupMemberName(value: string): string {
   if (value === '.' || value === './') return '.';
@@ -184,6 +193,7 @@ export function parseFullBackupManifest(value: unknown): FullBackupManifest {
       throw invalid();
   }
   const manifest = source as unknown as FullBackupManifest;
+  for (const entry of [...manifest.files, ...manifest.directories]) rejectResetRecoveryMember(entry.name);
   if (manifest.version === 2)
     validateBackupLinks(manifest.symlinks ?? [], manifest.excludedRuntimeSockets ?? [], manifest.files, manifest.directories);
   if (
@@ -243,6 +253,7 @@ export async function inspectFullBackup(options: {
       onEntry: async (entry: TarEntry) => {
         signal.throwIfAborted();
         const name = backupMemberName(entry.path);
+        rejectResetRecoveryMember(name);
         if (
           members.has(name) ||
           !allowedMember(name, entry.type) ||
