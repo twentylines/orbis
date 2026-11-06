@@ -18,16 +18,18 @@ import { SettingsBackupApplyService } from './settings-backup-apply.service';
 import { SystemBackupsService } from './system-backups.service';
 import { TimeMachineService } from './time-machine.service';
 import { retainedImageDocker } from './time-machine-retained-images';
+import { CoreCaptureRecoveryService } from './time-machine-core-recovery.service';
 
 /** Called after listen, once Nest has skipped capture-held module hooks. */
 export async function continueCoreCaptureAfterListen(app: INestApplication, dataDirectory: string, signal: AbortSignal) {
   const socket = process.env.ORBIS_HOST_SOCKET;
   if (!socket) throw new Error('Snapshot recovery requires the installed host service.');
   const presentation = app.get(AppService);
+  const recoveryService = app.get(CoreCaptureRecoveryService);
   const recovery = new CoreCaptureRecovery({
     dataDirectory,
     socket,
-    signal,
+    signal: AbortSignal.any([signal, recoveryService.signal]),
     docker: retainedImageDocker(app.get<Dockerode>(DOCKERODE), async () => {
       throw new Error('Snapshot publication cannot load images.');
     }),
@@ -55,5 +57,6 @@ export async function continueCoreCaptureAfterListen(app: INestApplication, data
     },
     onCleanupFailure: () => console.warn('A completed snapshot left temporary files for storage review.'),
   });
+  recoveryService.register(recovery);
   await recovery.continue();
 }

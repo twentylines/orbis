@@ -274,6 +274,12 @@ export function backupMaintenanceMiddleware(request: Request, response: Response
     if (request.method === 'POST' && /^\/api\/auth\/(?:login|logout|verify-totp|passkeys\/login\/(?:options|verify))\/?$/.test(pathname))
       return next();
     if (request.method === 'GET' && /^\/api\/auth\/passkeys\/availability\/?$/.test(pathname)) return next();
+    const recovery =
+      /^\/api\/system-backups\/time-machine\/recovery\/[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(\/continue)?\/?$/.exec(
+        pathname,
+      );
+    if (recovery && ((request.method === 'GET' && !recovery[1]) || (request.method === 'POST' && !!recovery[1] && !captureInitializing)))
+      return next();
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('Retry-After', '2');
     return response.status(503).json({ statusCode: 503, code: 'ORBIS_CAPTURE_RECOVERY_REQUIRED', message: 'Capture recovery requires review.' });

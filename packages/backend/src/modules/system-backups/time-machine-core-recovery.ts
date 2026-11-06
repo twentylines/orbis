@@ -44,15 +44,48 @@ type Options = {
 const fail = () => new Error('The saved capture needs recovery before Orbis can continue.');
 const digest = (value: unknown) => createHash('sha256').update(canonicalPublicationJson(value)).digest('hex');
 
-/** One startup attempt. Failure leaves the durable hold and all recovery evidence intact. */
+/** Resume the held capture; service initialization may begin only once. */
 export class CoreCaptureRecovery {
   private continuation?: Promise<void>;
+  private state: 'waiting' | 'starting' | 'needs-attention' | 'complete' = 'waiting';
+  private initializationAttempted = false;
+  private retryBinding?: { id: string; ownerId: number; sourceHoldSha256: string; pointReservationSha256: string };
 
   constructor(private readonly options: Options) {}
 
   continue(): Promise<void> {
-    this.continuation ??= Promise.resolve().then(() => this.continueOnce());
+    this.continuation ??= this.startAttempt();
     return this.continuation;
+  }
+
+  status(id: string, ownerId: number) {
+    if (!this.retryBinding || this.retryBinding.id !== id || this.retryBinding.ownerId !== ownerId) throw fail();
+    return {
+      id,
+      state: this.state,
+      canContinue: this.state === 'needs-attention' && !this.initializationAttempted && !this.options.signal.aborted && coreCaptureRecoveryRequired(),
+    };
+  }
+
+  retry(id: string, ownerId: number): Promise<void> {
+    if (!this.status(id, ownerId).canContinue) throw fail();
+    this.continuation = this.startAttempt();
+    return this.continuation;
+  }
+
+  private startAttempt() {
+    this.state = 'starting';
+    return Promise.resolve()
+      .then(() => this.continueOnce())
+      .then(
+        () => {
+          this.state = 'complete';
+        },
+        (error: unknown) => {
+          this.state = 'needs-attention';
+          throw error;
+        },
+      );
   }
 
   private async continueOnce() {
@@ -89,6 +122,18 @@ export class CoreCaptureRecovery {
         !['capturing', 'sealed'].includes(point.status) ||
         digest({ version: point.version, id: point.id, ownerId: point.ownerId, createdAt: point.createdAt, envelope: point.envelope }) !==
           hold.pointReservationSha256
+      )
+        throw fail();
+      if (
+        this.retryBinding &&
+        (point.status !== 'sealed' ||
+          digest(this.retryBinding) !==
+            digest({
+              id: point.id,
+              ownerId: point.ownerId,
+              sourceHoldSha256: binding.sourceHoldSha256,
+              pointReservationSha256: hold.pointReservationSha256,
+            }))
       )
         throw fail();
       const draft = await store.readCoreDraft(point, signal);
@@ -173,6 +218,14 @@ export class CoreCaptureRecovery {
       signal.throwIfAborted();
       const unchanged = await readCoreCaptureSourceHold(options.dataDirectory);
       if (digest(unchanged) !== binding.sourceHoldSha256) throw fail();
+      const retryBinding = {
+        id: point.id,
+        ownerId: point.ownerId,
+        sourceHoldSha256: binding.sourceHoldSha256,
+        pointReservationSha256: hold.pointReservationSha256,
+      };
+      if (this.retryBinding && digest(this.retryBinding) !== digest(retryBinding)) throw fail();
+      this.retryBinding ??= retryBinding;
       const preparation = await preStartupRead(() => root.prepare(binding, signal));
       let approval: CoreCaptureCompletionDetails | undefined;
       let queues: Awaited<ReturnType<Queue['verifyCoreCaptureConsumers']>> | undefined;
@@ -184,6 +237,8 @@ export class CoreCaptureRecovery {
           return queues;
         },
       });
+      // No service hook may be replayed after initialization could have begun.
+      this.initializationAttempted = true;
       await initializeCoreCaptureRecovery(preparation, async (details) => {
         if (details.pointReservationSha256 !== hold.pointReservationSha256) throw fail();
         approval = details;

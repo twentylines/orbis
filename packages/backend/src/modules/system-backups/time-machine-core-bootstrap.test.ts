@@ -1,6 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { afterEach, expect, it, vi } from 'vitest';
 import { continueCoreCaptureAfterListen } from './time-machine-core-bootstrap';
+import { CoreCaptureRecoveryService } from './time-machine-core-recovery.service';
 
 const captured = vi.hoisted(() => ({ options: undefined as undefined | { startup: Record<string, () => Promise<void>>; signal: AbortSignal } }));
 vi.mock('./time-machine-core-recovery', () => ({
@@ -20,7 +21,10 @@ afterEach(() => {
 it('replays exactly the skipped hooks and uses capture-specific presentation without ordinary bootstrap', async () => {
   vi.stubEnv('ORBIS_HOST_SOCKET', '/run/orbis/host.sock');
   const calls: string[] = [];
+  const serviceShutdown = new AbortController();
+  const register = vi.fn();
   const get = vi.fn((token: { name?: string } | string) => {
+    if (token === CoreCaptureRecoveryService) return { signal: serviceShutdown.signal, register };
     const name = typeof token === 'string' ? token : token.name;
     return {
       onModuleInit: async () => {
@@ -43,10 +47,12 @@ it('replays exactly the skipped hooks and uses capture-specific presentation wit
       },
     };
   });
-  const signal = new AbortController().signal;
+  const cancellation = new AbortController();
+  const signal = cancellation.signal;
   await continueCoreCaptureAfterListen({ get } as unknown as INestApplication, '/data', signal);
   const options = captured.options;
-  expect(options?.signal).toBe(signal);
+  expect(options?.signal.aborted).toBe(false);
+  expect(register).toHaveBeenCalledOnce();
   expect(options).toBeDefined();
   await options?.startup.initializeRecovery?.();
   await options?.startup.initializeServices?.();
@@ -69,6 +75,8 @@ it('replays exactly the skipped hooks and uses capture-specific presentation wit
     'AppService.presentation',
     'AppService.timers',
   ]);
+  serviceShutdown.abort();
+  expect(options?.signal.aborted).toBe(true);
 });
 
 it('refuses unavailable host support without touching any service hook', async () => {

@@ -328,6 +328,95 @@ it('resumes a sealed point without downloading or saving it again', async () => 
   expect(state.finish).toHaveBeenCalledOnce();
 });
 
+it('continues the same sealed point after root readiness failed before initialization', async () => {
+  state.point.status = 'sealed';
+  state.completion.mockRejectedValueOnce(Error('Broker not ready.'));
+  const { recovery, startup, queue } = fixture();
+  await expect(recovery.continue()).rejects.toThrow('Broker not ready');
+  expect(recovery.status(id, 1)).toEqual({ id, state: 'needs-attention', canContinue: true });
+  expect(startup.initializeRecovery).not.toHaveBeenCalled();
+  await recovery.retry(id, 1);
+  expect(recovery.status(id, 1)).toEqual({ id, state: 'complete', canContinue: false });
+  expect(state.completion).toHaveBeenCalledTimes(2);
+  expect(state.save).not.toHaveBeenCalled();
+  expect(state.adopt).not.toHaveBeenCalled();
+  expect(queue.resumeCoreCaptureConsumers).toHaveBeenCalledOnce();
+  expect(startup.initializeRecovery).toHaveBeenCalledOnce();
+  expect(state.finish).toHaveBeenCalledOnce();
+});
+
+it('refuses another operator, another point and a simultaneous second continuation', async () => {
+  state.point.status = 'sealed';
+  state.completion.mockRejectedValueOnce(Error('Broker not ready.'));
+  const { recovery } = fixture();
+  await expect(recovery.continue()).rejects.toThrow();
+  expect(() => recovery.status(id, 2)).toThrow();
+  expect(() => recovery.retry(id, 2)).toThrow();
+  expect(() => recovery.retry('22222222-2222-4222-8222-222222222222', 1)).toThrow();
+  const resumed = recovery.retry(id, 1);
+  expect(() => recovery.retry(id, 1)).toThrow();
+  expect(recovery.continue()).toBe(resumed);
+  await resumed;
+  expect(state.completion).toHaveBeenCalledTimes(2);
+  expect(state.finish).toHaveBeenCalledOnce();
+});
+
+it('rechecks the original source hold before continuing and cannot adopt a different binding', async () => {
+  state.point.status = 'sealed';
+  state.completion.mockRejectedValueOnce(Error('Broker not ready.'));
+  const { recovery, startup } = fixture();
+  await expect(recovery.continue()).rejects.toThrow();
+  state.marker.sourceSha256 = '9'.repeat(64);
+  state.readDraft.mockClear();
+  await expect(recovery.retry(id, 1)).rejects.toThrow('needs recovery');
+  expect(state.readDraft).not.toHaveBeenCalled();
+  expect(state.completion).toHaveBeenCalledOnce();
+  expect(state.save).not.toHaveBeenCalled();
+  expect(startup.initializeRecovery).not.toHaveBeenCalled();
+  expect(state.capture).toBe(true);
+});
+
+it('refuses a sealed point changed back to capturing instead of downloading or publishing again', async () => {
+  state.point.status = 'sealed';
+  state.completion.mockRejectedValueOnce(Error('Broker not ready.'));
+  const { recovery } = fixture();
+  await expect(recovery.continue()).rejects.toThrow();
+  state.point.status = 'capturing';
+  await expect(recovery.retry(id, 1)).rejects.toThrow('needs recovery');
+  expect(state.status).not.toHaveBeenCalled();
+  expect(state.save).not.toHaveBeenCalled();
+  expect(state.adopt).not.toHaveBeenCalled();
+  expect(state.completion).toHaveBeenCalledOnce();
+});
+
+it('never retries after any service initialization could have begun', async () => {
+  state.point.status = 'sealed';
+  const { recovery, startup } = fixture();
+  startup.initializeRecovery.mockRejectedValueOnce(Error('Startup interrupted.'));
+  await expect(recovery.continue()).rejects.toThrow('Startup interrupted');
+  expect(recovery.status(id, 1).canContinue).toBe(false);
+  expect(() => recovery.retry(id, 1)).toThrow();
+  expect(startup.initializeRecovery).toHaveBeenCalledOnce();
+  expect(state.finish).not.toHaveBeenCalled();
+  expect(state.capture).toBe(true);
+});
+
+it('keeps shutdown cancellation and failed publication outside the continuation path', async () => {
+  state.point.status = 'sealed';
+  state.completion.mockRejectedValueOnce(Error('Broker not ready.'));
+  const { recovery, cancellation } = fixture();
+  await expect(recovery.continue()).rejects.toThrow();
+  cancellation.abort();
+  expect(recovery.status(id, 1).canContinue).toBe(false);
+  expect(() => recovery.retry(id, 1)).toThrow();
+  expect(state.completion).toHaveBeenCalledOnce();
+  state.point.status = 'capturing';
+  state.save.mockRejectedValueOnce(Error('Publication failed.'));
+  const failed = fixture().recovery;
+  await expect(failed.continue()).rejects.toThrow('Publication failed');
+  expect(() => failed.retry(id, 1)).toThrow();
+});
+
 it('observes a lost commit reply once and accepts only the matching completed continuation', async () => {
   state.finish.mockImplementation(async () => {
     state.rootState = 'complete';

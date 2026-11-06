@@ -23,10 +23,12 @@ import { imageCaptureDocker } from './backup-image-capture';
 import { DOCKERODE } from '../docker/docker.module';
 import type Dockerode from 'dockerode';
 import { DesktopPreferencesModule } from '../desktop-preferences/desktop-preferences.module';
+import { CoreCaptureRecoveryService } from './time-machine-core-recovery.service';
+import { CoreCaptureRecoveryController } from './time-machine-core-recovery.controller';
 
 @Module({
   imports: [QueueModule, AuthModule, AppsModule, DockerModule, TasksModule, HostUpdatesModule, AppLifecycleModule, DesktopPreferencesModule],
-  controllers: [TimeMachineController, SystemBackupsController, BackupImportsController, BackupRestoresController],
+  controllers: [TimeMachineController, SystemBackupsController, BackupImportsController, BackupRestoresController, CoreCaptureRecoveryController],
   exports: [SystemBackupsService, BackupImportsService, TimeMachineService, BackupDatabaseService],
   providers: [
     BackupRestoresService,
@@ -38,6 +40,7 @@ import { DesktopPreferencesModule } from '../desktop-preferences/desktop-prefere
     TimeMachineService,
     TimeMachineRestoreAuthorization,
     TimeMachineCaptureRuntime,
+    CoreCaptureRecoveryService,
     { provide: TIME_MACHINE_CAPTURE_IMAGES, useFactory: (docker: Dockerode) => imageCaptureDocker(docker), inject: [DOCKERODE] },
   ],
 })
