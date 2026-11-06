@@ -101,7 +101,7 @@ class OrbisHostServiceSetupTests(unittest.TestCase):
         pid.assert_not_called()
 
     def test_systemd_identity_rejects_missing_pid_dropins_or_changed_command(self):
-        properties = {"ActiveState": "active", "SubState": "running", "MainPID": "52", "FragmentPath": str(SETUP.UNIT_FILE), "DropInPaths": "", "User": "root"}
+        properties = {"ActiveState": "active", "SubState": "running", "MainPID": "52", "FragmentPath": str(SETUP.UNIT_FILE), "DropInPaths": "", "User": "root", "NeedDaemonReload": "no"}
         root = Path("/srv/orbis")
         command = ["/usr/bin/python3", str(SETUP.INSTALL_DIR / "orbis-host-service.py"), "--root", str(root), "--docker-context", "default", "--socket", str(SETUP.SOCKET_FILE), "--snapshots", "/var/lib/orbis/snapshots", "--state-dir", "/var/lib/orbis/state"]
         for changes in ({"MainPID": "0"}, {"ActiveState": "inactive"}, {"DropInPaths": "/etc/override.conf"}, {"User": "nobody"}, {"FragmentPath": "/other.service"}):
@@ -111,6 +111,50 @@ class OrbisHostServiceSetupTests(unittest.TestCase):
         body = "\n".join(key + "=" + value for key, value in properties.items())
         with mock.patch.object(SETUP.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout=body)), mock.patch.object(Path, "stat", return_value=SimpleNamespace(st_uid=0)), mock.patch.object(Path, "read_bytes", return_value=b"changed command"), self.assertRaisesRegex(ValueError, "installed helper"):
             SETUP._systemd_main_pid(root, "default")
+
+    def test_systemd_identity_accepts_only_protected_canonical_observer_drop_in(self):
+        root = Path("/srv/orbis")
+        command = ["/usr/bin/python3", str(SETUP.INSTALL_DIR / "orbis-host-service.py"), "--root", str(root), "--docker-context", "default", "--socket", str(SETUP.SOCKET_FILE), "--snapshots", "/var/lib/orbis/snapshots", "--state-dir", "/var/lib/orbis/state"]
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "orbis-host.service.d"
+            directory.mkdir(mode=0o700)
+            drop_in = directory / "sentinel-observer.conf"
+            drop_in.write_bytes(SETUP.OBSERVER_DROP_IN_CONTENT)
+            properties = {"ActiveState": "active", "SubState": "running", "MainPID": "52", "FragmentPath": str(SETUP.UNIT_FILE), "DropInPaths": str(drop_in), "User": "root", "NeedDaemonReload": "no"}
+            def check(changes=None):
+                body = "\n".join(key + "=" + value for key, value in (properties | (changes or {})).items())
+                with mock.patch.object(SETUP.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout=body)), mock.patch.object(SETUP, "OBSERVER_DROP_IN", drop_in), mock.patch.object(SETUP.HOST.AUTHORITY, "OWNER", os.getuid()), mock.patch.object(Path, "stat", autospec=True, side_effect=lambda path, *a, **kw: SimpleNamespace(st_uid=0) if str(path) == "/proc/52" else original_stat(path, *a, **kw)), mock.patch.object(Path, "read_bytes", autospec=True, side_effect=lambda path: b"\0".join(part.encode() for part in command) + b"\0" if str(path) == "/proc/52/cmdline" else original_read(path)):
+                    return SETUP._systemd_main_pid(root, "default")
+            original_stat, original_read = Path.stat, Path.read_bytes
+            self.assertEqual(check(), 52)
+            for changes in ({"DropInPaths": str(drop_in) + " /etc/other.conf"}, {"NeedDaemonReload": "yes"}):
+                with self.subTest(changes=changes), self.assertRaises(ValueError):
+                    check(changes)
+            drop_in.write_bytes(SETUP.OBSERVER_DROP_IN_CONTENT + b"ExecStart=/evil\n")
+            with self.assertRaises(ValueError):
+                check()
+            drop_in.write_bytes(SETUP.OBSERVER_DROP_IN_CONTENT)
+            original_fstat = os.fstat
+            drop_inode = drop_in.stat().st_ino
+            def foreign_owner(fd):
+                details = original_fstat(fd)
+                if details.st_ino == drop_inode:
+                    return SimpleNamespace(st_mode=details.st_mode, st_uid=os.getuid() + 1)
+                return details
+            with mock.patch.object(SETUP.HOST.AUTHORITY.os, "fstat", side_effect=foreign_owner), self.assertRaises(ValueError):
+                check()
+            drop_in.chmod(0o666)
+            with self.assertRaises(ValueError):
+                check()
+            drop_in.chmod(0o600)
+            directory.chmod(0o777)
+            with self.assertRaises(ValueError):
+                check()
+            directory.chmod(0o700)
+            drop_in.unlink()
+            drop_in.symlink_to("/etc/passwd")
+            with self.assertRaises((ValueError, OSError)):
+                check()
 
     def test_final_verification_requires_both_host_and_container_digest(self):
         digest = "sha256:" + "a" * 64

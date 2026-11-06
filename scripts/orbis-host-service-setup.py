@@ -111,6 +111,8 @@ SCRIPTS = (
 INSTALL_DIR = Path("/opt/orbis/host-service")
 ENV_FILE = Path("/etc/orbis/host-service.env")
 UNIT_FILE = Path("/etc/systemd/system/orbis-host.service")
+OBSERVER_DROP_IN = Path("/etc/systemd/system/orbis-host.service.d/sentinel-observer.conf")
+OBSERVER_DROP_IN_CONTENT = b"[Unit]\nRequires=orbis-host-observer.socket\nAfter=orbis-host-observer.socket\n\n[Service]\nSockets=orbis-host-observer.socket\n"
 SOCKET_FILE = Path("/run/orbis/host.sock")
 
 
@@ -321,13 +323,21 @@ def _start_service() -> None:
 
 
 def _systemd_main_pid(root: Path, context: str) -> int:
-    properties = ("ActiveState", "SubState", "MainPID", "FragmentPath", "DropInPaths", "User")
+    properties = ("ActiveState", "SubState", "MainPID", "FragmentPath", "DropInPaths", "User", "NeedDaemonReload")
     result = subprocess.run(["/usr/bin/systemctl", "show", "orbis-host.service", *["--property=" + key for key in properties]], capture_output=True, text=True, check=False)
     values = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
     if (result.returncode or set(values) != set(properties) or values["ActiveState"] != "active"
             or values["SubState"] != "running" or values["FragmentPath"] != str(UNIT_FILE)
-            or values["DropInPaths"] or values["User"] != "root" or not values["MainPID"].isdigit()):
+            or values["DropInPaths"] not in ("", str(OBSERVER_DROP_IN)) or values["User"] != "root"
+            or not values["MainPID"].isdigit()):
         raise ValueError("the expected root systemd host service is not running")
+    if values["DropInPaths"]:
+        if values["NeedDaemonReload"] != "no":
+            raise ValueError("the observer drop-in needs a systemd reload")
+        with HOST.AUTHORITY.protected_directory(OBSERVER_DROP_IN.parent, private=False) as directory:
+            with HOST.AUTHORITY.protected_file(directory, OBSERVER_DROP_IN.name, 4096, private=False) as content:
+                if content != OBSERVER_DROP_IN_CONTENT:
+                    raise ValueError("the observer drop-in differs from the managed profile")
     pid = int(values["MainPID"])
     expected = ["/usr/bin/python3", str(INSTALL_DIR / "orbis-host-service.py"), "--root", str(root),
                 "--docker-context", context, "--socket", str(SOCKET_FILE), "--snapshots", "/var/lib/orbis/snapshots", "--state-dir", "/var/lib/orbis/state"]
