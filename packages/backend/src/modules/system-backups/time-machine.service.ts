@@ -25,6 +25,7 @@ import { AccountSecurityService } from '../auth/account-security.service';
 import { AppsRepository } from '../apps/apps.repository';
 import { QueueFactory } from '../queue/queue.factory';
 import { HostCoreCaptureReservedStartClient } from '../host-updates/host-core-capture-reserved-start-client';
+import { coreCapturePointReservationSha256 } from './time-machine-core-reservation';
 import {
   authorizeCoreCaptureOperator,
   CoreCaptureProducer,
@@ -274,8 +275,13 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw timeMachineConflict('capture-recovery-required');
       throw error;
     }
-    if (point.ownerId !== ownerId || ![2, 3].includes(point.version) || point.onboardingAttemptId !== id)
-      throw timeMachineConflict('point-not-found');
+    const bound =
+      point.onboardingAttemptId === id ||
+      (point.version === 3 &&
+        point.onboardingAttemptId === undefined &&
+        attempt.state === 'ready' &&
+        attempt.pointReservationSha256 === coreCapturePointReservationSha256(point));
+    if (point.ownerId !== ownerId || ![2, 3].includes(point.version) || !bound) throw timeMachineConflict('point-not-found');
     if (
       point.status === 'capturing' &&
       (attempt.state !== 'ready' || !this.active?.onboarding || this.active.id !== id || this.active.ownerId !== ownerId)

@@ -1,5 +1,6 @@
 import { historicalIconLimits, historicalIconsAssetSchema, type HistoricalIconsAsset } from '@runtipi/common/schemas/time-machine-icons';
 import { verifyAppIcons, type CapturedAppIcons } from './time-machine-app-icons';
+import { coreCapturePointReservationSha256 } from './time-machine-core-reservation';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import fs, { type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
@@ -566,24 +567,46 @@ export class TimeMachineStore {
       !value ||
       typeof value !== 'object' ||
       Array.isArray(value) ||
-      Object.keys(value).sort().join(',') !== 'id,machineId,ownerId,state,version' ||
+      Object.keys(value).sort().join(',') !==
+        (value && typeof value === 'object' && 'version' in value && value.version === 2
+          ? 'id,machineId,ownerId,pointReservationSha256,state,version'
+          : 'id,machineId,ownerId,state,version') ||
       !('id' in value && 'ownerId' in value && 'machineId' in value && 'state' in value && 'version' in value) ||
-      value.version !== 1 ||
+      (value.version !== 1 && value.version !== 2) ||
       value.id !== id ||
       value.ownerId !== ownerId ||
       value.machineId !== machineId ||
-      (value.state !== 'reserved' && value.state !== 'ready')
+      (value.state !== 'reserved' && value.state !== 'ready') ||
+      (value.version === 2 &&
+        (value.state !== 'ready' || !('pointReservationSha256' in value) || !timeMachineHashSchema.allows(value.pointReservationSha256)))
     )
       throw timeMachineConflict('point-not-found');
-    return { claimed, state: value.state };
+    return {
+      claimed,
+      state: value.state,
+      pointReservationSha256: value.version === 2 && 'pointReservationSha256' in value ? (value.pointReservationSha256 as string) : undefined,
+    };
   }
 
   async readyOnboardingAttempt(id: string, ownerId: number) {
     const current = await this.onboardingAttempt(id, ownerId);
     if (current.state !== 'reserved') throw timeMachineConflict('capture-recovery-required');
     const machineId = await this.machineIdentity();
+    const point = await this.load(id);
+    if (point.ownerId !== ownerId) throw timeMachineConflict('point-not-found');
     const file = path.join(this.root(), 'onboarding-attempts', `${id}.json`);
-    await this.atomic(file, JSON.stringify({ version: 1, id, ownerId, machineId, state: 'ready' }), true);
+    await this.atomic(
+      file,
+      JSON.stringify({
+        version: point.version === 3 ? 2 : 1,
+        id,
+        ownerId,
+        machineId,
+        state: 'ready',
+        ...(point.version === 3 ? { pointReservationSha256: coreCapturePointReservationSha256(point) } : {}),
+      }),
+      true,
+    );
   }
 
   create(ownerId: number, version: 3, onboardingAttemptId?: string): Promise<{ point: StoredCoreTimeMachinePoint; passphrase: string }>;
@@ -620,7 +643,7 @@ export class TimeMachineStore {
         archiveBytes: 0,
         archiveSha256: null,
         metadataSha256: null,
-        ...(onboardingAttemptId ? { onboardingAttemptId } : {}),
+        ...(onboardingAttemptId && version === 2 ? { onboardingAttemptId } : {}),
         ...(version === 2
           ? {
               runtimeBytes: 0,

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { Request } from 'express';
 import { backupMaintenanceActive } from '@/common/backup-maintenance';
 import { installationMode } from '@/common/installation-mode';
@@ -19,6 +19,7 @@ import {
 import { cancelReservedCoreCapture } from './time-machine-core-early-abort';
 import { readCoreCapturePublisher, rememberCoreCapturePublisher } from './time-machine-core-publisher';
 import type { StoredCoreTimeMachinePoint, TimeMachineStore } from './time-machine-store';
+import { coreCapturePointReservationSha256 } from './time-machine-core-reservation';
 
 declare const operatorGrant: unique symbol;
 export type CoreCaptureOperatorGrant = { readonly [operatorGrant]: true };
@@ -138,17 +139,7 @@ export class CoreCaptureProducer {
       signal.throwIfAborted();
       await authorization.recheck();
       this.options.onStage?.('preparing');
-      const reservation = createHash('sha256')
-        .update(
-          canonicalPublicationJson({
-            version: point.version,
-            id: point.id,
-            ownerId: point.ownerId,
-            createdAt: point.createdAt,
-            envelope: point.envelope,
-          }),
-        )
-        .digest('hex');
+      const reservation = coreCapturePointReservationSha256(point);
       if (reservedClient(selectedClient)) {
         requireReservedQueue(this.options.queue);
         reservedPreparationAttempted = true;

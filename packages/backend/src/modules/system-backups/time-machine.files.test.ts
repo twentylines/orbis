@@ -120,7 +120,8 @@ it.skipIf(process.platform !== 'linux')(
       const request = { authMethod: 'session', user: { id: 1, operator: true } } as Request;
       const point = await machine.beginOnboardingCapture(1, id, 'After setup', request);
       expect(point).toMatchObject({ id, status: 'capturing' });
-      expect(await store().load(id)).toMatchObject({ version: 3, kind: 'orbis-core', onboardingAttemptId: id });
+      expect(await store().load(id)).toMatchObject({ version: 3, kind: 'orbis-core' });
+      expect(await store().load(id)).not.toHaveProperty('onboardingAttemptId');
       expect(await store().onboardingAttempt(id, 1)).toMatchObject({ state: 'ready' });
       expect(JSON.parse(await fs.readFile(path.join(data, 'state', 'onboarding', '1.json'), 'utf8'))).toEqual({ version: 1 });
       expect(await machine.beginOnboardingCapture(1, id, 'After setup', request)).toMatchObject({ id });
@@ -195,6 +196,50 @@ it.skipIf(process.platform !== 'linux')('a core point creation failure after the
   } finally {
     if (socket === undefined) delete process.env.ORBIS_HOST_SOCKET;
     else process.env.ORBIS_HOST_SOCKET = socket;
+  }
+});
+
+it('core onboarding receipts bind the exact point without changing its Root reservation format', async () => {
+  await machine.list(1);
+  const id = randomUUID();
+  const storage = store();
+  await storage.onboardingAttempt(id, 1, true);
+  const { point } = await storage.create(1, 3, id);
+  await storage.fail(point, 'capture-failed');
+  await expect(machine.onboardingCapture(id, 1)).rejects.toMatchObject({ response: { code: 'point-not-found' } });
+  await storage.readyOnboardingAttempt(id, 1);
+  expect(await machine.onboardingCapture(id, 1)).toMatchObject({ id, status: 'failed' });
+  await expect(machine.onboardingCapture(id, 2)).rejects.toMatchObject({ response: { code: 'point-not-found' } });
+  const receiptFile = path.join(root(), 'onboarding-attempts', `${id}.json`);
+  const receipt = JSON.parse(await fs.readFile(receiptFile, 'utf8'));
+  const { pointReservationSha256: _binding, ...legacyReceipt } = receipt;
+  await fs.writeFile(receiptFile, JSON.stringify({ ...legacyReceipt, version: 1 }), { mode: 0o600 });
+  await expect(machine.onboardingCapture(id, 1)).rejects.toMatchObject({ response: { code: 'point-not-found' } });
+  await fs.writeFile(receiptFile, JSON.stringify(receipt), { mode: 0o600 });
+  const filename = path.join(root(), 'points', id, 'point.json');
+  const replaced = JSON.parse(await fs.readFile(filename, 'utf8'));
+  await fs.writeFile(filename, JSON.stringify({ ...replaced, onboardingAttemptId: randomUUID() }), { mode: 0o600 });
+  await expect(machine.onboardingCapture(id, 1)).rejects.toMatchObject({ response: { code: 'point-not-found' } });
+  replaced.envelope.nonce = 'f'.repeat(24);
+  await fs.writeFile(filename, JSON.stringify(replaced), { mode: 0o600 });
+  await expect(machine.onboardingCapture(id, 1)).rejects.toMatchObject({ response: { code: 'point-not-found' } });
+});
+
+it('core onboarding never accepts a reserved or foreign-machine receipt after interruption', async () => {
+  await machine.list(1);
+  const storage = store();
+  for (const issue of ['capture-failed', 'capture-interrupted'] as const) {
+    const id = randomUUID();
+    await storage.onboardingAttempt(id, 1, true);
+    const { point } = await storage.create(1, 3, id);
+    await storage.fail(point, issue);
+    await expect(machine.onboardingCapture(id, 1)).rejects.toMatchObject({ response: { code: 'point-not-found' } });
+    await storage.readyOnboardingAttempt(id, 1);
+    const filename = path.join(root(), 'onboarding-attempts', `${id}.json`);
+    const receipt = JSON.parse(await fs.readFile(filename, 'utf8'));
+    receipt.machineId = randomUUID();
+    await fs.writeFile(filename, JSON.stringify(receipt), { mode: 0o600 });
+    await expect(machine.onboardingCapture(id, 1)).rejects.toMatchObject({ response: { code: 'point-not-found' } });
   }
 });
 

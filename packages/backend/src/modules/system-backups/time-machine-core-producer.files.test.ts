@@ -2,6 +2,9 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { coreCapturePointReservationSha256 } from './time-machine-core-reservation';
+import { stabilizeDarwinFixtureCreation } from './darwin-files.fixture';
 import type { Request } from 'express';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { AuthService } from '../auth/auth.service';
@@ -16,10 +19,12 @@ let maintenance: typeof import('@/common/backup-maintenance');
 let storage: typeof import('./time-machine-store');
 let holds: typeof import('./time-machine-core-source-hold');
 const roots: string[] = [];
+let restoreDarwinCreation: () => void = () => undefined;
 const signal = () => new AbortController().signal;
 const h = (v: string) => v.repeat(64);
 beforeEach(async () => {
   vi.resetModules();
+  restoreDarwinCreation = stabilizeDarwinFixtureCreation(() => roots);
   subject = await import('./time-machine-core-producer');
   maintenance = await import('@/common/backup-maintenance');
   storage = await import('./time-machine-store');
@@ -30,6 +35,7 @@ beforeEach(async () => {
   maintenance.setSettingsRestoreRecoveryRequired(false);
 });
 afterEach(async () => {
+  restoreDarwinCreation();
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) await fs.rm(root, { force: true, recursive: true });
 });
@@ -156,7 +162,21 @@ it('reserves the browser onboarding UUID as a core-only point before any externa
   const id = randomUUID();
   const producer = f.producer(await f.authorize(), { onboardingAttemptId: id });
   const point = await producer.reserve(signal());
-  expect(point).toMatchObject({ id, version: 3, kind: 'orbis-core', onboardingAttemptId: id, status: 'capturing' });
+  expect(point).toMatchObject({ id, version: 3, kind: 'orbis-core', status: 'capturing' });
+  expect(point).not.toHaveProperty('onboardingAttemptId');
+  const rootReader = spawnSync(
+    'python3',
+    [
+      '-B',
+      '-c',
+      'import importlib.util,sys; s=importlib.util.spec_from_file_location("reservation",sys.argv[1]); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); print(m.sha256(m.reservation(sys.stdin.buffer.read(),sys.argv[2])))',
+      path.resolve(import.meta.dirname, '../../../../../scripts/orbis-host-core-capture-reservation.py'),
+      id,
+    ],
+    { input: JSON.stringify(point), encoding: 'utf8', timeout: 10_000 },
+  );
+  expect(rootReader.status, rootReader.stderr).toBe(0);
+  expect(rootReader.stdout.trim()).toBe(coreCapturePointReservationSha256(point));
   expect(await f.store.onboardingAttempt(id, 1)).toMatchObject({ state: 'reserved' });
   expect(f.client.prepare).not.toHaveBeenCalled();
   expect(f.client.admit).not.toHaveBeenCalled();
