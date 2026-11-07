@@ -14,6 +14,26 @@ _MAX_JSON = 16384
 _MAX_SAFE = 2**53 - 1
 _UUID = re.compile(r'[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}', re.ASCII)
 _TAG = re.compile(r'v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?', re.ASCII)
+_CAPTURE_ROUTE = re.compile(rb'/v2/core-captures/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})/progress')
+CAPTURE_CAPABILITY = {'schema': 'orbis.sentinel-observer.capture.v1', 'protocolVersion': 1, 'kind': 'core-capture-progress'}
+
+
+def validate_capture(value, point):
+    fields = {'version', 'id', 'state', 'phase', 'completedBytes', 'totalBytes', 'restartVerified'}
+    phases = {'preparing', 'stopping-orbis', 'saving-orbis', 'starting-orbis',
+              'stopping-apps', 'saving-apps', 'starting-apps', 'sealing', 'complete'}
+    count = lambda x: type(x) is int and 0 <= x <= _MAX_SAFE
+    if (type(value) is not dict or set(value) != fields or type(value['version']) is not int or value['version'] != 1
+            or value['id'] != point or not _UUID.fullmatch(point)
+            or type(value['state']) is not str or value['state'] not in {'waiting', 'running', 'recovery-required', 'complete'}
+            or type(value['phase']) is not str or value['phase'] not in phases
+            or not count(value['completedBytes']) or not (value['totalBytes'] is None or count(value['totalBytes']))
+            or value['totalBytes'] is not None and value['completedBytes'] > value['totalBytes']
+            or type(value['restartVerified']) is not bool
+            or (value['state'] == 'complete') != (value['phase'] == 'complete')
+            or value['restartVerified'] != (value['state'] == 'complete')):
+        raise ValueError('Capture progress is unavailable')
+    return dict(value)
 
 
 def validate_progress(value):
@@ -87,7 +107,7 @@ def _peer(conn):
 
 
 class ObserverServer:
-    def __init__(self, listener, provider):
+    def __init__(self, listener, provider, *, capture_provider=None):
         if listener.family != socket.AF_UNIX or listener.getsockopt(socket.SOL_SOCKET, socket.SO_TYPE) != socket.SOCK_STREAM or not self._is_listening(listener):
             raise ValueError('Unavailable')
         name = listener.getsockname()
@@ -96,6 +116,7 @@ class ObserverServer:
         self.path = os.path.abspath(name)
         self.identity = self._identity(self.path)
         self.provider = provider
+        self.capture_provider = capture_provider
         self.listener = listener.dup()
         self._stop = threading.Event()
         self._done = threading.Event()
@@ -154,7 +175,11 @@ class ObserverServer:
             if extra or len(lines[0]) > 8192:
                 raise ValueError('Unavailable')
             parts = lines[0].split(b' ')
-            if len(parts) != 3 or parts[0] != b'GET' or parts[2] not in (b'HTTP/1.0', b'HTTP/1.1') or parts[1] not in (b'/v1/capability', b'/v1/core-operation/progress'):
+            if len(parts) != 3 or parts[0] != b'GET' or parts[2] not in (b'HTTP/1.0', b'HTTP/1.1'):
+                raise ValueError('Unavailable')
+            capture = _CAPTURE_ROUTE.fullmatch(parts[1]) if self.capture_provider is not None else None
+            capture_capability = parts[1] == b'/v2/capture-capability' and self.capture_provider is not None
+            if parts[1] not in (b'/v1/capability', b'/v1/core-operation/progress') and not capture and not capture_capability:
                 raise ValueError('Unavailable')
             seen_length = False
             for line in lines[1:]:
@@ -174,6 +199,11 @@ class ObserverServer:
                 raise ValueError('Unavailable')
             if parts[1] == b'/v1/capability':
                 payload = {'schema': 'orbis.sentinel-observer.v1', 'protocolVersion': 1, 'kind': 'core-update-progress'}
+            elif capture_capability:
+                payload = CAPTURE_CAPABILITY
+            elif capture:
+                point = capture[1].decode('ascii')
+                payload = validate_capture(self.capture_provider(point), point)
             else:
                 payload = validate_progress(self.provider())
             if self._identity(self.path) != self.identity:
@@ -197,7 +227,7 @@ class ObserverServer:
             self._slots.release()
 
 
-def activated_observer(provider):
+def activated_observer(provider, *, capture_provider=None):
     """Use only the explicitly enrolled systemd observer descriptor."""
     if os.environ.get('LISTEN_PID') != str(os.getpid()):
         return None
@@ -205,7 +235,7 @@ def activated_observer(provider):
         raise ValueError('Observer activation is unavailable')
     os.set_inheritable(3, False)
     with socket.socket(fileno=3) as listener:
-        result = ObserverServer(listener, provider)
+        result = ObserverServer(listener, provider, capture_provider=capture_provider)
     for key in ('LISTEN_PID', 'LISTEN_FDS', 'LISTEN_FDNAMES'):
         os.environ.pop(key, None)
     return result

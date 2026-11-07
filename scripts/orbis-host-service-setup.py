@@ -100,6 +100,7 @@ SCRIPTS = (
     "orbis-install-transaction.py",
     "orbis-host-service.py",
     "orbis-host-sentinel-observer.py",
+    "orbis-host-core-capture-progress.py",
     "orbis-host-packages.py",
     "orbis-host-package-worker.py",
     "orbis-host-telemetry.py",

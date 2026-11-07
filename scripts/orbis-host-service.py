@@ -1815,6 +1815,11 @@ class HostService:
                         raise ValueError('The core operation changed during observation')
                 return result
 
+    def sentinel_capture_progress(self, point):
+        reader = core_capture_reader(self)
+        module = load_script('orbis-host-core-capture-progress.py', 'orbis_capture_progress_for_observer')
+        return module.CaptureProgress(self, reader).progress(point)
+
     def status(self) -> dict:
         saved = HOST.saved_state(self.root)
         enrolled = self.state_matches(saved)
@@ -2939,7 +2944,8 @@ def main() -> int:
     try:
         if os.environ.get('LISTEN_PID') == str(os.getpid()):
             module = load_script('orbis-host-sentinel-observer.py', 'orbis_sentinel_observer_for_service')
-            observer = module.activated_observer(lambda: service.sentinel_observer_progress())
+            observer = module.activated_observer(lambda: service.sentinel_observer_progress(),
+                capture_provider=lambda point: service.sentinel_capture_progress(point))
         service = HostService(args.root, args.docker_context, args.snapshots, args.state_dir)
         if observer is not None:
             observer_thread = threading.Thread(target=observer.serve_forever, name='orbis-progress-observer', daemon=True)

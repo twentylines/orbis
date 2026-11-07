@@ -24,6 +24,7 @@ class OrbisHostServiceSetupTests(unittest.TestCase):
     def test_discovery_is_bundled_with_the_host_helper_without_new_unit_or_dependencies(self):
         files, unit = SETUP.source_files(Path(__file__).parent)
         self.assertIn("orbis-host-discovery.py", [item.name for item in files])
+        self.assertIn("orbis-host-core-capture-progress.py", [item.name for item in files])
         self.assertEqual(unit.name, "orbis-host.service")
         self.assertIn("Environment=PYTHONDONTWRITEBYTECODE=1", unit.read_text().splitlines())
 
