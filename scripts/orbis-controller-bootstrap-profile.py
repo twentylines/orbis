@@ -77,13 +77,14 @@ def mapped_source(source, destination):
 def probe(updater, record, phase):
     if phase not in {'review', 'rollback'}:
         raise fail()
-    source = record['source']
+    source = (updater.bootstrap_source(record, phase) if record.get('sourceBootstrapEnablement') is not None
+              else record['source'])
     environment = dict(item.split('=', 1) for item in source['Config'].get('Env', []) if '=' in item)
     capable = environment.get('ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS') == '1'
     if not capable and (record['current'].get('commit'), record['current'].get('digest'), source['Image']) not in LEGACY_SOURCES:
         raise fail()
     runtime, P = updater.runtime, updater.P
-    require_image_startup(updater, record)
+    require_image_startup(updater, {**record, 'source': source})
     frozen = updater.path / 'bootstrap-profile.mjs'
     if 'bootstrapProbeCodeSha256' not in record:
         path = Path(__file__).with_suffix('.mjs')
@@ -276,6 +277,9 @@ def require_image_startup(updater, record):
             raise fail()
     body = runtime.engine('GET', '/containers/' + source['Id'] + '/changes', maximum=1024 * 1024)
     changes = updater.P.metadata(b'{"changes":' + body + b'}', byte_limit=1024 * 1024 + 12).get('changes')
+    # Docker's empty typed diff can be serialized as JSON null.
+    if changes is None:
+        changes = []
     if not isinstance(changes, list) or len(changes) > 8192:
         raise fail()
     for change in changes:

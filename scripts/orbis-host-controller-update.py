@@ -32,6 +32,8 @@ RESET = D.RESET
 RESET_POLICY = 'orbis.controller-update-reset-mount.v1'
 RESET_POLICY_V2 = 'orbis.controller-update-reset-mount.v2'
 SOURCE_RETIREMENT = 'orbis.controller-source-retirement.v1'
+SOURCE_ENABLEMENT = 'orbis.controller-source-bootstrap-enablement.v1'
+PRESERVE_ENV = 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS'
 PROBE_RETIREMENT = 'orbis.controller-probe-retirement.v2'
 TOOLS = load('orbis-install-transaction.py', 'orbis_controller_reconstruction_transaction')
 CAPABILITY = {'schema': 'orbis.controller-overlay-startup.v1', 'version': 1, 'preserveNetworkAccess': True,
@@ -101,7 +103,9 @@ class ControllerUpdate:
             raise
         daemon = D.APPS.digest_daemon(self.runtime.reader)
         binding = RESET.read_external_enrollment(self.root, daemon, self.context)
-        if binding.get('schema') != RESET.SCHEMA_V4:
+        # Existing verified mounts retain their enrollment contract. Only adding
+        # a mount requires the newer operator-reviewed enrollment.
+        if not dedicated and binding.get('schema') != RESET.SCHEMA_V4:
             raise ValueError('A new controller reset mount requires reviewed v4 external enrollment')
         RESET.verify(self.root, binding, daemon=daemon, context=self.context)
         if dedicated:
@@ -304,6 +308,13 @@ class ControllerUpdate:
             self.save(record)
 
     def plan_source_reconstruction(self, record):
+        body = self.source_reconstruction_body(record)
+        record['sourceRetirement'] = {'schema': SOURCE_RETIREMENT, 'phase': 'held', 'body': body,
+            'bodySha256': hashlib.sha256(self.P.canonical(body)).hexdigest(), 'imageId': record['source']['Image'],
+            'anchorName': 'orbis-controller-source-image-' + self.key,
+            'reconstructionName': 'orbis-controller-reconstructed-' + self.key}
+
+    def source_reconstruction_body(self, record):
         source = record['source']
         if source['HostConfig'].get('Links') or source['HostConfig'].get('VolumesFrom') or any(item.get('Type') != 'bind' for item in source['Mounts']):
             raise ValueError('Source dependencies require explicit reconstruction review')
@@ -316,10 +327,83 @@ class ControllerUpdate:
         body['HostConfig']['RestartPolicy'] = {'Name': 'no', 'MaximumRetryCount': 0}
         body['NetworkingConfig'] = {'EndpointsConfig': {name: {'Aliases': sorted({alias for alias in endpoint.get('Aliases') or []
             if alias not in {source['Id'], source['Id'][:12]}})} for name, endpoint in source['NetworkSettings']['Networks'].items()}}
-        record['sourceRetirement'] = {'schema': SOURCE_RETIREMENT, 'phase': 'held', 'body': body,
-            'bodySha256': hashlib.sha256(self.P.canonical(body)).hexdigest(), 'imageId': source['Image'],
-            'anchorName': 'orbis-controller-source-image-' + self.key,
-            'reconstructionName': 'orbis-controller-reconstructed-' + self.key}
+        return body
+
+    def bootstrap_enablement_intent(self, record):
+        body = self.source_reconstruction_body(record)
+        environment = body.get('Env', [])
+        if (not isinstance(environment, list) or any(not isinstance(item, str) or '=' not in item for item in environment)
+                or len({item.split('=', 1)[0] for item in environment}) != len(environment)):
+            raise BOOTSTRAP.fail()
+        body['Env'] = [item for item in environment if not item.startswith(PRESERVE_ENV + '=')] + [PRESERVE_ENV + '=1']
+        policy = {'schema': SOURCE_ENABLEMENT, 'sourceDefinition': record['sourceDefinition'],
+                  'publication': copy.deepcopy(record['current']), 'imageId': record['source']['Image'],
+                  'sourceEnvSha256': hashlib.sha256(self.P.canonical(record['source']['Config'].get('Env', []))).hexdigest(),
+                  'startupEnvSha256': hashlib.sha256(self.P.canonical(body['Env'])).hexdigest(),
+                  'bodySha256': hashlib.sha256(self.P.canonical(body)).hexdigest()}
+        return body, policy
+
+    def validate_bootstrap_enablement(self, record, retirement, *, require_proof=False):
+        policy = record.get('sourceBootstrapEnablement')
+        environment = dict(item.split('=', 1) for item in record['source']['Config'].get('Env', []) if '=' in item)
+        if policy is None:
+            if environment.get(PRESERVE_ENV) != '1' and record.get('sourceBootstrapProfile', {}).get('profile') == BOOTSTRAP.CAPABLE:
+                raise BOOTSTRAP.fail()
+            return
+        if (not isinstance(policy, dict) or environment.get(PRESERVE_ENV) == '1'
+                or record.get('controllerResetMount', {}).get('sourceMount') != 'present'
+                or not isinstance(record.get('controllerResetMount', {}).get('binding'), dict)
+                or not any(item.get('Destination') == RESET.TARGET for item in record['source']['Mounts'])):
+            raise BOOTSTRAP.fail()
+        body, expected = self.bootstrap_enablement_intent(record)
+        if retirement['body'] != body or {key: value for key, value in policy.items() if key != 'profileSha256'} != expected:
+            raise BOOTSTRAP.fail()
+        proof = record.get('sourceBootstrapProfile')
+        if proof is not None or require_proof or 'profileSha256' in policy:
+            if (not isinstance(proof, dict) or proof.get('profile') != BOOTSTRAP.CAPABLE
+                    or policy.get('profileSha256') != hashlib.sha256(self.P.canonical(BOOTSTRAP.comparable(proof))).hexdigest()):
+                raise BOOTSTRAP.fail()
+
+    def bootstrap_source(self, record, phase):
+        retirement = self.validate_retirement(record)
+        self.validate_bootstrap_enablement(record, retirement, require_proof=phase == 'rollback')
+        source = self.verify_source(record)
+        if phase == 'review':
+            if retirement['phase'] != 'held' or retirement.get('reconstructionId'):
+                raise BOOTSTRAP.fail()
+            # Only the isolated probe sees the future startup environment. The
+            # running original and its protected definition remain unchanged.
+            source['Config']['Env'] = copy.deepcopy(retirement['body']['Env'])
+        elif phase == 'rollback':
+            if not retirement.get('reconstructionId'):
+                raise BOOTSTRAP.fail()
+            self.runtime.check_intent(source, retirement['body'])
+        else:
+            raise BOOTSTRAP.fail()
+        if source['Image'] != retirement['imageId'] or source['Config'].get('Env') != retirement['body']['Env']:
+            raise BOOTSTRAP.fail()
+        return source
+
+    def review_source_bootstrap(self, record):
+        source = record['source']
+        environment = dict(item.split('=', 1) for item in source['Config'].get('Env', []) if '=' in item)
+        if (environment.get(PRESERVE_ENV) != '1' and record.get('sourceRetirement')
+                and (record['current'].get('commit'), record['current'].get('digest'), source['Image']) not in BOOTSTRAP.LEGACY_SOURCES):
+            retirement = self.validate_retirement(record)
+            if record.get('sourceBootstrapEnablement') is None:
+                if retirement['phase'] != 'held' or retirement.get('anchorId') or retirement.get('checkpointManifestSha256'):
+                    raise BOOTSTRAP.fail()
+                body, policy = self.bootstrap_enablement_intent(record)
+                retirement.update(body=body, bodySha256=policy['bodySha256'])
+                record['sourceBootstrapEnablement'] = policy
+                self.validate_bootstrap_enablement(record, retirement)
+                self.save(record)
+        proof = BOOTSTRAP.probe(self, record, 'review')
+        record['sourceBootstrapProfile'] = proof
+        if record.get('sourceBootstrapEnablement') is not None:
+            record['sourceBootstrapEnablement']['profileSha256'] = hashlib.sha256(self.P.canonical(BOOTSTRAP.comparable(proof))).hexdigest()
+            self.validate_bootstrap_enablement(record, self.validate_retirement(record), require_proof=True)
+        return proof
 
     def validate_retirement(self, record):
         retirement = record.get('sourceRetirement')
@@ -328,10 +412,12 @@ class ControllerUpdate:
                 or retirement.get('imageId') != record['source']['Image']
                 or retirement.get('phase') not in {'held', 'retiring', 'retired', 'reconstructing', 'reconstructed', 'restored'}):
             raise ValueError('The protected source reconstruction intent changed')
+        self.validate_bootstrap_enablement(record, retirement)
         return retirement
 
     def retain_source_image(self, record):
         retirement = self.validate_retirement(record)
+        self.validate_bootstrap_enablement(record, retirement, require_proof=record.get('sourceBootstrapEnablement') is not None)
         if not retirement.get('anchorId'):
             body = {'Image': retirement['imageId'], 'Labels': {'io.orbis.source-image-anchor': record['nonce']},
                     'HostConfig': {'NetworkMode': 'none', 'RestartPolicy': {'Name': 'no', 'MaximumRetryCount': 0}}}
@@ -411,7 +497,11 @@ class ControllerUpdate:
         if original is not None:
             if retirement.get('reconstructionId'):
                 raise ValueError('Both original and reconstructed source exist')
-            return self.verify_source(record)
+            if record.get('sourceBootstrapEnablement') is None:
+                return self.verify_source(record)
+            # A reviewed Env=1 proof never authorizes restarting the Env=0
+            # original, even if the cutover failed before source retirement.
+            self.retire_dedicated_source(record)
         if retirement['phase'] == 'held' or not retirement.get('checkpointManifestSha256'):
             raise ValueError('Source reconstruction lacks a durable retirement intent')
         if not retirement.get('reconstructionId'):
@@ -687,7 +777,7 @@ class ControllerUpdate:
             raise CapabilityError('The target does not support preserving live network access during controller updates')
         self.runtime.change(['rm', probe['Id']])
         record.pop('probeId', None)
-        record['sourceBootstrapProfile'] = BOOTSTRAP.probe(self, record, 'review')
+        self.review_source_bootstrap(record)
         if record['sourceBootstrapProfile']['profile'] == BOOTSTRAP.LEGACY:
             record['sourceBootstrapNetworks'] = BOOTSTRAP.preserved_networks(self, record)
         if record.get('sourceRetirement'):
@@ -871,7 +961,9 @@ class ControllerUpdate:
     def verify_source_bootstrap(self):
         record = self.read()
         self.preserved(record)
-        if record.get('sourceRetirement', {}).get('reconstructionId'):
+        if record.get('sourceBootstrapEnablement') is not None:
+            proof = BOOTSTRAP.probe(self, record, 'rollback')
+        elif record.get('sourceRetirement', {}).get('reconstructionId'):
             original_source = copy.deepcopy(record['source'])
             record['source'] = self.verify_source(record)
             def save_probe(value):
@@ -891,6 +983,8 @@ class ControllerUpdate:
 
     def start_original(self):
         record = self.read()
+        if record.get('sourceBootstrapEnablement') is not None:
+            self.bootstrap_source(record, 'rollback')
         original = self.verify_source(record)
         self.start_peers(record)
         if not original['State'].get('Running'):

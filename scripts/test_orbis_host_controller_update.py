@@ -139,6 +139,86 @@ class ControllerUpdateTests(unittest.TestCase):
         verify.assert_called_once_with(self.root, binding, daemon='hashed-daemon', context='fixture')
         aliases.assert_called_once_with(self.root, [], binding)
 
+    def test_existing_external_reset_mount_keeps_its_verified_enrollment_version(self):
+        @contextmanager
+        def directory(path): yield 123
+        for schema in (C.RESET.SCHEMA_V2, C.RESET.SCHEMA_V3, C.RESET.SCHEMA_V4):
+            with self.subTest(schema=schema):
+                binding = {'schema': schema, 'path': str(C.RESET.external_directory(self.root))}
+                source = copy.deepcopy(self.record['source'])
+                source['Mounts'] = [{'Type': 'bind', 'Source': binding['path'],
+                    'Destination': C.RESET.TARGET, 'RW': True, 'Propagation': 'rprivate'}]
+                before = copy.deepcopy(source)
+                with mock.patch.object(C.RESET, '_control_descriptor', side_effect=directory), \
+                        mock.patch.object(C.os, 'stat'), \
+                        mock.patch.object(C.D.APPS, 'digest_daemon', return_value='hashed-daemon'), \
+                        mock.patch.object(C.RESET, 'read_external_enrollment', return_value=binding), \
+                        mock.patch.object(C.RESET, 'verify') as verify, \
+                        mock.patch.object(C.RESET, 'require_runtime', wraps=C.RESET.require_runtime) as runtime:
+                    self.assertEqual(self.updater.optional_reset_enrollment(source), binding)
+                verify.assert_called_once_with(self.root, binding, daemon='hashed-daemon', context='fixture')
+                runtime.assert_called_once_with(self.root, source['Mounts'], binding)
+                self.assertEqual(source, before)
+        self.assertFalse(self.calls)
+
+    def test_older_enrollment_cannot_add_a_new_reset_mount(self):
+        @contextmanager
+        def directory(path): yield 123
+        for schema in (C.RESET.SCHEMA_V2, C.RESET.SCHEMA_V3):
+            with self.subTest(schema=schema), \
+                    mock.patch.object(C.RESET, '_control_descriptor', side_effect=directory), \
+                    mock.patch.object(C.os, 'stat'), \
+                    mock.patch.object(C.D.APPS, 'digest_daemon', return_value='hashed-daemon'), \
+                    mock.patch.object(C.RESET, 'read_external_enrollment', return_value={'schema': schema}), \
+                    mock.patch.object(C.RESET, 'verify') as verify:
+                with self.assertRaisesRegex(ValueError, 'requires reviewed v4'):
+                    self.updater.optional_reset_enrollment(self.record['source'])
+                verify.assert_not_called()
+        self.assertFalse(self.calls)
+
+    def test_existing_older_reset_mount_still_rejects_unsafe_mounts(self):
+        @contextmanager
+        def directory(path): yield 123
+        binding = {'schema': C.RESET.SCHEMA_V3, 'path': str(C.RESET.external_directory(self.root))}
+        valid = {'Type': 'bind', 'Source': binding['path'], 'Destination': C.RESET.TARGET,
+                 'RW': True, 'Propagation': 'rprivate'}
+        cases = [[{**valid, 'Source': '/unverified'}], [{**valid, 'Type': 'volume'}], [{**valid, 'RW': False}],
+                 [{**valid, 'Propagation': 'rshared'}], [valid, valid],
+                 [{**valid, 'Destination': C.RESET.TARGET + '/nested'}],
+                 [valid, {**valid, 'Destination': C.RESET.TARGET + '/nested'}],
+                 [valid, {'Type': 'bind', 'Source': str(Path(binding['path']).parent),
+                          'Destination': '/unreviewed', 'RW': True}]]
+        for mounts in cases:
+            source = {**self.record['source'], 'Mounts': mounts}
+            with self.subTest(mounts=mounts), \
+                    mock.patch.object(C.RESET, '_control_descriptor', side_effect=directory), \
+                    mock.patch.object(C.os, 'stat'), \
+                    mock.patch.object(C.D.APPS, 'digest_daemon', return_value='hashed-daemon'), \
+                    mock.patch.object(C.RESET, 'read_external_enrollment', return_value=binding), \
+                    mock.patch.object(C.RESET, 'verify'):
+                with self.assertRaises(C.RESET.ResetAuthorityError):
+                    self.updater.optional_reset_enrollment(source)
+        self.assertFalse(self.calls)
+
+    def test_existing_v3_mount_is_preserved_in_candidate_and_rollback_intent(self):
+        binding = {'schema': C.RESET.SCHEMA_V3, 'path': str(C.RESET.external_directory(self.root))}
+        source = self.record['source']
+        source['Mounts'] = [{'Type': 'bind', 'Source': binding['path'],
+            'Destination': C.RESET.TARGET, 'RW': True, 'Propagation': 'rprivate'}]
+        source['HostConfig']['Binds'] = [binding['path'] + ':' + C.RESET.TARGET + ':rw,rprivate']
+        body = copy.deepcopy(self.record['body'])
+        body['HostConfig']['Binds'] = copy.deepcopy(source['HostConfig']['Binds'])
+        before, source_before = copy.deepcopy(body), copy.deepcopy(source)
+        with mock.patch.object(self.updater, 'optional_reset_enrollment', return_value=binding), \
+                mock.patch.object(self.updater, 'reset_journal', return_value={'state': 'empty'}):
+            self.assertEqual(self.updater.reset_candidate_body(self.record, body), before)
+        self.assertEqual(source, source_before)
+        self.assertEqual(self.record['controllerResetMount']['binding'], binding)
+        self.assertEqual(self.record['controllerResetMount']['sourceMount'], 'present')
+        retirement = self.updater.validate_retirement(self.record)
+        self.assertEqual(retirement['body']['HostConfig']['Binds'], source['HostConfig']['Binds'])
+        self.assertFalse(self.calls)
+
     def test_optional_reset_absence_is_not_partial_or_invalid_enrollment(self):
         @contextmanager
         def directory(path): yield 123
@@ -554,6 +634,201 @@ class DedicatedSourceReconstructionTests(unittest.TestCase):
 
     def missing(self):
         raise ValueError('missing')
+
+    def enable_source_bootstrap(self, preserve='0'):
+        source = self.objects['1' * 64]
+        source['Config']['Env'] = ['CUSTOM=keep'] + ([C.PRESERVE_ENV + '=' + preserve] if preserve is not None else [])
+        self.record['source'] = copy.deepcopy(source)
+        self.record['sourceDefinition'] = self.runtime.definition(source)
+        self.record['current'] = {'commit': 'c' * 40, 'digest': source['Image']}
+        self.updater.plan_source_reconstruction(self.record)
+        proof = {'schema': C.BOOTSTRAP.SCHEMA, 'profile': C.BOOTSTRAP.CAPABLE,
+                 'codeSha256': 'd' * 64, 'observedAt': 1800000000000}
+        with mock.patch.object(C.BOOTSTRAP, 'probe', return_value=proof):
+            self.updater.review_source_bootstrap(self.record)
+        return copy.deepcopy(source)
+
+    def test_capable_env_zero_reviews_only_reconstruction_environment_without_changing_original(self):
+        original = self.enable_source_bootstrap()
+        expected = ['CUSTOM=keep', 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1']
+        source = self.updater.bootstrap_source(self.record, 'review')
+        self.assertEqual(source['Config']['Env'], expected)
+        self.assertEqual(self.objects[original['Id']], original)
+        self.assertEqual(self.record['source'], original)
+        self.assertEqual(self.record['sourceRetirement']['body']['Env'], expected)
+        body = copy.deepcopy(self.record['sourceRetirement']['body'])
+        body['Env'] = original['Config']['Env']
+        self.assertEqual(body, self.updater.source_reconstruction_body(self.record))
+        self.assertEqual(self.record['sourceBootstrapEnablement']['publication'], self.record['current'])
+        self.assertFalse(self.calls)
+
+    def test_capable_source_missing_flag_uses_only_the_recorded_reconstruction_enablement(self):
+        original = self.enable_source_bootstrap(preserve=None)
+        self.assertEqual(self.objects[original['Id']]['Config']['Env'], ['CUSTOM=keep'])
+        self.assertEqual(self.updater.bootstrap_source(self.record, 'review')['Config']['Env'],
+                         ['CUSTOM=keep', 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1'])
+        self.assertFalse(self.calls)
+
+    def test_enablement_proof_failure_never_retains_image_retires_or_starts_source(self):
+        self.enable_source_bootstrap()
+        self.record.pop('sourceBootstrapProfile')
+        self.record['sourceBootstrapEnablement'].pop('profileSha256')
+        with mock.patch.object(C.BOOTSTRAP, 'probe', side_effect=C.BOOTSTRAP.fail()):
+            with self.assertRaises(C.BOOTSTRAP.SourceBootstrapError):
+                self.updater.review_source_bootstrap(self.record)
+        with self.assertRaises(C.BOOTSTRAP.SourceBootstrapError):
+            self.updater.retain_source_image(self.record)
+        self.assertFalse(self.calls)
+        self.assertEqual(set(self.objects), {'1' * 64, '3' * 64, '4' * 64, '5' * 64})
+        self.assertEqual(self.objects['1' * 64]['Config']['Env'][-1], 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=0')
+
+    def test_enablement_rejects_intent_proof_publication_and_policy_tampering(self):
+        self.enable_source_bootstrap()
+        accepted = copy.deepcopy(self.record)
+        def change_environment(record):
+            retirement = record['sourceRetirement']
+            retirement['body']['Env'] = ['CUSTOM=changed', 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1']
+            retirement['bodySha256'] = C.hashlib.sha256(self.updater.P.canonical(retirement['body'])).hexdigest()
+        changes = [change_environment,
+            lambda record: record['sourceBootstrapProfile'].update(codeSha256='e' * 64),
+            lambda record: record['sourceBootstrapEnablement'].update(startupEnvSha256='e' * 64),
+            lambda record: record['current'].update(commit='e' * 40),
+            lambda record: record.pop('sourceBootstrapEnablement')]
+        for index, change in enumerate(changes):
+            record = copy.deepcopy(accepted)
+            change(record)
+            with self.subTest(change=index):
+                with self.assertRaises(C.BOOTSTRAP.SourceBootstrapError): self.updater.validate_retirement(record)
+        self.assertFalse(self.calls)
+
+    def test_enablement_held_rollback_retires_and_reconstructs_before_any_source_restart(self):
+        original = self.enable_source_bootstrap()
+        with self.assertRaises(C.BOOTSTRAP.SourceBootstrapError): self.updater.start_original()
+        self.updater.stop_for_rollback()
+        self.assertNotIn(original['Id'], self.objects)
+        self.assertEqual(self.objects['7' * 64]['Config']['Env'], ['CUSTOM=keep', 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1'])
+        self.assertFalse(self.objects['7' * 64]['State']['Running'])
+        self.assertIn('checkpointManifestSha256', self.record['sourceRetirement'])
+        self.assertEqual(self.record['source'], original)
+        self.updater.start_original()
+        self.assertIn(['start', '7' * 64], self.calls)
+        self.assertNotIn(['start', original['Id']], self.calls)
+        self.assertEqual(max(self.writer_counts), 1)
+
+    def test_enablement_checkpoint_failure_keeps_original_stopped_without_reconstruction(self):
+        self.enable_source_bootstrap()
+        with mock.patch.object(C.TOOLS, 'read_record', return_value={'stage': 'snapshotting'}):
+            with self.assertRaisesRegex(ValueError, 'durable checkpoint'): self.updater.stop_for_rollback()
+        self.assertIn('1' * 64, self.objects)
+        self.assertNotIn('7' * 64, self.objects)
+        self.assertNotIn(['rm', '1' * 64], self.calls)
+        self.assertFalse(any(call[0] == 'start' for call in self.calls))
+
+    def test_enablement_failed_candidate_rollback_proves_actual_reconstructed_env(self):
+        original = self.enable_source_bootstrap()
+        self.updater.healthy = mock.Mock(side_effect=RuntimeError('candidate health failed'))
+        with self.assertRaisesRegex(RuntimeError, 'candidate health failed'): self.updater.start_target()
+        self.updater.stop_for_rollback()
+        self.assertNotIn('2' * 64, self.objects)
+        def probe(updater, record, phase):
+            actual = updater.bootstrap_source(record, phase)
+            self.assertEqual(actual['Id'], '7' * 64)
+            self.assertEqual(actual['Image'], original['Image'])
+            self.assertEqual(actual['Config']['Env'][-1], 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1')
+            self.assertEqual(record['source'], original)
+            return record['sourceBootstrapProfile']
+        with mock.patch.object(C.BOOTSTRAP, 'probe', side_effect=probe):
+            C.ControllerUpdate.verify_source_bootstrap(self.updater)
+        self.assertEqual(max(self.writer_counts), 1)
+
+    def test_enablement_lost_held_retirement_and_reconstruction_replies_are_reconciled(self):
+        self.enable_source_bootstrap()
+        change = self.runtime.change
+        def lost_remove(arguments):
+            change(arguments)
+            if arguments == ['rm', '1' * 64]: raise RuntimeError('remove reply lost')
+        self.runtime.change = lost_remove
+        with self.assertRaisesRegex(RuntimeError, 'remove reply lost'): self.updater.stop_for_rollback()
+        self.runtime.change = change
+        engine = self.runtime.engine
+        def lost_create(method, route, body=None, **kwargs):
+            result = engine(method, route, body, **kwargs)
+            if method == 'POST' and 'reconstructed' in route: raise RuntimeError('create reply lost')
+            return result
+        self.runtime.engine = lost_create
+        with self.assertRaisesRegex(RuntimeError, 'create reply lost'): self.updater.stop_for_rollback()
+        self.runtime.engine = engine
+        self.updater.stop_for_rollback()
+        self.assertEqual(self.record['sourceRetirement']['reconstructionId'], '7' * 64)
+        self.assertEqual(self.objects['7' * 64]['Config']['Env'][-1], 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1')
+        self.assertEqual(sum(call[:2] == ['create', '7' * 64] for call in self.calls), 1)
+        self.assertEqual(max(self.writer_counts), 1)
+
+    def test_enablement_crash_after_retirement_intent_before_remove_retries_exact_stopped_source(self):
+        self.enable_source_bootstrap()
+        change = self.runtime.change
+        def crash_before_remove(arguments):
+            if arguments == ['rm', '1' * 64]: raise RuntimeError('process lost before removal')
+            change(arguments)
+        self.runtime.change = crash_before_remove
+        with self.assertRaisesRegex(RuntimeError, 'before removal'): self.updater.stop_for_rollback()
+        self.assertEqual(self.record['sourceRetirement']['phase'], 'retiring')
+        self.assertIn('1' * 64, self.objects)
+        self.assertNotIn('7' * 64, self.objects)
+        self.runtime.change = change
+        self.updater.stop_for_rollback()
+        self.assertNotIn('1' * 64, self.objects)
+        self.assertEqual(self.objects['7' * 64]['Config']['Env'][-1], 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1')
+        self.assertEqual(max(self.writer_counts), 1)
+
+    def test_enablement_wrong_reconstructed_env_and_non_dedicated_source_fail_closed(self):
+        self.enable_source_bootstrap()
+        held = copy.deepcopy(self.record)
+        self.record['controllerResetMount']['sourceMount'] = 'absent'
+        with self.assertRaises(C.BOOTSTRAP.SourceBootstrapError): self.updater.validate_retirement(self.record)
+        self.assertFalse(self.calls)
+        self.record = held
+        self.updater.stop_for_rollback()
+        self.objects['7' * 64]['Config']['Env'][-1] = 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=0'
+        self.record['sourceRetirement']['reconstructionDefinition'] = self.runtime.definition(self.objects['7' * 64])
+        with self.assertRaises(ValueError): self.updater.start_original()
+        self.assertFalse(any(call[0] == 'start' for call in self.calls))
+
+    def test_enablement_lost_candidate_create_reply_retires_candidate_before_reconstruction(self):
+        self.enable_source_bootstrap()
+        engine = self.runtime.engine
+        def lost_create(method, route, body=None, **kwargs):
+            result = engine(method, route, body, **kwargs)
+            if method == 'POST' and route.endswith('name=' + self.record['candidateName']):
+                raise RuntimeError('candidate create reply lost')
+            return result
+        self.runtime.engine = lost_create
+        with self.assertRaisesRegex(RuntimeError, 'candidate create reply lost'): self.updater.start_target()
+        self.assertNotIn('candidateId', self.record)
+        self.runtime.engine = engine
+        self.updater.stop_for_rollback()
+        self.assertNotIn('2' * 64, self.objects)
+        self.assertLess(self.calls.index(['rm', '2' * 64]), next(index for index, call in enumerate(self.calls) if call[:2] == ['create', '7' * 64]))
+        self.assertEqual(self.objects['7' * 64]['Config']['Env'][-1], 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1')
+        self.assertEqual(max(self.writer_counts), 1)
+
+    def test_enabled_and_legacy_sources_keep_existing_review_paths(self):
+        before = copy.deepcopy(self.record['sourceRetirement'])
+        with mock.patch.object(C.BOOTSTRAP, 'probe', return_value={'profile': C.BOOTSTRAP.CAPABLE}) as probe:
+            self.updater.review_source_bootstrap(self.record)
+        self.assertNotIn('sourceBootstrapEnablement', self.record)
+        self.assertEqual(self.record['sourceRetirement'], before)
+        probe.assert_called_once_with(self.updater, self.record, 'review')
+        self.record.pop('sourceBootstrapProfile')
+        source = self.record['source']
+        source['Config']['Env'] = []
+        self.record['current'] = {'commit': 'c' * 40, 'digest': source['Image']}
+        key = (self.record['current']['commit'], self.record['current']['digest'], source['Image'])
+        with mock.patch.dict(C.BOOTSTRAP.LEGACY_SOURCES, {key: 'd' * 64}), \
+                mock.patch.object(C.BOOTSTRAP, 'probe', return_value={'profile': C.BOOTSTRAP.LEGACY}):
+            self.updater.review_source_bootstrap(self.record)
+        self.assertNotIn('sourceBootstrapEnablement', self.record)
+        self.assertFalse(self.calls)
 
     def test_dedicated_cutover_retires_source_after_checkpoint_before_creating_candidate(self):
         self.updater.start_target()

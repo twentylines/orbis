@@ -126,6 +126,63 @@ class BootstrapProfileTests(unittest.TestCase):
                 frozen.write_bytes(b'// tampered')
                 with self.assertRaises(B.SourceBootstrapError): B.probe(updater, record, 'rollback')
 
+    def test_unenabled_nonlegacy_source_without_reconstruction_fails_before_runtime_calls(self):
+        runtime = mock.Mock()
+        record = {'current': {}, 'source': {'Image': self.image, 'Config': {'Env': []}}}
+        with self.assertRaises(B.SourceBootstrapError):
+            B.probe(SimpleNamespace(runtime=runtime), record, 'review')
+        self.assertEqual(runtime.mock_calls, [])
+
+    def test_protected_enablement_probe_uses_exact_image_and_isolated_flag_one_startup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / 'package.py'
+            package.with_suffix('.mjs').write_bytes(b'// reviewed probe')
+            @contextmanager
+            def protected_directory(path, **kwargs): yield path
+            @contextmanager
+            def protected_file(path, name, maximum, **kwargs): yield (path / name).read_bytes()
+            authority = SimpleNamespace(protected_directory=protected_directory, protected_file=protected_file,
+                atomic=lambda path, body: path.write_bytes(body))
+            publication = SimpleNamespace(metadata=lambda body, **kwargs: json.loads(body),
+                canonical=lambda value: json.dumps(value, sort_keys=True).encode())
+            runtime = mock.Mock()
+            original = {'Id': '1' * 64, 'Image': self.image,
+                'Config': {'Env': ['TIPI_VERSION=4.10.1', 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=0']}, 'Mounts': []}
+            startup = copy.deepcopy(original)
+            startup['Config']['Env'][-1] = 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1'
+            record = {'current': self.publication, 'source': copy.deepcopy(original), 'nonce': 'b' * 64,
+                'sourceBootstrapEnablement': {'protected': 'validated by controller'}}
+            source = mock.Mock(return_value=startup)
+            updater = SimpleNamespace(runtime=runtime, P=publication, a=authority, path=root,
+                key='a' * 64, context='fixture', save=lambda value: None, bootstrap_source=source,
+                lookup=mock.Mock(side_effect=ValueError('missing')))
+            proof = {'schema': B.SCHEMA, 'profile': B.CAPABLE, 'codeSha256': 'd' * 64, 'observedAt': self.now}
+            runtime.inspect.return_value = {'Id': '2' * 64, 'Image': self.image, 'State': {'Running': False}}
+            runtime.definition.return_value = 'e' * 64
+            runtime.engine.return_value = json.dumps({'Id': '2' * 64}).encode()
+            runtime.bounded_output.side_effect = lambda arguments, *args: b'0' if 'wait' in arguments else json.dumps(proof).encode()
+            with mock.patch.object(B, '__file__', str(package)), mock.patch.object(B, 'require_image_startup') as startup_check, \
+                    mock.patch.object(B.time, 'time', return_value=self.now / 1000):
+                self.assertEqual(B.probe(updater, record, 'review'), proof)
+                source.assert_called_once_with(record, 'review')
+                self.assertEqual(startup_check.call_args.args[1]['source'], startup)
+                body = record['bootstrapProbes']['review']['body']
+                self.assertEqual(body['Image'], self.image)
+                self.assertEqual(body['Env'], startup['Config']['Env'])
+                host = body['HostConfig']
+                self.assertEqual(host['NetworkMode'], 'none')
+                self.assertTrue(host['ReadonlyRootfs'])
+                self.assertEqual(len(host['Mounts']), 1)
+                self.assertEqual(host['Mounts'][0]['Target'], '/orbis-probe/profile.mjs')
+                self.assertTrue(host['Mounts'][0]['ReadOnly'])
+                self.assertEqual(record['source'], original)
+                record['sourceBootstrapProfile'] = proof
+                runtime.bounded_output.side_effect = lambda arguments, *args: b'1' if 'wait' in arguments else b'{}'
+                with self.assertRaises(B.SourceBootstrapError): B.probe(updater, record, 'review')
+                self.assertEqual(record['source'], original)
+                self.assertFalse(any(call.args[0] == ['start', original['Id']] for call in runtime.change.call_args_list))
+
     def test_source_image_startup_rejects_code_mounts_overrides_and_modified_overlay(self):
         publication = SimpleNamespace(metadata=lambda body, **kwargs: json.loads(body))
         runtime = mock.Mock()
@@ -135,6 +192,11 @@ class BootstrapProfileTests(unittest.TestCase):
         record = {'source': {'Id': '1' * 64, 'Image': self.image, 'Config': copy.deepcopy(config), 'Mounts': []}}
         runtime.engine.return_value = b'[]'
         B.require_image_startup(updater, record)
+        runtime.engine.return_value = b'null'
+        B.require_image_startup(updater, record)
+        for invalid in (b'false', b'0', b'{}', b'"unavailable"'):
+            runtime.engine.return_value = invalid
+            with self.assertRaises(B.SourceBootstrapError): B.require_image_startup(updater, record)
         for changes in ([{'Path': '/app/main.mjs', 'Kind': 0}], [{'Path': '/app/node_modules/yaml/index.js', 'Kind': 0}],
                         [{'Path': '/usr/local/bin/node', 'Kind': 0}]):
             runtime.engine.return_value = json.dumps(changes).encode()
