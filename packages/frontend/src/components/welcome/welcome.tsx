@@ -28,12 +28,10 @@ import { useReducedMotion, useReducedTransparency } from '@/desktop/motion-prefe
 import { themePresets, presetLabels } from '@/desktop/wallpaper-presets';
 import { IconArrowLeft, IconArrowRight, IconCheck, IconDeviceDesktop, IconHistory, IconLeaf, IconSparkles } from '@tabler/icons-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { AnimatePresence, motion, useIsPresent } from 'framer-motion';
 import { useNavigate } from 'react-router';
 import { finishSetup, prepareSetupHome, setupAppUpdateSteps, setupScheduleAllowsNext, type SetupAppChoices, type SetupSaveStep } from './setup-save';
-import { SystemBackupsSettings } from '@/modules/system-backups/system-backups-settings';
-import { HostTransferPanel } from '@/modules/host-transfer/host-transfer-panel';
 import { readManualProtection, saveManualProtection } from '@/modules/time-machine-capsules/protection-choice';
 import { timeMachinePreferencesQueryKey } from '@/modules/time-machine/time-machine-preferences-query';
 import { TimeMachineApiError } from '@/modules/time-machine/time-machine-api';
@@ -57,6 +55,10 @@ import './welcome.css';
 const defaultAutomatic: AutomaticUpdateSettings = { orbis: { enabled: false, mode: 'idle' }, schedule: { time: '03:00', timezone: 'UTC' } };
 const setupEase = [0.22, 1, 0.36, 1] as const;
 const SetupSpace = memo(DepthTravel);
+const loadSetupBackups = () => import('@/modules/system-backups/system-backups-settings');
+const loadSetupTransfer = () => import('@/modules/host-transfer/host-transfer-panel');
+const SetupBackups = lazy(() => loadSetupBackups().then(({ SystemBackupsSettings }) => ({ default: SystemBackupsSettings })));
+const SetupTransfer = lazy(() => loadSetupTransfer().then(({ HostTransferPanel }) => ({ default: HostTransferPanel })));
 
 export function SetupCustomisation({ draft, onChange }: { draft: DesktopPreferences; onChange: (next: DesktopPreferences) => void }) {
   return (
@@ -516,10 +518,14 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                   {setupStepCopy[step].description ? <p>{setupStepCopy[step].description}</p> : null}
                 </div>
                 {step === 'restore' ? (
-                  <SystemBackupsSettings restoreOnly embedded recoveryScene onActivityChange={setRestoreBusy} onDismiss={() => go('choose', true)} />
+                  <Suspense fallback={<output>Loading backup options…</output>}>
+                    <SetupBackups restoreOnly embedded recoveryScene onActivityChange={setRestoreBusy} onDismiss={() => go('choose', true)} />
+                  </Suspense>
                 ) : null}
                 {step === 'transfer' ? (
-                  <HostTransferPanel mode="receive" embedded recoveryScene onActivityChange={setRestoreBusy} onDismiss={() => go('choose', true)} />
+                  <Suspense fallback={<output>Loading transfer options…</output>}>
+                    <SetupTransfer mode="receive" embedded recoveryScene onActivityChange={setRestoreBusy} onDismiss={() => go('choose', true)} />
+                  </Suspense>
                 ) : null}
                 {recoveryStep ? null : (
                   <form
@@ -541,11 +547,25 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                           </button>
                           {user.operator ? (
                             <>
-                              <button type="button" aria-pressed={entry === 'restore'} onClick={() => setEntry('restore')}>
+                              <button
+                                type="button"
+                                aria-pressed={entry === 'restore'}
+                                onClick={() => {
+                                  setEntry('restore');
+                                  void loadSetupBackups().catch(() => undefined);
+                                }}
+                              >
                                 <strong>Restore a backup</strong>
                                 <span>Bring back your saved Orbis settings.</span>
                               </button>
-                              <button type="button" aria-pressed={entry === 'transfer'} onClick={() => setEntry('transfer')}>
+                              <button
+                                type="button"
+                                aria-pressed={entry === 'transfer'}
+                                onClick={() => {
+                                  setEntry('transfer');
+                                  void loadSetupTransfer().catch(() => undefined);
+                                }}
+                              >
                                 <strong>Transfer a server</strong>
                                 <span>Transfer from Orbis to Orbis over your private network.</span>
                               </button>

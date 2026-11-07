@@ -125,14 +125,6 @@
   background: color-mix(in srgb, var(--desktop-surface) 72%, transparent);
   animation: backup-reveal 160ms ease-out;
 }
-.system-backups-fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
-  gap: 16px;
-}
-.system-backups-fields > div {
-  min-width: 0;
-}
 .system-backups-actions {
   display: flex;
   align-items: center;
@@ -205,15 +197,6 @@
 }
 .system-backups-settings .alert .btn {
   margin-top: 12px;
-}
-.system-backups-encryption {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
-}
-.system-backups-encryption .form-check {
-  margin: 0;
-  line-height: 1.55;
 }
 .system-backups-window-body {
   container-type: inline-size;

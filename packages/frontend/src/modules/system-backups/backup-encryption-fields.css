@@ -1,0 +1,17 @@
+.system-backups-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: 16px;
+}
+.system-backups-fields > div {
+  min-width: 0;
+}
+.system-backups-encryption {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.system-backups-encryption .form-check {
+  margin: 0;
+  line-height: 1.55;
+}

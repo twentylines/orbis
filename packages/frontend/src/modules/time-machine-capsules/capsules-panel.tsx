@@ -12,7 +12,7 @@ import { RecoveryProgress } from '@/components/recovery-progress/recovery-progre
 import { useAppContext } from '@/context/app-context';
 import { downloadBackup } from '@/modules/system-backups/backup-api';
 import { formatBackupBytes } from '@/modules/system-backups/contracts';
-import { BackupEncryptionFields, backupEncryptionPassphrase } from '@/modules/system-backups/system-backups-settings';
+import { BackupEncryptionFields, backupEncryptionPassphrase } from '@/modules/system-backups/backup-encryption-fields';
 import { capsuleAction, capsuleRequest, readCapsules, uploadCapsule } from './capsule-api';
 import './capsules-panel.css';
 

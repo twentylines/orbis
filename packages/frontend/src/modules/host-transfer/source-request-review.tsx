@@ -5,7 +5,7 @@ import { Checkbox } from '@/components/ui/Checkbox/Checkbox';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { useAppContext } from '@/context/app-context';
-import { BackupEncryptionFields, backupEncryptionPassphrase } from '../system-backups/system-backups-settings';
+import { BackupEncryptionFields, backupEncryptionPassphrase } from '../system-backups/backup-encryption-fields';
 import { approveRestoreRequest, rejectRestoreRequest, RestoreRequestScope, type IncomingRestoreRequest } from './receiver-request-api';
 import './receiver-request-panel.css';
 
