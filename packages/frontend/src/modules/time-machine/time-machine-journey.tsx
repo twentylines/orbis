@@ -80,8 +80,9 @@ type StackScene = {
 };
 const StackSceneContext = createContext<StackScene | undefined>(undefined);
 type PreviewAssets = { wallpaper?: string | null; assetFailed?: boolean; assetLoading?: boolean };
-function HistoricalPointCard({ point, scene: initialScene, assets }: { point: TimeMachinePoint; scene: StackScene; assets: PreviewAssets }) {
+export function HistoricalPointCard({ point, scene: initialScene, assets }: { point: TimeMachinePoint; scene: StackScene; assets: PreviewAssets }) {
   const scene = useContext(StackSceneContext) ?? initialScene;
+  const opening = useRef(scene.opening).current;
   const [present, remove] = usePresence();
   const controls = useAnimationControls();
   const removeCurrent = useRef(remove);
@@ -100,8 +101,8 @@ function HistoricalPointCard({ point, scene: initialScene, assets }: { point: Ti
   const origin = useRef(
     scene.moving
       ? pointCardPose(
-          scene.opening ? Math.max(0, depth) : (scene.indices.get(point.id) ?? 10) - scene.previousIndex,
-          scene.opening ? 'folded' : 'spread',
+          opening ? Math.max(0, depth) : (scene.indices.get(point.id) ?? 10) - scene.previousIndex,
+          opening ? 'folded' : 'spread',
           scene.compact,
         )
       : pointCardPose(depth, 'spread', scene.compact),
@@ -138,12 +139,8 @@ function HistoricalPointCard({ point, scene: initialScene, assets }: { point: Ti
       return;
     }
     let current = true;
-    const duration = scene.open
-      ? firstMotion.current && scene.opening
-        ? pointMotionSeconds.unfold
-        : pointMotionSeconds.travel
-      : pointMotionSeconds.fold;
-    const openingDelay = firstMotion.current && scene.opening && scene.open ? 0.08 : 0;
+    const duration = scene.open ? (firstMotion.current && opening ? pointMotionSeconds.unfold : pointMotionSeconds.travel) : pointMotionSeconds.fold;
+    const openingDelay = firstMotion.current && opening && scene.open ? 0.08 : 0;
     firstMotion.current = false;
     void controls.start({ ...pose, transition: { duration, delay: openingDelay, ease: [0.22, 0.72, 0.18, 1] } }).then(() => {
       if (current && !present) remove?.();
@@ -152,7 +149,7 @@ function HistoricalPointCard({ point, scene: initialScene, assets }: { point: Ti
       current = false;
       controls.stop();
     };
-  }, [controls, depth, front, present, remove, retired, scene.compact, scene.moving, scene.open, scene.opening, scene.visible]);
+  }, [controls, depth, front, present, remove, retired, scene.compact, scene.moving, scene.open, opening, scene.visible]);
   const showPreview = front || keepExitingPreview;
   const preview = captured.current;
   return (
@@ -557,10 +554,6 @@ export function TimeMachineJourney({
         }
         data-motion={visible && moving}
         data-solid={solid || undefined}
-        onOpenAutoFocus={() => {
-          const latest = ordered[0];
-          if (latest && latest.id !== selected) onSelect(latest.id);
-        }}
         onCloseAutoFocus={() => {
           const latest = ordered[0];
           if (latest && latest.id !== selected) onSelect(latest.id);

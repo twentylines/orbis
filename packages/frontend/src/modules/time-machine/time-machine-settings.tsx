@@ -164,6 +164,11 @@ export function TimeMachinePointDetails({
     </div>
   );
 }
+export function openTimelineAt(pointId: string | null, setSelection: (id: string | null) => void, setGallery: (open: boolean) => void) {
+  setSelection(pointId);
+  setGallery(true);
+}
+
 export function TimeMachineSettings({ openTimeline = false, onExitTimeline }: { openTimeline?: boolean; onExitTimeline?: () => void } = {}) {
   const machine = useTimeMachine();
   return <TimeMachineSettingsSession key={machine.identity.revision} machine={machine} openTimeline={openTimeline} onExitTimeline={onExitTimeline} />;
@@ -487,7 +492,7 @@ function TimeMachineSettingsSession({
                 </p>
               </div>
               <div className="tm-settings-actions">
-                <Button intent="primary" onClick={() => setGallery(true)} disabled={!snapshot.list.available}>
+                <Button intent="primary" onClick={() => openTimelineAt(null, setSelection, setGallery)} disabled={!snapshot.list.available}>
                   <IconHistory size={20} aria-hidden="true" />
                   Enter Time Machine
                 </Button>
@@ -527,13 +532,7 @@ function TimeMachineSettingsSession({
                         </span>
                         {item.issue ? <small>{item.issue.message}</small> : null}
                       </div>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setSelection(item.id);
-                          setGallery(true);
-                        }}
-                      >
+                      <Button variant="outline" onClick={() => openTimelineAt(item.id, setSelection, setGallery)}>
                         Browse
                       </Button>
                     </li>

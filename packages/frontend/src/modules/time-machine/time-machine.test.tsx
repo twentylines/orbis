@@ -28,7 +28,7 @@ import {
 import { historicalPoint, readyReview } from './time-machine.test-data';
 import { CapturedContents, capturedContents } from './captured-contents';
 import { timeMachineActivity } from './time-machine-activity';
-import { TimeMachineSetupView } from './time-machine-settings';
+import { openTimelineAt, TimeMachineSetupView } from './time-machine-settings';
 
 test('historical projection uses sealed metadata without substituting a current wallpaper or live readings', () => {
   const point = historicalPoint();
@@ -330,4 +330,36 @@ test('an empty timeline uses the full scene body without mounting an empty date 
   expect(populated).toContain('data-empty="false"');
   expect(populated).toContain('aria-label="Saved dates"');
   expect(populated).not.toContain('No saved points');
+});
+
+test('wallpaper resolution does not restart a mounted card opening', async () => {
+  const child = Bun.spawn([process.execPath, new URL('./time-machine-opening.fixture.tsx', import.meta.url).pathname], {
+    env: { ...process.env },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  expect(code, stderr).toBe(0);
+  expect(JSON.parse(stdout)).toEqual({ wallpaperDoesNotRestart: true, closeRetargets: true, otherChangesRetarget: true });
+});
+
+test('generic entry chooses the newest point and Browse keeps its requested point', () => {
+  const newer = historicalPoint();
+  const older = { ...historicalPoint(), id: 'older', createdAt: newer.createdAt - 1000 };
+  const points = [newer, older];
+  let selection: string | null = older.id;
+  let open = false;
+  const choose = (id: string | null) => {
+    selection = id;
+  };
+  const show = (value: boolean) => {
+    open = value;
+  };
+  openTimelineAt(null, choose, show);
+  expect(open).toBe(true);
+  expect(selectedPointId(points, selection)).toBe(newer.id);
+  open = false;
+  openTimelineAt(older.id, choose, show);
+  expect(open).toBe(true);
+  expect(selectedPointId(points, selection)).toBe(older.id);
 });
