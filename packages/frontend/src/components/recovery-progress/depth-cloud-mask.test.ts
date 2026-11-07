@@ -7,6 +7,7 @@ test('concurrent scenes share one retained image and receive it only after decod
   const image = {
     src: '',
     decoding: 'auto' as HTMLImageElement['decoding'],
+    crossOrigin: null as string | null,
     decode: () =>
       new Promise<void>((resolve) => {
         ready = resolve;
@@ -28,6 +29,7 @@ test('concurrent scenes share one retained image and receive it only after decod
   expect(calls).toBe(1);
   expect(image.src).toBe('/mask.webp');
   expect(image.decoding).toBe('async');
+  expect(image.crossOrigin).toBe('anonymous');
   expect(settled).toBe(false);
   ready();
   expect(await first).toBe(image);
@@ -38,7 +40,7 @@ test('concurrent scenes share one retained image and receive it only after decod
 
 test('a failed or unsupported decoder retains the procedural fallback without retries', async () => {
   for (const create of [
-    () => ({ src: '', decoding: 'auto' as const, decode: () => Promise.reject(new Error('unavailable')) }),
+    () => ({ src: '', decoding: 'auto' as const, crossOrigin: null, decode: () => Promise.reject(new Error('unavailable')) }),
     () => {
       throw new Error('unsupported');
     },

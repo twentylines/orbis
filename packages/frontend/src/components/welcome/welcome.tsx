@@ -543,7 +543,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                             <>
                               <button type="button" aria-pressed={entry === 'restore'} onClick={() => setEntry('restore')}>
                                 <strong>Restore a backup</strong>
-                                <span>Bring back saved Orbis configuration and managed app data.</span>
+                                <span>Bring back your saved Orbis settings.</span>
                               </button>
                               <button type="button" aria-pressed={entry === 'transfer'} onClick={() => setEntry('transfer')}>
                                 <strong>Transfer a server</strong>

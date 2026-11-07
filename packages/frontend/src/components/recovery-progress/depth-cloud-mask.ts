@@ -1,4 +1,4 @@
-type MaskImage = Pick<HTMLImageElement, 'src' | 'decoding' | 'decode'>;
+type MaskImage = Pick<HTMLImageElement, 'src' | 'decoding' | 'crossOrigin' | 'decode'>;
 
 export function createCloudMaskLoader(createImage: () => MaskImage, source: string) {
   let pending: Promise<MaskImage | null> | undefined;
@@ -8,6 +8,7 @@ export function createCloudMaskLoader(createImage: () => MaskImage, source: stri
       .then(async () => {
         const image = createImage();
         image.decoding = 'async';
+        image.crossOrigin = 'anonymous';
         image.src = source;
         await image.decode();
         decoded = image;
