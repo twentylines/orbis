@@ -1,9 +1,188 @@
 .tm-capture-progress {
+  position: relative;
   display: grid;
-  gap: 10px;
-  margin-block: 20px;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.2fr);
+  align-items: center;
+  overflow: hidden;
+  isolation: isolate;
+  min-width: 0;
+  margin-block: 24px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 18px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
 }
-.tm-capture-progress progress {
-  width: 100%;
-  accent-color: var(--desktop-accent);
+.tm-capture-space {
+  position: relative;
+  min-height: 240px;
+  overflow: hidden;
+  perspective: 650px;
+  contain: layout paint;
+  background: radial-gradient(ellipse at 50% 70%, color-mix(in srgb, var(--desktop-accent) 15%, transparent), transparent 68%);
+}
+.tm-capture-orbit {
+  position: absolute;
+  inset: 22% 5%;
+  border: 1px solid color-mix(in srgb, var(--desktop-accent) 30%, transparent);
+  border-radius: 50%;
+  transform: rotateX(62deg) rotateZ(-24deg);
+}
+.tm-capture-deck {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  animation: tm-capture-arrive 900ms cubic-bezier(0.22, 0.72, 0.18, 1) both;
+}
+.tm-capture-plane {
+  position: absolute;
+  inset: 27% 24%;
+  border: 1px solid color-mix(in srgb, var(--desktop-accent) 55%, var(--desktop-line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--desktop-accent) 9%, var(--desktop-surface));
+  transition:
+    transform 850ms cubic-bezier(0.22, 0.72, 0.18, 1),
+    opacity 850ms;
+}
+.tm-capture-plane-back {
+  transform: translate3d(-18px, -34px, -100px) rotateX(28deg) rotateY(-20deg) rotateZ(-14deg);
+  opacity: 0.35;
+}
+.tm-capture-plane-middle {
+  transform: translate3d(-8px, -16px, -45px) rotateX(22deg) rotateY(-15deg) rotateZ(-7deg);
+  opacity: 0.65;
+}
+.tm-capture-plane-front {
+  transform: translate3d(8px, 15px, 20px) rotateX(16deg) rotateY(-10deg);
+}
+.tm-capture-progress[data-pose="preview"] .tm-capture-plane-front {
+  transform: translate3d(15px, 10px, 65px) rotateX(5deg) rotateY(-6deg);
+}
+.tm-capture-progress[data-pose="collecting"] .tm-capture-plane-back {
+  transform: translate3d(-10px, -18px, -65px) rotateX(18deg) rotateY(-12deg) rotateZ(-7deg);
+}
+.tm-capture-progress[data-pose="collecting"] .tm-capture-plane-middle {
+  transform: translate3d(0, 0, -20px) rotateX(18deg) rotateY(-12deg) rotateZ(-3deg);
+}
+.tm-capture-progress:is([data-pose="sealing"], [data-pose="saved"]) .tm-capture-plane-back {
+  transform: translate3d(3px, 6px, -20px) rotateX(12deg) rotateY(-8deg);
+}
+.tm-capture-progress:is([data-pose="sealing"], [data-pose="saved"]) .tm-capture-plane-middle {
+  transform: translate3d(6px, 10px, 0) rotateX(12deg) rotateY(-8deg);
+}
+.tm-capture-progress:is([data-pose="sealing"], [data-pose="saved"]) .tm-capture-plane-front {
+  transform: translate3d(9px, 14px, 20px) rotateX(12deg) rotateY(-8deg);
+}
+.tm-capture-scan {
+  position: absolute;
+  inset: -25%;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+  background: linear-gradient(112deg, transparent 43%, color-mix(in srgb, var(--desktop-accent) 12%, transparent) 50%, transparent 57%);
+  animation: tm-capture-scan 3200ms ease-in-out infinite;
+  animation-play-state: paused;
+}
+.tm-capture-progress[data-running="true"] .tm-capture-scan {
+  animation-play-state: running;
+}
+.tm-capture-progress[data-running="false"] .tm-capture-scan {
+  visibility: hidden;
+}
+.tm-capture-progress[data-active="false"] .tm-capture-deck {
+  animation: none;
+}
+.tm-capture-progress[data-running="false"] .tm-capture-plane {
+  transition: none;
+}
+.tm-capture-copy {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 28px 28px 28px 8px;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+.tm-capture-copy strong {
+  font-size: 1.1rem;
+}
+.tm-capture-copy small {
+  color: var(--desktop-muted);
+}
+.tm-capture-meter {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.tm-capture-meter .recovery-progress-bar {
+  flex: 1;
+  min-width: 0;
+}
+.tm-capture-meter > span {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.tm-capture-progress[data-visible="false"] .tm-capture-deck {
+  animation-play-state: paused;
+}
+.tm-capture-progress[data-reduced="true"] .tm-capture-deck {
+  animation: none;
+}
+.tm-capture-progress[data-reduced="true"] .tm-capture-plane {
+  transition: none;
+}
+@keyframes tm-capture-arrive {
+  from {
+    transform: translate3d(0, 24px, -170px) rotateX(12deg);
+    opacity: 0;
+  }
+  to {
+    transform: translate3d(0, 0, 0) rotateX(0);
+    opacity: 1;
+  }
+}
+@keyframes tm-capture-scan {
+  0% {
+    transform: translate3d(-100%, 0, 0);
+    opacity: 0;
+  }
+  20%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(100%, 0, 0);
+    opacity: 0;
+  }
+}
+@media (max-width: 600px) {
+  .tm-capture-progress {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tm-capture-space {
+    min-height: 200px;
+  }
+  .tm-capture-plane {
+    inset-inline: max(24%, calc(50% - 100px));
+  }
+  .tm-capture-copy {
+    padding: 0 22px 24px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tm-capture-deck,
+  .tm-capture-scan {
+    animation: none;
+  }
+  .tm-capture-plane {
+    transition: none;
+  }
+  .tm-capture-scan {
+    display: none;
+  }
+}
+
+.tm-capture-progress[data-running="false"] .recovery-progress-bar > span {
+  animation-play-state: paused;
+  visibility: hidden;
 }

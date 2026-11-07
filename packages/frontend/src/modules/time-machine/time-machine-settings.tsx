@@ -196,7 +196,7 @@ function TimeMachineSettingsSession({
   const [noticeDismissed, setNoticeDismissed] = useState(() => hasSeenTimeMachineNotice(machine.user.id, noticeOrigin));
   const timelineExitRequested = useRef(false);
   const changeGallery = (open: boolean) => {
-    if (open && snapshot?.preferences.enabled !== true) return;
+    if (open && !snapshot?.list.available) return;
     timelineExitRequested.current = !open;
     setGallery(open);
   };
@@ -235,6 +235,7 @@ function TimeMachineSettingsSession({
   const enabled = enabledDraft ?? snapshot?.preferences.enabled ?? false;
   const dirty = snapshot !== null && enabled !== snapshot.preferences.enabled;
   const settingsMode = timeMachineSettingsMode(snapshot?.preferences ?? null);
+  const hasSnapshot = Boolean(snapshot);
   const save = async () => {
     if (!snapshot) throw new Error('Read Time Machine settings before saving.');
     let savedPreferences: Awaited<ReturnType<typeof saveTimeMachinePreferences>> | undefined;
@@ -274,9 +275,8 @@ function TimeMachineSettingsSession({
     }
   };
   useEffect(() => {
-    if (settingsMode === 'setup') setGallery(false);
-    else if (settingsMode === 'active' && openTimeline) setGallery(true);
-  }, [settingsMode, openTimeline]);
+    if (hasSnapshot && openTimeline) setGallery(true);
+  }, [hasSnapshot, openTimeline]);
   const chooseAction = (kind: 'capture' | 'remove' | 'inspect') => {
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     form.current?.reset();
@@ -474,11 +474,20 @@ function TimeMachineSettingsSession({
       )}
       {snapshot ? (
         <>
+          {active ? <TimeMachineCaptureProgress point={active} unavailable={Boolean(error)} /> : null}
           {snapshot.list.available ? null : (
             <InlineFeedback>Time Machine storage is unavailable. No point can be captured or removed.</InlineFeedback>
           )}
           {settingsMode === 'setup' ? (
-            <TimeMachineSetupView pending={busy || activationPending} onEnable={() => void activate()} />
+            <>
+              <TimeMachineSetupView pending={busy || activationPending} onEnable={() => void activate()} />
+              <div className="tm-settings-actions">
+                <Button variant="outline" onClick={() => openTimelineAt(null, setSelection, setGallery)} disabled={!snapshot.list.available}>
+                  <IconHistory size={20} aria-hidden="true" />
+                  Enter Time Machine
+                </Button>
+              </div>
+            </>
           ) : (
             <>
               <div className="tm-enabled-preference">
@@ -519,40 +528,13 @@ function TimeMachineSettingsSession({
               </div>
               {dirty ? <p>Save this change before starting a capture.</p> : null}
               <p>Automatic captures are not available on this server yet.</p>
-              {active ? <TimeMachineCaptureProgress point={active} /> : null}
               <p>{timeMachineRetentionSummary(savedPoints.length, retainedBytes, formatBackupBytes)}</p>
-              {points.length ? (
-                <ol className="tm-point-list">
-                  {points.map((item) => (
-                    <li key={item.id}>
-                      <div className="tm-point-summary">
-                        <strong>{item.metadata?.label || pointDate(item)}</strong>
-                        <span>
-                          {pointDate(item)}, {item.status}
-                        </span>
-                        {item.issue ? <small>{item.issue.message}</small> : null}
-                      </div>
-                      <Button variant="outline" onClick={() => openTimelineAt(item.id, setSelection, setGallery)}>
-                        Browse
-                      </Button>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p>Your timeline will appear after the first point is captured.</p>
-              )}
-              <TimeMachineCapsules
-                visible={visible}
-                points={snapshot?.list.points ?? null}
-                pointsError={Boolean(error)}
-                onRefreshPoints={machine.retry}
-              />
             </>
           )}
         </>
       ) : null}
       <TimeMachineJourney
-        open={gallery && settingsMode === 'active'}
+        open={gallery && Boolean(snapshot)}
         onOpenChange={changeGallery}
         onClosed={finishTimelineClose}
         points={points}
@@ -563,6 +545,16 @@ function TimeMachineSettingsSession({
         onRemove={() => chooseAction('remove')}
         session={machine.sessionAbortSignal}
         busy={busy || !machine.canMutate || Boolean(error)}
+        toolbar={
+          <TimeMachineCapsules
+            visible={visible && gallery}
+            points={snapshot?.list.points ?? null}
+            selected={point}
+            pointsError={Boolean(error)}
+            blocked={busy || !machine.canMutate}
+            onRefreshPoints={machine.retry}
+          />
+        }
         onCapture={
           snapshot?.preferences.enabled && machine.canMutate && snapshot.capabilities.manualCapture && !snapshot.list.activeCaptureId
             ? () => chooseAction('capture')

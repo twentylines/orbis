@@ -5,7 +5,48 @@
   min-width: 0;
 }
 .capsules-panel {
-  margin-top: 24px;
+  padding: 24px;
+}
+.capsules-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.capsules-toolbar > .btn {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: normal;
+}
+@media (max-width: 600px) {
+  .capsules-toolbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .capsules-toolbar > .btn:first-of-type {
+    grid-column: 1 / -1;
+  }
+}
+.capsules-files-description {
+  padding-inline: 24px;
+  margin: 0;
+  line-height: 1.6;
+}
+.capsules-dialog .capsules-files-description {
+  padding-inline: 0;
+}
+.capsules-selected-point {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: break-word;
+  line-height: 1.5;
 }
 .capsules-panel header,
 .capsules-list article {
@@ -26,6 +67,9 @@
 }
 .capsules-panel h3 {
   font-size: 1rem;
+}
+.capsules-panel p {
+  overflow-wrap: break-word;
 }
 .capsules-list article {
   border-top: 1px solid var(--tblr-border-color);
