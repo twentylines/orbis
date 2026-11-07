@@ -52,10 +52,17 @@ const win = {
 doc.defaultView = win;
 Object.assign(globalThis, { window: win, document: doc, HTMLElement: win.HTMLElement, matchMedia: win.matchMedia, IS_REACT_ACT_ENVIRONMENT: true });
 const calls: { type: string; value?: unknown }[] = [];
+const entries: { transform: string; opacity: number }[] = [];
 const actualMotion = await import('framer-motion');
 mock.module('framer-motion', () => ({
   ...actualMotion,
-  motion: { article: () => null, div: () => null },
+  motion: {
+    article: ({ initial }: { initial: (typeof entries)[number] }) => {
+      entries.push(initial);
+      return null;
+    },
+    div: () => null,
+  },
   AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
   usePresence: () => [true, undefined],
   useAnimationControls: () =>
@@ -80,6 +87,7 @@ const scene = {
   selectedIndex: 0,
   previousIndex: 0,
   indices: new Map([[point.id, 0]]),
+  count: 1,
   exiting: new Set<string>(),
   opening: true,
   open: true,
@@ -115,6 +123,11 @@ await render(scene, null);
 const initial = calls.filter((call) => call.type === 'start');
 expect(initial).toHaveLength(1);
 expect((initial[0]?.value as { transition: { duration: number; delay: number } }).transition).toMatchObject({ duration: 0.76, delay: 0.08 });
+expect(initial[0]?.value).toMatchObject({
+  transform: 'translateY(0px) translateZ(0px) scale(1) rotateX(0deg)',
+  transition: { ease: [0.22, 0.72, 0.18, 1] },
+});
+for (const alias of ['y', 'z', 'scale', 'rotateX']) expect(initial[0]?.value).not.toHaveProperty(alias);
 await render({ ...scene, opening: false }, 'blob:wallpaper');
 expect(calls.filter((call) => call.type === 'start')).toHaveLength(1);
 expect(calls.filter((call) => call.type === 'stop')).toHaveLength(0);
@@ -131,5 +144,30 @@ await render({ ...scene, opening: false, selectedIndex: 1, compact: true, moving
 expect(calls.filter((call) => call.type === 'start')).toHaveLength(4);
 await render({ ...scene, opening: false, selectedIndex: 1, compact: true, visible: false }, 'blob:wallpaper');
 expect(calls.at(-1)?.type).toBe('stop');
+await act(async () => {
+  root.render(
+    <HistoricalPointCard
+      key="returning-back"
+      point={point}
+      scene={{
+        ...scene,
+        selected: 'oldest',
+        selectedIndex: 15,
+        previousIndex: 15,
+        indices: new Map([[point.id, 0]]),
+        count: 16,
+        opening: false,
+        open: false,
+      }}
+      assets={{}}
+    />,
+  );
+});
+const returning = entries.at(-1);
+expect(returning?.opacity).toBe(0);
+expect(Number(returning?.transform.match(/translateZ\(([-\d.]+)px\)/)?.[1])).toBeLessThan(0);
+expect(Number(returning?.transform.match(/translateY\(([-\d.]+)px\)/)?.[1])).toBeLessThan(0);
 await act(async () => root.unmount());
-process.stdout.write(JSON.stringify({ wallpaperDoesNotRestart: true, closeRetargets: true, otherChangesRetarget: true }));
+process.stdout.write(
+  JSON.stringify({ wallpaperDoesNotRestart: true, closeRetargets: true, otherChangesRetarget: true, returningBackStartsBehind: true }),
+);

@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { HistoricalHomePreview as HistoricalHome } from './historical-home-preview';
 import { HistoricalDateRuler, HistoricalPointStack, HistoricalTimelineBody } from './time-machine-journey';
+import { DialogOpenContext } from '@/components/ui/Dialog/Dialog';
 import {
   chronologicalPoints,
   historicalAssetPath,
@@ -16,9 +17,11 @@ import {
   eligibleRestoreReview,
   grantMatchesReview,
   pointCardPose,
+  pointFoldDepth,
   pointMotionEnabled,
   pointMotionSeconds,
   pointPreviewAdmitted,
+  pointStackCards,
   timelineIndexAt,
   timelineOffsets,
   timelineTarget,
@@ -119,7 +122,11 @@ test('timeline preserves selection, sorts a copy, bounds depth cards and support
   expect(timelineTarget(ordered, id, 'Home')).toBe(ordered.at(-1)?.id ?? null);
   expect(timelineTarget(ordered, id, 'End')).toBe(ordered[0]?.id ?? null);
   expect(timelineTarget([], null, 'Home')).toBeNull();
-  const html = renderToStaticMarkup(<HistoricalPointStack points={ordered} selected={id} />);
+  const html = renderToStaticMarkup(
+    <DialogOpenContext.Provider value={true}>
+      <HistoricalPointStack points={ordered} selected={id} />
+    </DialogOpenContext.Provider>,
+  );
   expect(html.match(/class="tm-home-layer"/g) ?? []).toHaveLength(7);
   expect((html.match(/class="tm-point-silhouette"/g) ?? []).length).toBe(6);
   expect((html.match(/class="tm-historical-home"/g) ?? []).length).toBe(1);
@@ -210,11 +217,35 @@ test('large metadata-only UI histories mount nearby dates and retain a distant s
     expect(html).toContain(`aria-posinset="${count}" aria-setsize="${count}"`);
     expect(html.match(/aria-current="date"/g)).toHaveLength(1);
     expect(html.match(/tabindex="0"/g)).toHaveLength(1);
-    const stack = renderToStaticMarkup(<HistoricalPointStack points={points} selected={selected} />);
+    const stack = renderToStaticMarkup(
+      <DialogOpenContext.Provider value={true}>
+        <HistoricalPointStack points={points} selected={selected} />
+      </DialogOpenContext.Provider>,
+    );
     expect(stack.match(/class="tm-home-layer"/g)).toHaveLength(10);
     expect(stack.match(/class="tm-historical-home"/g)).toHaveLength(1);
     expect(stack).toContain('Saved server');
   }
+});
+
+test('closing rejoins every known capture behind the selected Home at either endpoint and the middle', () => {
+  const points = orderedPoints(timelineStressPoints(16));
+  for (const index of [0, 7, 15]) {
+    const selected = points[index]?.id ?? null;
+    const cards = pointStackCards(points, index, false);
+    expect(cards).toHaveLength(points.length);
+    expect(new Set(cards.map((point) => point.id))).toEqual(new Set(points.map((point) => point.id)));
+    const depths = cards.map((point) => pointFoldDepth(points.indexOf(point) - index, points.length));
+    expect(depths).toEqual(Array.from({ length: 16 }, (_, depth) => depth));
+    const html = renderToStaticMarkup(<HistoricalPointStack points={points} selected={selected} />);
+    expect(html.match(/class="tm-home-layer"/g)).toHaveLength(16);
+    expect(html.match(/data-front="true"/g)).toHaveLength(1);
+    expect(html.match(/class="tm-historical-home"/g)).toHaveLength(1);
+    expect(html).toContain(`data-point-card="${selected}" data-depth="0" data-front="true"`);
+  }
+  expect(pointStackCards(points, 15, true)).toHaveLength(1);
+  expect(pointStackCards(points, -1, false)).toEqual([]);
+  expect(pointStackCards(timelineStressPoints(10_000), 9999, false)).toHaveLength(16);
 });
 
 test('virtual ruler range calculation bounds rows across scroll positions, endpoint jumps and larger measured sizes', () => {
@@ -340,7 +371,12 @@ test('wallpaper resolution does not restart a mounted card opening', async () =>
   });
   const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
   expect(code, stderr).toBe(0);
-  expect(JSON.parse(stdout)).toEqual({ wallpaperDoesNotRestart: true, closeRetargets: true, otherChangesRetarget: true });
+  expect(JSON.parse(stdout)).toEqual({
+    wallpaperDoesNotRestart: true,
+    closeRetargets: true,
+    otherChangesRetarget: true,
+    returningBackStartsBehind: true,
+  });
 });
 
 test('generic entry chooses the newest point and Browse keeps its requested point', () => {

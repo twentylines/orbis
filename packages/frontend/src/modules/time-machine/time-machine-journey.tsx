@@ -24,10 +24,12 @@ import { chronologicalPoints, orderedPoints } from './contracts';
 import { useHistoricalWallpaper } from './historical-home';
 import { HistoricalHomePreview as HistoricalHome } from './historical-home-preview';
 import {
-  pointCardPose,
+  pointCardFrame,
+  pointFoldDepth,
   pointMotionEnabled,
   pointMotionSeconds,
   pointPreviewAdmitted,
+  pointStackCards,
   timelineIndexAt,
   timelineOffsets,
   timelineTarget,
@@ -71,6 +73,7 @@ type StackScene = {
   selectedIndex: number;
   previousIndex: number;
   indices: Map<string, number>;
+  count: number;
   exiting: Set<string>;
   opening: boolean;
   open: boolean;
@@ -89,6 +92,7 @@ export function HistoricalPointCard({ point, scene: initialScene, assets }: { po
   removeCurrent.current = remove;
   const retired = !present && !scene.exiting.has(point.id);
   const depth = (scene.indices.get(point.id) ?? scene.selectedIndex + 10) - scene.selectedIndex;
+  const foldedDepth = pointFoldDepth(depth, scene.count);
   const front = present && depth === 0;
   const previewAdmitted = pointPreviewAdmitted(point.id, scene.selected, scene.previousFront);
   const captured = useRef({ point, ...assets });
@@ -100,12 +104,14 @@ export function HistoricalPointCard({ point, scene: initialScene, assets }: { po
   if (present) previousFront.current = front;
   const origin = useRef(
     scene.moving
-      ? pointCardPose(
-          opening ? Math.max(0, depth) : (scene.indices.get(point.id) ?? 10) - scene.previousIndex,
-          opening ? 'folded' : 'spread',
-          scene.compact,
-        )
-      : pointCardPose(depth, 'spread', scene.compact),
+      ? !scene.open && !opening
+        ? { ...pointCardFrame(foldedDepth, 'spread', scene.compact), opacity: 0 }
+        : pointCardFrame(
+            opening ? Math.max(0, depth) : (scene.indices.get(point.id) ?? 10) - scene.previousIndex,
+            opening ? 'folded' : 'spread',
+            scene.compact,
+          )
+      : pointCardFrame(depth, 'spread', scene.compact),
   );
   const firstMotion = useRef(true);
   useEffect(() => {
@@ -131,7 +137,7 @@ export function HistoricalPointCard({ point, scene: initialScene, assets }: { po
       controls.stop();
       return;
     }
-    const pose = pointCardPose(depth, scene.open ? 'spread' : 'folded', scene.compact);
+    const pose = pointCardFrame(scene.open ? depth : foldedDepth, scene.open ? 'spread' : 'folded', scene.compact);
     if (front) controls.set({ opacity: 1 });
     if (!scene.moving) {
       controls.set(pose);
@@ -149,7 +155,7 @@ export function HistoricalPointCard({ point, scene: initialScene, assets }: { po
       current = false;
       controls.stop();
     };
-  }, [controls, depth, front, present, remove, retired, scene.compact, scene.moving, scene.open, opening, scene.visible]);
+  }, [controls, depth, foldedDepth, front, present, remove, retired, scene.compact, scene.moving, scene.open, opening, scene.visible]);
   const showPreview = front || keepExitingPreview;
   const preview = captured.current;
   return (
@@ -160,7 +166,13 @@ export function HistoricalPointCard({ point, scene: initialScene, assets }: { po
       data-depth={Math.max(0, depth)}
       data-front={front || undefined}
       data-retired={retired || undefined}
-      style={{ '--tm-depth': Math.max(0, depth), zIndex: 20 - depth, visibility: retired ? 'hidden' : undefined } as CSSProperties}
+      style={
+        {
+          '--tm-depth': Math.max(0, depth),
+          zIndex: 20 - (scene.open ? depth : foldedDepth),
+          visibility: retired ? 'hidden' : undefined,
+        } as CSSProperties
+      }
       initial={origin.current}
       animate={controls}
     >
@@ -215,7 +227,7 @@ export function HistoricalPointStack({
   const ordered = useMemo(() => orderedPoints(points), [points]);
   const indices = useMemo(() => new Map(ordered.map((point, index) => [point.id, index])), [ordered]);
   const selectedIndex = selected === null ? -1 : (indices.get(selected) ?? -1);
-  const cards = useMemo(() => (selectedIndex < 0 ? [] : ordered.slice(selectedIndex, selectedIndex + 10)), [ordered, selectedIndex]);
+  const cards = useMemo(() => pointStackCards(ordered, selectedIndex, open), [ordered, selectedIndex, open]);
   const previous = useRef({
     selected,
     previousFront: null as string | null,
@@ -231,6 +243,7 @@ export function HistoricalPointStack({
     selectedIndex,
     previousIndex: changed ? previous.current.index : selectedIndex,
     indices,
+    count: ordered.length,
     exiting: changed ? previous.current.cards : previous.current.exiting,
     opening: !mounted.current,
     open,

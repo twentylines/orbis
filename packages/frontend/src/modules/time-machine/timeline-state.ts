@@ -1,4 +1,4 @@
-import type { TimeMachinePoint } from '@runtipi/common/schemas/time-machine';
+import { timeMachineLimits, type TimeMachinePoint } from '@runtipi/common/schemas/time-machine';
 import type { TimeMachineRestoreGrant, TimeMachineRestoreReview } from '@runtipi/common/schemas/time-machine-restore';
 
 export function timelineTarget(points: readonly TimeMachinePoint[], selected: string | null, key: string): string | null {
@@ -40,9 +40,24 @@ export function timelineWindow(offsets: readonly number[], position: number, ext
 
 export const pointMotionSeconds = { unfold: 0.76, travel: 0.52, fold: 0.54, sceneExit: 0.72 } as const;
 
+export function pointStackCards<T>(points: readonly T[], selectedIndex: number, open: boolean): readonly T[] {
+  if (selectedIndex < 0 || selectedIndex >= points.length) return [];
+  if (open) return points.slice(selectedIndex, selectedIndex + 10);
+  // Rejoin the known capture deck on close, without unbounding synthetic stress histories.
+  const tail = points.slice(selectedIndex, selectedIndex + timeMachineLimits.points);
+  return [...tail, ...points.slice(0, Math.min(selectedIndex, timeMachineLimits.points - tail.length))];
+}
+
+export function pointFoldDepth(depth: number, count: number) {
+  return depth < 0 ? count + depth : depth;
+}
+
 export function pointCardPose(depth: number, phase: 'spread' | 'folded', compact = false) {
+  if (phase === 'folded') {
+    const foldedDepth = Math.max(0, Math.min(timeMachineLimits.points - 1, depth));
+    return { y: 28 - foldedDepth * 1.5, z: -40 - foldedDepth * 3, scale: 0.92, rotateX: -10, opacity: 1 };
+  }
   const bounded = Math.max(-1, Math.min(10, depth));
-  if (phase === 'folded') return { y: 28 - Math.max(0, bounded) * 1.5, z: -40 - Math.max(0, bounded) * 3, scale: 0.92, rotateX: -10, opacity: 1 };
   if (bounded < 0) return { y: compact ? 100 : 170, z: 360, scale: 1.03, rotateX: 3, opacity: 0 };
   return {
     y: bounded ? -bounded * (compact ? 12 : 20) : 0,
@@ -51,6 +66,12 @@ export function pointCardPose(depth: number, phase: 'spread' | 'folded', compact
     rotateX: 0,
     opacity: bounded >= 10 ? 0 : 1,
   };
+}
+
+export function pointCardFrame(depth: number, phase: 'spread' | 'folded', compact = false) {
+  const { y, z, scale, rotateX, opacity } = pointCardPose(depth, phase, compact);
+  // A single transform uses the browser animation path; aliases need a JS tick per card.
+  return { transform: `translateY(${y}px) translateZ(${z}px) scale(${scale}) rotateX(${rotateX}deg)`, opacity };
 }
 
 export function pointPreviewAdmitted(pointId: string, selected: string | null, previous: string | null) {
