@@ -95,10 +95,12 @@ def published_release(tag: str) -> tuple[str, str, str | None, str | None]:
             tag_object = read_json(f"{GITHUB_API}/git/tags/{tag_sha}", 16 * 1024, {"Accept": "application/vnd.github+json"})
         return asset_url, tag_commit(ref, tag_object), release.get("published_at"), release.get("body")
     except HTTPError as error:
-        if error.code not in {403, 429}:
+        if error.code not in {403, 429, 500, 502, 503, 504}:
             raise
-        # The public API shares a small anonymous quota. The release asset still
-        # proves publication; Git's tag endpoint and the tagged notes avoid it.
+        error.close()
+        # API quota limits and temporary outages need not block public assets.
+        # The release asset still proves publication; Git independently binds
+        # its commit, and the registry digest/platform checks remain unchanged.
         commit = git_tag_commit(tag)
         notes, _ = read_url(f"https://raw.githubusercontent.com/twentylines/orbis/{quote(tag)}/releases/{quote(tag)}.md", 64 * 1024)
         return asset_url, commit, None, notes.decode("utf-8")

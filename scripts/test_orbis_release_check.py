@@ -49,6 +49,48 @@ class OrbisReleaseCheckTests(unittest.TestCase):
         self.assertIsNone(published)
         self.assertEqual(notes, "# Published notes")
 
+    def test_temporary_api_errors_use_the_same_git_and_tagged_notes_verification(self):
+        for code in (429, 500, 502, 503, 504):
+            with self.subTest(code=code), \
+                 patch.object(CHECK, "read_json", side_effect=HTTPError(CHECK.GITHUB_API, code, "unavailable", {}, None)), \
+                 patch.object(CHECK, "git_tag_commit", return_value="a" * 40) as git, \
+                 patch.object(CHECK, "read_url", return_value=(b"# Published notes", {})) as notes:
+                self.assertEqual(CHECK.published_release(TAG), (ASSET, "a" * 40, None, "# Published notes"))
+                git.assert_called_once_with(TAG)
+                notes.assert_called_once_with(f"https://raw.githubusercontent.com/twentylines/orbis/{TAG}/releases/{TAG}.md", 64 * 1024)
+
+    def test_permanent_api_errors_do_not_fall_back(self):
+        for code in (400, 401, 404, 410, 501):
+            error = HTTPError(CHECK.GITHUB_API, code, "rejected", {}, None)
+            self.addCleanup(error.close)
+            with self.subTest(code=code), patch.object(CHECK, "read_json", side_effect=error), \
+                 patch.object(CHECK, "git_tag_commit") as git, patch.object(CHECK, "read_url") as read:
+                with self.assertRaises(HTTPError) as raised:
+                    CHECK.published_release(TAG)
+                self.assertIs(raised.exception, error)
+                git.assert_not_called()
+                read.assert_not_called()
+
+    def test_api_outage_fallback_still_rejects_manifest_commit_mismatch(self):
+        manifest = {"schema": "orbis.release.v1", "image": CHECK.PLAN.IMAGE, "tag": TAG,
+                    "commit": "a" * 40, "digest": "sha256:" + "c" * 64, "runtipiCompatibility": "4.10.1"}
+        with patch.object(CHECK, "read_json", side_effect=[HTTPError(CHECK.GITHUB_API, 504, "unavailable", {}, None), manifest]), \
+             patch.object(CHECK, "git_tag_commit", return_value="b" * 40), \
+             patch.object(CHECK, "read_url", return_value=(b"# Published notes", {})) as read:
+            with self.assertRaisesRegex(ValueError, "commit did not match"):
+                CHECK.check(TAG)
+            self.assertEqual(read.call_count, 1)
+
+    def test_api_outage_does_not_turn_a_missing_public_asset_into_a_release(self):
+        absent = HTTPError(ASSET, 404, "missing", {}, None)
+        self.addCleanup(absent.close)
+        with patch.object(CHECK, "read_json", side_effect=[HTTPError(CHECK.GITHUB_API, 503, "unavailable", {}, None), absent]), \
+             patch.object(CHECK, "git_tag_commit", return_value="a" * 40), \
+             patch.object(CHECK, "read_url", return_value=(b"# Published notes", {})):
+            with self.assertRaises(HTTPError) as raised:
+                CHECK.check(TAG)
+            self.assertIs(raised.exception, absent)
+
     def test_checks_index_body_digest_header_and_platforms(self):
         index = {
             "mediaType": "application/vnd.oci.image.index.v1+json",
