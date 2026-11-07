@@ -74,7 +74,8 @@ body:has(.orbis-theme) .orbis-dialog-content .orbis-dialog-header {
   gap: 12px;
 }
 @media (max-width: 480px) {
-  .orbis-dialog-content .orbis-dialog-header[data-header-actions="true"] {
+  .orbis-dialog-content .orbis-dialog-header[data-header-actions="true"],
+  body:has(.orbis-theme) .orbis-dialog-content .orbis-dialog-header[data-header-actions="true"] {
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
   }

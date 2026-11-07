@@ -20,14 +20,14 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-test('manual capture sends no password or experimental confirmation by default and preserves optional policy proof', async () => {
+test('manual capture uses the Orbis-only endpoint without default app data or password proof and preserves optional policy proof', async () => {
   const point = historicalPoint();
   const fetcher = mock(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json(point));
   globalThis.fetch = fetcher as unknown as typeof fetch;
   const signal = new AbortController().signal;
-  await captureTimeMachine('Before updating Jellyfin', {}, signal);
-  expect(fetcher.mock.calls[0]?.[0]).toBe('/api/system-backups/time-machine/captures');
-  expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({ label: 'Before updating Jellyfin' });
+  await captureTimeMachine('Before updating Orbis', {}, signal);
+  expect(fetcher.mock.calls[0]?.[0]).toBe('/api/system-backups/time-machine/core-captures');
+  expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({ label: 'Before updating Orbis' });
   expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ credentials: 'same-origin', cache: 'no-store', redirect: 'error' });
   await captureTimeMachine('Protected capture', { password: 'unit-test-proof', totpCode: '123456' }, signal);
   expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toEqual({

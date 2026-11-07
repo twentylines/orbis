@@ -19,6 +19,7 @@ test('concurrent scenes share one retained image and receive it only after decod
   const first = load();
   const second = load();
   expect(first).toBe(second);
+  expect(load.peek()).toBeNull();
   let settled = false;
   void first.then(() => {
     settled = true;
@@ -30,6 +31,7 @@ test('concurrent scenes share one retained image and receive it only after decod
   expect(settled).toBe(false);
   ready();
   expect(await first).toBe(image);
+  expect(load.peek()).toBe(image);
   expect(await load()).toBe(image);
   expect(calls).toBe(1);
 });
@@ -48,6 +50,7 @@ test('a failed or unsupported decoder retains the procedural fallback without re
     }, '/mask.webp');
     expect(await load()).toBeNull();
     expect(await load()).toBeNull();
+    expect(load.peek()).toBeNull();
     expect(calls).toBe(1);
   }
 });

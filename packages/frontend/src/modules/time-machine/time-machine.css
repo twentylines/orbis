@@ -615,7 +615,8 @@
 @media (max-width: 620px) {
   .tm-journey-layout {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(280px, 1fr) auto;
+    grid-template-rows: minmax(max(280px, calc(116px + 14rem)), 1fr) auto;
+    min-height: min-content;
     gap: 10px;
     padding: 0 12px 10px;
   }

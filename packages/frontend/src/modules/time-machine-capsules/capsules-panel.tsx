@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { IconTrash } from '@tabler/icons-react';
 import type { CapsuleJob } from '@runtipi/common/schemas/time-machine-capsule';
+import type { TimeMachinePoint } from '@runtipi/common/schemas/time-machine';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
@@ -12,7 +13,6 @@ import { useAppContext } from '@/context/app-context';
 import { downloadBackup } from '@/modules/system-backups/backup-api';
 import { formatBackupBytes } from '@/modules/system-backups/contracts';
 import { BackupEncryptionFields, backupEncryptionPassphrase } from '@/modules/system-backups/system-backups-settings';
-import { readTimeMachinePoints } from '@/modules/time-machine/time-machine-api';
 import { capsuleAction, capsuleRequest, readCapsules, uploadCapsule } from './capsule-api';
 import './capsules-panel.css';
 
@@ -27,13 +27,23 @@ const statusCopy: Record<CapsuleJob['status'], string> = {
   failed: 'Needs review',
   cancelled: 'Cancelled',
 };
-export function TimeMachineCapsules({ visible = true }: { visible?: boolean }) {
+export function TimeMachineCapsules({
+  visible,
+  points,
+  pointsError,
+  onRefreshPoints,
+}: {
+  visible: boolean;
+  points: readonly TimeMachinePoint[] | null;
+  pointsError: boolean;
+  onRefreshPoints: () => Promise<boolean>;
+}) {
   const { user } = useAppContext();
   const id = useId();
   const [action, setAction] = useState<Action | null>(null);
   const [point, setPoint] = useState('');
   const [file, setFile] = useState<File | null>(null);
-  const [accountPassword, setAccountPassword] = useState(false);
+  const [accountPassword, setAccountPassword] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -48,15 +58,7 @@ export function TimeMachineCapsules({ visible = true }: { visible?: boolean }) {
     refetchInterval: (query) => (visible && query.state.data?.jobs.some((job) => ['running', 'verifying'].includes(job.status)) ? 2000 : false),
     retry: false,
   });
-  const points = useQuery({
-    queryKey: ['capsule-sealed-points', user.id],
-    queryFn: ({ signal }) => readTimeMachinePoints(signal),
-    enabled: visible,
-    staleTime: 30_000,
-    refetchInterval: false,
-    retry: false,
-  });
-  const sealed = points.data?.points.filter((point) => point.status === 'sealed' && point.metadata?.version === 2) ?? [];
+  const sealed = points?.filter((point) => point.status === 'sealed' && [2, 3].includes(point.metadata?.version ?? 0)) ?? [];
   useEffect(
     () => () => {
       abort.current?.abort();
@@ -68,7 +70,7 @@ export function TimeMachineCapsules({ visible = true }: { visible?: boolean }) {
     form.current?.reset();
     setError(null);
     setNotice(null);
-    setAccountPassword(false);
+    setAccountPassword(true);
     setFile(null);
     setAction(value);
   };
@@ -122,7 +124,7 @@ export function TimeMachineCapsules({ visible = true }: { visible?: boolean }) {
       abort.current = null;
     }
   };
-  if (!sealed.length && !jobs.data?.jobs.length && !jobs.isError && !points.isError) return null;
+  if (!sealed.length && !jobs.data?.jobs.length && !jobs.isError && !pointsError) return null;
   return (
     <section className="capsules-panel" aria-labelledby={`${id}-title`}>
       <header>
@@ -132,7 +134,7 @@ export function TimeMachineCapsules({ visible = true }: { visible?: boolean }) {
           disabled={busy || jobs.isFetching}
           onClick={() => {
             void jobs.refetch();
-            void points.refetch();
+            void onRefreshPoints();
           }}
         >
           Refresh
@@ -144,8 +146,8 @@ export function TimeMachineCapsules({ visible = true }: { visible?: boolean }) {
           Save capture
         </Button>
       </div>
-      {points.isError ? <InlineFeedback>Saved captures could not be loaded. Select Refresh to try again.</InlineFeedback> : null}
-      {!sealed.length && !points.isPending && !points.isError ? <p>Create a Time Machine capture before saving one to your computer.</p> : null}
+      {pointsError ? <InlineFeedback>Saved captures could not be loaded. Select Refresh to try again.</InlineFeedback> : null}
+      {!sealed.length && points !== null && !pointsError ? <p>Create a Time Machine capture before saving one to your computer.</p> : null}
       {jobs.isError ? <InlineFeedback>{jobs.error.message}</InlineFeedback> : null}
       {notice ? <output aria-live="polite">{notice}</output> : null}
       <div className="capsules-list">

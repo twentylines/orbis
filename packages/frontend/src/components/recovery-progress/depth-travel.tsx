@@ -52,6 +52,7 @@ export function DepthTravel({
   const visible = useWindowVisible();
   const field = useRef<HTMLDivElement>(null);
   const shownDistance = useRef(0);
+  const decodedMask = loadCloudMask.peek();
   useEffect(() => {
     let mounted = true;
     void loadCloudMask().then((image) => {
@@ -205,6 +206,7 @@ export function DepthTravel({
     <div
       ref={field}
       className={`depth-travel ${className}`}
+      style={decodedMask ? ({ '--depth-cloud-mask': `url("${decodedMask.src}")` } as CSSProperties) : undefined}
       aria-hidden="true"
       data-active={active && visible}
       data-reduced={Boolean(reduced)}

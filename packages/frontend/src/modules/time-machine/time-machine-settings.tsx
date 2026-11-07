@@ -452,7 +452,7 @@ function TimeMachineSettingsSession({
         <Alert variant="warning" dismissible className="tm-first-open-notice">
           <div>
             <AlertHeading>Experimental</AlertHeading>
-            <AlertDescription>Captures pause apps while consistent data is saved. Keep this server running.</AlertDescription>
+            <AlertDescription>Keep this server running while Orbis saves a capture.</AlertDescription>
           </div>
           <Button
             type="button"
@@ -479,7 +479,8 @@ function TimeMachineSettingsSession({
               <div className="tm-enabled-preference">
                 <Switch label="Enable Time Machine" checked={enabled} disabled={busy} onCheckedChange={setEnabledDraft} />
                 <p>
-                  Manual points include the database, configuration and managed app data. Operating system snapshots are not included.{' '}
+                  Captures save Orbis settings, its database and the version needed for recovery. App data and operating system files are not
+                  included.{' '}
                   {snapshot.capabilities.restore.supported
                     ? 'Each restore requires verification and fresh authorization.'
                     : 'Open a point to inspect this server’s current restore blockers.'}
@@ -512,9 +513,7 @@ function TimeMachineSettingsSession({
                 )}
               </div>
               {dirty ? <p>Save this change before starting a capture.</p> : null}
-              <p>
-                Automatic captures are off. Scheduling, app exclusions and optional system snapshots are shown only when this server supports them.
-              </p>
+              <p>Automatic captures are not available on this server yet.</p>
               {active ? <TimeMachineCaptureProgress point={active} /> : null}
               <p>{timeMachineRetentionSummary(savedPoints.length, retainedBytes, formatBackupBytes)}</p>
               {points.length ? (
@@ -543,7 +542,12 @@ function TimeMachineSettingsSession({
               ) : (
                 <p>Your timeline will appear after the first point is captured.</p>
               )}
-              <TimeMachineCapsules visible={visible} />
+              <TimeMachineCapsules
+                visible={visible}
+                points={snapshot?.list.points ?? null}
+                pointsError={Boolean(error)}
+                onRefreshPoints={machine.retry}
+              />
             </>
           )}
         </>
@@ -595,7 +599,7 @@ function TimeMachineSettingsSession({
           </DialogHeader>
           <DialogDescription>
             {action?.kind === 'capture'
-              ? 'Apps pause while consistent data is copied. Keep this server running until capture finishes.'
+              ? 'Orbis pauses briefly while its data is saved. App data is not included. Keep this server running until capture finishes.'
               : action?.kind === 'remove'
                 ? 'The encrypted point and its saved preview will be permanently removed. Other points and the running server stay unchanged.'
                 : action?.kind === 'authorize'

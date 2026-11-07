@@ -125,6 +125,7 @@ const DialogContent = ({
   onOpenAutoFocus,
   onCloseAutoFocus,
   onInteractOutside,
+  onFocusCapture,
   restoreFocusTo,
   closeDisabled = false,
   hideClose = false,
@@ -161,6 +162,26 @@ const DialogContent = ({
         {...props}
         inert={!open || props.inert}
         data-focus-surface="parent"
+        onFocusCapture={(event) => {
+          onFocusCapture?.(event);
+          const content = event.currentTarget;
+          const target = event.target;
+          if (
+            event.defaultPrevented ||
+            target === content ||
+            target.closest('[role="dialog"]') !== content ||
+            !target.matches(':focus-visible') ||
+            content.scrollHeight <= content.clientHeight
+          )
+            return;
+          const frame = content.getBoundingClientRect();
+          const control = target.getBoundingClientRect();
+          const padding = getComputedStyle(content);
+          const top = frame.top + (Number.parseFloat(padding.scrollPaddingTop) || 0);
+          const bottom = frame.bottom - (Number.parseFloat(padding.scrollPaddingBottom) || 0);
+          const offset = control.top < top ? control.top - top : control.bottom > bottom ? control.bottom - bottom : 0;
+          if (offset) content.scrollBy({ top: offset, behavior: 'instant' });
+        }}
         onInteractOutside={(event) => {
           if (event.target instanceof Element && event.target.closest('.orbis-notifications')) event.preventDefault();
           else onInteractOutside?.(event);

@@ -189,7 +189,7 @@ export async function readTimeMachine(signal: AbortSignal): Promise<TimeMachineS
 export async function captureTimeMachine(label: string, credentials: Partial<BackupCredentials>, signal: AbortSignal) {
   const body = { label };
   if (!timeMachineCaptureSchema.allows(body)) throw new Error('Review the capture name before continuing.');
-  return parseTimeMachine(pointSchema, await request('/captures', 'POST', { ...body, ...credentials }, signal));
+  return parseTimeMachine(pointSchema, await request('/core-captures', 'POST', { ...body, ...credentials }, signal));
 }
 export async function readOnboardingCapture(attemptId: string, signal: AbortSignal) {
   if (!timeMachineIdSchema.allows(attemptId)) throw new Error('The setup capture receipt could not be verified.');
