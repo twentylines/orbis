@@ -2,6 +2,8 @@ import { useEffect, useRef, type CSSProperties } from 'react';
 import { animate } from 'framer-motion';
 import { useReducedMotion } from '@/desktop/motion-preferences';
 import { useWindowVisible } from '@/desktop/window-visibility';
+import { loadCloudMask } from './depth-cloud-mask';
+import { depthCameraKeyframes, depthCameraZ, depthPlaneKeyframes } from './depth-travel-motion';
 import './depth-travel.css';
 
 export type DepthTravelVariant = 'timeline' | 'restore' | 'update' | 'downgrade' | 'onboarding';
@@ -51,25 +53,42 @@ export function DepthTravel({
   const field = useRef<HTMLDivElement>(null);
   const shownDistance = useRef(0);
   useEffect(() => {
+    let mounted = true;
+    void loadCloudMask().then((image) => {
+      if (mounted && image) field.current?.style.setProperty('--depth-cloud-mask', `url("${image.src}")`);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+  useEffect(() => {
     const element = field.current;
+    const camera = element?.querySelector<HTMLElement>('.depth-travel-camera');
     const target = Number.isFinite(distance) ? Math.max(0, Math.min(1024, distance)) : 0;
     if (!element || departing || !active || !visible || reduced || document.documentElement.dataset.orbisEffects === 'low') {
       shownDistance.current = target;
-      element?.style.setProperty('--depth-camera-z', '0px');
+      camera?.style.setProperty('--depth-camera-z', '0px');
       return;
     }
     const origin = shownDistance.current;
     if (origin === target) return;
-    const animations = [...element.querySelectorAll('.depth-travel-plane')].flatMap((plane) =>
-      typeof plane.getAnimations === 'function' ? plane.getAnimations() : [],
+    const planes = [...element.querySelectorAll<HTMLElement>('.depth-travel-plane')];
+    const clocks = planes.flatMap((plane) =>
+      typeof plane.getAnimations === 'function'
+        ? plane
+            .getAnimations()
+            .filter((animation) => 'animationName' in animation && animation.animationName === 'depth-travel-forward')
+            .map((animation) => ({ plane, animation }))
+        : [],
     );
+    const animations = clocks.map(({ animation }) => animation);
     if (!animations.length) {
       shownDistance.current = target;
       return;
     }
     const displacement = Math.abs(target - origin) * 5200;
     element.dataset.travelling = 'true';
-    const clocks = animations.map((animation) => {
+    const bases = animations.map((animation) => {
       const duration = Number(animation.effect?.getTiming().duration) || 4800;
       const current = Number(animation.currentTime) || 0;
       const base = (((current % duration) + duration) % duration) + (Math.ceil(displacement / duration) + 2) * duration;
@@ -77,14 +96,55 @@ export function DepthTravel({
       animation.currentTime = base;
       return base;
     });
+    if (camera && typeof camera.animate === 'function' && planes.every((plane) => typeof plane.animate === 'function')) {
+      const effects: Animation[] = [];
+      try {
+        const timing = { duration: 650, easing: 'cubic-bezier(0.22, 0.72, 0.18, 1)', fill: 'both' as const };
+        const cameraMotion = camera.animate(depthCameraKeyframes(origin, target), timing);
+        cameraMotion.id = 'orbis-depth-camera-travel';
+        effects.push(cameraMotion);
+        clocks.forEach(({ plane, animation }, index) => {
+          const baseTiming = animation.effect?.getTiming();
+          const duration = Number(baseTiming?.duration) || 4800;
+          const start = (bases[index] ?? 0) - (Number(baseTiming?.delay) || 0);
+          const effect = plane.animate(depthPlaneKeyframes(start, start + (target - origin) * 5200, duration), timing);
+          effect.id = 'orbis-depth-plane-travel';
+          effects.push(effect);
+        });
+        const startTime = document.timeline.currentTime;
+        if (typeof startTime === 'number') for (const effect of effects) effect.startTime = startTime;
+        let settled = false;
+        const settle = (complete: boolean) => {
+          if (settled) return;
+          settled = true;
+          const progress = complete ? 1 : Math.max(0, Math.min(1, cameraMotion.effect?.getComputedTiming().progress ?? 0));
+          const distance = origin + (target - origin) * progress;
+          shownDistance.current = distance;
+          camera.style.setProperty('--depth-camera-z', `${depthCameraZ(distance)}px`);
+          animations.forEach((animation, index) => {
+            if (animation.playState !== 'idle') animation.currentTime = (bases[index] ?? 0) + (distance - origin) * 5200;
+          });
+          for (const effect of effects) effect.cancel();
+          delete element.dataset.travelling;
+          if (element.isConnected) for (const animation of animations) if (animation.playState !== 'idle') animation.play();
+        };
+        void cameraMotion.finished.then(
+          () => settle(true),
+          () => undefined,
+        );
+        return () => settle(false);
+      } catch {
+        for (const effect of effects) effect.cancel();
+      }
+    }
     const travel = animate(origin, target, {
       duration: 0.65,
       ease: [0.22, 0.72, 0.18, 1],
       onUpdate: (value) => {
         shownDistance.current = value;
-        element.style.setProperty('--depth-camera-z', `${(280 * value) / (value + 5)}px`);
+        camera?.style.setProperty('--depth-camera-z', `${(280 * value) / (value + 5)}px`);
         animations.forEach((animation, index) => {
-          animation.currentTime = (clocks[index] ?? 0) + (value - origin) * 5200;
+          animation.currentTime = (bases[index] ?? 0) + (value - origin) * 5200;
         });
       },
       onComplete: () => {
@@ -110,7 +170,11 @@ export function DepthTravel({
     const element = field.current;
     if (!element || !departing || !active || !visible || reduced || document.documentElement.dataset.orbisEffects === 'low') return;
     const planes = [...element.querySelectorAll('.depth-travel-plane')];
-    const animations = planes.flatMap((plane) => (typeof plane.getAnimations === 'function' ? plane.getAnimations() : []));
+    const animations = planes.flatMap((plane) =>
+      typeof plane.getAnimations === 'function'
+        ? plane.getAnimations().filter((animation) => 'animationName' in animation && animation.animationName === 'depth-travel-forward')
+        : [],
+    );
     if (!animations.length) return;
     const rates = animations.map((animation) => animation.playbackRate);
     let acceleration: ReturnType<typeof animate> | undefined;

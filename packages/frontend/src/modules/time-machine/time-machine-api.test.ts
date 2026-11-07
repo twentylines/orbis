@@ -14,6 +14,7 @@ import { saveTimeMachineEnabled } from './time-machine-preferences-query';
 import { timeMachineRetentionSummary, timeMachineSettingsMode } from './time-machine-settings-state';
 import { hasSeenTimeMachineNotice, markTimeMachineNoticeSeen, timeMachineNoticeKey } from './time-machine-notice';
 import { historicalPoint, readyReview } from './time-machine.test-data';
+import { readSetupCapture, reconcileSetupCapture, reserveSetupCapture } from '@/components/welcome/setup-capture';
 const originalFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -186,4 +187,36 @@ test('onboarding responses cannot accept another attempt and owner/machine looku
     Response.json({ code: 'point-not-found', message: 'Not available' }, { status: 409 }),
   ) as unknown as typeof fetch;
   await expect(readOnboardingCapture(point.id, new AbortController().signal)).rejects.toMatchObject({ status: 409, code: 'point-not-found' });
+});
+
+test.each([false, true])('onboarding starts the same missing attempt through the real HTTP error envelope (code retained: %s)', async (withCode) => {
+  const point = historicalPoint();
+  const values = new Map<string, string>();
+  const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => void values.set(key, value) };
+  const receipt = reserveSetupCapture(1, storage, () => point.id);
+  const fetcher = mock(async (_input: RequestInfo | URL, init?: RequestInit) =>
+    init?.method === 'POST'
+      ? Response.json(point)
+      : Response.json(
+          {
+            statusCode: 409,
+            message: 'This restore point is not available.',
+            path: `/api/system-backups/time-machine/onboarding-captures/${point.id}`,
+            ...(withCode ? { code: 'point-not-found' } : {}),
+          },
+          { status: 409 },
+        ),
+  );
+  globalThis.fetch = fetcher as unknown as typeof fetch;
+  await expect(reconcileSetupCapture(1, receipt, true, new AbortController().signal, storage)).resolves.toMatchObject({ id: point.id });
+  expect(fetcher.mock.calls.map(([, init]) => init?.method)).toEqual(['GET', 'POST']);
+  expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toEqual({ label: 'After setup', attemptId: receipt.attemptId });
+  expect(readSetupCapture(1, storage)?.phase).toBe('accepted');
+});
+
+test('unknown structured issue codes are not reclassified from their message', async () => {
+  globalThis.fetch = mock(async () =>
+    Response.json({ statusCode: 409, code: 'unknown-conflict', message: 'This restore point is not available.' }, { status: 409 }),
+  ) as unknown as typeof fetch;
+  await expect(readOnboardingCapture(historicalPoint().id, new AbortController().signal)).rejects.toMatchObject({ code: undefined, status: 409 });
 });

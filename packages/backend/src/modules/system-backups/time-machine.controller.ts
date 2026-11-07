@@ -138,7 +138,7 @@ export class TimeMachineController {
     const { attemptId, label } = input;
     if (Object.keys(input).some((key) => key !== 'attemptId' && key !== 'label')) throw timeMachineConflict('invalid-request');
     if (!timeMachineIdSchema.allows(attemptId)) throw timeMachineConflict('invalid-request');
-    const point = await this.timeMachine.beginOnboardingCapture(owner, attemptId, label);
+    const point = await this.timeMachine.beginOnboardingCapture(owner, attemptId, label, request);
     this.launchAfterResponse(point.id, owner, response);
     return point;
   }

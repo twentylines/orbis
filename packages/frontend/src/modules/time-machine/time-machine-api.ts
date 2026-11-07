@@ -136,8 +136,11 @@ async function request(path: string, method: 'GET' | 'POST' | 'PUT', body: unkno
         const text = new TextDecoder().decode(await boundedBody(response, 16 * 1024));
         safeMessage = safeBackupErrorMessage(response.status, text);
         const value: unknown = JSON.parse(text);
-        if (timeMachineIssueSchema.allows(value) || timeMachineRestoreIssueSchema.allows(value)) code = value.code;
-        else if (value && typeof value === 'object' && 'message' in value) {
+        if (value && typeof value === 'object' && 'message' in value) {
+          const issue = { code: 'code' in value ? value.code : undefined, message: value.message };
+          if (timeMachineIssueSchema.allows(issue) || timeMachineRestoreIssueSchema.allows(issue)) code = issue.code;
+          // Older controllers omit the issue code from the HTTP exception envelope.
+          if (!('code' in value) && value.message === 'This restore point is not available.') code = 'point-not-found';
           if (value.message === issueMessages['host-capture-support-required']) code = 'host-capture-support-required';
           if (
             value.message ===

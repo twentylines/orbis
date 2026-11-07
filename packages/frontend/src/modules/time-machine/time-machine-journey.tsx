@@ -307,6 +307,7 @@ export function HistoricalDateRuler({
   const rendered = virtual
     ? timelineWindow(offsets, viewport.position, viewport.extent, [selectedIndex, focusedIndex])
     : ascending.map((_, index) => index);
+  const renderedRows = rendered.map((index) => ascending[index]?.id).join(',');
   const pendingAnchor = useRef<{ id: string; inset: number } | null>(null);
   const lastSelection = useRef<string | null | undefined>(undefined);
   const lastCompact = useRef(compact);
@@ -317,8 +318,10 @@ export function HistoricalDateRuler({
     const position = compact ? element.scrollLeft : element.scrollTop;
     const extent = compact ? element.clientWidth : element.clientHeight;
     const total = compact ? element.scrollWidth : element.scrollHeight;
-    element.dataset.fadeStart = String(position > 1);
-    element.dataset.fadeEnd = String(position + extent < total - 1);
+    const fadeStart = String(position > 1);
+    const fadeEnd = String(position + extent < total - 1);
+    if (element.dataset.fadeStart !== fadeStart) element.dataset.fadeStart = fadeStart;
+    if (element.dataset.fadeEnd !== fadeEnd) element.dataset.fadeEnd = fadeEnd;
     setViewport((current) => (current.position === position && current.extent === extent ? current : { position, extent }));
   }, [compact]);
   const scheduleViewport = () => {
@@ -345,12 +348,15 @@ export function HistoricalDateRuler({
       lastCompact.current = compact;
     }
     readViewport();
-  });
+  }, [ascending, compact, offsets, readViewport, selected]);
   useLayoutEffect(() => {
     const element = ruler.current;
-    if (!element || typeof ResizeObserver === 'undefined') return;
+    if (!element || !renderedRows || typeof ResizeObserver === 'undefined') return;
     const measure = () => {
-      if (compact || !virtual) return;
+      if (compact || !virtual) {
+        readViewport();
+        return;
+      }
       const position = element.scrollTop;
       const anchorIndex = timelineIndexAt(offsets, position);
       let nextSizes: Map<string, number> | undefined;
@@ -370,11 +376,21 @@ export function HistoricalDateRuler({
       }
       readViewport();
     };
-    const observer = new ResizeObserver(measure);
+    let frame: number | undefined;
+    const observer = new ResizeObserver(() => {
+      if (frame !== undefined) return;
+      frame = requestAnimationFrame(() => {
+        frame = undefined;
+        measure();
+      });
+    });
     for (const row of element.querySelectorAll('li[data-timeline-point]')) observer.observe(row);
     measure();
-    return () => observer.disconnect();
-  });
+    return () => {
+      observer.disconnect();
+      if (frame !== undefined) cancelAnimationFrame(frame);
+    };
+  }, [ascending, compact, offsets, readViewport, renderedRows, sizes, virtual]);
   useEffect(() => {
     const element = ruler.current;
     if (!element || typeof ResizeObserver === 'undefined') return;

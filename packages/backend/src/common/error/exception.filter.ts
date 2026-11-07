@@ -2,6 +2,8 @@ import type { LoggerService } from '@/core/logger/logger.service';
 import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import { type } from 'arktype';
+import { timeMachineIssueSchema } from '@runtipi/common/schemas/time-machine';
+import { timeMachineRestoreIssueSchema } from '@runtipi/common/schemas/time-machine-restore';
 import type { Request, Response } from 'express';
 import { TranslatableError } from './translatable-error';
 
@@ -17,6 +19,12 @@ export class MainExceptionFilter implements ExceptionFilter {
 
     let message = 'Internal server error';
     let cause: unknown;
+    let code: string | undefined;
+
+    if (exception instanceof HttpException && status >= 400 && status < 500) {
+      const issue = exception.getResponse();
+      if (timeMachineIssueSchema.allows(issue) || timeMachineRestoreIssueSchema.allows(issue)) code = issue.code;
+    }
 
     if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
       this.logger.error(`An error occured while calling: ${request.url}`, exception);
@@ -59,6 +67,7 @@ export class MainExceptionFilter implements ExceptionFilter {
 
     response.status(status).json({
       statusCode: status,
+      ...(code ? { code } : {}),
       message,
       path: request.url,
       intlParams,

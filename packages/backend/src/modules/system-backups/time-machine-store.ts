@@ -586,12 +586,12 @@ export class TimeMachineStore {
     await this.atomic(file, JSON.stringify({ version: 1, id, ownerId, machineId, state: 'ready' }), true);
   }
 
-  create(ownerId: number, version: 3, onboardingAttemptId?: undefined): Promise<{ point: StoredCoreTimeMachinePoint; passphrase: string }>;
+  create(ownerId: number, version: 3, onboardingAttemptId?: string): Promise<{ point: StoredCoreTimeMachinePoint; passphrase: string }>;
   create(ownerId: number, version?: 1 | 2, onboardingAttemptId?: string): Promise<{ point: StoredLegacyTimeMachinePoint; passphrase: string }>;
   create(ownerId: number, version: 1 | 2 | 3 = 1, onboardingAttemptId?: string) {
     return this.serialize(async () => {
       if (!Number.isSafeInteger(ownerId) || ownerId < 1) throw timeMachineConflict('invalid-request');
-      if (onboardingAttemptId !== undefined && (version !== 2 || !timeMachineIdSchema.allows(onboardingAttemptId)))
+      if (onboardingAttemptId !== undefined && (version === 1 || !timeMachineIdSchema.allows(onboardingAttemptId)))
         throw timeMachineConflict('invalid-request');
       const points = await this.list();
       if (points.length) {

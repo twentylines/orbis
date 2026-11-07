@@ -209,6 +209,25 @@ test('a lost submitted request cannot be abandoned from a later missing lookup o
   expect(readSetupCapture(1, storage)?.phase).toBe('submitted');
 });
 
+test('a first capture refused before reservation lets setup continue without losing or replacing its attempt', async () => {
+  const storage = memoryStorage();
+  const receipt = reserveSetupCapture(1, storage, () => attemptId);
+  let starts = 0;
+  const api = {
+    read: async () => {
+      throw missing();
+    },
+    start: async () => {
+      starts++;
+      throw new TimeMachineApiError(409, 'host-capture-support-required');
+    },
+  };
+  await expect(reconcileSetupCapture(1, receipt, true, signal(), storage, api)).rejects.toBeInstanceOf(SetupCaptureNotStartedError);
+  expect(readSetupCapture(1, storage)).toMatchObject({ attemptId, phase: 'pending' });
+  expect(starts).toBe(1);
+  expect(reserveSetupCapture(1, storage, () => otherId).attemptId).toBe(attemptId);
+});
+
 test('reset generations start setup afresh while preserving and locating an unconfirmed earlier capture', () => {
   const values = new Map<string, string>();
   const raw: Storage = {

@@ -24,6 +24,8 @@ declare const operatorGrant: unique symbol;
 export type CoreCaptureOperatorGrant = { readonly [operatorGrant]: true };
 const issued = new WeakMap<CoreCaptureOperatorGrant, { ownerId: number; id: string; recheck: () => Promise<void> }>();
 const fail = () => new Error('The snapshot could not be started.');
+export class CoreCaptureCapabilityError extends Error {}
+export class CoreCaptureReservationError extends Error {}
 
 export async function authorizeCoreCaptureOperator(options: {
   auth: AuthService;
@@ -69,6 +71,7 @@ type Options = {
   client: LegacyClient | ReservedClient;
   queue: Pick<QueueFactory, 'pauseForBackup'>;
   grant: CoreCaptureOperatorGrant;
+  onboardingAttemptId?: string;
   buildDraft: (point: StoredCoreTimeMachinePoint, signal: AbortSignal) => Promise<unknown>;
   onStage?: (stage: 'preparing' | 'saving-preview' | 'capturing-core') => void;
 };
@@ -96,11 +99,21 @@ export class CoreCaptureProducer {
     issued.delete(this.options.grant);
     await authorization.recheck();
     if (reservedClient(this.options.client)) requireReservedQueue(this.options.queue);
-    await this.options.client.requireCapability(signal);
+    try {
+      await this.options.client.requireCapability(signal);
+    } catch (error) {
+      signal.throwIfAborted();
+      throw new CoreCaptureCapabilityError(error instanceof Error ? error.message : 'Core capture is unavailable.', { cause: error });
+    }
     await authorization.recheck();
     signal.throwIfAborted();
     if (backupMaintenanceActive() || installationMode().phase !== 'normal') throw fail();
-    const created = await this.options.store.create(authorization.ownerId, 3);
+    const attemptId = this.options.onboardingAttemptId;
+    if (attemptId && !(await this.options.store.onboardingAttempt(attemptId, authorization.ownerId, true)).claimed) throw fail();
+    const created = await this.options.store.create(authorization.ownerId, 3, attemptId).catch((error: unknown) => {
+      if (attemptId) throw new CoreCaptureReservationError('The reserved setup capture needs recovery.', { cause: error });
+      throw error;
+    });
     this.point = created.point;
     this.authorization = authorization;
     return created.point;

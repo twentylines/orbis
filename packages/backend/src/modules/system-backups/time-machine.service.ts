@@ -25,7 +25,12 @@ import { AccountSecurityService } from '../auth/account-security.service';
 import { AppsRepository } from '../apps/apps.repository';
 import { QueueFactory } from '../queue/queue.factory';
 import { HostCoreCaptureReservedStartClient } from '../host-updates/host-core-capture-reserved-start-client';
-import { authorizeCoreCaptureOperator, CoreCaptureProducer } from './time-machine-core-producer';
+import {
+  authorizeCoreCaptureOperator,
+  CoreCaptureProducer,
+  CoreCaptureCapabilityError,
+  CoreCaptureReservationError,
+} from './time-machine-core-producer';
 import { buildCoreCaptureDraft } from './time-machine-core-draft-builder';
 import { authorizeBackupActionSession } from './backup-session-authorization';
 import { backupCredentials, optionalBackupCredentials } from './backup-access';
@@ -269,7 +274,8 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw timeMachineConflict('capture-recovery-required');
       throw error;
     }
-    if (point.ownerId !== ownerId || point.version !== 2 || point.onboardingAttemptId !== id) throw timeMachineConflict('point-not-found');
+    if (point.ownerId !== ownerId || ![2, 3].includes(point.version) || point.onboardingAttemptId !== id)
+      throw timeMachineConflict('point-not-found');
     if (
       point.status === 'capturing' &&
       (attempt.state !== 'ready' || !this.active?.onboarding || this.active.id !== id || this.active.ownerId !== ownerId)
@@ -292,6 +298,16 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
   }
 
   async captureCore(ownerId: number, credentials: unknown, input: unknown, request: Request) {
+    return this.prepareCoreCapture(ownerId, credentials, input, request);
+  }
+
+  private async prepareCoreCapture(
+    ownerId: number,
+    credentials: unknown,
+    input: unknown,
+    request: Request,
+    onboarding?: { id: string; complete: () => Promise<void> },
+  ) {
     await this.initialize();
     this.available();
     if (!timeMachineCaptureSchema.allows(input)) throw timeMachineConflict('invalid-request');
@@ -310,8 +326,9 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
       setupDone = resolve;
     });
     const active: NonNullable<TimeMachineService['active']> = {
-      id: '',
+      id: onboarding?.id ?? '',
       ownerId,
+      ...(onboarding ? { onboarding: true } : {}),
       abort: new AbortController(),
       done,
       setup,
@@ -321,6 +338,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
       backupJobId: null,
     };
     this.active = active;
+    let createdPointId: string | undefined;
     try {
       const preferences = await this.store.preferences();
       if (!preferences.enabled) throw timeMachineConflict('invalid-request');
@@ -340,6 +358,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
         client: new HostCoreCaptureReservedStartClient(socket),
         queue,
         grant,
+        ...(onboarding ? { onboardingAttemptId: onboarding.id } : {}),
         onStage: (stage) => {
           active.progress = { stage, completedBytes: 0, totalBytes: null };
         },
@@ -367,6 +386,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
         },
       });
       const point = await producer.reserve(active.abort.signal);
+      createdPointId = point.id;
       active.id = point.id;
       active.start = async () => {
         try {
@@ -375,11 +395,25 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
           if (!this.closing) this.logger.warn('Snapshot capture stopped. Its recovery state was kept.');
         }
       };
+      if (onboarding) {
+        await onboarding.complete();
+        await this.store.readyOnboardingAttempt(point.id, ownerId);
+      }
       return await this.publicPoint(point);
     } catch (error) {
       active.abort.abort();
+      if (error instanceof CoreCaptureReservationError) this.unavailable = true;
+      if (createdPointId) {
+        await this.store
+          .load(createdPointId)
+          .then((point) => this.store.fail(point, 'capture-failed'))
+          .catch(() => {
+            this.unavailable = true;
+          });
+      }
       if (this.active === active) this.active = undefined;
       settle();
+      if (error instanceof CoreCaptureCapabilityError) throw timeMachineConflict('host-capture-support-required');
       if (error && typeof error === 'object' && 'getResponse' in error) throw error;
       throw timeMachineConflict('capture-failed');
     } finally {
@@ -387,11 +421,11 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async beginOnboardingCapture(ownerId: number, id: unknown, label: unknown) {
+  async beginOnboardingCapture(ownerId: number, id: unknown, label: unknown, request?: Request) {
     await this.initialize();
     this.available();
-    const request = { label, experimentalAcknowledged: true };
-    if (!timeMachineIdSchema.allows(id) || !timeMachineCaptureSchema.allows(request) || !this.onboarding)
+    const capture = { label, experimentalAcknowledged: true };
+    if (!timeMachineIdSchema.allows(id) || !timeMachineCaptureSchema.allows(capture) || !this.onboarding)
       throw timeMachineConflict('invalid-request');
     if (this.active?.onboarding && this.active.id === id && this.active.ownerId === ownerId) {
       await this.active.setup;
@@ -403,7 +437,9 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
-    const result = await this.onboarding.withIncompleteOnboarding(ownerId, (complete) => this.prepareCapture(ownerId, request, id, complete));
+    const result = await this.onboarding.withIncompleteOnboarding(ownerId, (complete) =>
+      request ? this.prepareCoreCapture(ownerId, {}, capture, request, { id, complete }) : this.prepareCapture(ownerId, capture, id, complete),
+    );
     if (!result) {
       try {
         await this.store.onboardingAttempt(id, ownerId);

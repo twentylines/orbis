@@ -151,6 +151,49 @@ async function fixture(requireProof = false, publisher?: 'sentinel.v1') {
   };
 }
 
+it('reserves the browser onboarding UUID as a core-only point before any external operation', async () => {
+  const f = await fixture();
+  const id = randomUUID();
+  const producer = f.producer(await f.authorize(), { onboardingAttemptId: id });
+  const point = await producer.reserve(signal());
+  expect(point).toMatchObject({ id, version: 3, kind: 'orbis-core', onboardingAttemptId: id, status: 'capturing' });
+  expect(await f.store.onboardingAttempt(id, 1)).toMatchObject({ state: 'reserved' });
+  expect(f.client.prepare).not.toHaveBeenCalled();
+  expect(f.client.admit).not.toHaveBeenCalled();
+  expect(f.pauseForBackup).not.toHaveBeenCalled();
+  const duplicate = f.producer(await f.authorize(), { onboardingAttemptId: id });
+  await expect(duplicate.reserve(signal())).rejects.toThrow();
+  expect(await f.store.list()).toHaveLength(1);
+  expect(await f.store.load(id)).toEqual(point);
+});
+
+it('refused core capability creates no onboarding attempt or point', async () => {
+  const f = await fixture();
+  f.client.requireCapability.mockRejectedValueOnce(new Error('unsupported'));
+  const id = randomUUID();
+  await expect(f.producer(await f.authorize(), { onboardingAttemptId: id }).reserve(signal())).rejects.toBeInstanceOf(
+    subject.CoreCaptureCapabilityError,
+  );
+  expect(await f.store.list()).toHaveLength(0);
+  await expect(f.store.onboardingAttempt(id, 1)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(f.client.prepare).not.toHaveBeenCalled();
+  expect(f.pauseForBackup).not.toHaveBeenCalled();
+});
+
+it('failed point creation after a durable onboarding claim is reported as a recovery requirement', async () => {
+  const f = await fixture();
+  const id = randomUUID();
+  vi.spyOn(f.store, 'create').mockRejectedValueOnce(new Error('disk failure'));
+  await expect(f.producer(await f.authorize(), { onboardingAttemptId: id }).reserve(signal())).rejects.toBeInstanceOf(
+    subject.CoreCaptureReservationError,
+  );
+  expect(await f.store.onboardingAttempt(id, 1)).toMatchObject({ state: 'reserved' });
+  expect(await f.store.list()).toHaveLength(0);
+  expect(f.client.prepare).not.toHaveBeenCalled();
+  expect(f.client.admit).not.toHaveBeenCalled();
+  expect(f.pauseForBackup).not.toHaveBeenCalled();
+});
+
 it('persists the selected publisher before asking the queue to drain', async () => {
   const f = await fixture(false, 'sentinel.v1');
   const producer = f.producer(await f.authorize());

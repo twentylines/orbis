@@ -205,6 +205,8 @@ body:has(.orbis-theme) .orbis-dialog-content .btn:not(.btn-primary, .btn-danger)
   overflow-y: auto;
   overscroll-behavior: contain;
   isolation: isolate;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .orbis-dialog-content[data-presentation="scene"][data-state="open"] {
   animation-name: orbis-scene-enter;

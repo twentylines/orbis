@@ -30,6 +30,7 @@ import { DesktopPreferencesService } from '../desktop-preferences/desktop-prefer
 import { AccountSecurityService } from '../auth/account-security.service';
 import { ResetState } from '../system-reset/reset-state';
 import { GUARDS_METADATA, HEADERS_METADATA } from '@nestjs/common/constants';
+import { HostCoreCaptureReservedStartClient } from '../host-updates/host-core-capture-reserved-start-client';
 
 let directory: string;
 let restoreDarwinCreation: () => void = () => undefined;
@@ -94,6 +95,109 @@ async function capture() {
   return terminal((await machine.capture(1, credentials, { experimentalAcknowledged: true, label: 'Historic checkpoint' })).id);
 }
 
+it.skipIf(process.platform !== 'linux')(
+  'authenticated onboarding reserves a core-only point, completes setup and reuses its original attempt',
+  async () => {
+    const socket = process.env.ORBIS_HOST_SOCKET;
+    process.env.ORBIS_HOST_SOCKET = '/run/orbis/host.sock';
+    try {
+      Object.assign(machine, {
+        coreQueue: {
+          pauseForBackup: vi.fn(),
+          resumeCoreCapturePause: vi.fn(),
+          recheckCoreCapturePause: vi.fn(),
+          verifyCoreCaptureSetupUnwind: vi.fn(),
+          createCoreCaptureQueueSetup: vi.fn(),
+          verifyCoreCaptureSetupRefusal: vi.fn(),
+        },
+        coreDatabase: {},
+        coreApps: {},
+      });
+      auth.operatorActionContext.mockResolvedValue({ userId: 1, sessionBinding: 'setup-session', securityBinding: 'setup-security' });
+      const capability = vi.spyOn(HostCoreCaptureReservedStartClient.prototype, 'requireCapability').mockResolvedValue(undefined);
+      const legacy = vi.spyOn(connected.runtime, 'requireSupport');
+      const id = randomUUID();
+      const request = { authMethod: 'session', user: { id: 1, operator: true } } as Request;
+      const point = await machine.beginOnboardingCapture(1, id, 'After setup', request);
+      expect(point).toMatchObject({ id, status: 'capturing' });
+      expect(await store().load(id)).toMatchObject({ version: 3, kind: 'orbis-core', onboardingAttemptId: id });
+      expect(await store().onboardingAttempt(id, 1)).toMatchObject({ state: 'ready' });
+      expect(JSON.parse(await fs.readFile(path.join(data, 'state', 'onboarding', '1.json'), 'utf8'))).toEqual({ version: 1 });
+      expect(await machine.beginOnboardingCapture(1, id, 'After setup', request)).toMatchObject({ id });
+      expect(capability).toHaveBeenCalledOnce();
+      expect(legacy).not.toHaveBeenCalled();
+      expect(auth.verifySensitiveAction).not.toHaveBeenCalled();
+    } finally {
+      if (socket === undefined) delete process.env.ORBIS_HOST_SOCKET;
+      else process.env.ORBIS_HOST_SOCKET = socket;
+    }
+  },
+);
+
+it.skipIf(process.platform !== 'linux')('missing core capability leaves setup incomplete without reserving an attempt', async () => {
+  const socket = process.env.ORBIS_HOST_SOCKET;
+  process.env.ORBIS_HOST_SOCKET = '/run/orbis/host.sock';
+  try {
+    Object.assign(machine, {
+      coreQueue: {
+        pauseForBackup: vi.fn(),
+        resumeCoreCapturePause: vi.fn(),
+        recheckCoreCapturePause: vi.fn(),
+        verifyCoreCaptureSetupUnwind: vi.fn(),
+        createCoreCaptureQueueSetup: vi.fn(),
+        verifyCoreCaptureSetupRefusal: vi.fn(),
+      },
+      coreDatabase: {},
+      coreApps: {},
+    });
+    auth.operatorActionContext.mockResolvedValue({ userId: 1, sessionBinding: 'setup-session', securityBinding: 'setup-security' });
+    vi.spyOn(HostCoreCaptureReservedStartClient.prototype, 'requireCapability').mockRejectedValueOnce(new Error('old helper'));
+    const id = randomUUID();
+    await expect(
+      machine.beginOnboardingCapture(1, id, 'After setup', { authMethod: 'session', user: { id: 1, operator: true } } as Request),
+    ).rejects.toMatchObject({ response: { code: 'host-capture-support-required' } });
+    expect(await store().list()).toHaveLength(0);
+    await expect(store().onboardingAttempt(id, 1)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.stat(path.join(data, 'state/onboarding/1.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(machine.preferences()).resolves.toBeDefined();
+  } finally {
+    if (socket === undefined) delete process.env.ORBIS_HOST_SOCKET;
+    else process.env.ORBIS_HOST_SOCKET = socket;
+  }
+});
+
+it.skipIf(process.platform !== 'linux')('a core point creation failure after the setup claim blocks further operations for recovery', async () => {
+  const socket = process.env.ORBIS_HOST_SOCKET;
+  process.env.ORBIS_HOST_SOCKET = '/run/orbis/host.sock';
+  try {
+    Object.assign(machine, {
+      coreQueue: {
+        pauseForBackup: vi.fn(),
+        resumeCoreCapturePause: vi.fn(),
+        recheckCoreCapturePause: vi.fn(),
+        verifyCoreCaptureSetupUnwind: vi.fn(),
+        createCoreCaptureQueueSetup: vi.fn(),
+        verifyCoreCaptureSetupRefusal: vi.fn(),
+      },
+      coreDatabase: {},
+      coreApps: {},
+    });
+    auth.operatorActionContext.mockResolvedValue({ userId: 1, sessionBinding: 'setup-session', securityBinding: 'setup-security' });
+    vi.spyOn(HostCoreCaptureReservedStartClient.prototype, 'requireCapability').mockResolvedValue(undefined);
+    vi.spyOn(TimeMachineStore.prototype, 'create').mockRejectedValueOnce(new Error('disk failure'));
+    const id = randomUUID();
+    await expect(
+      machine.beginOnboardingCapture(1, id, 'After setup', { authMethod: 'session', user: { id: 1, operator: true } } as Request),
+    ).rejects.toMatchObject({ response: { code: 'capture-failed' } });
+    expect(await store().onboardingAttempt(id, 1)).toMatchObject({ state: 'reserved' });
+    await expect(machine.preferences()).rejects.toMatchObject({ response: { code: 'storage-unavailable' } });
+    await expect(fs.stat(path.join(data, 'state/onboarding/1.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  } finally {
+    if (socket === undefined) delete process.env.ORBIS_HOST_SOCKET;
+    else process.env.ORBIS_HOST_SOCKET = socket;
+  }
+});
+
 it('onboarding capture requires v6 without fallback and does not request a password', async () => {
   const id = randomUUID();
   await expect(machine.beginOnboardingCapture(1, id, 'First')).rejects.toMatchObject({
@@ -155,10 +259,20 @@ it('onboarding capture refuses a reserved orphan and does not create another poi
   expect(await store().list()).toHaveLength(0);
 });
 
-it('onboarding capture starts once after the response and reports an actual background failure', async () => {
+it('the onboarding route forwards the authenticated session and launches once after its response', async () => {
   const id = randomUUID();
-  vi.spyOn(connected.runtime, 'requireSupport').mockResolvedValue({});
-  const operation = vi.spyOn(connected.runtime, 'operation');
+  const begin = vi.spyOn(machine, 'beginOnboardingCapture').mockResolvedValue({
+    id,
+    createdAt: Date.now(),
+    status: 'capturing',
+    stage: 'preparing',
+    completedBytes: 0,
+    totalBytes: null,
+    issue: null,
+    backupJobId: null,
+    metadata: null,
+  });
+  const launch = vi.spyOn(machine, 'launchCapture').mockResolvedValue(undefined);
   const response = new EventEmitter() as Response;
   const session = { authMethod: 'session', user: { id: 1, operator: true } } as Request;
   const controller = new TimeMachineController(machine);
@@ -167,13 +281,11 @@ it('onboarding capture starts once after the response and reports an actual back
   ).rejects.toThrow();
   const point = await controller.onboardingCapture(session, { attemptId: id, label: 'First' }, response);
   expect(point).toMatchObject({ id, status: 'capturing' });
-  expect(JSON.parse(await fs.readFile(path.join(data, 'state', 'onboarding', '1.json'), 'utf8'))).toEqual({ version: 1 });
-  expect(operation).not.toHaveBeenCalled();
+  expect(begin).toHaveBeenCalledWith(1, id, 'First', session);
+  expect(launch).not.toHaveBeenCalled();
   response.emit('finish');
   response.emit('close');
-  await vi.waitFor(async () => expect(await machine.onboardingCapture(id, 1)).toMatchObject({ status: 'failed' }));
-  expect(operation).toHaveBeenCalledTimes(1);
-  expect(await store().list()).toHaveLength(1);
+  expect(launch).toHaveBeenCalledExactlyOnceWith(id, 1);
 });
 
 it('onboarding capture reconciles an ambiguous point publication as interrupted after restart', async () => {
