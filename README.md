@@ -4,7 +4,7 @@ Orbis is a Runtipi fork for managing self-hosted apps, Docker resources and serv
 
 Orbis is currently in beta. 
 
-[Releases and changelogs](https://github.com/twentylines/orbis/releases) · [Installation and migration](DEPLOYMENT.md) · [Server clusters](CLUSTERS.md) · [Licence](LICENSE)
+[Releases and changelogs](https://github.com/twentylines/orbis/releases) · [Installation and migration](INSTALLATION.md) · [Server clusters](CLUSTERS.md) · [Licence](LICENSE)
 
 ## Install
 
@@ -19,14 +19,14 @@ This fetches the newest published release, including betas. See [installation re
 ## Documentation
 
 - [Inspect existing Runtipi and Orbis installations](INSTALLATION.md)
-- [Installation and migration](DEPLOYMENT.md)
+- [Installation and migration](INSTALLATION.md)
 - [Orbis and system updates](UPDATES.md)
 - [Linux host service](HOST-SERVICE.md)
 - [App stores](APP-STORES.md)
 - [App backups](BACKUPS.md)
 - [Monitoring](MONITORING.md)
 - [Navigation and app launchers](DESKTOP-WINDOWS.md)
-- [Development changelog](CHANGELOG.md)
+- [Changelog](CHANGELOG.md)
 
 ## Attribution
 

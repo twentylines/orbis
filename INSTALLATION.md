@@ -44,7 +44,7 @@ A stopped controller remains discoverable while its container exists. If its con
 
 An existing account or saved login session still opens Orbis setup on first use. Confirm the server name, display mode and optional error reporting, and choose whether to open server pairing next. Completing setup preserves the account and installed apps. Completion is stored on the server for that account, independently of the inherited welcome flag and browser appearance cache. It persists across browsers, logins and appearance resets.
 
-For the existing explicit-root migration tools and their supported layouts, see [Installation and migration](DEPLOYMENT.md).
+For replacement requirements and recovery procedures, see the sections below.
 
 ## Installer permissions and replacement choices
 
@@ -267,7 +267,7 @@ After an interruption, inspect the private journal and confirm that writers are 
 
 The helper preserves file-mount inodes, restores directory contents and metadata, and checks the restored data before completing its journal. It neither starts containers nor replaces the controller. Hard links spanning separate resource roots are not reconstructed; the complete migration executor must handle that topology before using this helper for such installations.
 
-The enclosing installation executor is responsible for consistent database and queue shutdown, controller replacement, selective reset and stopped-writer rollback. This helper is part of the source implementation; the complete Keep/Fresh installer and its end-to-end rehearsals remain in development.
+The enclosing installation executor handles database and queue shutdown, controller replacement, selective reset and stopped-writer rollback. The complete Keep/Fresh installer and its end-to-end recovery remain in development.
 
 ## Controller hold and resume modes
 
