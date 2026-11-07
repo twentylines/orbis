@@ -40,6 +40,45 @@ export function timelineWindow(offsets: readonly number[], position: number, ext
 
 export const pointMotionSeconds = { unfold: 0.76, travel: 0.52, fold: 0.54, sceneExit: 0.72 } as const;
 
+export function createPointTravelGate(
+  now = () => performance.now(),
+  schedule = (run: () => void, delay: number) => setTimeout(run, delay),
+  cancel = (timer: ReturnType<typeof setTimeout>) => clearTimeout(timer),
+) {
+  let until = 0;
+  let pending: (() => void) | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const reset = () => {
+    if (timer !== undefined) cancel(timer);
+    timer = undefined;
+    pending = undefined;
+    until = 0;
+  };
+  return {
+    reset,
+    hold(seconds: number) {
+      until = now() + seconds * 1000;
+    },
+    request(action: () => void) {
+      const remaining = until - now();
+      if (remaining <= 0) {
+        reset();
+        action();
+        return;
+      }
+      // Keep the latest intent, with no accumulating wheel/key repeat backlog.
+      pending = action;
+      if (timer === undefined)
+        timer = schedule(() => {
+          timer = undefined;
+          const next = pending;
+          pending = undefined;
+          next?.();
+        }, remaining);
+    },
+  };
+}
+
 export function pointStackCards<T>(points: readonly T[], selectedIndex: number, open: boolean): readonly T[] {
   if (selectedIndex < 0 || selectedIndex >= points.length) return [];
   if (open) return points.slice(selectedIndex, selectedIndex + 10);

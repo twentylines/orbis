@@ -24,6 +24,7 @@ import { chronologicalPoints, orderedPoints } from './contracts';
 import { useHistoricalWallpaper } from './historical-home';
 import { HistoricalHomePreview as HistoricalHome } from './historical-home-preview';
 import {
+  createPointTravelGate,
   pointCardFrame,
   pointFoldDepth,
   pointMotionEnabled,
@@ -130,7 +131,7 @@ export function HistoricalPointCard({ point, scene: initialScene, assets }: { po
   useLayoutEffect(() => {
     if (retired) {
       controls.set({ opacity: 0 });
-      remove?.();
+      removeCurrent.current?.();
       return;
     }
     if (!scene.visible) {
@@ -141,7 +142,7 @@ export function HistoricalPointCard({ point, scene: initialScene, assets }: { po
     if (front) controls.set({ opacity: 1 });
     if (!scene.moving) {
       controls.set(pose);
-      if (!present) remove?.();
+      if (!present) removeCurrent.current?.();
       return;
     }
     let current = true;
@@ -149,13 +150,13 @@ export function HistoricalPointCard({ point, scene: initialScene, assets }: { po
     const openingDelay = firstMotion.current && opening && scene.open ? 0.08 : 0;
     firstMotion.current = false;
     void controls.start({ ...pose, transition: { duration, delay: openingDelay, ease: [0.22, 0.72, 0.18, 1] } }).then(() => {
-      if (current && !present) remove?.();
+      if (current && !present) removeCurrent.current?.();
     });
     return () => {
       current = false;
       controls.stop();
     };
-  }, [controls, depth, foldedDepth, front, present, remove, retired, scene.compact, scene.moving, scene.open, opening, scene.visible]);
+  }, [controls, depth, foldedDepth, front, present, retired, scene.compact, scene.moving, scene.open, opening, scene.visible]);
   const showPreview = front || keepExitingPreview;
   const preview = captured.current;
   return (
@@ -534,14 +535,32 @@ export function TimeMachineJourney({
   const point = ordered.find((item) => item.id === selected);
   const index = ordered.findIndex((item) => item.id === selected);
   const wallpaper = useHistoricalWallpaper(point, open && visible, session);
+  const navigation = useMemo(() => createPointTravelGate(), []);
+  const chooseCurrent = useRef<(id: string | null, focus?: boolean) => void>(() => undefined);
+  useEffect(() => {
+    navigation.reset();
+    if (open && moving && visible) navigation.hold(pointMotionSeconds.unfold + 0.08);
+    return navigation.reset;
+  }, [navigation, open, moving, visible]);
   const choose = (id: string | null, focus = false) => {
-    if (!id) return;
+    if (!id || !open || !visible) return;
+    if (moving) {
+      navigation.request(() => chooseCurrent.current(id, focus));
+      return;
+    }
+    commitChoice(id, focus);
+  };
+  const commitChoice = (id: string, focus = false) => {
+    if (id !== selected && moving) navigation.hold(pointMotionSeconds.travel);
     if (focus) focusRequested.current = id;
     if (id !== selected) onSelect(id);
     else if (focus) {
       dates.current?.querySelector<HTMLButtonElement>(`[data-point-id="${id}"]`)?.focus({ preventScroll: true });
       focusRequested.current = null;
     }
+  };
+  chooseCurrent.current = (id, focus) => {
+    if (id && open && visible && ordered.some((point) => point.id === id)) commitChoice(id, focus);
   };
   const move = (older: boolean) => choose(timelineTarget(ordered, selected, older ? 'ArrowUp' : 'ArrowDown'));
   useLayoutEffect(() => {
@@ -567,6 +586,12 @@ export function TimeMachineJourney({
         }
         data-motion={visible && moving}
         data-solid={solid || undefined}
+        onWheel={(event) => {
+          if (event.ctrlKey || Math.abs(event.deltaY) < 12 || !(event.target instanceof Element) || !event.target.closest('.tm-stage')) return;
+          const preview = event.target.closest<HTMLElement>('.tm-historical-home');
+          if (preview && preview.scrollHeight > preview.clientHeight + 1) return;
+          move(event.deltaY > 0);
+        }}
         onCloseAutoFocus={() => {
           const latest = ordered[0];
           if (latest && latest.id !== selected) onSelect(latest.id);
@@ -617,7 +642,7 @@ export function TimeMachineJourney({
           wallpaper={wallpaper.url}
           assetFailed={wallpaper.failed}
           assetLoading={wallpaper.loading}
-          onSelect={onSelect}
+          onSelect={choose}
           dates={dates}
         />
         <div className="tm-controls">

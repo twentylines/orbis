@@ -13,6 +13,7 @@ import {
   visiblePointCards,
 } from './contracts';
 import {
+  createPointTravelGate,
   capturePercent,
   eligibleRestoreReview,
   grantMatchesReview,
@@ -398,4 +399,48 @@ test('generic entry chooses the newest point and Browse keeps its requested poin
   openTimelineAt(older.id, choose, show);
   expect(open).toBe(true);
   expect(selectedPointId(points, selection)).toBe(older.id);
+});
+
+test('card travel coalesces repeated input and cancels pending input on close', () => {
+  let clock = 0;
+  let nextId = 0;
+  const timers = new Map<number, { run: () => void; delay: number }>();
+  const gate = createPointTravelGate(
+    () => clock,
+    (run, delay) => {
+      timers.set(++nextId, { run, delay });
+      return nextId as unknown as ReturnType<typeof setTimeout>;
+    },
+    (id) => {
+      timers.delete(id as unknown as number);
+    },
+  );
+  const selected: number[] = [];
+  const select = (id: number) => {
+    selected.push(id);
+    gate.hold(pointMotionSeconds.travel);
+  };
+  gate.request(() => select(1));
+  clock = 110;
+  for (let repeat = 0; repeat < 80; repeat++) gate.request(() => select(2));
+  expect(selected).toEqual([1]);
+  expect(timers.size).toBe(1);
+  expect(timers.get(1)?.delay).toBe(410);
+  gate.request(() => select(0));
+  clock = 520;
+  timers.get(1)?.run();
+  timers.delete(1);
+  expect(selected).toEqual([1, 0]);
+  clock = 600;
+  gate.request(() => select(3));
+  gate.reset();
+  expect(timers.size).toBe(0);
+  expect(selected).toEqual([1, 0]);
+  gate.hold(pointMotionSeconds.unfold + 0.08);
+  gate.request(() => select(4));
+  expect([...timers.values()][0]?.delay).toBe(840);
+  clock = 2000;
+  gate.request(() => select(5));
+  expect(timers.size).toBe(0);
+  expect(selected).toEqual([1, 0, 5]);
 });

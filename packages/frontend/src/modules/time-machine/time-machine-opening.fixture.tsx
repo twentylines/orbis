@@ -53,6 +53,7 @@ doc.defaultView = win;
 Object.assign(globalThis, { window: win, document: doc, HTMLElement: win.HTMLElement, matchMedia: win.matchMedia, IS_REACT_ACT_ENVIRONMENT: true });
 const calls: { type: string; value?: unknown }[] = [];
 const entries: { transform: string; opacity: number }[] = [];
+let presence = true;
 const actualMotion = await import('framer-motion');
 mock.module('framer-motion', () => ({
   ...actualMotion,
@@ -64,7 +65,7 @@ mock.module('framer-motion', () => ({
     div: () => null,
   },
   AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
-  usePresence: () => [true, undefined],
+  usePresence: () => (presence ? [true, undefined] : [false, () => undefined]),
   useAnimationControls: () =>
     useMemo(
       () => ({
@@ -144,6 +145,13 @@ await render({ ...scene, opening: false, selectedIndex: 1, compact: true, moving
 expect(calls.filter((call) => call.type === 'start')).toHaveLength(4);
 await render({ ...scene, opening: false, selectedIndex: 1, compact: true, visible: false }, 'blob:wallpaper');
 expect(calls.at(-1)?.type).toBe('stop');
+presence = false;
+const exitingScene = { ...scene, opening: false, exiting: new Set([point.id]) };
+await render(exitingScene, null);
+const exitingStarts = calls.filter((call) => call.type === 'start').length;
+await render(exitingScene, 'blob:resolved-during-exit');
+expect(calls.filter((call) => call.type === 'start')).toHaveLength(exitingStarts);
+presence = true;
 await act(async () => {
   root.render(
     <HistoricalPointCard
