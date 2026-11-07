@@ -73,7 +73,7 @@ function containsDialogHeader(children: React.ReactNode): boolean {
   );
 }
 
-function observeDialogSize(anchor: HTMLElement | null) {
+export function observeDialogSize(anchor: HTMLElement | null) {
   const content = anchor?.parentElement;
   if (!content || typeof ResizeObserver === 'undefined' || typeof content.animate !== 'function') return;
   let previousHeight = Number.parseFloat(getComputedStyle(content).height);
@@ -99,18 +99,9 @@ function observeDialogSize(anchor: HTMLElement | null) {
     });
   };
   const observer = new ResizeObserver(resize);
-  const mutations = new MutationObserver(() => {
-    if (animation?.playState === 'running') {
-      previousHeight = Number.parseFloat(getComputedStyle(content).height);
-      animation.cancel();
-    }
-    resize();
-  });
   observer.observe(content);
-  mutations.observe(content, { childList: true, characterData: true, subtree: true });
   return () => {
     observer.disconnect();
-    mutations.disconnect();
     animation?.cancel();
   };
 }
