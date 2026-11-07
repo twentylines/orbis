@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Durable progress responder for scoped controller updates on standard Traefik."""
 import importlib.util
+import copy
 import hashlib
+import itertools
 import json
 import os
 import secrets
@@ -320,13 +322,13 @@ class CoreOverlay:
                 raise ValueError('Core maintenance source changed')
             if record.get('responderId'):
                 raw = self.runtime.inspect(record['responderId'])
-                if self.runtime.definition(raw) != record['definitions']['responder']:
+                if not self.terminal_responder_matches(raw, record):
                     raise ValueError('The maintenance responder changed')
                 self.runtime.change(['update', '--restart', 'no', raw['Id']])
                 if raw['State'].get('Running'):
                     self.runtime.change(['stop', raw['Id']])
                 stopped = self.runtime.inspect(record['responderId'])
-                if (self.runtime.definition(stopped) != record['definitions']['responder']
+                if (not self.terminal_responder_matches(stopped, record)
                         or stopped['State'].get('Running') is not False
                         or stopped['HostConfig'].get('RestartPolicy') != {'Name': 'no', 'MaximumRetryCount': 0}):
                     raise ValueError('The maintenance responder has not stopped safely')
@@ -347,9 +349,28 @@ class CoreOverlay:
         if not record.get('responderId'):
             return True
         raw = self.runtime.inspect(record['responderId'])
-        return (self.runtime.definition(raw) == record['definitions']['responder']
+        return (self.terminal_responder_matches(raw, record)
                 and raw['State'].get('Running') is False
                 and raw['HostConfig'].get('RestartPolicy') == {'Name': 'no', 'MaximumRetryCount': 0})
+
+    def terminal_responder_matches(self, raw, record):
+        if raw.get('Id') != record.get('responderId') or raw.get('Image') != record['source']['imageId']:
+            return False
+        expected = record['definitions']['responder']
+        if self.runtime.definition(raw) == expected:
+            return True
+        # Docker rewrites nil DNS slices as empty lists on daemon restart. Keep
+        # the original digest authoritative; only these empty representations
+        # may vary, and only while settling an already-terminal update.
+        host = raw['HostConfig']
+        keys = [key for key in ('Dns', 'DnsOptions', 'DnsSearch')
+                if key in host and (host[key] is None or type(host[key]) is list and not host[key])]
+        for values in itertools.product((None, []), repeat=len(keys)):
+            candidate = copy.deepcopy(raw)
+            candidate['HostConfig'].update(zip(keys, values))
+            if self.runtime.definition(candidate) == expected:
+                return True
+        return False
 
     def reviewed_retirement(self, job, record):
         import hashlib

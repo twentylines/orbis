@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import importlib.util
+import itertools
 import json
 import os
 import socket
@@ -255,6 +256,131 @@ class OverlayAcceptanceTests(unittest.TestCase):
         self.assertFalse(self.events)
         with self.assertRaises(FileNotFoundError):
             self.overlay.abort(self.identifier)
+
+    def test_terminal_dns_empty_representations_preserve_the_original_digest(self):
+        keys = ('Dns', 'DnsOptions', 'DnsSearch')
+        for before in itertools.product((None, []), repeat=3):
+            original = copy.deepcopy(self.responder)
+            original['HostConfig'].update(zip(keys, before))
+            expected = self.responder_binding(original)
+            for after in itertools.product((None, []), repeat=3):
+                with self.subTest(before=before, after=after):
+                    observed = copy.deepcopy(original)
+                    observed['HostConfig'].update(zip(keys, after))
+                    untouched = copy.deepcopy(observed)
+                    self.assertTrue(self.overlay.terminal_responder_matches(observed, expected))
+                    self.assertEqual(observed, untouched)
+        self.assertFalse(self.events)
+
+    def test_terminal_dns_compatibility_rejects_nonempty_and_unrelated_changes(self):
+        original = copy.deepcopy(self.responder)
+        original['HostConfig'].update(Dns=None, DnsOptions=None, DnsSearch=None)
+        expected = self.responder_binding(original)
+        changes = [('HostConfig', 'Dns', ['1.1.1.1']), ('HostConfig', 'DnsOptions', ['ndots:0']),
+                   ('HostConfig', 'DnsSearch', ['example.test']), ('HostConfig', 'CapAdd', ['SYS_ADMIN']),
+                   ('HostConfig', 'Privileged', True), ('Config', 'Cmd', ['unexpected']),
+                   ('HostConfig', 'Binds', []), ('HostConfig', 'Dns', False)]
+        for section, key, value in changes:
+            with self.subTest(section=section, key=key):
+                observed = copy.deepcopy(original)
+                observed['HostConfig'].update(Dns=[], DnsOptions=[], DnsSearch=[])
+                observed[section][key] = value
+                self.assertFalse(self.overlay.terminal_responder_matches(observed, expected))
+
+    def responder_binding(self, raw):
+        return {'responderId': raw['Id'], 'source': {'imageId': raw['Image']},
+                'definitions': {'responder': self.runtime.definition(raw)}}
+
+    def test_dns_compatibility_uses_production_digest_and_explicit_image_identity(self):
+        self.runtime.definition.side_effect = lambda raw: D.DockerRestoreRuntime.definition(
+            SimpleNamespace(P=H.IDENTITY.PUBLICATION), raw)
+        original = copy.deepcopy(self.responder)
+        original['Config']['Image'] = original['Image']
+        original['HostConfig'].update(Dns=None, DnsOptions=None, DnsSearch=None)
+        original['Mounts'] = [{'Type': 'bind', 'Source': '/run/orbis', 'Destination': '/run/orbis',
+                               'RW': False, 'Mode': '', 'Propagation': 'rprivate'}]
+        original['NetworkSettings'] = {'Networks': {'fixture': {'NetworkID': 'original-network'}}}
+        expected = self.responder_binding(original)
+        observed = copy.deepcopy(original)
+        observed['HostConfig'].update(Dns=[], DnsOptions=[], DnsSearch=[])
+        self.assertTrue(self.overlay.terminal_responder_matches(observed, expected))
+        changes = [lambda raw: raw.update(Id='d' * 64), lambda raw: raw.update(Image='sha256:' + 'e' * 64),
+                   lambda raw: raw['Config'].update(Image='different-image'),
+                   lambda raw: raw['Mounts'][0].update(RW=True),
+                   lambda raw: raw['Mounts'][0].update(Source='/unexpected'),
+                   lambda raw: raw['NetworkSettings']['Networks'].update(other={}),
+                   lambda raw: raw['HostConfig'].pop('Dns')]
+        for change in changes:
+            raw = copy.deepcopy(observed)
+            change(raw)
+            self.assertFalse(self.overlay.terminal_responder_matches(raw, expected))
+
+    def terminal_dns_fixture(self):
+        self.responder['HostConfig'].update(Dns=None, DnsOptions=None, DnsSearch=None)
+        record = self.begin()
+        record.update(phase='complete', decision='commit')
+        self.overlay.save(record)
+        job = {**self.job(), 'state': 'complete'}
+        self.responder['HostConfig'].update(Dns=[], DnsOptions=[], DnsSearch=[],
+                                           RestartPolicy={'Name': 'no', 'MaximumRetryCount': 0})
+        self.responder['State']['Running'] = False
+        return job
+
+    def test_completed_stopped_responder_remains_settled_after_dns_rewrite(self):
+        job = self.terminal_dns_fixture()
+        path = self.overlay.directory(self.identifier) / 'overlay.json'
+        original = path.read_bytes()
+        self.assertTrue(self.overlay.settled(job))
+        self.assertEqual(path.read_bytes(), original)
+        self.assertFalse(self.events)
+
+    def test_dns_compatibility_keeps_terminal_phase_and_restart_guards(self):
+        job = self.terminal_dns_fixture()
+        self.assertFalse(self.overlay.settled({**job, 'state': 'running'}))
+        self.responder['State']['Running'] = True
+        self.assertFalse(self.overlay.settled(job))
+        self.responder['State']['Running'] = False
+        self.responder['HostConfig']['RestartPolicy']['Name'] = 'always'
+        self.assertFalse(self.overlay.settled(job))
+        self.responder['HostConfig']['RestartPolicy']['Name'] = 'no'
+        record = self.overlay.read(self.identifier)
+        record['decision'] = 'rollback'
+        self.overlay.save(record)
+        self.assertFalse(self.overlay.settled(job))
+
+    def test_finish_can_stop_dns_rewritten_responder_of_healthy_terminal_job(self):
+        job = self.terminal_dns_fixture()
+        self.responder['State']['Running'] = True
+        self.current = copy.deepcopy(self.target)
+        with mock.patch.object(H, 'current_core', return_value={'state': 'running', 'health': 'healthy'}):
+            self.overlay.finish(job)
+        self.assertTrue(self.overlay.settled(job))
+        self.assertEqual(self.events, [['update', '--restart', 'no', self.responder['Id']], ['stop', self.responder['Id']]])
+
+    def test_dns_rewritten_terminal_responder_is_untouched_when_health_or_publication_changed(self):
+        job = self.terminal_dns_fixture()
+        self.responder['State']['Running'] = True
+        with self.assertRaisesRegex(ValueError, 'terminal publication'):
+            self.overlay.finish(job)
+        self.assertFalse(self.events)
+        self.current = copy.deepcopy(self.target)
+        with mock.patch.object(H, 'current_core', return_value={'state': 'running', 'health': 'unhealthy'}):
+            with self.assertRaisesRegex(ValueError, 'not healthy'):
+                self.overlay.finish(job)
+        self.assertFalse(self.events)
+
+    def test_dns_rewritten_rollback_and_failed_jobs_settle_only_the_source(self):
+        job = self.terminal_dns_fixture()
+        record = self.overlay.read(self.identifier)
+        record.update(phase='rolled-back', decision='rollback')
+        self.overlay.save(record)
+        for state in ('rolled-back', 'failed'):
+            with self.subTest(state=state):
+                terminal = {**job, 'state': state}
+                self.assertTrue(self.overlay.settled(terminal))
+                with mock.patch.object(H, 'current_core', return_value={'state': 'running', 'health': 'healthy'}):
+                    self.overlay.finish(terminal)
+                self.assertTrue(self.overlay.settled(terminal))
 
 
 class DockerSocketIdentityTests(unittest.TestCase):
