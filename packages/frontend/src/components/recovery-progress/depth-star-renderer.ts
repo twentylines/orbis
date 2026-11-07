@@ -1,5 +1,19 @@
 import { depthStarMarks } from './depth-star-data';
 
+const starPlanes = [0, 1, 2].map((layer) => {
+  const marks = depthStarMarks(layer);
+  let minimum = Number.POSITIVE_INFINITY;
+  let maximumRadius = 0;
+  for (const [index, mark] of marks.entries()) {
+    maximumRadius = Math.max(maximumRadius, mark.radius);
+    for (let other = index + 1; other < marks.length; other++) {
+      const next = marks[other];
+      if (next) minimum = Math.min(minimum, Math.hypot(mark.x - next.x, mark.y - next.y));
+    }
+  }
+  return { marks, gap: minimum - 2 * maximumRadius };
+});
+
 export function depthStarProjection(width: number, height: number, ox: number, oy: number, perspective: number, z: number) {
   const scale = perspective / (perspective - z);
   const planeWidth = width * 1.9;
@@ -27,12 +41,13 @@ export function createDepthStarRenderer(root: HTMLElement): (() => void) | null 
     const canvas = document.createElement('canvas');
     const layer = document.createElement('canvas');
     const trails = document.createElement('canvas');
+    layer.width = layer.height = 0;
+    trails.width = trails.height = 0;
     const out = canvas.getContext('2d');
     const planeContext = layer.getContext('2d');
     const trailContext = trails.getContext('2d');
     if (!out || !planeContext || !trailContext) return null;
     const surfaces = [canvas, layer, trails];
-    const marks = [0, 1, 2].map(depthStarMarks);
     canvas.className = 'depth-travel-stars';
     canvas.setAttribute('aria-hidden', 'true');
     let frame = 0;
@@ -80,10 +95,8 @@ export function createDepthStarRenderer(root: HTMLElement): (() => void) | null 
         if (bw !== backingWidth || bh !== backingHeight) {
           backingWidth = bw;
           backingHeight = bh;
-          for (const surface of surfaces) {
-            surface.width = bw;
-            surface.height = bh;
-          }
+          canvas.width = bw;
+          canvas.height = bh;
         }
         const sx = bw / width;
         const sy = bh / height;
@@ -95,8 +108,9 @@ export function createDepthStarRenderer(root: HTMLElement): (() => void) | null 
         clear(out);
         for (let index = 0; index < planes.length; index++) {
           const plane = planes[index];
-          const stars = marks[index];
-          if (!plane || !stars) throw new Error('Missing star plane');
+          const starPlane = starPlanes[index];
+          if (!plane || !starPlane) throw new Error('Missing star plane');
+          const { marks: stars, gap } = starPlane;
           const state = getComputedStyle(plane);
           if (state.display === 'none' || state.visibility === 'hidden') continue;
           const alpha = Number(state.opacity);
@@ -105,24 +119,38 @@ export function createDepthStarRenderer(root: HTMLElement): (() => void) | null 
           const geometry = depthStarProjection(width, height, ox, oy, perspective, matrix.m43);
           if (!Object.values(geometry).every(Number.isFinite) || geometry.factor <= 0) throw new Error('Invalid star projection');
           const trailOpacity = Number(getComputedStyle(plane, '::after').opacity);
-          clear(planeContext);
-          if (trailOpacity > 0) clear(trailContext);
-          for (const context of trailOpacity > 0 ? [planeContext, trailContext] : [planeContext]) {
+          const direct = trailOpacity === 0 && gap * geometry.factor * Math.min(sx, sy) > 2 * Math.SQRT2;
+          const starsContext = direct ? out : planeContext;
+          const sizeScratch = (surface: HTMLCanvasElement) => {
+            if (surface.width !== bw || surface.height !== bh) {
+              surface.width = bw;
+              surface.height = bh;
+            }
+          };
+          if (!direct) {
+            sizeScratch(layer);
+            clear(planeContext);
+          }
+          if (trailOpacity > 0) {
+            sizeScratch(trails);
+            clear(trailContext);
+          }
+          for (const context of trailOpacity > 0 ? [starsContext, trailContext] : [starsContext]) {
             context.save();
             context.setTransform(sx, 0, 0, sy, 0, 0);
             context.beginPath();
             context.rect(geometry.left, geometry.top, geometry.width, geometry.height);
             context.clip();
           }
-          planeContext.setTransform(sx * geometry.factor, 0, 0, sy * geometry.factor, sx * geometry.left, sy * geometry.top);
+          starsContext.setTransform(sx * geometry.factor, 0, 0, sy * geometry.factor, sx * geometry.left, sy * geometry.top);
           for (const mark of stars) {
-            planeContext.globalAlpha = mark.opacity;
-            planeContext.fillStyle = mark.colour;
-            planeContext.beginPath();
-            planeContext.arc(mark.x, mark.y, mark.radius, 0, Math.PI * 2);
-            planeContext.fill();
+            starsContext.globalAlpha = mark.opacity * (direct ? alpha : 1);
+            starsContext.fillStyle = mark.colour;
+            starsContext.beginPath();
+            starsContext.arc(mark.x, mark.y, mark.radius, 0, Math.PI * 2);
+            starsContext.fill();
           }
-          planeContext.restore();
+          starsContext.restore();
           if (trailOpacity > 0) {
             trailContext.setTransform(sx * geometry.factor, 0, 0, sy * geometry.factor, sx * geometry.trailLeft, sy * geometry.trailTop);
             for (const mark of stars) {
@@ -140,8 +168,10 @@ export function createDepthStarRenderer(root: HTMLElement): (() => void) | null 
             planeContext.globalAlpha = trailOpacity;
             planeContext.drawImage(trails, 0, 0);
           }
-          out.globalAlpha = alpha;
-          out.drawImage(layer, 0, 0);
+          if (!direct) {
+            out.globalAlpha = alpha;
+            out.drawImage(layer, 0, 0);
+          }
         }
         out.globalAlpha = 1;
         if (!ownsMarker) {

@@ -31,7 +31,9 @@ describe('star data and projection', () => {
 });
 
 type Listener = () => void;
-function harness(options: { noContext?: boolean; drawError?: boolean; width?: number; trailOpacity?: number; inactive?: boolean } = {}) {
+function harness(
+  options: { noContext?: boolean; drawError?: boolean; width?: number; height?: number; trailOpacity?: number; inactive?: boolean } = {},
+) {
   const saved = new Map<string, PropertyDescriptor | undefined>();
   const set = (name: string, value: unknown) => {
     saved.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
@@ -48,34 +50,42 @@ function harness(options: { noContext?: boolean; drawError?: boolean; width?: nu
   const rootListeners = listeners();
   const windowListeners = listeners();
   const mediaListeners = listeners();
-  const context = {
-    setTransform() {},
-    clearRect() {},
-    save() {},
-    beginPath() {},
-    rect() {},
-    clip() {},
-    arc() {},
-    fill() {},
-    moveTo() {},
-    lineTo() {},
-    stroke() {
-      strokes++;
-    },
-    restore() {},
-    drawImage() {
-      if (options.drawError) throw new Error('draw failure');
-    },
-  };
   class FakeCanvas {
     className = '';
-    width = 0;
-    height = 0;
+    width = 300;
+    height = 150;
     removed = false;
     events = listeners();
+    fills = 0;
+    copies = 0;
+    alphas: number[] = [];
+    context = {
+      globalAlpha: 1,
+      setTransform() {},
+      clearRect() {},
+      save() {},
+      beginPath() {},
+      rect() {},
+      clip() {},
+      arc() {},
+      fill: () => {
+        if (options.drawError) throw new Error('draw failure');
+        this.fills++;
+        this.alphas.push(this.context.globalAlpha);
+      },
+      moveTo() {},
+      lineTo() {},
+      stroke: () => {
+        strokes++;
+      },
+      restore() {},
+      drawImage: () => {
+        this.copies++;
+      },
+    };
     setAttribute() {}
     getContext() {
-      return options.noContext ? null : context;
+      return options.noContext ? null : this.context;
     }
     addEventListener(name: string, callback: Listener) {
       this.events.set(name, callback);
@@ -123,7 +133,13 @@ function harness(options: { noContext?: boolean; drawError?: boolean; width?: nu
   });
   set('getComputedStyle', (target: unknown, pseudo?: string) =>
     target === root
-      ? { width: `${options.width ?? 100}px`, height: '80px', boxSizing: 'content-box', perspectiveOrigin: '50px 40px', perspective: '520px' }
+      ? {
+          width: `${options.width ?? 100}px`,
+          height: `${options.height ?? 80}px`,
+          boxSizing: 'content-box',
+          perspectiveOrigin: '50px 40px',
+          perspective: '520px',
+        }
       : pseudo
         ? { opacity: String(options.trailOpacity ?? 0) }
         : { display: 'block', visibility: 'visible', opacity: '0.5', transform: 'none' },
@@ -181,6 +197,82 @@ function harness(options: { noContext?: boolean; drawError?: boolean; width?: nu
 }
 
 describe('renderer fallback and teardown', () => {
+  test('draws separated circles directly without allocating or copying scratch surfaces', () => {
+    const h = harness();
+    try {
+      const dispose = createDepthStarRenderer(h.root);
+      expect(h.surfaces[0]?.fills).toBe(240);
+      expect(h.surfaces[0]?.copies).toBe(0);
+      expect(h.surfaces[0]?.alphas[0]).toBeCloseTo(0.32 * 0.5);
+      expect(h.surfaces.slice(1).every((surface) => surface.width === 0 && surface.height === 0)).toBe(true);
+      dispose?.();
+    } finally {
+      h.restore();
+    }
+  });
+
+  test('tiny projected circles retain group compositing', () => {
+    const h = harness({ width: 1, height: 1 });
+    try {
+      const dispose = createDepthStarRenderer(h.root);
+      expect(h.surfaces[0]?.fills).toBe(0);
+      expect(h.surfaces[0]?.copies).toBe(3);
+      expect(h.surfaces[1]?.fills).toBe(240);
+      expect(h.surfaces[1]?.width).toBe(2);
+      expect(h.surfaces[2]?.width).toBe(0);
+      dispose?.();
+      expect(h.surfaces.every((surface) => surface.width === 0 && surface.height === 0)).toBe(true);
+    } finally {
+      h.restore();
+    }
+  });
+
+  test('visible trails keep the grouped compositing path', () => {
+    const h = harness({ trailOpacity: 0.2 });
+    try {
+      const dispose = createDepthStarRenderer(h.root);
+      expect(h.surfaces[0]?.fills).toBe(0);
+      expect(h.surfaces[0]?.copies).toBe(3);
+      expect(h.surfaces[1]?.fills).toBe(240);
+      expect(h.surfaces[1]?.copies).toBe(3);
+      expect(h.strokes()).toBe(240);
+      expect(h.surfaces[2]?.width).toBe(200);
+      dispose?.();
+    } finally {
+      h.restore();
+    }
+  });
+
+  test('retains scratch buffers across trail transitions', () => {
+    const options = { trailOpacity: 0 };
+    const h = harness(options);
+    try {
+      const dispose = createDepthStarRenderer(h.root);
+      const run = () => {
+        const [id, callback] = [...h.pending.entries()][0] ?? [];
+        if (id === undefined || !callback) throw new Error('missing frame');
+        h.pending.delete(id);
+        callback();
+      };
+      expect(h.surfaces[1]?.width).toBe(0);
+      options.trailOpacity = 0.2;
+      run();
+      expect(h.surfaces[1]?.width).toBe(200);
+      expect(h.surfaces[2]?.width).toBe(200);
+      options.trailOpacity = 0;
+      run();
+      expect(h.surfaces[1]?.width).toBe(200);
+      expect(h.surfaces[2]?.width).toBe(200);
+      options.trailOpacity = 0.2;
+      run();
+      expect(h.strokes()).toBe(480);
+      dispose?.();
+      expect(h.surfaces.every((surface) => surface.width === 0 && surface.height === 0)).toBe(true);
+    } finally {
+      h.restore();
+    }
+  });
+
   test('skips invisible trails but draws all visible trail marks', () => {
     for (const [opacity, expected] of [
       [0, 0],
@@ -243,7 +335,7 @@ describe('renderer fallback and teardown', () => {
   });
 
   test('context loss restores SVG and cancels the pending frame', () => {
-    const h = harness();
+    const h = harness({ trailOpacity: 0.2 });
     try {
       const dispose = createDepthStarRenderer(h.root);
       expect(dispose).not.toBeNull();
