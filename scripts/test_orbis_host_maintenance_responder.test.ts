@@ -10,6 +10,9 @@ import {
   readRootCoreProgress,
   coreProgressSocketIdentity,
   validateCoreUpdateProgress,
+  sentinelCaptureRoute,
+  validateSentinelCapture,
+  readSentinelCapture,
 } from './orbis-host-maintenance-responder.mjs';
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -82,11 +85,125 @@ test('actual HTTP serves SPA on direct navigation, locks API, and follows author
   expect((await fetch(`${base}/api/apps/start`, { method: 'POST' })).status).toBe(503);
   expect(proxied).toBe(0);
   expect((await fetch(`${base}/api/auth/login`, { method: 'POST' })).status).toBe(201);
+  expect(await (await fetch(`${base}/api/health`)).json()).toEqual({ status: 'ok', maintenance: true });
   expect((await fetch(`${base}/linked.html`)).status).toBe(503);
   state = 'checking';
   expect((await fetch(`${base}/api/app-context`)).status).toBe(503);
   state = 'idle';
   expect((await fetch(`${base}/api/app-context`)).status).toBe(201);
+  expect((await fetch(`${base}/api/health`)).status).toBe(201);
+});
+
+test('Sentinel capture paths are read-only, exact and available before Main state', async () => {
+  const point = '11111111-1111-4111-8111-111111111111';
+  const page = `/sentinel/captures/${point}`;
+  const progress = `/sentinel/api/v1/captures/${point}/progress`;
+  expect(sentinelCaptureRoute(page)).toBe('text/html; charset=utf-8');
+  expect(sentinelCaptureRoute(progress)).toBe('application/json');
+  for (const route of [
+    `${page}?x=1`,
+    `${page}\n`,
+    `${page}/`,
+    page.replace(point, `../${point}`),
+    '/sentinel/api/v1/telemetry',
+    '/sentinel/capture-assets/other.js',
+  ])
+    expect(sentinelCaptureRoute(route)).toBeNull();
+  let calls = 0;
+  const server = createMaintenanceServer({
+    readState: async () => {
+      throw Error('Main is unavailable');
+    },
+    readSentinel: async (route: string) => {
+      calls++;
+      expect(route).toBe(page);
+      return { body: Buffer.from('<!doctype html><title>Sentinel fixture</title>'), contentType: 'text/html; charset=utf-8' };
+    },
+    proxy: () => {
+      throw Error('Must not forward to Main');
+    },
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  cleanups.push(
+    () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      }),
+  );
+  const address = server.address();
+  if (!address || typeof address === 'string') throw Error('No fixture port');
+  const base = `http://127.0.0.1:${address.port}`;
+  const response = await fetch(base + page);
+  expect(response.status).toBe(200);
+  expect(await response.text()).toContain('Sentinel fixture');
+  expect(response.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
+  expect((await fetch(base + page, { method: 'POST' })).status).toBe(404);
+  expect((await fetch(`${base}${page}?x=1`)).status).toBe(404);
+  expect(calls).toBe(1);
+});
+
+test('Sentinel public progress rejects private fields, stale success and false completion', () => {
+  const point = '11111111-1111-4111-8111-111111111111';
+  const progress = { version: 1, id: point, state: 'complete', phase: 'complete', completedBytes: 0, totalBytes: null, restartVerified: true };
+  const envelope = { schema: 'orbis-sentinel.capture-progress.v1', id: point, available: true, progress, ageMs: 0, sourceState: 'ready' };
+  expect(validateSentinelCapture(envelope, point)).toEqual(envelope);
+  for (const value of [
+    { ...envelope, private: 'fixture' },
+    { ...envelope, ageMs: 5001 },
+    { ...envelope, sourceState: 'stale' },
+    { ...envelope, progress: { ...progress, restartVerified: false } },
+    { ...envelope, progress: { ...progress, totalBytes: false } },
+    { ...envelope, progress: { ...progress, currentPath: 'fixture' } },
+  ])
+    expect(() => validateSentinelCapture(value, point)).toThrow();
+  expect(validateSentinelCapture({ ...envelope, available: false, progress: null }, point).available).toBeFalse();
+});
+
+test('Sentinel Unix bridge validates content type, size, deadline and socket replacement', async () => {
+  const directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'sentinel-bridge-')));
+  const before = process.cwd();
+  process.chdir(directory);
+  cleanups.push(async () => {
+    process.chdir(before);
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+  let mode = 'valid';
+  const point = '11111111-1111-4111-8111-111111111111';
+  const route = `/sentinel/api/v1/captures/${point}/progress`;
+  const envelope = {
+    schema: 'orbis-sentinel.capture-progress.v1',
+    id: point,
+    available: false,
+    progress: null,
+    ageMs: null,
+    sourceState: 'starting',
+  };
+  const server = http.createServer((request, response) => {
+    expect(request.method).toBe('GET');
+    expect(request.url).toBe(route);
+    response.setHeader('content-type', mode === 'wrong-type' ? 'text/html' : 'application/json');
+    if (mode === 'trickle') {
+      const timer = setInterval(() => response.write(' '), 5);
+      response.on('close', () => clearInterval(timer));
+      return;
+    }
+    response.end(mode === 'oversize' ? 'x'.repeat(65537) : JSON.stringify(mode === 'private' ? { ...envelope, private: 'fixture' } : envelope));
+  });
+  await new Promise<void>((resolve) => server.listen('s', resolve));
+  cleanups.push(
+    () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      }),
+  );
+  const options = { socket: 's', identity: async () => 'fixture-seal' };
+  expect(JSON.parse((await readSentinelCapture(route, options)).body.toString())).toEqual(envelope);
+  let reads = 0;
+  await expect(readSentinelCapture(route, { ...options, identity: async () => String(reads++) })).rejects.toThrow();
+  for (mode of ['wrong-type', 'oversize', 'private', 'trickle'])
+    await expect(readSentinelCapture(route, { ...options, deadlineMs: 40 })).rejects.toThrow();
 });
 
 test('progress remains readable while Orbis is unavailable and never forwards actions or exposes private fields', async () => {

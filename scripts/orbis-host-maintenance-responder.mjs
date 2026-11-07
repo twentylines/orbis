@@ -7,6 +7,98 @@ const assets = '/app/assets/frontend';
 const states = new Set(['idle', 'restoring', 'updating', 'downgrading', 'recovery', 'checking']);
 const progressStates = new Set(['queued', 'running', 'recovering', 'complete', 'failed', 'interrupted']);
 const progressPhases = new Set([null, 'downloading', 'installing', 'restarting', 'verifying', 'recovering']);
+const sentinelSocket = '/run/orbis-sentinel/api.sock';
+
+export function sentinelCaptureRoute(raw) {
+  if (typeof raw !== 'string' || raw.length > 180 || /[\s?%#\\]/.test(raw)) return null;
+  if (/^\/sentinel\/captures\/[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(raw)) return 'text/html; charset=utf-8';
+  if (raw === '/sentinel/capture-assets/capture.css') return 'text/css; charset=utf-8';
+  if (raw === '/sentinel/capture-assets/capture.js') return 'text/javascript; charset=utf-8';
+  return /^\/sentinel\/api\/v1\/captures\/[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\/progress$/.test(raw)
+    ? 'application/json'
+    : null;
+}
+
+export function validateSentinelCapture(value, point) {
+  const exact = (object, keys) => object && typeof object === 'object' && !Array.isArray(object) && Object.keys(object).sort().join() === keys;
+  const count = (item) => Number.isSafeInteger(item) && item >= 0;
+  if (
+    !exact(value, 'ageMs,available,id,progress,schema,sourceState') ||
+    value.schema !== 'orbis-sentinel.capture-progress.v1' ||
+    value.id !== point ||
+    typeof value.available !== 'boolean' ||
+    !['ready', 'starting', 'stale', 'unavailable'].includes(value.sourceState) ||
+    !(value.ageMs === null || count(value.ageMs))
+  )
+    throw Error('Unavailable');
+  if (!value.available) {
+    if (value.progress !== null) throw Error('Unavailable');
+    return value;
+  }
+  const p = value.progress;
+  if (
+    value.sourceState !== 'ready' ||
+    value.ageMs === null ||
+    value.ageMs > 5000 ||
+    !exact(p, 'completedBytes,id,phase,restartVerified,state,totalBytes,version') ||
+    p.version !== 1 ||
+    p.id !== point ||
+    !['waiting', 'running', 'recovery-required', 'complete'].includes(p.state) ||
+    ![
+      'preparing',
+      'stopping-orbis',
+      'saving-orbis',
+      'starting-orbis',
+      'stopping-apps',
+      'saving-apps',
+      'starting-apps',
+      'sealing',
+      'complete',
+    ].includes(p.phase) ||
+    !count(p.completedBytes) ||
+    !(p.totalBytes === null || count(p.totalBytes)) ||
+    (p.totalBytes !== null && p.completedBytes > p.totalBytes) ||
+    typeof p.restartVerified !== 'boolean' ||
+    (p.state === 'complete') !== (p.phase === 'complete') ||
+    p.restartVerified !== (p.state === 'complete')
+  )
+    throw Error('Unavailable');
+  return value;
+}
+
+export async function readSentinelCapture(raw, options = {}) {
+  const contentType = sentinelCaptureRoute(raw);
+  if (!contentType) throw Error('Unavailable');
+  const socket = options.socket ?? sentinelSocket;
+  const identity = options.identity ?? coreProgressSocketIdentity;
+  const before = await identity(socket);
+  const body = await new Promise((resolve, reject) => {
+    const request = http.get({ socketPath: socket, path: raw, signal: AbortSignal.timeout(options.deadlineMs ?? 2000) }, (response) => {
+      if (response.statusCode !== 200 || response.headers['content-type'] !== contentType) {
+        response.resume();
+        reject(Error('Unavailable'));
+        return;
+      }
+      let size = 0;
+      const chunks = [];
+      response.on('data', (chunk) => {
+        size += chunk.length;
+        if (size > 65536) response.destroy(Error('Unavailable'));
+        else chunks.push(Buffer.from(chunk));
+      });
+      response.on('error', reject);
+      response.on('aborted', () => reject(Error('Unavailable')));
+      response.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+    request.on('error', reject);
+  });
+  if ((await identity(socket)) !== before) throw Error('Unavailable');
+  if (contentType === 'application/json') {
+    const point = raw.split('/')[5];
+    validateSentinelCapture(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body)), point);
+  }
+  return { body, contentType };
+}
 
 export function validateCoreUpdateProgress(value) {
   const object = (item) => item && typeof item === 'object' && !Array.isArray(item);
@@ -243,6 +335,24 @@ export function createMaintenanceServer(options = {}) {
   return http.createServer(async (request, response) => {
     try {
       const pathname = new URL(request.url, 'http://localhost').pathname;
+      if (pathname === '/sentinel' || pathname.startsWith('/sentinel/')) {
+        if (request.method !== 'GET' || !sentinelCaptureRoute(request.url)) return json(response, 404, { code: 'SENTINEL_UNAVAILABLE' });
+        try {
+          const { body, contentType } = await (options.readSentinel ?? readSentinelCapture)(request.url);
+          response.writeHead(200, {
+            'Content-Type': contentType,
+            'Content-Length': body.length,
+            'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
+            'Referrer-Policy': 'no-referrer',
+            'Content-Security-Policy':
+              "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+          });
+          return response.end(body);
+        } catch {
+          return json(response, 503, { code: 'SENTINEL_UNAVAILABLE' });
+        }
+      }
       if (/^\/api\/system\/core-update-progress\/?$/.test(pathname)) {
         if (request.method !== 'GET') return json(response, 405, { code: 'CORE_UPDATE_PROGRESS_UNAVAILABLE' });
         try {
@@ -254,7 +364,8 @@ export function createMaintenanceServer(options = {}) {
       const state = await read();
       if (['GET', 'HEAD'].includes(request.method) && /^\/api\/system\/(?:restoration-status|operation-status)\/?$/.test(pathname))
         return json(response, 200, state);
-      if (request.method === 'GET' && pathname === '/api/health') return json(response, 200, { status: 'ok', maintenance: state.state !== 'idle' });
+      if (request.method === 'GET' && pathname === '/api/health' && state.state !== 'idle')
+        return json(response, 200, { status: 'ok', maintenance: true });
       if (state.state === 'idle' || permittedDuringMaintenance(request.method, pathname)) return forward(request, response);
       if (pathname.startsWith('/api/') || !['GET', 'HEAD'].includes(request.method))
         return json(response, 503, { code: 'ORBIS_RESTORATION_IN_PROGRESS', message: 'Restoration is in progress.' });
