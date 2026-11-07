@@ -54,10 +54,12 @@ let layoutReads = 0;
 let contentRenders = 0;
 let stageRenders = 0;
 let targetHeight = 0;
+let naturalHeight = 100;
+const heights: number[] = [];
 const target = {
   get offsetHeight() {
     layoutReads++;
-    return 100;
+    return naturalHeight;
   },
 } as HTMLElement;
 const stageRef = { current: {} as HTMLDivElement };
@@ -86,6 +88,7 @@ mock.module('framer-motion', () => ({
     div: ({ children, animate }: { children: ReactNode; animate: { height?: number } }) => {
       stageRenders++;
       targetHeight = animate.height ?? 0;
+      heights.push(targetHeight);
       return children;
     },
   },
@@ -116,10 +119,11 @@ const container = {
   },
 };
 const root = createRoot(container as unknown as HTMLElement);
+const content = <Content />;
 await act(async () => {
   root.render(
     <SetupStage stageRef={stageRef} stepElement={target} reduced={false}>
-      <Content />
+      {content}
     </SetupStage>,
   );
 });
@@ -140,6 +144,27 @@ await act(async () => {
 expect(targetHeight).toBe(216);
 expect(contentRenders).toBe(1);
 expect(stageRenders).toBe(initialRenders + 1);
+const noResizeLayoutReads = layoutReads === initialReads;
+naturalHeight = 40;
+await act(async () => {
+  root.render(
+    <SetupStage stageRef={stageRef} stepElement={target} reduced={false} pending>
+      {content}
+    </SetupStage>,
+  );
+});
+expect(targetHeight).toBe(216);
+expect(layoutReads).toBe(initialReads);
+naturalHeight = 320;
+await act(async () => {
+  root.render(
+    <SetupStage stageRef={stageRef} stepElement={target} reduced={false}>
+      {content}
+    </SetupStage>,
+  );
+});
+expect(targetHeight).toBe(336);
+expect(heights).not.toContain(56);
 resized(300);
 expect(frames.size).toBe(1);
 await act(async () => {
@@ -152,7 +177,9 @@ process.stdout.write(
     resizeCallbacks: 100,
     batchedUpdates: 1,
     contentRenders,
-    noResizeLayoutReads: layoutReads === initialReads,
+    noResizeLayoutReads,
     unmountCancelsFrame: true,
+    pendingKeepsPreviousHeight: true,
+    finalContentResizesOnceReady: true,
   }),
 );

@@ -1,35 +1,23 @@
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react';
 import { animate } from 'framer-motion';
 import { useReducedMotion } from '@/desktop/motion-preferences';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { loadCloudMask } from './depth-cloud-mask';
+import { depthStarTexture } from './depth-star-data';
+import { createDepthStarRenderer } from './depth-star-renderer';
 import { depthCameraKeyframes, depthCameraZ, depthPlaneKeyframes } from './depth-travel-motion';
 import './depth-travel.css';
 
 export type DepthTravelVariant = 'timeline' | 'restore' | 'update' | 'downgrade' | 'onboarding';
 
-function starTexture(layer: number, trails: boolean) {
-  const marks = Array.from({ length: 80 }, (_, index) => {
-    const seed = index + layer * 89;
-    const x = 20 + ((seed * 373 + 71) % 960);
-    const y = 20 + ((seed * 537 + 193) % 960);
-    const size = index % 17 === 0 ? 1.4 : index % 5 === 0 ? 0.85 : 0.55;
-    const opacity = 0.32 + ((seed * 17) % 55) / 100;
-    const colour = index % 23 === 11 ? '#e3d3b5' : index % 9 === 4 ? '#c9d9e8' : '#d9e3eb';
-    if (!trails) return `<circle cx="${x}" cy="${y}" r="${size}" fill="${colour}" opacity="${opacity}"/>`;
-    const radius = Math.hypot(x - 500, y - 500) || 1;
-    const length = 3 + (radius / 700) * 8;
-    return `<path d="M${x},${y}l${(((500 - x) / radius) * length).toFixed(2)},${(((500 - y) / radius) * length).toFixed(2)}" stroke="${colour}" stroke-width="${size * 0.65}" opacity="${opacity * 0.5}"/>`;
-  }).join('');
-  return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice">${marks}</svg>`)}")`;
-}
-
-// Three cached textures move as layers; individual stars never need DOM updates.
+// CSS clocks keep the same motion and retain their textures as the rendering fallback.
 const starPlanes = [0, 1, 2].map((layer) => (
   <div
     key={layer}
     className="depth-travel-plane"
-    style={{ '--depth-layer': layer, '--depth-stars': starTexture(layer, false), '--depth-trails': starTexture(layer, true) } as CSSProperties}
+    style={
+      { '--depth-layer': layer, '--depth-stars': depthStarTexture(layer, false), '--depth-trails': depthStarTexture(layer, true) } as CSSProperties
+    }
   />
 ));
 
@@ -53,6 +41,11 @@ export function DepthTravel({
   const field = useRef<HTMLDivElement>(null);
   const shownDistance = useRef(0);
   const decodedMask = loadCloudMask.peek();
+  useLayoutEffect(() => {
+    const element = field.current;
+    if (!element) return;
+    return createDepthStarRenderer(element) ?? undefined;
+  }, []);
   useEffect(() => {
     let mounted = true;
     void loadCloudMask().then((image) => {

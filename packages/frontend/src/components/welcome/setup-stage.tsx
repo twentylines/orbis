@@ -6,17 +6,20 @@ export function SetupStage({
   stageRef,
   stepElement,
   reduced,
+  pending = false,
 }: {
   children: ReactNode;
   stageRef: RefObject<HTMLDivElement | null>;
   stepElement: HTMLElement | null;
   reduced: boolean;
+  pending?: boolean;
 }) {
   const [size, setSize] = useState<{ height: number; animate: boolean } | null>(null);
   const measured = useRef(false);
   useLayoutEffect(() => {
     const stage = stageRef.current;
-    if (!stage || !stepElement) return;
+    // Loading text is not the next step's final geometry; retain the outgoing height until it is ready.
+    if (!stage || !stepElement || pending) return;
     const style = getComputedStyle(stage);
     const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
     const update = (contentHeight: number) => {
@@ -44,12 +47,13 @@ export function SetupStage({
       observer.disconnect();
       if (frame !== undefined) cancelAnimationFrame(frame);
     };
-  }, [stageRef, stepElement]);
+  }, [stageRef, stepElement, pending]);
   return (
     <motion.div
       ref={stageRef}
       id="setup-choices"
       className="orbis-setup-stage"
+      aria-busy={pending || undefined}
       initial={false}
       animate={size ? { height: size.height } : {}}
       transition={{ duration: reduced || !size?.animate ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}

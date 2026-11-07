@@ -227,5 +227,7 @@ test('setup size changes coalesce without rerendering the current step and stop 
     contentRenders: 1,
     noResizeLayoutReads: true,
     unmountCancelsFrame: true,
+    pendingKeepsPreviousHeight: true,
+    finalContentResizesOnceReady: true,
   });
 });

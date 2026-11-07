@@ -257,10 +257,13 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     refetchOnWindowFocus: false,
   });
   const captureRequested = setupCaptureRequested(canManageUpdates, protectionDraft, protection.data?.enabled);
-  const updateSettings = useQuery({ ...automaticUpdateSettingsOptions(), enabled: canManageUpdates && (step === 'updates' || step === 'ready') });
+  const updateSettings = useQuery({
+    ...automaticUpdateSettingsOptions(),
+    enabled: canManageUpdates && (step === 'performance' || step === 'updates' || step === 'ready'),
+  });
   const installed = useQuery({
     ...getInstalledAppsOptions(),
-    enabled: canManageUpdates && (step === 'updates' || step === 'ready'),
+    enabled: canManageUpdates && (step === 'performance' || step === 'updates' || step === 'ready'),
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -307,6 +310,12 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   }, []);
 
   const position = setupPosition(step, entry);
+  const stepLayoutPending =
+    step === 'updates' &&
+    canManageUpdates &&
+    (updateSettings.isPending ||
+      installed.isPending ||
+      (!automaticEdited && Boolean(updateSettings.data) && automatic !== updateSettings.data?.settings));
   const headingId = `setup-heading-${step}`;
   const recoveryStep = step === 'restore' || step === 'transfer';
   const go = (next: SetupStep | null, dismissedRecovery = false) => {
@@ -500,7 +509,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
         }
       >
         <section className="orbis-setup" aria-labelledby={headingId} aria-busy={saving || transitioning} data-reduced={reduceSetupMotion}>
-          <SetupStage stageRef={stage} stepElement={stepElement} reduced={reduceSetupMotion}>
+          <SetupStage stageRef={stage} stepElement={stepElement} reduced={reduceSetupMotion} pending={stepLayoutPending}>
             <AnimatePresence initial={false} mode="sync" custom={direction}>
               <SetupStepPanel
                 key={step}
