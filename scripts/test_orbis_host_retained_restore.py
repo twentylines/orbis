@@ -745,12 +745,14 @@ class RetainedRestoreTests(unittest.TestCase):
         service.current_manifest = mock.Mock(return_value=target)
         overlay = module.CoreOverlay(service)
         runtime = mock.Mock()
-        runtime.source_snapshot.return_value = {'publication': current, 'controllerId': 'a' * 64, 'definition': 'current-definition'}
+        image = 'sha256:' + 'c' * 64
+        runtime.source_snapshot.return_value = {'publication': current, 'controllerId': 'a' * 64,
+                                                'imageId': image, 'definition': 'current-definition'}
         def prepare(record):
             record.update(responderId='b' * 64, definitions={'responder': 'responder-definition'})
             overlay.save(record)
         runtime.prepare_overlay.side_effect = prepare
-        responder = {'Id': 'b' * 64, 'State': {'Running': True},
+        responder = {'Id': 'b' * 64, 'Image': image, 'State': {'Running': True},
                      'HostConfig': {'RestartPolicy': {'Name': 'unless-stopped', 'MaximumRetryCount': 0}}}
         runtime.inspect.side_effect = lambda _: copy.deepcopy(responder)
         def change(arguments):
