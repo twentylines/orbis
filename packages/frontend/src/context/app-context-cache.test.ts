@@ -81,6 +81,6 @@ test('uses the loaded context when its cache has been evicted', () => {
   const client = new QueryClient();
   const original = fixture();
   patchAppContext(client, { updatesAvailable: 0 }, original);
-  expect(client.getQueryData(appContextQueryKey())).toEqual({ ...original, updatesAvailable: 0 });
+  expect(client.getQueryData<AppContextDto>(appContextQueryKey())).toEqual({ ...original, updatesAvailable: 0 });
   client.clear();
 });
