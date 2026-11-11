@@ -45,16 +45,9 @@
   justify-items: start;
   text-align: start;
 }
-.desktop[data-desktop-mode="dark"] .workspace-heading :is(h1, .workspace-subline),
-.desktop[data-desktop-mode="dark"] .workspace-apps .workspace-section-heading :is(h2, a) {
-  -webkit-text-stroke: 1px var(--workspace-heading-edge, var(--desktop-base-surface));
-  paint-order: stroke fill;
-}
-.desktop[data-desktop-mode="dark"] .workspace-heading h1 {
-  -webkit-text-stroke-width: 1.5px;
-  text-shadow:
-    0 1px 0 color-mix(in srgb, var(--workspace-heading-edge, var(--desktop-base-surface)) 45%, transparent),
-    0 3px 6px color-mix(in srgb, var(--workspace-heading-edge, var(--desktop-base-surface)) 28%, transparent);
+.workspace-heading :is(h1, .workspace-subline),
+.workspace-apps .workspace-section-heading :is(h2, a) {
+  text-shadow: var(--workspace-heading-soft-shadow, none);
 }
 .workspace-heading h1 .orbis-whole-word {
   box-sizing: border-box;

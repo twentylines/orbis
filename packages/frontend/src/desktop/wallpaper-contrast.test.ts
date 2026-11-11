@@ -40,6 +40,14 @@ describe('wallpaper text contrast', () => {
     expect(wallpaperTextColour(image, viewport, { left: 40, top: 100, width: 200, height: 40 }, base)).toBe('#10181b');
     expect(wallpaperTextColour(image, viewport, { left: 680, top: 100, width: 100, height: 40 }, base)).toBe('#ffffff');
   });
+  test('protects the dark edge of a heading that crosses foreground and dimmed sky', () => {
+    const image = { ...sample((x) => (x < 3 ? [25, 25, 25, 255] : [172, 172, 172, 255])), dim: 0.18 };
+    expect(wallpaperTextColour(image, viewport, { left: 0, top: 0, width: 800, height: 80 }, base)).toBe('#ffffff');
+  });
+  test('uses shadow-supported light ink when a mixed photograph defeats both plain colours', () => {
+    const image = sample((x) => (x < 8 ? [0, 0, 0, 255] : [255, 255, 255, 255]));
+    expect(wallpaperTextColour(image, viewport, { left: 0, top: 0, width: 800, height: 80 }, base)).toBe('#ffffff');
+  });
   test('honours cover cropping and the saved horizontal position', () => {
     const image = sample((x) => (x < 8 ? [0, 0, 0, 255] : [255, 255, 255, 255]));
     const narrow = { width: 200, height: 800 };
@@ -67,7 +75,7 @@ describe('wallpaper text contrast', () => {
   });
 });
 
-test('wallpaper text ignores unrelated scrolling and batches heading reads before colour writes', () => {
+test('wallpaper text batches initial and scrolling heading reads before colour writes', async () => {
   const names = [
     'window',
     'document',
@@ -86,6 +94,8 @@ test('wallpaper text ignores unrelated scrolling and batches heading reads befor
   const log: string[] = [];
   let nextFrame = 0;
   let dim = '0';
+  let backgroundReads = 0;
+  let backgroundColour = '#10181b';
   class Element {
     children: Element[] = [];
     contains(target: Element): boolean {
@@ -133,9 +143,18 @@ test('wallpaper text ignores unrelated scrolling and batches heading reads befor
       },
       document: {
         documentElement: root,
-        createElement: () => ({ getContext: () => null }),
+        createElement: () => ({
+          getContext: () => ({
+            fillStyle: '',
+            fillRect() {},
+            getImageData() {
+              backgroundReads++;
+              return { data: this.fillStyle === '#f0f0f0' ? [240, 240, 240, 255] : [16, 24, 27, 255] };
+            },
+          }),
+        }),
       },
-      getComputedStyle: () => ({ backgroundColor: '#10181b', getPropertyValue: () => dim }),
+      getComputedStyle: () => ({ backgroundColor: backgroundColour, getPropertyValue: () => dim }),
       ResizeObserver: class {
         constructor(callback: () => void) {
           resizes.push(callback);
@@ -161,7 +180,13 @@ test('wallpaper text ignores unrelated scrolling and batches heading reads befor
     const first = makeHeading('first');
     const second = makeHeading('second');
     disposers.push(observeWallpaperText(first, image), observeWallpaperText(second, image));
+    expect(log).toEqual([]);
+    expect(backgroundReads).toBe(0);
+    await Promise.resolve();
+    expect(backgroundReads).toBe(1);
+    expect(log.slice(0, 2)).toEqual(['read:first', 'read:second']);
     expect(log.filter((line) => line.endsWith(':--workspace-heading-ink:#10181b'))).toHaveLength(2);
+    expect(log.filter((line) => line.endsWith(':--workspace-heading-soft-shadow:none'))).toHaveLength(2);
     log.length = 0;
 
     for (let index = 0; index < 10; index++) dispatch('scroll', new Element());
@@ -184,9 +209,9 @@ test('wallpaper text ignores unrelated scrolling and batches heading reads befor
     expect(log.slice(0, 2)).toEqual(['read:first', 'read:second']);
     expect(log.slice(2)).toEqual([
       'write:first:--workspace-heading-ink:#ffffff',
-      'write:first:--workspace-heading-edge:#10181b',
+      'write:first:--workspace-heading-soft-shadow:0 1px 4px rgb(0 0 0 / 0.72), 0 3px 14px rgb(0 0 0 / 0.32)',
       'write:second:--workspace-heading-ink:#ffffff',
-      'write:second:--workspace-heading-edge:#10181b',
+      'write:second:--workspace-heading-soft-shadow:0 1px 4px rgb(0 0 0 / 0.72), 0 3px 14px rgb(0 0 0 / 0.32)',
     ]);
     log.length = 0;
     dispatch('scroll', root);
@@ -202,6 +227,33 @@ test('wallpaper text ignores unrelated scrolling and batches heading reads befor
     dispatch('resize', window);
     flush();
     expect(log).toEqual([]);
+
+    const disposeCached = observeWallpaperText(makeHeading('cached'), image);
+    expect(backgroundReads).toBe(1);
+    disposeCached();
+    log.length = 0;
+    await Promise.resolve();
+    expect(log).toEqual([]);
+    backgroundColour = '#f0f0f0';
+    dim = '0';
+    const transparent = sample(() => [0, 0, 0, 0]);
+    const disposeChanged = observeWallpaperText(makeHeading('changed'), transparent);
+    disposers.push(disposeChanged);
+    await Promise.resolve();
+    expect(backgroundReads).toBe(2);
+    expect(log).toContain('write:changed:--workspace-heading-ink:#10181b');
+    log.length = 0;
+    backgroundColour = '#10181b';
+    modes.at(-1)?.();
+    flush();
+    expect(backgroundReads).toBe(3);
+    expect(log).toContain('write:changed:--workspace-heading-ink:#ffffff');
+    log.length = 0;
+    backgroundColour = '#f0f0f0';
+    modes.at(-1)?.();
+    flush();
+    expect(backgroundReads).toBe(4);
+    expect(log).toContain('write:changed:--workspace-heading-ink:#10181b');
   } finally {
     for (const dispose of disposers) dispose();
     for (const [name, descriptor] of descriptors) {

@@ -14,16 +14,32 @@ type Measurement = () => (() => void) | undefined;
 const pending = new Set<Measurement>();
 let pendingFrame: number | null = null;
 
-function scheduleMeasurement(measure: Measurement) {
+let initialPending = false;
+
+function flushMeasurements() {
+  const measurements = [...pending];
+  pending.clear();
+  // Read every heading before changing styles, so one heading cannot flush another's layout.
+  const updates = measurements.map((read) => read());
+  for (const update of updates) update?.();
+}
+
+function scheduleMeasurement(measure: Measurement, initial = false) {
   pending.add(measure);
+  if (initial) {
+    if (initialPending) return;
+    initialPending = true;
+    // Layout effects register all Home headings before this pre-paint batch runs.
+    queueMicrotask(() => {
+      initialPending = false;
+      flushMeasurements();
+    });
+    return;
+  }
   if (pendingFrame !== null) return;
   pendingFrame = requestAnimationFrame(() => {
     pendingFrame = null;
-    const measurements = [...pending];
-    pending.clear();
-    // Read every heading before changing styles, so one heading cannot flush another's layout.
-    const updates = measurements.map((read) => read());
-    for (const update of updates) update?.();
+    flushMeasurements();
   });
 }
 
@@ -42,11 +58,11 @@ export function useWallpaperText<T extends HTMLElement>() {
   return setTarget;
 }
 
-export function observeWallpaperText(target: HTMLElement, sample: WallpaperSample) {
-  let connected = true;
-  let previousColour: string | null = null;
-  const desktop = target.closest('.desktop') ?? document.documentElement;
-  const base = getComputedStyle(desktop).backgroundColor;
+const backgroundColours = new WeakMap<Element, { base: string; colour: [number, number, number] }>();
+
+function wallpaperBackground(desktop: Element, base: string) {
+  const cached = backgroundColours.get(desktop);
+  if (cached?.base === base) return cached.colour;
   let background: [number, number, number] = [16, 24, 27];
   try {
     const canvas = document.createElement('canvas');
@@ -62,10 +78,20 @@ export function observeWallpaperText(target: HTMLElement, sample: WallpaperSampl
   } catch {
     // Privacy-restricted canvas reads must not prevent using the dashboard.
   }
+  backgroundColours.set(desktop, { base, colour: background });
+  return background;
+}
+
+export function observeWallpaperText(target: HTMLElement, sample: WallpaperSample) {
+  let connected = true;
+  let previousColour: string | null = null;
+  const desktop = target.closest('.desktop') ?? document.documentElement;
   const measure = () => {
     if (!connected) return;
     const rect = target.getBoundingClientRect();
-    const modeDim = Number.parseFloat(getComputedStyle(desktop).getPropertyValue('--workspace-wallpaper-dim')) || 0;
+    const style = getComputedStyle(desktop);
+    const background = wallpaperBackground(desktop, style.backgroundColor);
+    const modeDim = Number.parseFloat(style.getPropertyValue('--workspace-wallpaper-dim')) || 0;
     const colour = wallpaperTextColour(
       { ...sample, dim: 1 - (1 - sample.dim) * (1 - modeDim) },
       { width: window.innerWidth, height: window.innerHeight },
@@ -77,7 +103,10 @@ export function observeWallpaperText(target: HTMLElement, sample: WallpaperSampl
       if (!connected) return;
       previousColour = colour;
       target.style.setProperty('--workspace-heading-ink', colour);
-      target.style.setProperty('--workspace-heading-edge', colour === '#ffffff' ? '#10181b' : '#ffffff');
+      target.style.setProperty(
+        '--workspace-heading-soft-shadow',
+        colour === '#ffffff' ? '0 1px 4px rgb(0 0 0 / 0.72), 0 3px 14px rgb(0 0 0 / 0.32)' : 'none',
+      );
     };
   };
   const schedule = () => {
@@ -93,7 +122,7 @@ export function observeWallpaperText(target: HTMLElement, sample: WallpaperSampl
   modeObserver.observe(desktop, { attributes: true, attributeFilter: ['data-desktop-mode'] });
   window.addEventListener('resize', schedule, { passive: true });
   window.addEventListener('scroll', scroll, { passive: true, capture: true });
-  measure()?.();
+  scheduleMeasurement(measure, true);
   return () => {
     connected = false;
     observer.disconnect();
@@ -106,6 +135,6 @@ export function observeWallpaperText(target: HTMLElement, sample: WallpaperSampl
       pendingFrame = null;
     }
     target.style.removeProperty('--workspace-heading-ink');
-    target.style.removeProperty('--workspace-heading-edge');
+    target.style.removeProperty('--workspace-heading-soft-shadow');
   };
 }

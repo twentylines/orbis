@@ -23,7 +23,7 @@ export const presetWallpaperSources: Record<ThemePreset, string> = {
   forest: '/wallpapers/forest-v3.webp',
   stone: '/wallpapers/stone-v2.webp',
   ocean: '/wallpapers/ocean-v3.webp',
-  blush: '/wallpapers/blush-v3.webp',
+  blush: '/wallpapers/blush-v4.webp',
 };
 export const presetWallpaperPreviews = Object.fromEntries(
   themePresets.map((preset) => [preset, presetWallpaperSources[preset].replace('.webp', '-preview.webp')]),

@@ -61,9 +61,12 @@ export function wallpaperTextColour(sample: WallpaperSample, viewport: { width: 
   if (!readings.length) return null;
   const score = (colour: Colour) => {
     const value = luminance(colour);
-    const ratios = readings.map((reading) => contrast(value, reading)).sort((a, b) => a - b);
-    // Judge the text's own region, rather than a whole-photo average or a single bright pixel.
-    return ratios[Math.floor(ratios.length * 0.2)] ?? 0;
+    // A heading can cross sky and dark foreground; protect its weakest sampled region.
+    return Math.min(...readings.map((reading) => contrast(value, reading)));
   };
-  return score(colours.light) > score(colours.dark) ? wallpaperTextColours.light : wallpaperTextColours.dark;
+  const lightScore = score(colours.light);
+  const darkScore = score(colours.dark);
+  // Mixed photographs need light ink so its dark, diffuse shadow can support the bright areas.
+  if (Math.max(lightScore, darkScore) < 4.5) return wallpaperTextColours.light;
+  return lightScore > darkScore ? wallpaperTextColours.light : wallpaperTextColours.dark;
 }
