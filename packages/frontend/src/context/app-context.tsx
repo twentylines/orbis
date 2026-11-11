@@ -1,7 +1,8 @@
 import type { AppContextDto } from '@/api-client';
 import { appContextOptions, appContextQueryKey, systemLoadOptions } from '@/api-client/@tanstack/react-query.gen';
 import { type QueryClient, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
-import { createContext, useContext, useEffect, useRef } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import { patchAppContext } from './app-context-cache';
 
 interface AppContextValue extends AppContextDto {
   refreshAppContext: () => Promise<void>;
@@ -23,22 +24,29 @@ export const AppContextProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     prefetch(queryClient);
   }, [queryClient]);
 
-  const queryKey = appContextQueryKey();
   // Suspense handles an initial failure; cached context keeps the desktop usable during a server restart.
   const { data: appContext } = useSuspenseQuery({ ...appContextOptions() });
 
-  const refreshAppContext = async () => {
-    await queryClient.invalidateQueries({ queryKey });
-  };
+  const refreshAppContext = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: appContextQueryKey() });
+  }, [queryClient]);
 
-  const value = {
-    ...appContext,
-    sessionIdentity,
-    refreshAppContext,
-    setAppContext: (newAppContext: Partial<AppContextDto>) => {
-      queryClient.setQueryData(['appContext'], { ...appContext, ...newAppContext });
+  const setAppContext = useCallback(
+    (patch: Partial<AppContextDto>) => {
+      patchAppContext(queryClient, patch, appContext);
     },
-  };
+    [queryClient, appContext],
+  );
+
+  const value = useMemo(
+    () => ({
+      ...appContext,
+      sessionIdentity,
+      refreshAppContext,
+      setAppContext,
+    }),
+    [appContext, sessionIdentity, refreshAppContext, setAppContext],
+  );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
