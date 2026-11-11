@@ -54,8 +54,9 @@ test('captured theme palettes and appearance remain scoped and unresolved system
   const { point, preview } = saved();
   const theme = bundledThemePacks[0];
   if (!theme) throw new Error('Missing theme fixture');
-  preview.theme = structuredClone(theme);
-  preview.theme.light.surface = '#fffef0';
+  const capturedTheme = structuredClone(theme);
+  capturedTheme.light.surface = '#fffef0';
+  preview.theme = capturedTheme;
   preview.desktop.appearance = {
     accent: '#a74271',
     textScale: 150,

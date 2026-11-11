@@ -23,7 +23,16 @@ export function SetupStage({
     const style = getComputedStyle(stage);
     const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
     const update = (contentHeight: number) => {
-      const height = contentHeight + padding;
+      const previous = stage.style.height;
+      let height: number;
+      try {
+        stage.style.height = `${contentHeight + padding}px`;
+        // Animate to the visible flex/viewport limit, rather than reaching it halfway through the motion.
+        height = stage.getBoundingClientRect().height;
+      } finally {
+        stage.style.height = previous;
+      }
+      if (!(height > 0)) return;
       const animate = measured.current;
       measured.current = true;
       setSize((current) => (current?.height === height ? current : { height, animate }));

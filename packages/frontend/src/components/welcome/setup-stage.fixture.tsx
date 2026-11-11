@@ -55,6 +55,7 @@ let contentRenders = 0;
 let stageRenders = 0;
 let targetHeight = 0;
 let naturalHeight = 100;
+let heightLimit = Number.POSITIVE_INFINITY;
 const heights: number[] = [];
 const target = {
   get offsetHeight() {
@@ -62,7 +63,14 @@ const target = {
     return naturalHeight;
   },
 } as HTMLElement;
-const stageRef = { current: {} as HTMLDivElement };
+const stageRef = {
+  current: {
+    style: { height: '' },
+    getBoundingClientRect() {
+      return { height: Math.min(Number.parseFloat(this.style.height), heightLimit) };
+    },
+  } as HTMLDivElement,
+};
 Object.assign(globalThis, {
   getComputedStyle: () => ({ paddingTop: '8', paddingBottom: '8' }),
   requestAnimationFrame: (frame: FrameRequestCallback) => {
@@ -165,6 +173,15 @@ await act(async () => {
 });
 expect(targetHeight).toBe(336);
 expect(heights).not.toContain(56);
+heightLimit = 240;
+resized(600);
+await act(async () => {
+  const queued = [...frames.values()];
+  frames.clear();
+  for (const frame of queued) frame(0);
+});
+expect(targetHeight).toBe(240);
+expect(stageRef.current.style.height).toBe('');
 resized(300);
 expect(frames.size).toBe(1);
 await act(async () => {
@@ -181,5 +198,6 @@ process.stdout.write(
     unmountCancelsFrame: true,
     pendingKeepsPreviousHeight: true,
     finalContentResizesOnceReady: true,
+    constrainedHeightUsesVisibleDestination: true,
   }),
 );

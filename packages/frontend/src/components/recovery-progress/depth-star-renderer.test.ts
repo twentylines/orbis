@@ -197,13 +197,14 @@ function harness(
 }
 
 describe('renderer fallback and teardown', () => {
-  test('draws separated circles directly without allocating or copying scratch surfaces', () => {
+  test('draws visible separated circles directly without allocating or copying scratch surfaces', () => {
     const h = harness();
     try {
       const dispose = createDepthStarRenderer(h.root);
-      expect(h.surfaces[0]?.fills).toBe(240);
+      expect(h.surfaces[0]?.fills).toBeGreaterThan(0);
+      expect(h.surfaces[0]?.fills).toBeLessThan(240);
       expect(h.surfaces[0]?.copies).toBe(0);
-      expect(h.surfaces[0]?.alphas[0]).toBeCloseTo(0.32 * 0.5);
+      expect(h.surfaces[0]?.alphas.every((alpha) => alpha > 0 && alpha <= 0.5)).toBe(true);
       expect(h.surfaces.slice(1).every((surface) => surface.width === 0 && surface.height === 0)).toBe(true);
       dispose?.();
     } finally {
@@ -233,9 +234,11 @@ describe('renderer fallback and teardown', () => {
       const dispose = createDepthStarRenderer(h.root);
       expect(h.surfaces[0]?.fills).toBe(0);
       expect(h.surfaces[0]?.copies).toBe(3);
-      expect(h.surfaces[1]?.fills).toBe(240);
+      expect(h.surfaces[1]?.fills).toBeGreaterThan(0);
+      expect(h.surfaces[1]?.fills).toBeLessThan(240);
       expect(h.surfaces[1]?.copies).toBe(3);
-      expect(h.strokes()).toBe(240);
+      expect(h.strokes()).toBeGreaterThan(0);
+      expect(h.strokes()).toBeLessThan(240);
       expect(h.surfaces[2]?.width).toBe(200);
       dispose?.();
     } finally {
@@ -259,13 +262,14 @@ describe('renderer fallback and teardown', () => {
       run();
       expect(h.surfaces[1]?.width).toBe(200);
       expect(h.surfaces[2]?.width).toBe(200);
+      const firstStrokes = h.strokes();
       options.trailOpacity = 0;
       run();
       expect(h.surfaces[1]?.width).toBe(200);
       expect(h.surfaces[2]?.width).toBe(200);
       options.trailOpacity = 0.2;
       run();
-      expect(h.strokes()).toBe(480);
+      expect(h.strokes()).toBe(firstStrokes * 2);
       dispose?.();
       expect(h.surfaces.every((surface) => surface.width === 0 && surface.height === 0)).toBe(true);
     } finally {
@@ -273,15 +277,16 @@ describe('renderer fallback and teardown', () => {
     }
   });
 
-  test('skips invisible trails but draws all visible trail marks', () => {
-    for (const [opacity, expected] of [
-      [0, 0],
-      [0.2, 240],
-    ] as const) {
+  test('skips invisible trails and off-canvas trail marks', () => {
+    for (const opacity of [0, 0.2]) {
       const h = harness({ trailOpacity: opacity });
       try {
         const dispose = createDepthStarRenderer(h.root);
-        expect(h.strokes()).toBe(expected);
+        if (opacity === 0) expect(h.strokes()).toBe(0);
+        else {
+          expect(h.strokes()).toBeGreaterThan(0);
+          expect(h.strokes()).toBeLessThan(240);
+        }
         expect(h.root.dataset.depthStars).toBe('canvas');
         dispose?.();
       } finally {

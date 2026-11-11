@@ -118,6 +118,9 @@ export function createDepthStarRenderer(root: HTMLElement): (() => void) | null 
           const matrix = state.transform === 'none' ? new DOMMatrixReadOnly() : new DOMMatrixReadOnly(state.transform);
           const geometry = depthStarProjection(width, height, ox, oy, perspective, matrix.m43);
           if (!Object.values(geometry).every(Number.isFinite) || geometry.factor <= 0) throw new Error('Invalid star projection');
+          const fringe = Math.max(1 / sx, 1 / sy);
+          const intersects = (left: number, top: number, right: number, bottom: number) =>
+            right >= -fringe && bottom >= -fringe && left <= width + fringe && top <= height + fringe;
           const trailOpacity = Number(getComputedStyle(plane, '::after').opacity);
           const direct = trailOpacity === 0 && gap * geometry.factor * Math.min(sx, sy) > 2 * Math.SQRT2;
           const starsContext = direct ? out : planeContext;
@@ -144,6 +147,11 @@ export function createDepthStarRenderer(root: HTMLElement): (() => void) | null 
           }
           starsContext.setTransform(sx * geometry.factor, 0, 0, sy * geometry.factor, sx * geometry.left, sy * geometry.top);
           for (const mark of stars) {
+            const x = geometry.left + mark.x * geometry.factor;
+            const y = geometry.top + mark.y * geometry.factor;
+            const radius = mark.radius * geometry.factor;
+            // Keep the antialiased edge; off-canvas paths cannot contribute pixels.
+            if (!intersects(x - radius, y - radius, x + radius, y + radius)) continue;
             starsContext.globalAlpha = mark.opacity * (direct ? alpha : 1);
             starsContext.fillStyle = mark.colour;
             starsContext.beginPath();
@@ -154,6 +162,13 @@ export function createDepthStarRenderer(root: HTMLElement): (() => void) | null 
           if (trailOpacity > 0) {
             trailContext.setTransform(sx * geometry.factor, 0, 0, sy * geometry.factor, sx * geometry.trailLeft, sy * geometry.trailTop);
             for (const mark of stars) {
+              const x = geometry.trailLeft + mark.x * geometry.factor;
+              const y = geometry.trailTop + mark.y * geometry.factor;
+              const endX = x + Number(mark.dx) * geometry.factor;
+              const endY = y + Number(mark.dy) * geometry.factor;
+              const radius = mark.radius * 0.325 * geometry.factor;
+              if (!intersects(Math.min(x, endX) - radius, Math.min(y, endY) - radius, Math.max(x, endX) + radius, Math.max(y, endY) + radius))
+                continue;
               trailContext.globalAlpha = mark.opacity * 0.5;
               trailContext.strokeStyle = mark.colour;
               trailContext.lineWidth = mark.radius * 0.65;
