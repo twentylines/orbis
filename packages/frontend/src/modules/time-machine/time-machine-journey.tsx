@@ -38,8 +38,10 @@ import {
 } from './timeline-state';
 import './time-machine.css';
 
-export const pointDate = (point: Pick<TimeMachinePoint, 'createdAt'>) =>
-  new Date(point.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+export const pointDate = (point: Pick<TimeMachinePoint, 'createdAt'>, formatter?: Intl.DateTimeFormat) =>
+  formatter
+    ? formatter.format(new Date(point.createdAt))
+    : new Date(point.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const subscribeEffects = (change: () => void) => {
   const observer = new MutationObserver(change);
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-orbis-effects'] });
@@ -414,6 +416,7 @@ export function HistoricalDateRuler({
     return () => observer.disconnect();
   }, [readViewport]);
   const rows: ReactNode[] = [];
+  const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   let previousIndex = -1;
   const spacer = (start: number, end: number) => {
     if (start >= end) return;
@@ -446,7 +449,7 @@ export function HistoricalDateRuler({
           onClick={() => onSelect(item.id)}
         >
           <i className="tm-ruler-tick" aria-hidden="true" />
-          <time dateTime={new Date(item.createdAt).toISOString()}>{pointDate(item)}</time>
+          <time dateTime={new Date(item.createdAt).toISOString()}>{pointDate(item, dateFormatter)}</time>
           <span>{item.metadata?.label || item.status}</span>
         </button>
       </li>,

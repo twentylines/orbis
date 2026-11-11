@@ -195,6 +195,13 @@ test('the date ruler ascends oldest to newest independently of the newest-first 
   expect(html.match(/aria-current="date"/g)).toHaveLength(1);
   expect(html.match(/tabindex="0"/g)).toHaveLength(1);
   expect(html.match(/tm-ruler-tick/g)).toHaveLength(2);
+  for (const point of points) {
+    const date = new Date(point.createdAt);
+    const expected = renderToStaticMarkup(
+      <time dateTime={date.toISOString()}>{date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</time>,
+    );
+    expect(html).toContain(expected);
+  }
   expect(html).not.toContain('<a ');
 });
 
