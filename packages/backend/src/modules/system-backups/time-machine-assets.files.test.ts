@@ -80,6 +80,21 @@ it('binds captured builtin bytes to a digest and does not re-resolve a photo aft
   expect(saved?.data).toEqual(png);
 });
 
+it('captures the current Blush landscape while an earlier captured photograph remains valid', async () => {
+  desktop = { ...desktop, preset: 'blush' };
+  const bundled = path.resolve('../frontend/public/wallpapers');
+  const current = await fs.readFile(path.join(bundled, 'blush-v4.webp'));
+  const previous = await fs.readFile(path.join(bundled, 'blush-v3.webp'));
+  const saved = await snapshotWallpaper(snapshot, await preview(), 1, [bundled]);
+  expect(saved?.source).toBe('captured-builtin');
+  expect(saved?.identity).toBe(digest(current));
+  expect(saved?.data).toEqual(current);
+  expect(saved?.identity).not.toBe(digest(previous));
+  const historical = capturedWallpaper(previous, 'captured-builtin', digest(previous));
+  expect(historical.data).toEqual(previous);
+  expect(historical.identity).toBe(digest(previous));
+});
+
 it('selects the captured theme version and checks its real asset hash, dimensions and mime', async () => {
   const pack = bundledThemePacks[0];
   if (!pack?.assets[0]) throw new Error('Missing immutable theme fixture.');

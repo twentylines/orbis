@@ -12,7 +12,7 @@ export const timeMachineBuiltinPhotographs = {
   forest: 'forest-v3.webp',
   stone: 'stone-v2.webp',
   ocean: 'ocean-v3.webp',
-  blush: 'blush-v3.webp',
+  blush: 'blush-v4.webp',
 } as const;
 const legacy = { sandstone: 'stone', tidal: 'ocean', canopy: 'forest' } as const;
 const mimes = { png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp' } as const;
