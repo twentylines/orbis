@@ -86,3 +86,28 @@ test('rejects an SVG body even when a forged payload labels it as a raster', asy
   globalThis.fetch = (async () => new Response(body, { headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
   await expect(readHistoricalAppIcons(point, new AbortController().signal)).rejects.toThrow();
 });
+
+test('preserves every byte value across a large decoded icon and rejects a changed image digest', async () => {
+  const { point, asset } = fixture();
+  const image = Buffer.alloc(256 * 1024);
+  for (let index = 0; index < image.length; index++) image[index] = index % 256;
+  png.copy(image, 0, 0, 8);
+  const original = asset.icons[0];
+  if (!original) throw new Error('Captured icon fixture is missing');
+  const descriptor = { ...original, identity: sha(image), bytes: image.length };
+  const respond = () => {
+    const body = Buffer.from(JSON.stringify({ version: 1, icons: [{ ...descriptor, data: image.toString('base64') }] }));
+    asset.icons = [descriptor];
+    asset.identity = sha(body);
+    asset.bytes = body.length;
+    globalThis.fetch = (async () => new Response(body, { headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+  };
+  respond();
+  const icons = await readHistoricalAppIcons(point, new AbortController().signal);
+  const icon = icons[0];
+  if (!icon) throw new Error('Captured icon is missing');
+  expect(Buffer.from(await icon.blob.arrayBuffer())).toEqual(image);
+  image[image.length - 1] = image.readUInt8(image.length - 1) ^ 1;
+  respond();
+  await expect(readHistoricalAppIcons(point, new AbortController().signal)).rejects.toThrow();
+});

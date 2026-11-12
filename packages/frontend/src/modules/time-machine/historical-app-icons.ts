@@ -54,7 +54,8 @@ export async function readHistoricalAppIcons(point: TimeMachinePoint, signal: Ab
     if (!item || !expected || Object.entries(expected).some(([key, value]) => Reflect.get(item, key) !== value)) throw fail();
     const raw = atob(item.data);
     if (raw.length !== item.bytes || btoa(raw) !== item.data) throw fail();
-    const image = Uint8Array.from(raw, (character) => character.charCodeAt(0));
+    const image = new Uint8Array(raw.length);
+    for (let byte = 0; byte < raw.length; byte++) image[byte] = raw.charCodeAt(byte);
     if ((await digest(image)) !== item.identity) throw fail();
     const header = String.fromCharCode(...image.subarray(0, 12));
     const raster =
