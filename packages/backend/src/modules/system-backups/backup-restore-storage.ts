@@ -57,11 +57,12 @@ function canonical(value: string) {
   );
 }
 function bind(mount: RestoreStorageMount) {
+  const inheritedSocket = mount.Destination === socketDestination && mount.RW === false && mount.Propagation === 'rslave';
   if (
     mount.Type !== 'bind' ||
     !canonical(mount.Source) ||
     typeof mount.RW !== 'boolean' ||
-    (mount.Propagation !== undefined && !['', 'private', 'rprivate'].includes(mount.Propagation))
+    (mount.Propagation !== undefined && !['', 'private', 'rprivate'].includes(mount.Propagation) && !inheritedSocket)
   )
     throw failed();
   return mount;

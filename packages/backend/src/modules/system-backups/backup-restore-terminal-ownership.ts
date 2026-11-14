@@ -284,6 +284,9 @@ export async function proveManagedController(
     )
   )
     throw terminalFailure();
+  const socket = current.Mounts.find((mount) => mount.Destination === '/var/run/docker.sock');
+  // Inherited propagation is safe for a socket inode; directories retain the private-mount requirement.
+  if (socket?.Propagation === 'rslave' && !(await fs.lstat('/var/run/docker.sock')).isSocket()) throw terminalFailure();
   const image = await inspectTerminalImage(docker, current.Image, signal);
   if (image.Id !== current.Image || image.Config?.Labels?.['io.orbis.installation-protocol'] !== ownership.protocol) throw terminalFailure();
   const endpoint = current.NetworkSettings.Networks[ownership.mainNetwork];

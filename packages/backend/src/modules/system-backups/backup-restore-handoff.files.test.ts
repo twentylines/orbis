@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { createServer } from 'node:net';
 import type Dockerode from 'dockerode';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { prepareRestoreHandoff, discardUnstartedRestoreHandoff, type RestoreHandoffOptions } from './backup-restore-handoff';
@@ -216,6 +217,45 @@ const assertOriginalUntouched = () => {
     expect(handles.get(id)?.start).not.toHaveBeenCalled();
   }
 };
+
+it('accepts inherited Docker socket propagation only after observing a real socket inode', async () => {
+  const original = snapshots.get(controller);
+  const socket = original?.Mounts.find((mount) => mount.Destination === '/var/run/docker.sock');
+  if (!socket) throw new Error('Missing controller socket');
+  socket.Propagation = 'rslave';
+  const socketPath = path.join(os.tmpdir(), `${path.basename(root).slice(-6)}.sock`);
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => server.once('error', reject).listen(socketPath, resolve));
+  try {
+    const lstat = fs.lstat;
+    vi.spyOn(fs, 'lstat').mockImplementation((file, options) => lstat(file === '/var/run/docker.sock' ? socketPath : file, options));
+    const result = await prepareRestoreHandoff(options);
+    expect(result.journal.state.phase).toBe('staging');
+    expect(create).toHaveBeenCalledTimes(2);
+    assertOriginalUntouched();
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+it.each(['file', 'directory', 'symlink'] as const)('rejects an inherited Docker socket bound to a %s before allocation', async (kind) => {
+  const original = snapshots.get(controller);
+  const socket = original?.Mounts.find((mount) => mount.Destination === '/var/run/docker.sock');
+  if (!socket) throw new Error('Missing controller socket');
+  socket.Propagation = 'rslave';
+  const target = path.join(root, 'not-a-socket');
+  if (kind === 'file') await fs.writeFile(target, 'ordinary file');
+  else if (kind === 'directory') await fs.mkdir(target);
+  else await fs.symlink(path.join(root, 'data'), target);
+  const stat = await fs.lstat(target);
+  vi.spyOn(fs, 'lstat').mockResolvedValueOnce(stat);
+  const claim = vi.spyOn(options, 'claimReviewedSource');
+  await expect(prepareRestoreHandoff(options)).rejects.toThrow('managed Compose controller support could not be verified');
+  expect(create).not.toHaveBeenCalled();
+  expect(claim).not.toHaveBeenCalled();
+  expect(await currentJournal()).toBeUndefined();
+  assertOriginalUntouched();
+});
 
 it('binds preserved media into the staged journal only after authenticating the v2 source manifest', async () => {
   options.claimReviewedSource = async (journal, accept) => {

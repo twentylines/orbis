@@ -364,18 +364,30 @@ def read_status(state_dir, point):
             **({'artifact': artifact} if artifact is not None else {})}
 
 
+def worker_environment():
+    # Transient units do not inherit the admitting service's Docker client context.
+    values = {'PATH': os.environ.get('PATH', os.defpath),
+              'DOCKER_CONFIG': os.environ.get('DOCKER_CONFIG', str(Path.home() / '.docker'))}
+    for value in values.values():
+        if not isinstance(value, str) or len(value) > 8192 or any(ord(char) < 32 or ord(char) == 127 for char in value):
+            raise AdmissionError('The Docker client environment could not be preserved')
+    values['PATH'] = os.pathsep.join(os.path.abspath(part) for part in values['PATH'].split(os.pathsep))
+    values['DOCKER_CONFIG'] = os.path.abspath(values['DOCKER_CONFIG'])
+    return ['--setenv=' + name + '=' + value for name, value in values.items()]
+
 def launch_worker(state_dir, point):
     admission = Admission(state_dir, point)
     code_sha256 = worker_hash()
     if admission.read('claim.json', optional=True)[0] is not None:
         raise AdmissionError('The capture attempt is already consumed')
+    environment = worker_environment()
     # Existing complete, partial, or lost-response intents are all non-replayable.
     admission.create('launch-intent.json', admission.event('launch-intent', workerSha256=code_sha256,
                      unit='orbis-core-capture-' + admission.point, supervisionProtocol=2,
                      supervisorSha256=SUPERVISOR.source_hash(worker_context())))
     command = ['/usr/bin/systemd-run', '--unit=orbis-core-capture-' + admission.point,
                '--property=Type=exec', '--property=Restart=no', '--property=RemainAfterExit=yes',
-               '--property=KillMode=control-group', '--property=Delegate=yes', '--property=TasksAccounting=yes',
+               '--property=KillMode=control-group', '--property=Delegate=yes', '--property=TasksAccounting=yes', *environment,
                '/usr/bin/python3', '-B', str(SUPERVISOR.SUPERVISOR), 'run', admission.point, '--state-dir', str(admission.state)]
     try:
         result = subprocess.run(command, capture_output=True, timeout=10, check=False)

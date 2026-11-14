@@ -312,6 +312,32 @@ describe('unsupported layouts', () => {
     target(original, '/data/state').Propagation = Propagation;
     expect(() => deriveRestoreStorageLayout(original)).toThrow('supported writable bind storage');
   });
+  it('retains a read-only inherited Docker socket while privately binding restore auxiliaries', () => {
+    const original = production();
+    target(original, '/var/run/docker.sock').Propagation = 'rslave';
+    const result = deriveRestoreStorageLayout(original);
+    expect(result.workerMounts.find((item) => item.Target === '/var/run/docker.sock')).toMatchObject({
+      ReadOnly: true,
+      BindOptions: { Propagation: 'rprivate' },
+    });
+    expect(result.verifierMounts.some((item) => item.Target === '/var/run/docker.sock')).toBe(false);
+    expect(() => verifyRestoreStorageMounts(original, productionInspection('worker'), 'worker')).not.toThrow();
+  });
+  it.each(['/data/state', '/app-data', '/data/.env', '/run/orbis', '/synthetic/socket'])(
+    'keeps inherited propagation unavailable for %s',
+    (destination) => {
+      const original = production();
+      const selected = original.find((item) => item.Destination === destination);
+      if (selected) Object.assign(selected, { Propagation: 'rslave', RW: false });
+      else original.push({ ...mount(destination, '/synthetic/source', false), Propagation: 'rslave' });
+      expect(() => deriveRestoreStorageLayout(original)).toThrow('supported writable bind storage');
+    },
+  );
+  it('rejects inherited propagation on a writable Docker socket', () => {
+    const original = production();
+    Object.assign(target(original, '/var/run/docker.sock'), { Propagation: 'rslave', RW: true });
+    expect(() => deriveRestoreStorageLayout(original)).toThrow('supported writable bind storage');
+  });
   it('rejects a non-bind socket instead of granting another socket or its parent', () => {
     const original = production();
     target(original, '/var/run/docker.sock').Type = 'volume';

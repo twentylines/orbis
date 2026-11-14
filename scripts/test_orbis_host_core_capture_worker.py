@@ -348,6 +348,41 @@ class CoreCaptureWorkerTests(unittest.TestCase):
             self.assertEqual(launch.call_count, 1)
         self.assert_held()
 
+    def test_launcher_preserves_only_the_admitting_docker_client_environment(self):
+        values = {'PATH': '/opt/docker/bin:/usr/bin:/bin', 'DOCKER_CONFIG': '/var/lib/docker-client',
+                  'JWT_SECRET': 'not-forwarded', 'PYTHONPATH': '/unrelated/module-path'}
+        with mock.patch.dict(os.environ, values, clear=True), mock.patch.object(W.subprocess, 'run', return_value=mock.Mock(returncode=0)) as launch:
+            W.launch_worker(str(self.state), self.point)
+        command = launch.call_args.args[0]
+        self.assertEqual([part for part in command if part.startswith('--setenv=')],
+                         ['--setenv=PATH=/opt/docker/bin:/usr/bin:/bin', '--setenv=DOCKER_CONFIG=/var/lib/docker-client'])
+        self.assertNotIn('not-forwarded', ' '.join(command))
+        self.assertNotIn('/unrelated/module-path', ' '.join(command))
+        self.assert_held()
+
+    def test_docker_config_defaults_to_the_admitting_home_without_forwarding_home(self):
+        with mock.patch.dict(os.environ, {'HOME': '/var/lib/operator'}, clear=True):
+            result = W.worker_environment()
+        self.assertIn('--setenv=DOCKER_CONFIG=/var/lib/operator/.docker', result)
+        self.assertFalse(any(part.startswith('--setenv=HOME=') for part in result))
+        self.assertIn('--setenv=PATH=' + os.pathsep.join(os.path.abspath(part) for part in os.defpath.split(os.pathsep)), result)
+
+    def test_relative_docker_paths_keep_the_admitting_working_directory(self):
+        with mock.patch.dict(os.environ, {'PATH': 'bin::/usr/bin', 'DOCKER_CONFIG': 'client'}, clear=True):
+            result = W.worker_environment()
+        self.assertEqual(result, ['--setenv=PATH=' + os.pathsep.join([os.path.abspath('bin'), os.getcwd(), '/usr/bin']),
+                                  '--setenv=DOCKER_CONFIG=' + os.path.abspath('client')])
+
+    def test_invalid_environment_is_rejected_before_consuming_launch_intent(self):
+        for name, value in [('PATH', '/usr/bin\n/untrusted'), ('DOCKER_CONFIG', '/private\rbad'),
+                            ('PATH', 'x' * 8193), ('DOCKER_CONFIG', '/private\x7f')]:
+            with self.subTest(name=name, valueLength=len(value)), mock.patch.dict(os.environ, {name: value}), \
+                    mock.patch.object(W.subprocess, 'run') as launch, self.assertRaises(W.AdmissionError):
+                W.launch_worker(str(self.state), self.point)
+            launch.assert_not_called()
+            self.assertFalse((self.directory / 'launch-intent.json').exists())
+        self.assert_held()
+
     def test_lost_launch_response_never_relaunches(self):
         with mock.patch.object(W.subprocess, 'run', side_effect=subprocess.TimeoutExpired('fixed-unit', 10)) as launch:
             self.assertEqual(W.launch_worker(str(self.state), self.point)['state'], 'launch-unsettled')
