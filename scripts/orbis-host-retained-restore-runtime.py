@@ -1325,8 +1325,19 @@ class DockerRestoreRuntime:
                 item = matches[0]
                 if destination == '/run/orbis' and (item.get('Source') != '/run/orbis' or item.get('RW') is not False):
                     raise fail()
+                propagation = 'rprivate'
+                if destination == '/var/run/docker.sock' and item.get('Propagation') == 'rslave':
+                    source = item.get('Source')
+                    if item.get('RW') is not False or not isinstance(source, str) or not source.startswith('/'):
+                        raise fail()
+                    try:
+                        if not stat.S_ISSOCK(os.lstat(source).st_mode):
+                            raise fail()
+                    except OSError as error:
+                        raise fail() from error
+                    propagation = 'rslave'
                 result.append({'Type': 'bind', 'Source': item['Source'], 'Target': destination, 'ReadOnly': not item['RW'],
-                               'BindOptions': {'Propagation': 'rprivate'}})
+                               'BindOptions': {'Propagation': propagation}})
         return sorted(result, key=lambda item: (item['Target'].count('/'), item['Target']))
 
     def base_body(self, record, role, target_config):

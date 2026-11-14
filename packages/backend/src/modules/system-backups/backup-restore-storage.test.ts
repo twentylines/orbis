@@ -312,14 +312,17 @@ describe('unsupported layouts', () => {
     target(original, '/data/state').Propagation = Propagation;
     expect(() => deriveRestoreStorageLayout(original)).toThrow('supported writable bind storage');
   });
-  it('retains a read-only inherited Docker socket while privately binding restore auxiliaries', () => {
+  it('preserves inherited read-only socket propagation while keeping data binds private', () => {
     const original = production();
     target(original, '/var/run/docker.sock').Propagation = 'rslave';
     const result = deriveRestoreStorageLayout(original);
     expect(result.workerMounts.find((item) => item.Target === '/var/run/docker.sock')).toMatchObject({
       ReadOnly: true,
-      BindOptions: { Propagation: 'rprivate' },
+      BindOptions: { Propagation: 'rslave' },
     });
+    expect(
+      result.workerMounts.filter((item) => item.Target !== '/var/run/docker.sock').every((item) => item.BindOptions.Propagation === 'rprivate'),
+    ).toBe(true);
     expect(result.verifierMounts.some((item) => item.Target === '/var/run/docker.sock')).toBe(false);
     expect(() => verifyRestoreStorageMounts(original, productionInspection('worker'), 'worker')).not.toThrow();
   });

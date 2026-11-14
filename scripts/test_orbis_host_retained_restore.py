@@ -60,6 +60,32 @@ class ResetAuthorityMountTests(unittest.TestCase):
             self.assertEqual(authority['ReadOnly'], role == 'verifier')
             self.assertEqual(authority['BindOptions'], {'Propagation': 'rprivate'})
 
+    def test_coordinator_preserves_inherited_readonly_socket_propagation_only_for_real_socket(self):
+        source = self.runtime.root / 'engine.sock'
+        with socket.socket(socket.AF_UNIX) as engine:
+            engine.bind(str(source))
+            selected = next(item for item in self.mounts if item['Destination'] == '/var/run/docker.sock')
+            selected.update(Source=str(source), Propagation='rslave')
+            mounts = self.runtime.storage_mounts(self.record, 'coordinator')
+            selected = next(item for item in mounts if item['Target'] == '/var/run/docker.sock')
+            self.assertTrue(selected['ReadOnly'])
+            self.assertEqual(selected['BindOptions'], {'Propagation': 'rslave'})
+            self.assertTrue(all(item['BindOptions'] == {'Propagation': 'rprivate'} for item in mounts if item is not selected))
+            self.assertFalse(any(item['Target'] == '/var/run/docker.sock' for item in self.runtime.storage_mounts(self.record, 'verifier')))
+
+    def test_coordinator_refuses_inherited_socket_propagation_for_writable_or_non_socket_sources(self):
+        source = self.runtime.root / 'engine.sock'
+        with socket.socket(socket.AF_UNIX) as engine:
+            engine.bind(str(source))
+            plain = self.runtime.root / 'plain'; plain.write_text('not a socket')
+            folder = self.runtime.root / 'directory'; folder.mkdir()
+            link = self.runtime.root / 'link'; link.symlink_to(source)
+            selected = next(item for item in self.mounts if item['Destination'] == '/var/run/docker.sock')
+            for invalid, writable in [(plain, False), (folder, False), (link, False), (self.runtime.root / 'absent', False), (source, True)]:
+                selected.update(Source=str(invalid), Propagation='rslave', RW=writable)
+                with self.subTest(source=invalid.name, writable=writable), self.assertRaises(ValueError):
+                    self.runtime.storage_mounts(self.record, 'coordinator')
+
     def test_missing_or_changed_proof_and_source_are_refused(self):
         del self.record['source']['resetAuthority']
         with self.assertRaises(ValueError):

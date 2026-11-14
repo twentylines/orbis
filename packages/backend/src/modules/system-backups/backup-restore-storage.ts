@@ -14,7 +14,7 @@ export type RestoreStorageBind = {
   Source: string;
   Target: string;
   ReadOnly: boolean;
-  BindOptions: { Propagation: 'rprivate' };
+  BindOptions: { Propagation: 'rprivate' | 'rslave' };
 };
 export type RestoreStorageLayout = {
   roots: Record<RestoreTreeName, string>;
@@ -71,7 +71,8 @@ function mountOrder(a: RestoreStorageBind, b: RestoreStorageBind) {
   return a.Target.split('/').length - b.Target.split('/').length || (a.Target < b.Target ? -1 : a.Target > b.Target ? 1 : 0);
 }
 function specification(mount: RestoreStorageMount, readOnly = !mount.RW): RestoreStorageBind {
-  return { Type: 'bind', Source: mount.Source, Target: mount.Destination, ReadOnly: readOnly, BindOptions: { Propagation: 'rprivate' } };
+  const propagation = mount.Destination === socketDestination && readOnly && mount.Propagation === 'rslave' ? 'rslave' : 'rprivate';
+  return { Type: 'bind', Source: mount.Source, Target: mount.Destination, ReadOnly: readOnly, BindOptions: { Propagation: propagation } };
 }
 
 export function deriveRestoreStorageLayout(original: readonly RestoreStorageMount[], preserveLiveProxy = false): RestoreStorageLayout {
