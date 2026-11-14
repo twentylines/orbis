@@ -373,6 +373,9 @@ def worker_environment():
             raise AdmissionError('The Docker client environment could not be preserved')
     values['PATH'] = os.pathsep.join(os.path.abspath(part) for part in values['PATH'].split(os.pathsep))
     values['DOCKER_CONFIG'] = os.path.abspath(values['DOCKER_CONFIG'])
+    for value in values.values():
+        if len(value) > 8192 or any(ord(char) < 32 or ord(char) == 127 for char in value):
+            raise AdmissionError('The resolved Docker client environment could not be preserved')
     return ['--setenv=' + name + '=' + value for name, value in values.items()]
 
 def launch_worker(state_dir, point):

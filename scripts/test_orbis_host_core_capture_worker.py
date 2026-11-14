@@ -383,6 +383,19 @@ class CoreCaptureWorkerTests(unittest.TestCase):
             self.assertFalse((self.directory / 'launch-intent.json').exists())
         self.assert_held()
 
+    def test_expanded_path_is_rejected_before_consuming_launch_intent(self):
+        with mock.patch.dict(os.environ, {'PATH': ':' * 8191, 'DOCKER_CONFIG': '/safe/client'}), \
+                mock.patch.object(W.subprocess, 'run') as launch, self.assertRaises(W.AdmissionError):
+            W.launch_worker(str(self.state), self.point)
+        launch.assert_not_called()
+        self.assertFalse((self.directory / 'launch-intent.json').exists())
+        self.assert_held()
+
+    def test_relative_paths_cannot_introduce_control_characters_from_working_directory(self):
+        with mock.patch.dict(os.environ, {'PATH': 'bin', 'DOCKER_CONFIG': 'client'}), \
+                mock.patch.object(W.os, 'getcwd', return_value='/unusable\nworking-directory'), self.assertRaises(W.AdmissionError):
+            W.worker_environment()
+
     def test_lost_launch_response_never_relaunches(self):
         with mock.patch.object(W.subprocess, 'run', side_effect=subprocess.TimeoutExpired('fixed-unit', 10)) as launch:
             self.assertEqual(W.launch_worker(str(self.state), self.point)['state'], 'launch-unsettled')
