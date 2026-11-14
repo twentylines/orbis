@@ -712,9 +712,9 @@ class DockerRestoreRuntime:
                     or set(host.get('CapDrop') or []) != {'ALL'}
                     or set(host.get('CapAdd') or []) != ({'CHOWN', 'DAC_OVERRIDE', 'FOWNER'} if role == 'worker' else set())
                     or host.get('SecurityOpt') != ['no-new-privileges:true']
-                    or host.get('RestartPolicy') != {'Name': 'unless-stopped' if role == 'worker' else 'no', 'MaximumRetryCount': 0}):
+                    or host.get('RestartPolicy') != {'Name': 'no', 'MaximumRetryCount': 0}):
                 raise fail()
-            expected = self.storage_mounts(record, 'coordinator' if role == 'worker' else 'verifier')
+            expected = self.storage_mounts(record, 'coordinator' if role == 'worker' else 'verifier', provisional=True)
             expected = [item for item in expected if item['Target'] != '/run/orbis']
             wanted = sorted((item['Source'], item['Target'], not item['ReadOnly']) for item in expected)
             actual = sorted((item['Source'], item['Destination'], item['RW']) for item in raw['Mounts'])
@@ -1273,8 +1273,8 @@ class DockerRestoreRuntime:
         if set(raw['NetworkSettings']['Networks']) != set(body['NetworkingConfig']['EndpointsConfig']):
             raise fail()
 
-    def storage_mounts(self, record, role):
-        if role not in {'coordinator', 'verifier'}:
+    def storage_mounts(self, record, role, *, provisional=False):
+        if role not in {'coordinator', 'verifier'} or type(provisional) is not bool:
             raise fail()
         original = record['source']['container']
         authority = self.require_reset_authority(record)
@@ -1285,7 +1285,7 @@ class DockerRestoreRuntime:
                           and isinstance(roots, list) and 'traefik' not in roots
                           and isinstance(record['source'].get('proxyHostIdentity'), dict))
         destinations = ['/data/' + name for name in ('state', 'apps', 'repos', 'media', 'user-config', 'traefik', 'backups', 'logs', '.env')] + ['/app-data', '/cache']
-        selected = {}
+        selected, projected = {}, {}
         for destination in destinations:
             matches = [item for item in original['Mounts'] if destination == item.get('Destination') or destination.startswith(str(item.get('Destination')) + '/')]
             if not matches:
@@ -1296,6 +1296,13 @@ class DockerRestoreRuntime:
             if item.get('Type') != 'bind' or (item.get('RW') is not True and not readonly_proxy):
                 raise fail()
             selected[item['Destination']] = item
+            if provisional:
+                source = str(Path(item['Source']) / destination.removeprefix(item['Destination']).lstrip('/'))
+                if not source.startswith('/') or os.path.normpath(source) != source:
+                    raise fail()
+                projected[destination] = {'Type': 'bind', 'Source': source, 'Target': destination,
+                                          'ReadOnly': (destination not in {'/cache', '/data/logs'}) if role == 'verifier' else not item['RW'],
+                                          'BindOptions': {'Propagation': 'rprivate'}}
         proxy = selected.get('/data/traefik')
         if proxy is not None and proxy.get('RW') is False:
             source = proxy.get('Source')
@@ -1313,6 +1320,8 @@ class DockerRestoreRuntime:
         result = [{'Type': 'bind', 'Source': item['Source'], 'Target': item['Destination'],
                    'ReadOnly': (item['Destination'] not in {'/cache', '/data/logs'}) if role == 'verifier' else not item['RW'],
                    'BindOptions': {'Propagation': 'rprivate'}} for item in selected.values()]
+        if provisional:
+            result = list(projected.values())
         if role == 'verifier':
             if not any(item['Target'] == '/data/logs' for item in result):
                 result.append({'Type': 'bind', 'Source': str(self.map_path(original, '/data/logs')), 'Target': '/data/logs',

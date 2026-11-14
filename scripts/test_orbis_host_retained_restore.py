@@ -60,6 +60,23 @@ class ResetAuthorityMountTests(unittest.TestCase):
             self.assertEqual(authority['ReadOnly'], role == 'verifier')
             self.assertEqual(authority['BindOptions'], {'Propagation': 'rprivate'})
 
+    def test_provisional_mounts_exclude_reset_control_and_project_parent_data_storage(self):
+        for consolidated in (False, True):
+            original = copy.deepcopy(self.mounts)
+            if consolidated:
+                self.mounts[:] = [mount for mount in self.mounts if not mount['Destination'].startswith('/data/') or mount['Destination'] == D.RESET.TARGET]
+                self.mounts.append({'Type': 'bind', 'Source': '/fixture/data', 'Destination': '/data', 'RW': True, 'Propagation': 'rprivate'})
+            for role in ('coordinator', 'verifier'):
+                with self.subTest(consolidated=consolidated, role=role):
+                    mounts = self.runtime.storage_mounts(self.record, role, provisional=True)
+                    self.assertFalse(any(item['Target'] in {'/data', D.RESET.TARGET} for item in mounts))
+                    self.assertTrue(any(item['Target'] == '/data/backups' for item in mounts))
+                    if consolidated:
+                        state = next(item for item in mounts if item['Target'] == '/data/state')
+                        self.assertEqual(state['Source'], '/fixture/data/state')
+                        self.assertEqual(state['ReadOnly'], role == 'verifier')
+            self.mounts[:] = original
+
     def test_coordinator_preserves_inherited_readonly_socket_propagation_only_for_real_socket(self):
         source = self.runtime.root / 'engine.sock'
         with socket.socket(socket.AF_UNIX) as engine:
@@ -1001,14 +1018,19 @@ class RetainedRestoreTests(unittest.TestCase):
                 'Config': {'Labels': {'org.fixture': 'fixture', 'io.orbis.restore': identifier, 'io.orbis.restore.nonce': nonce, 'io.orbis.restore.role': role, 'traefik.enable': 'false'},
                            'Entrypoint': ['node'], 'User': '0', 'WorkingDir': '/app', 'Cmd': ['/app/restore-worker.mjs', identifier] if role == 'worker' else ['/app/main.mjs']},
                 'HostConfig': {'ReadonlyRootfs': True, 'NetworkMode': 'main', 'CapDrop': ['ALL'], 'CapAdd': ['CHOWN', 'DAC_OVERRIDE', 'FOWNER'] if role == 'worker' else [],
-                               'SecurityOpt': ['no-new-privileges:true'], 'RestartPolicy': {'Name': 'unless-stopped' if role == 'worker' else 'no', 'MaximumRetryCount': 0}},
+                               'SecurityOpt': ['no-new-privileges:true'], 'RestartPolicy': {'Name': 'no', 'MaximumRetryCount': 0}},
                 'Mounts': [{'Source': str(self.root / 'state'), 'Destination': '/data/state', 'RW': role == 'worker'}],
                 'State': {'Running': False, 'StartedAt': '0001-01-01T00:00:00Z'}, 'NetworkSettings': {'Networks': {'main': {'NetworkID': ''}}}}
         runtime.inspect = mock.Mock(side_effect=lambda value: observed[value])
-        runtime.storage_mounts = mock.Mock(side_effect=lambda _, role: [{'Source': str(self.root / 'state'), 'Target': '/data/state', 'ReadOnly': role == 'verifier'}])
+        runtime.storage_mounts = mock.Mock(side_effect=lambda _, role, **kwargs: [{'Source': str(self.root / 'state'), 'Target': '/data/state', 'ReadOnly': role == 'verifier'}])
         bootstrap = {'identity': {role: {'id': journal[key], 'fingerprint': runtime.node_fingerprint(observed[journal[key]])} for role, key in (('worker', 'worker'), ('verifier', 'verifierController'))}}
         self.assertEqual(set(runtime.provisional_auxiliaries(source, journal, bootstrap)), {'worker', 'verifier'})
+        self.assertTrue(all(call.kwargs == {'provisional': True} for call in runtime.storage_mounts.call_args_list))
         worker = observed[journal['worker']]
+        worker['HostConfig']['RestartPolicy']['Name'] = 'unless-stopped'
+        with self.assertRaises(ValueError):
+            runtime.provisional_auxiliaries(source, journal, bootstrap)
+        worker['HostConfig']['RestartPolicy']['Name'] = 'no'
         worker['State']['StartedAt'] = '2026-11-01T00:00:00Z'
         with self.assertRaises(ValueError):
             runtime.provisional_auxiliaries(source, journal, bootstrap)

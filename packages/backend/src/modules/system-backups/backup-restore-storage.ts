@@ -75,8 +75,13 @@ function specification(mount: RestoreStorageMount, readOnly = !mount.RW): Restor
   return { Type: 'bind', Source: mount.Source, Target: mount.Destination, ReadOnly: readOnly, BindOptions: { Propagation: propagation } };
 }
 
-export function deriveRestoreStorageLayout(original: readonly RestoreStorageMount[], preserveLiveProxy = false): RestoreStorageLayout {
-  if (!Array.isArray(original) || original.length > 1024 || typeof preserveLiveProxy !== 'boolean') throw failed();
+export function deriveRestoreStorageLayout(
+  original: readonly RestoreStorageMount[],
+  preserveLiveProxy = false,
+  retainedProvisional = false,
+): RestoreStorageLayout {
+  if (!Array.isArray(original) || original.length > 1024 || typeof preserveLiveProxy !== 'boolean' || typeof retainedProvisional !== 'boolean')
+    throw failed();
   const destinations = new Set<string>();
   for (const mount of original) {
     if (!mount || !canonical(mount.Destination) || destinations.has(mount.Destination)) throw failed();
@@ -104,6 +109,7 @@ export function deriveRestoreStorageLayout(original: readonly RestoreStorageMoun
       throw failed();
   }
   const selected = new Map<string, RestoreStorageMount>();
+  const projected = new Map<string, RestoreStorageBind>();
   const resolve = (destination: string, allowReadOnly = false) => {
     const covering = original
       .filter((mount) => inside(mount.Destination, destination))
@@ -114,6 +120,7 @@ export function deriveRestoreStorageLayout(original: readonly RestoreStorageMoun
     const suffix = path.posix.relative(covering.Destination, destination);
     const source = path.posix.join(covering.Source, suffix);
     if (!canonical(source)) throw failed();
+    projected.set(destination, { ...specification(covering), Source: source, Target: destination });
     return source;
   };
   const roots = Object.fromEntries(
@@ -141,8 +148,14 @@ export function deriveRestoreStorageLayout(original: readonly RestoreStorageMoun
     bind(socket);
     if (sources.some((source) => overlap(source, socket.Source))) throw failed();
   }
-  const workerMounts = [...selected.values(), ...(socket ? [socket] : [])].map((mount) => specification(mount)).sort(mountOrder);
-  const verifierMounts = [...selected.values()].map((mount) => specification(mount, !['/cache', '/data/logs'].includes(mount.Destination)));
+  // Dedicated paths keep a parent /data bind from exposing reset control during provisional admission.
+  const storage = retainedProvisional ? [...projected.values()] : [...selected.values()].map((mount) => specification(mount));
+  const workerMounts = [...storage, ...(socket ? [specification(socket)] : [])].sort(mountOrder);
+  const verifierMounts = storage.map((mount) => ({
+    ...mount,
+    BindOptions: { ...mount.BindOptions },
+    ReadOnly: !['/cache', '/data/logs'].includes(mount.Target),
+  }));
   if (!verifierMounts.some((mount) => mount.Target === '/data/logs'))
     verifierMounts.push({
       Type: 'bind',
@@ -159,9 +172,10 @@ export function verifyRestoreStorageMounts(
   actual: readonly RestoreStorageMount[],
   role: 'worker' | 'verifier',
   preserveLiveProxy = false,
+  retainedProvisional = false,
 ) {
   if (!['worker', 'verifier'].includes(role) || !Array.isArray(actual)) throw failed();
-  const layout = deriveRestoreStorageLayout(original, preserveLiveProxy);
+  const layout = deriveRestoreStorageLayout(original, preserveLiveProxy, retainedProvisional);
   const expected = role === 'worker' ? layout.workerMounts : layout.verifierMounts;
   if (
     actual.length !== expected.length ||

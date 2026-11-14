@@ -164,9 +164,10 @@ export function verifyRestoreVerifierMounts(
   original: Dockerode.ContainerInspectInfo,
   verifier: Dockerode.ContainerInspectInfo,
   preserveLiveProxy = false,
+  retainedProvisional = false,
 ) {
   try {
-    verifyRestoreStorageMounts(original.Mounts, verifier.Mounts, 'verifier', preserveLiveProxy);
+    verifyRestoreStorageMounts(original.Mounts, verifier.Mounts, 'verifier', preserveLiveProxy, retainedProvisional);
   } catch {
     throw failed('verifier-mounts');
   }
@@ -351,7 +352,7 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
       throw failed();
     return inspect;
   }
-  async verifyWorker(hostname: string, options: { preparing?: boolean } = {}) {
+  async verifyWorker(hostname: string, options: { preparing?: boolean; retainedProvisional?: boolean } = {}) {
     const state = await this.journal.refresh();
     const worker = await this.docker.getContainer(hostname).inspect();
     if (
@@ -368,6 +369,23 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
     const candidate = await this.role(this.operation.candidate, 'candidate');
     const verifier = await this.role(this.operation.verifier, 'verifier');
     if (
+      options.retainedProvisional &&
+      (!options.preparing ||
+        this.retained ||
+        state.phase !== 'staging' ||
+        state.decision !== null ||
+        [worker, verifier].some(
+          (container) =>
+            container.State.Running ||
+            container.State.Restarting ||
+            container.State.Paused ||
+            container.RestartCount !== 0 ||
+            !(Date.parse(container.State.StartedAt) <= 0) ||
+            container.HostConfig.RestartPolicy?.Name !== 'no',
+        ))
+    )
+      throw failed('retained-provisional-state');
+    if (
       JSON.stringify(canonical(original.HostConfig.PortBindings ?? {})) !== JSON.stringify(canonical(candidate.HostConfig.PortBindings ?? {})) ||
       original.HostConfig.NetworkMode !== candidate.HostConfig.NetworkMode ||
       candidate.HostConfig.Privileged !== original.HostConfig.Privileged
@@ -383,7 +401,7 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
     if (JSON.stringify(mountIdentity(original.Mounts)) !== JSON.stringify(mountIdentity(candidate.Mounts))) throw failed('candidate-mounts');
     try {
       if (this.retained) await this.retained.verifyWorker(original, worker);
-      else verifyRestoreStorageMounts(original.Mounts, worker.Mounts, 'worker', !state.roots.includes('traefik'));
+      else verifyRestoreStorageMounts(original.Mounts, worker.Mounts, 'worker', !state.roots.includes('traefik'), options.retainedProvisional);
     } catch {
       throw failed('worker-mounts');
     }
@@ -402,7 +420,7 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
       if (!['staging', 'preparing', 'discarded'].includes(state.phase)) throw failed('preparation-phase');
     } else await this.fileRoots();
     if (!verifier.HostConfig.ReadonlyRootfs) throw failed('verifier-filesystem');
-    verifyRestoreVerifierMounts(original, verifier, !state.roots.includes('traefik'));
+    verifyRestoreVerifierMounts(original, verifier, !state.roots.includes('traefik'), options.retainedProvisional);
     if (verifier.HostConfig.Devices?.length || verifier.HostConfig.DeviceRequests?.length || verifier.HostConfig.PidMode === 'host')
       throw failed('verifier-devices');
     return worker.Id;

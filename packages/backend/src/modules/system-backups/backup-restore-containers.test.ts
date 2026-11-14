@@ -34,6 +34,27 @@ function fixture() {
 type Fixture = ReturnType<typeof fixture>;
 const plans = (original: Fixture) => restoreAuxiliaryContainerPlans(original as unknown as Dockerode.ContainerInspectInfo, id, nonce);
 
+it('keeps retained provisional containers inert and outside reset-control storage', () => {
+  const original = fixture() as unknown as Dockerode.ContainerInspectInfo;
+  original.Mounts.push({
+    Type: 'bind',
+    Source: `/var/lib/orbis/reset-authority/${'d'.repeat(64)}/data`,
+    Destination: '/data/orbis-reset',
+    RW: true,
+    Propagation: 'rprivate',
+    Mode: 'rw',
+  });
+  const selected = restoreAuxiliaryContainerPlans(original, id, nonce, false, true);
+  for (const plan of [selected.worker, selected.verifier]) {
+    expect(plan.HostConfig?.RestartPolicy).toEqual({ Name: 'no', MaximumRetryCount: 0 });
+    expect(plan.HostConfig?.Mounts?.some((entry) => ['/data', '/data/orbis-reset'].includes(entry.Target))).toBe(false);
+    expect(plan.HostConfig?.Mounts?.some((entry) => entry.Target === '/data/backups')).toBe(true);
+  }
+  const ordinary = restoreAuxiliaryContainerPlans(original, id, nonce);
+  expect(ordinary.worker.HostConfig?.RestartPolicy?.Name).toBe('unless-stopped');
+  expect(ordinary.worker.HostConfig?.Mounts?.some((entry) => entry.Target === '/data/orbis-reset')).toBe(true);
+});
+
 it('creates verifier and worker plans without copying the controller identity, routing or ports', () => {
   const original = fixture();
   const before = structuredClone(original);

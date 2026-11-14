@@ -34,6 +34,28 @@ const production = () => [
   mount('/etc/localtime', '/etc/localtime', false),
   mount('/etc/timezone', '/etc/timezone', false),
 ];
+
+it.each([consolidated, production])('projects provisional storage without exposing reset control or a parent data bind (%#)', (fixture) => {
+  const control = mount('/data/orbis-reset', `/var/lib/orbis/reset-authority/${'a'.repeat(64)}/data`);
+  const original = [...fixture(), control];
+  const before = structuredClone(original);
+  const provisional = deriveRestoreStorageLayout(original, false, true);
+  const ordinary = deriveRestoreStorageLayout(original);
+  for (const role of ['worker', 'verifier'] as const) {
+    const selected = role === 'worker' ? provisional.workerMounts : provisional.verifierMounts;
+    expect(selected.some((entry) => ['/data', '/data/orbis-reset'].includes(entry.Target))).toBe(false);
+    expect(selected.some((entry) => entry.Source === control.Source)).toBe(false);
+    expect(selected.find((entry) => entry.Target === '/data/state')?.Source).toBe(provisional.roots.state);
+    const observed = selected.map((entry) => mount(entry.Target, entry.Source, !entry.ReadOnly));
+    expect(() => verifyRestoreStorageMounts(original, observed, role, false, true)).not.toThrow();
+    expect(() => verifyRestoreStorageMounts(original, observed, role)).toThrow();
+    expect(() => verifyRestoreStorageMounts(original, [...observed, control], role, false, true)).toThrow();
+    expect(() => verifyRestoreStorageMounts(original, [...observed, mount('/data', '/srv/orbis/data')], role, false, true)).toThrow();
+  }
+  expect(ordinary.workerMounts.find((entry) => entry.Target === '/data/orbis-reset')?.ReadOnly).toBe(false);
+  expect(ordinary.verifierMounts.find((entry) => entry.Target === '/data/orbis-reset')?.ReadOnly).toBe(true);
+  expect(original).toEqual(before);
+});
 function target(mounts: RestoreStorageMount[], name: string) {
   const found = mounts.find((item) => item.Destination === name);
   if (!found) throw new Error('Missing synthetic fixture mount');

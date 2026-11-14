@@ -18,9 +18,9 @@ const checks = vi.hoisted(() => ({ verify: vi.fn(), writers: vi.fn(), order: [] 
 vi.mock('./backup-restore-runtime', async (original) => ({
   ...(await original<typeof import('./backup-restore-runtime')>()),
   BackupRestoreDockerRuntime: class {
-    verifyWorker(id: string) {
+    verifyWorker(id: string, options: unknown) {
       checks.order.push('verify');
-      return checks.verify(id);
+      return checks.verify(id, options);
     }
     preflightWriters() {
       checks.order.push('writers');
@@ -217,6 +217,27 @@ const assertOriginalUntouched = () => {
     expect(handles.get(id)?.start).not.toHaveBeenCalled();
   }
 };
+
+it('passes retained provisional scope through both handoff checks and omits reset authority from its inert containers', async () => {
+  snapshots.get(controller)?.Mounts.push({
+    Type: 'bind',
+    Source: `/var/lib/orbis/reset-authority/${'a'.repeat(64)}/data`,
+    Destination: '/data/orbis-reset',
+    RW: true,
+    Propagation: 'rprivate',
+    Mode: 'rw',
+  });
+  options.retainedProvisional = true;
+  const result = await prepareRestoreHandoff(options);
+  expect(result.journal.state.phase).toBe('staging');
+  expect(checks.verify).toHaveBeenCalledTimes(2);
+  for (const [, scope] of checks.verify.mock.calls) expect(scope).toEqual({ preparing: true, retainedProvisional: true });
+  for (const [plan] of create.mock.calls) {
+    expect(plan.HostConfig.RestartPolicy).toEqual({ Name: 'no', MaximumRetryCount: 0 });
+    expect(plan.HostConfig.Mounts.some((entry: { Target: string }) => entry.Target === '/data/orbis-reset')).toBe(false);
+  }
+  assertOriginalUntouched();
+});
 
 it('accepts inherited Docker socket propagation only after observing a real socket inode', async () => {
   const original = snapshots.get(controller);

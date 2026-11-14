@@ -11,7 +11,9 @@ import {
   verifyRestoreVerifierMounts,
   restoreRootPlanMatchesPolicy,
   type RestoreOperation,
+  type RestoreRuntimeIdentity,
 } from './backup-restore-runtime';
+import { restoreAuxiliaryContainerPlans } from './backup-restore-containers';
 import type { BackupRestoreJournal } from './backup-restore-journal';
 import { verifierMarkerPrefix, restoreFailureProgress } from './backup-restore-diagnostics';
 import { RestoreRolledBackError } from './backup-restore-coordinator';
@@ -21,6 +23,101 @@ import { restoreTreeNames, type RestoreTreeName } from './backup-restore-materia
 vi.unmock('node:fs');
 vi.mock('./backup-restore-files', () => ({ verifyRestoreFiles: vi.fn(async () => undefined) }));
 vi.mock('./backup-restore-database', () => ({ verifyRestoreDatabase: vi.fn(async () => undefined) }));
+
+function provisionalRuntimeFixture() {
+  const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const nonce = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const original = {
+    Id: '1'.repeat(64),
+    Name: '/runtipi',
+    Image: `sha256:${'a'.repeat(64)}`,
+    Config: { User: '0', Env: ['NODE_ENV=production'], Labels: {} },
+    HostConfig: { NetworkMode: 'fixture', Privileged: false, PortBindings: {}, RestartPolicy: { Name: 'unless-stopped', MaximumRetryCount: 0 } },
+    State: { Running: true, Restarting: false, Paused: false, StartedAt: '2026-01-01T00:00:00Z' },
+    RestartCount: 0,
+    NetworkSettings: { Networks: { fixture: {} } },
+    Mounts: [
+      { Type: 'bind', Source: '/srv/orbis/data', Destination: '/data', RW: true },
+      { Type: 'bind', Source: '/srv/orbis/app-data', Destination: '/app-data', RW: true },
+      { Type: 'bind', Source: '/srv/orbis/cache', Destination: '/cache', RW: true },
+      { Type: 'bind', Source: '/run/docker.sock', Destination: '/var/run/docker.sock', RW: false },
+      {
+        Type: 'bind',
+        Source: `/var/lib/orbis/reset-authority/${'d'.repeat(64)}/data`,
+        Destination: '/data/orbis-reset',
+        RW: true,
+        Propagation: 'rprivate',
+      },
+    ],
+  } as unknown as Dockerode.ContainerInspectInfo;
+  const plans = restoreAuxiliaryContainerPlans(original, id, nonce, false, true);
+  const raw = (plan: Dockerode.ContainerCreateOptions, index: string) =>
+    ({
+      Id: index.repeat(64),
+      Name: `/${plan.name}`,
+      Image: original.Image,
+      Config: plan,
+      HostConfig: plan.HostConfig,
+      State: { Running: false, Restarting: false, Paused: false, StartedAt: '0001-01-01T00:00:00Z' },
+      RestartCount: 0,
+      NetworkSettings: { Networks: { fixture: {} } },
+      Mounts: plan.HostConfig?.Mounts?.map((mount) => ({ Type: mount.Type, Source: mount.Source, Destination: mount.Target, RW: !mount.ReadOnly })),
+    }) as unknown as Dockerode.ContainerInspectInfo;
+  const worker = raw(plans.worker, '2');
+  const verifier = raw(plans.verifier, '3');
+  const state = { id, nonce, worker: worker.Id, phase: 'staging', decision: null, roots: [...restoreTreeNames] };
+  const journal = { state, refresh: async () => state } as unknown as BackupRestoreJournal;
+  const operation = {
+    id,
+    nonce,
+    image: original.Image,
+    version: 1,
+    apps: [],
+    original: snapshotRestoreContainer(original),
+    candidate: snapshotRestoreContainer(original),
+    worker: snapshotRestoreContainer(worker),
+    verifier: snapshotRestoreContainer(verifier),
+    queue: { host: 'queue', username: 'fixture', password: 'fixture-password' },
+  } as RestoreRuntimeIdentity;
+  const containers = new Map([original, worker, verifier].map((value) => [value.Id, value]));
+  const docker = { getContainer: (id: string) => ({ inspect: async () => structuredClone(containers.get(id)) }) } as unknown as Dockerode;
+  return { worker, verifier, state, operation, runtime: new BackupRestoreDockerRuntime(docker, journal, operation) };
+}
+
+it('verifies retained provisional workers only during inert staging', async () => {
+  const fixture = provisionalRuntimeFixture();
+  await expect(fixture.runtime.verifyWorker(fixture.worker.Id, { preparing: true, retainedProvisional: true })).resolves.toBe(fixture.worker.Id);
+  await expect(fixture.runtime.verifyWorker(fixture.worker.Id, { preparing: true })).rejects.toMatchObject({ runtimeCheck: 'worker-mounts' });
+});
+
+it.each(['running', 'started', 'restart', 'control', 'parent', 'verifier-control', 'without-preparing', 'phase'])(
+  'rejects a retained provisional runtime whose authority or lifecycle changed (%s)',
+  async (change) => {
+    const fixture = provisionalRuntimeFixture();
+    if (change === 'running') fixture.worker.State.Running = true;
+    if (change === 'started') fixture.worker.State.StartedAt = '2026-01-01T00:00:00Z';
+    if (change === 'restart') fixture.worker.HostConfig.RestartPolicy = { Name: 'unless-stopped', MaximumRetryCount: 0 };
+    if (change === 'control' || change === 'verifier-control') {
+      (change === 'control' ? fixture.worker : fixture.verifier).Mounts.push({
+        Type: 'bind',
+        Source: `/var/lib/orbis/reset-authority/${'d'.repeat(64)}/data`,
+        Destination: '/data/orbis-reset',
+        RW: true,
+        Propagation: 'rprivate',
+        Mode: 'rw',
+      });
+    }
+    if (change === 'parent')
+      fixture.worker.Mounts.push({ Type: 'bind', Source: '/srv/orbis/data', Destination: '/data', RW: true, Mode: 'rw', Propagation: 'rprivate' });
+    if (change === 'phase') fixture.state.phase = 'preparing';
+    // Even a matching new snapshot cannot authorize added storage or a started provisional worker.
+    fixture.operation.worker = snapshotRestoreContainer(fixture.worker);
+    fixture.operation.verifier = snapshotRestoreContainer(fixture.verifier);
+    await expect(
+      fixture.runtime.verifyWorker(fixture.worker.Id, { preparing: change !== 'without-preparing', retainedProvisional: true }),
+    ).rejects.toThrow();
+  },
+);
 
 it.each(['quiescing', 'rolling-back'] as const)('keeps legacy recovery compatible but refuses new unsealed promotion in %s', async (phase) => {
   const journal = { state: { phase } } as unknown as BackupRestoreJournal;

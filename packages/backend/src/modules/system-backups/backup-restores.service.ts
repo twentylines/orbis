@@ -541,6 +541,7 @@ export class BackupRestoresService implements OnModuleDestroy {
         docker: this.docker,
         controller: os.hostname(),
         ownerId: options.ownerId,
+        retainedProvisional: true,
         connection: { host: database.host, port: database.port, user: database.username, password: database.password, database: database.database },
         queue: this.config.get('queue'),
         apps: plan.containers.map((container) => ({ id: container.id, project: container.project })),

@@ -6,7 +6,13 @@ const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{1
 const requiredCapabilities = ['CHOWN', 'DAC_OVERRIDE', 'FOWNER'];
 const failed = () => new BackupRequirementError('This controller cannot prepare an isolated restore worker. No server data has been changed.');
 
-export function restoreAuxiliaryContainerPlans(original: Dockerode.ContainerInspectInfo, id: string, nonce: string, preserveLiveProxy = false) {
+export function restoreAuxiliaryContainerPlans(
+  original: Dockerode.ContainerInspectInfo,
+  id: string,
+  nonce: string,
+  preserveLiveProxy = false,
+  retainedProvisional = false,
+) {
   const { Config: config, HostConfig: host } = original;
   if (
     !uuid.test(id) ||
@@ -34,7 +40,7 @@ export function restoreAuxiliaryContainerPlans(original: Dockerode.ContainerInsp
   const dropped = capabilities(host.CapDrop);
   if (requiredCapabilities.some((capability) => (dropped.includes('ALL') || dropped.includes(capability)) && !added.includes(capability)))
     throw failed();
-  const storage = deriveRestoreStorageLayout(original.Mounts, preserveLiveProxy);
+  const storage = deriveRestoreStorageLayout(original.Mounts, preserveLiveProxy, retainedProvisional);
   const networks = Object.keys(original.NetworkSettings.Networks);
   if (!networks.length || networks.length > 16 || networks.some((name) => !/^[a-zA-Z0-9_.-]{1,255}$/.test(name))) throw failed();
   const requestedNetwork = host.NetworkMode || networks[0];
@@ -101,7 +107,7 @@ export function restoreAuxiliaryContainerPlans(original: Dockerode.ContainerInsp
       ...structuredClone(common.HostConfig),
       CapAdd: [...requiredCapabilities],
       Mounts: storage.workerMounts,
-      RestartPolicy: { Name: 'unless-stopped', MaximumRetryCount: 0 },
+      RestartPolicy: { Name: retainedProvisional ? 'no' : 'unless-stopped', MaximumRetryCount: 0 },
     },
   };
   return { verifier, worker };

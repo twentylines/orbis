@@ -69,6 +69,7 @@ export type RestoreHandoffOptions = {
   directories: { data: string; appData: string; cache: string };
   signal: AbortSignal;
   preserveLiveProxy?: boolean;
+  retainedProvisional?: boolean;
   claimReviewedSource: (
     journal: BackupRestoreJournal,
     accept: (source: { seal: BackupSourceSeal }, signal: AbortSignal) => Promise<void>,
@@ -105,7 +106,7 @@ export async function prepareRestoreHandoff(options: RestoreHandoffOptions) {
     throw failed();
   const id = randomUUID();
   const nonce = randomUUID();
-  const plans = restoreAuxiliaryContainerPlans(original, id, nonce, options.preserveLiveProxy);
+  const plans = restoreAuxiliaryContainerPlans(original, id, nonce, options.preserveLiveProxy, options.retainedProvisional);
   const environment = path.join(options.directories.data, '.env');
   const environmentSha256 = await restoreTargetEnvironmentDigest(environment, options);
   const apps: RestoreRuntimeIdentity['apps'] = [];
@@ -173,7 +174,7 @@ export async function prepareRestoreHandoff(options: RestoreHandoffOptions) {
       }),
     );
     const runtime = new BackupRestoreDockerRuntime(docker, journal, identity, options.directories);
-    await runtime.verifyWorker(worker.id, { preparing: true });
+    await runtime.verifyWorker(worker.id, { preparing: true, retainedProvisional: options.retainedProvisional });
     await runtime.preflightWriters();
     let accepted = false;
     // The import service owns disk/restore leases inside this callback; never reacquire either here.
@@ -200,7 +201,7 @@ export async function prepareRestoreHandoff(options: RestoreHandoffOptions) {
     });
     signal.throwIfAborted();
     if (!accepted || (await restoreTargetEnvironmentDigest(environment, options)) !== environmentSha256) throw failed();
-    await runtime.verifyWorker(worker.id, { preparing: true });
+    await runtime.verifyWorker(worker.id, { preparing: true, retainedProvisional: options.retainedProvisional });
     await runtime.preflightWriters();
     for (const [handle, role] of [
       [worker, 'worker'],
