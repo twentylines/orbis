@@ -14,9 +14,10 @@ import { BackupRestoreDockerRuntime, snapshotRestoreContainer } from './backup-r
 import type Dockerode from 'dockerode';
 const roots: string[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) await fs.rm(root, { recursive: true, force: true });
 });
-async function fixture() {
+async function fixture(options: { version?: 1 | 2; mediaPolicy?: 'included' | 'preserve-destination'; selectedRoots?: string[] } = {}) {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'retained-binding-')));
   roots.push(root);
   const store = path.join(root, 'store');
@@ -32,13 +33,33 @@ async function fixture() {
     candidateController: original,
     worker: 'b'.repeat(64),
     verifierController: 'c'.repeat(64),
-    roots: [...restoreTreeNames],
+    roots: options.selectedRoots ?? [...restoreTreeNames],
   });
+  const manifest = Buffer.from(
+    JSON.stringify({
+      format: 'orbis-full-backup',
+      version: options.version ?? 1,
+      ...(options.version === 2 ? { mediaPolicy: options.mediaPolicy ?? 'included' } : {}),
+      createdAt: 1,
+      orbisVersion: 'v0.8.0-beta.3',
+      runtipiVersion: '4.10.1',
+      architecture: 'arm64',
+      files: [],
+      directories: [],
+      containers: [],
+      images: [],
+      exclusions: [],
+    }),
+  );
+  const manifestSeal = { bytes: manifest.length, sha256: createHash('sha256').update(manifest).digest('hex') };
+  const manifestPath = path.join(journal.directory, 'source', 'payload', 'content', 'manifest.json');
+  await fs.mkdir(path.dirname(manifestPath), { recursive: true, mode: 0o700 });
+  await fs.writeFile(manifestPath, manifest, { mode: 0o600 });
   await recordRetainedRestoreAdmission(
     journal,
     1,
     importId,
-    { pointId, reviewId: randomUUID(), archiveSha256: '1'.repeat(64), manifestSha256: '2'.repeat(64), machineId: '3'.repeat(64) },
+    { pointId, reviewId: randomUUID(), archiveSha256: '1'.repeat(64), manifestSha256: manifestSeal.sha256, machineId: '3'.repeat(64) },
     { sha256: '4'.repeat(64), verify: async () => undefined },
   );
   const image = `sha256:${'6'.repeat(64)}`;
@@ -74,7 +95,7 @@ async function fixture() {
     connection: { host: 'db', port: 5432, user: 'fixture', password: 'fixture', database: 'db' },
     source: {
       version: 1 as const,
-      manifest: seal,
+      manifest: manifestSeal,
       recovery: seal,
       database: seal,
       normalized: { ...seal, counts: { user: 0, app: 0, app_store: 0, link: 0 } },
@@ -88,7 +109,7 @@ async function fixture() {
     bootstrapSha256: sha(await fs.readFile(path.join(journal.directory, 'bootstrap.json'))),
     admissionSha256: sha(await fs.readFile(path.join(journal.directory, 'time-machine-admission.json'))),
     sourceSealSha256: sha(canonicalPublicationJson(bootstrap.source)),
-    legacyManifestSha256: seal.sha256,
+    legacyManifestSha256: manifestSeal.sha256,
     runtimeManifestSha256: '5'.repeat(64),
   };
   const target = {
@@ -134,6 +155,7 @@ async function fixture() {
     image,
     inspect,
     originalContainer,
+    manifestPath,
     snapshot,
     sourceBinding,
     restoreId,
@@ -238,8 +260,35 @@ it('rejects altered original bootstrap bytes after root recorded their digest', 
   expect((await BackupRestoreJournal.active(test.store))?.state).toEqual(test.journal.state);
 });
 
-it('reconstructs a retained context from root-matched binding while preserving original bootstrap and legacy identities', async () => {
-  const test = await fixture();
+it.each([
+  { version: 1 as const, mediaPolicy: 'included' as const, preserveLiveProxy: false, selectedRoots: [...restoreTreeNames] },
+  {
+    version: 1 as const,
+    mediaPolicy: 'included' as const,
+    preserveLiveProxy: true,
+    selectedRoots: ['state', 'apps', 'repos', 'media', 'user-config', 'app-data'],
+  },
+  { version: 2 as const, mediaPolicy: 'included' as const, preserveLiveProxy: false, selectedRoots: [...restoreTreeNames] },
+  {
+    version: 2 as const,
+    mediaPolicy: 'included' as const,
+    preserveLiveProxy: true,
+    selectedRoots: ['state', 'apps', 'repos', 'media', 'user-config', 'app-data'],
+  },
+  {
+    version: 2 as const,
+    mediaPolicy: 'preserve-destination' as const,
+    preserveLiveProxy: false,
+    selectedRoots: ['state', 'apps', 'repos', 'user-config', 'traefik', 'app-data'],
+  },
+  {
+    version: 2 as const,
+    mediaPolicy: 'preserve-destination' as const,
+    preserveLiveProxy: true,
+    selectedRoots: ['state', 'apps', 'repos', 'user-config', 'app-data'],
+  },
+])('reconstructs v$version/$mediaPolicy context with preserveLiveProxy=$preserveLiveProxy and immutable original identities', async (options) => {
+  const test = await fixture(options);
   const { image, inspect, originalContainer: original, snapshot } = test;
   const candidate = inspect('d'.repeat(64), test.target.creationReference);
   const verifier = inspect('e'.repeat(64), test.target.creationReference);
@@ -293,6 +342,7 @@ it('reconstructs a retained context from root-matched binding while preserving o
     importId: test.importId,
     docker,
     hostname: worker.Id,
+    preserveLiveProxy: options.preserveLiveProxy,
     directories: { data: '/data', appData: '/app-data', cache: '/cache' },
   };
   const context = await readRetainedRestoreContext(input);
@@ -301,7 +351,9 @@ it('reconstructs a retained context from root-matched binding while preserving o
   expect(context.bootstrap.identity.verifier.id).toBe(verifier.Id);
   expect(context.bootstrap.identity.worker?.id).toBe(worker.Id);
   expect(verify).toHaveBeenCalledOnce();
-  await expect(readRetainedRestoreContext({ ...input, preserveLiveProxy: true })).rejects.toThrow('Retained restore context could not be verified.');
+  await expect(readRetainedRestoreContext({ ...input, preserveLiveProxy: !options.preserveLiveProxy })).rejects.toThrow(
+    'Retained restore context could not be verified.',
+  );
   expect(verify).toHaveBeenCalledOnce();
   await journal.advance('discarded');
   await expect(readRetainedRestoreContext(input)).resolves.toMatchObject({ binding: { restoreId: test.restoreId } });
@@ -311,3 +363,60 @@ it('reconstructs a retained context from root-matched binding while preserving o
   await expect(readRetainedRestoreContext(input)).rejects.toThrow();
   verify.mockRestore();
 });
+
+it.each([
+  { mediaPolicy: 'included' as const, selectedRoots: ['state', 'apps', 'repos', 'user-config', 'traefik', 'app-data'] },
+  { mediaPolicy: 'preserve-destination' as const, selectedRoots: [...restoreTreeNames] },
+  { mediaPolicy: 'preserve-destination' as const, selectedRoots: ['apps', 'repos', 'user-config', 'traefik', 'app-data'] },
+  { mediaPolicy: 'preserve-destination' as const, selectedRoots: ['state', 'apps', 'repos', 'user-config', 'traefik'] },
+])('rejects root selection $selectedRoots against the authenticated $mediaPolicy manifest', async (options) => {
+  const test = await fixture({ version: 2, ...options });
+  const journal = await test.run();
+  const getContainer = vi.fn();
+  await expect(
+    readRetainedRestoreContext({
+      journal,
+      rootBinding: (await test.rootStatus()).binding,
+      expectedPointId: test.pointId,
+      expectedRuntimeManifestSha256: '5'.repeat(64),
+      ownerId: 1,
+      importId: test.importId,
+      docker: { getContainer } as unknown as Dockerode,
+      hostname: 'f'.repeat(64),
+      directories: { data: '/data', appData: '/app-data', cache: '/cache' },
+    }),
+  ).rejects.toThrow('Retained restore context could not be verified.');
+  expect(getContainer).not.toHaveBeenCalled();
+  expect((await journal.refresh()).phase).toBe('staging');
+});
+
+it.each(['bytes', 'public-mode', 'symlink', 'hardlink'] as const)(
+  'rejects %s changes to the root-bound media policy before inspecting Docker',
+  async (change) => {
+    const test = await fixture();
+    const journal = await test.run();
+    if (change === 'bytes') await fs.appendFile(test.manifestPath, ' ');
+    else if (change === 'public-mode') await fs.chmod(test.manifestPath, 0o644);
+    else if (change === 'hardlink') await fs.link(test.manifestPath, `${test.manifestPath}.other`);
+    else {
+      await fs.rename(test.manifestPath, `${test.manifestPath}.original`);
+      await fs.symlink(`${test.manifestPath}.original`, test.manifestPath);
+    }
+    const getContainer = vi.fn();
+    await expect(
+      readRetainedRestoreContext({
+        journal,
+        rootBinding: (await test.rootStatus()).binding,
+        expectedPointId: test.pointId,
+        expectedRuntimeManifestSha256: '5'.repeat(64),
+        ownerId: 1,
+        importId: test.importId,
+        docker: { getContainer } as unknown as Dockerode,
+        hostname: 'f'.repeat(64),
+        directories: { data: '/data', appData: '/app-data', cache: '/cache' },
+      }),
+    ).rejects.toThrow();
+    expect(getContainer).not.toHaveBeenCalled();
+    expect((await journal.refresh()).phase).toBe('staging');
+  },
+);

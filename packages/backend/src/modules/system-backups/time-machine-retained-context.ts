@@ -10,7 +10,8 @@ import { readRetainedRestoreReceipt } from './time-machine-restore-admission';
 import { readTerminalJson } from './backup-restore-terminal-record';
 import { readRetainedBoundRecord, retainedRootBindingSchema, type RetainedRootBinding } from './time-machine-retained-bootstrap';
 import { verifyRetainedWorkerIdentity } from './time-machine-retained-worker-identity';
-import { restoreTreeNames } from './backup-restore-materialize';
+import { restoreTreesForManifest } from './backup-restore-materialize';
+import { readBackupSourceManifest } from './backup-restore-source';
 
 const fail = () => new Error('Retained restore context could not be verified.');
 const same = (a: unknown, b: unknown) => canonicalPublicationJson(a) === canonicalPublicationJson(b);
@@ -76,13 +77,11 @@ export async function readRetainedRestoreContext(options: {
   hostname: string;
   committed?: boolean;
   preserveLiveProxy?: boolean;
+  signal?: AbortSignal;
   directories: { data: string; appData: string; cache: string };
 }) {
   const { journal, docker } = options;
   const state = await journal.refresh();
-  const expectedRoots = restoreTreeNames.filter((name) => !options.preserveLiveProxy || name !== 'traefik');
-  if (state.roots.length !== expectedRoots.length || state.roots.some((name) => !expectedRoots.includes(name as (typeof restoreTreeNames)[number])))
-    throw fail();
   const record = await readTerminalJson(path.join(journal.directory, 'retained-binding.json'));
   if (
     !record ||
@@ -143,6 +142,14 @@ export async function readRetainedRestoreContext(options: {
     receipt.binding.pointId !== options.expectedPointId ||
     receipt.binding.manifestSha256 !== binding.sourceBinding.legacyManifestSha256
   )
+    throw fail();
+  const manifest = await readBackupSourceManifest({
+    directory: path.join(journal.directory, 'source', 'payload'),
+    expected: bootstrap.source,
+    signal: options.signal ?? AbortSignal.timeout(30_000),
+  });
+  const expectedRoots = restoreTreesForManifest(manifest, options.preserveLiveProxy);
+  if (state.roots.length !== expectedRoots.length || state.roots.some((name) => !expectedRoots.includes(name as (typeof expectedRoots)[number])))
     throw fail();
   const [original, candidate, verifier, worker, image] = await Promise.all([
     docker.getContainer(binding.originalController).inspect(),

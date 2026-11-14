@@ -104,6 +104,17 @@ async function json(file: string, signal: AbortSignal, maximum: number, expected
   }
 }
 
+export async function readBackupSourceManifest(options: { directory: string; expected: BackupSourceSeal; signal: AbortSignal }) {
+  const { directory, signal } = options;
+  if (!path.isAbsolute(directory) || path.resolve(directory) !== directory) throw failed();
+  const seal = backupSourceSealSchema(options.expected);
+  if (seal instanceof type.errors) throw failed();
+  await privateDirectory(directory);
+  const content = path.join(directory, 'content');
+  await privateDirectory(content);
+  return parseFullBackupManifest(await json(path.join(content, 'manifest.json'), signal, fullBackupLimits.manifestBytes, seal.manifest));
+}
+
 export async function validateBackupSource(options: { directory: string; expected: BackupSourceSeal; signal: AbortSignal }) {
   const { directory, signal } = options;
   try {
@@ -116,7 +127,7 @@ export async function validateBackupSource(options: { directory: string; expecte
     await privateDirectory(content);
     await privateDirectory(database);
     if ((await fs.readdir(database)).sort().join(',') !== 'records.json,records.ndjson') throw failed();
-    const manifest = parseFullBackupManifest(await json(path.join(content, 'manifest.json'), signal, fullBackupLimits.manifestBytes, seal.manifest));
+    const manifest = await readBackupSourceManifest(options);
     const recovery = await json(path.join(content, 'recovery.json'), signal, 1024 * 1024, seal.recovery);
     if (!recovery || typeof recovery !== 'object' || Array.isArray(recovery)) throw failed();
     const fields = recovery as Record<string, unknown>;
