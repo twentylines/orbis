@@ -1341,6 +1341,62 @@ class RetainedRestoreTests(unittest.TestCase):
         body['HostConfig'].pop('Mounts'); raw['HostConfig'].pop('Mounts'); raw['Mounts'].pop(0)
         runtime.check_intent(raw, body)
 
+    def socket_mount_intent(self, source, *, legacy=False, destination='/var/run/docker.sock', writable=False):
+        runtime = D.DockerRestoreRuntime(self.manager)
+        if legacy:
+            host = {'Binds': [str(source) + ':' + destination + (':rw' if writable else ':ro')]}
+        else:
+            host = {'Mounts': [{'Type': 'bind', 'Source': str(source), 'Target': destination, 'ReadOnly': not writable}]}
+        body = {'HostConfig': copy.deepcopy(host), 'NetworkingConfig': {'EndpointsConfig': {'main': {}}}}
+        raw = {'Config': {}, 'HostConfig': copy.deepcopy(host),
+               'Mounts': [{'Type': 'bind', 'Source': str(source), 'Destination': destination, 'RW': writable, 'Propagation': 'rslave'}],
+               'NetworkSettings': {'Networks': {'main': {}}}}
+        return runtime, body, raw
+
+    def test_readonly_docker_socket_accepts_engine_rslave_normalization(self):
+        with tempfile.TemporaryDirectory() as directory, socket.socket(socket.AF_UNIX) as engine:
+            source = Path(directory).resolve() / 'engine.sock'
+            engine.bind(str(source))
+            for legacy in (False, True):
+                runtime, body, raw = self.socket_mount_intent(source, legacy=legacy)
+                with self.subTest(legacy=legacy):
+                    runtime.check_intent(raw, body)
+                if not legacy:
+                    body['HostConfig']['Mounts'][0]['BindOptions'] = {'Propagation': 'rprivate'}
+                    runtime.check_intent(raw, body)
+
+    def test_socket_normalization_rejects_other_destinations_writable_and_changed_sources(self):
+        with tempfile.TemporaryDirectory() as directory, socket.socket(socket.AF_UNIX) as engine:
+            source = Path(directory).resolve() / 'engine.sock'
+            engine.bind(str(source))
+            for legacy in (False, True):
+                for destination, writable in [('/data/socket', False), ('/var/run/docker.sock', True)]:
+                    runtime, body, raw = self.socket_mount_intent(source, legacy=legacy, destination=destination, writable=writable)
+                    with self.subTest(legacy=legacy, destination=destination, writable=writable), self.assertRaises(ValueError):
+                        runtime.check_intent(raw, body)
+                runtime, body, raw = self.socket_mount_intent(source, legacy=legacy)
+                raw['Mounts'][0]['Source'] = str(source) + '-other'
+                with self.assertRaises(ValueError):
+                    runtime.check_intent(raw, body)
+                runtime, body, raw = self.socket_mount_intent(source, legacy=legacy)
+                raw['Mounts'][0]['Propagation'] = 'rshared'
+                with self.assertRaises(ValueError):
+                    runtime.check_intent(raw, body)
+
+    def test_socket_normalization_requires_actual_socket_not_file_directory_symlink_or_missing(self):
+        with tempfile.TemporaryDirectory() as directory, socket.socket(socket.AF_UNIX) as engine:
+            parent = Path(directory).resolve()
+            source = parent / 'engine.sock'
+            engine.bind(str(source))
+            plain = parent / 'plain'; plain.write_text('not a socket')
+            folder = parent / 'directory'; folder.mkdir()
+            link = parent / 'link'; link.symlink_to(source)
+            for invalid in (plain, folder, link, parent / 'absent'):
+                for legacy in (False, True):
+                    runtime, body, raw = self.socket_mount_intent(invalid, legacy=legacy)
+                    with self.subTest(source=invalid.name, legacy=legacy), self.assertRaises(ValueError):
+                        runtime.check_intent(raw, body)
+
     def test_mixed_mount_intent_rejects_missing_extra_changed_and_duplicate_actual_binds(self):
         def missing(raw): raw['Mounts'].pop()
         def extra(raw): raw['Mounts'].append({'Type': 'bind', 'Source': '/other', 'Destination': '/extra', 'RW': True, 'Propagation': 'rprivate'})

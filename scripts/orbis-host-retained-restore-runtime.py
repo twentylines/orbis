@@ -1247,6 +1247,19 @@ class DockerRestoreRuntime:
             if not isinstance(item, dict) or item.get('Type') != 'bind':
                 raise fail()
             add(actual, item.get('Source'), item.get('Destination'), item.get('RW'), item.get('Propagation'))
+        docker_socket = '/var/run/docker.sock'
+        requested_socket = intended.get(docker_socket)
+        observed_socket = actual.get(docker_socket)
+        if (requested_socket is not None and requested_socket[1:] == (False, 'rprivate')
+                and observed_socket == (requested_socket[0], False, 'rslave')):
+            try:
+                if not stat.S_ISSOCK(os.lstat(requested_socket[0]).st_mode):
+                    raise fail()
+            except OSError as error:
+                raise fail() from error
+            # Docker reports read-only Unix socket binds as rslave even when
+            # their create request uses the default private propagation.
+            actual[docker_socket] = requested_socket
         if intended != actual:
             raise fail()
         actual_host = normalized(raw['HostConfig'])
