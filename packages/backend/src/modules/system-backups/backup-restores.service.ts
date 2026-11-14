@@ -604,6 +604,8 @@ export class BackupRestoresService implements OnModuleDestroy {
       const state = active?.state.id === journal.state.id ? await journal.refresh() : journal.state;
       if (state.phase === 'staging' && state.decision === null) await journal.discardStaging();
       else if (!['rolled-back', 'discarded'].includes(state.phase)) throw failed();
+      // Only Node's temporary runtime is disposable after protected rollback has settled.
+      await fs.rm(path.join(journal.directory, 'retained'), { recursive: true, force: true });
     }
     if (finished && this.pending?.id === journal.state.id) {
       this.pending.release();

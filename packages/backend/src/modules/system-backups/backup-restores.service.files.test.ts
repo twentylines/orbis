@@ -425,6 +425,14 @@ it('preserves the journal and maintenance hold if root begin loses its reply', a
 
 it('reconciles a lost begin reply only after protected rollback and idle, releasing the held lease', async () => {
   const active = await journal();
+  const retained = path.join(active.directory, 'retained');
+  await fs.mkdir(retained);
+  await fs.writeFile(path.join(retained, 'image.oci'), 'temporary retained image');
+  const evidence = ['source/payload/archive', 'bootstrap.json', 'time-machine-admission.json', 'retained-root-request.json'];
+  for (const name of evidence) {
+    await fs.mkdir(path.dirname(path.join(active.directory, name)), { recursive: true });
+    await fs.writeFile(path.join(active.directory, name), name);
+  }
   const pointId = randomUUID();
   const release = vi.fn();
   Reflect.set(service, 'pending', { id: active.state.id, release });
@@ -441,12 +449,105 @@ it('reconciles a lost begin reply only after protected rollback and idle, releas
   vi.mocked(operationStatus.readRootRestorationState).mockResolvedValue('checking');
   expect((await service.retainedStatus(active, 7)).job.status).toBe('recovery-required');
   expect((await active.refresh()).phase).toBe('staging');
+  expect(await fs.readFile(path.join(retained, 'image.oci'), 'utf8')).toBe('temporary retained image');
   expect(release).not.toHaveBeenCalled();
   vi.mocked(operationStatus.readRootRestorationState).mockResolvedValue('idle');
   expect((await service.retainedStatus(active, 7)).job.status).toBe('rolled-back');
   expect((await active.refresh()).phase).toBe('discarded');
+  await expect(fs.lstat(retained)).rejects.toMatchObject({ code: 'ENOENT' });
+  for (const name of evidence) expect(await fs.readFile(path.join(active.directory, name), 'utf8')).toBe(name);
+  expect((await service.retainedStatus(active, 7)).job.status).toBe('rolled-back');
   expect(release).toHaveBeenCalledOnce();
   expect(Reflect.get(service, 'pending')).toBeUndefined();
+});
+it.each([
+  ['allocating', null, 'idle'],
+  ['rolling-back', 'rollback', 'idle'],
+  ['rolled-back', null, 'idle'],
+  ['rolled-back', 'commit', 'idle'],
+  ['rolled-back', 'rollback', null],
+  ['rolled-back', 'rollback', 'checking'],
+  ['rolled-back', 'rollback', 'recovery'],
+] as const)('preserves retained staging while protected status is %s/%s/%s', async (state, decision, maintenance) => {
+  const active = await journal();
+  const retained = path.join(active.directory, 'retained');
+  await fs.mkdir(retained);
+  await fs.writeFile(path.join(retained, 'image.oci'), 'needed for recovery');
+  const pointId = randomUUID();
+  const release = vi.fn();
+  Reflect.set(service, 'pending', { id: active.state.id, release });
+  boundary.receiptRead.mockResolvedValue({ ownerId: 7, binding: { pointId } });
+  boundary.admissionRead.mockResolvedValue({ sha256: 'd'.repeat(64) });
+  boundary.rootStatus.mockResolvedValue({ pointId, state, decision, recoverable: true, admissionSha256: 'd'.repeat(64) });
+  vi.mocked(operationStatus.readRootRestorationState).mockResolvedValue(maintenance);
+  await service.retainedStatus(active, 7);
+  expect(await fs.readFile(path.join(retained, 'image.oci'), 'utf8')).toBe('needed for recovery');
+  expect((await active.refresh()).phase).toBe('staging');
+  expect(release).not.toHaveBeenCalled();
+});
+it('keeps the lease when settled rollback staging cannot be removed and retries cleanup on the next status read', async () => {
+  const active = await journal();
+  const retained = path.join(active.directory, 'retained');
+  await fs.mkdir(retained);
+  await fs.writeFile(path.join(retained, 'image.oci'), 'temporary retained image');
+  const pointId = randomUUID();
+  const release = vi.fn();
+  Reflect.set(service, 'pending', { id: active.state.id, release });
+  boundary.receiptRead.mockResolvedValue({ ownerId: 7, binding: { pointId } });
+  boundary.admissionRead.mockResolvedValue({ sha256: 'd'.repeat(64) });
+  boundary.rootStatus.mockResolvedValue({ pointId, state: 'rolled-back', decision: 'rollback', admissionSha256: 'd'.repeat(64) });
+  vi.mocked(operationStatus.readRootRestorationState).mockResolvedValue('idle');
+  const remove = fs.rm;
+  const cleanup = vi.spyOn(fs, 'rm').mockImplementation(async (...args) => {
+    if (args[0] === retained) throw Object.assign(new Error('declared staging permission failure'), { code: 'EACCES' });
+    return remove(...args);
+  });
+  await expect(service.retainedStatus(active, 7)).rejects.toThrow('declared staging permission failure');
+  expect((await active.refresh()).phase).toBe('discarded');
+  expect(release).not.toHaveBeenCalled();
+  expect(await fs.readFile(path.join(retained, 'image.oci'), 'utf8')).toBe('temporary retained image');
+  cleanup.mockRestore();
+  expect((await service.retainedStatus(active, 7)).job.status).toBe('rolled-back');
+  await expect(fs.lstat(retained)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(release).toHaveBeenCalledOnce();
+});
+it.each(['owner', 'point', 'admission', 'journal'] as const)('preserves staging when the settled rollback %s does not match', async (mismatch) => {
+  const active = await journal();
+  if (mismatch === 'journal') await active.advance('preparing');
+  const retained = path.join(active.directory, 'retained');
+  await fs.mkdir(retained);
+  await fs.writeFile(path.join(retained, 'image.oci'), 'preserve on mismatched authority');
+  const pointId = randomUUID();
+  const release = vi.fn();
+  Reflect.set(service, 'pending', { id: active.state.id, release });
+  boundary.receiptRead.mockResolvedValue({ ownerId: mismatch === 'owner' ? 8 : 7, binding: { pointId } });
+  boundary.admissionRead.mockResolvedValue({ sha256: 'd'.repeat(64) });
+  boundary.rootStatus.mockResolvedValue({
+    pointId: mismatch === 'point' ? randomUUID() : pointId,
+    state: 'rolled-back',
+    decision: 'rollback',
+    admissionSha256: (mismatch === 'admission' ? 'e' : 'd').repeat(64),
+  });
+  vi.mocked(operationStatus.readRootRestorationState).mockResolvedValue('idle');
+  await expect(service.retainedStatus(active, 7)).rejects.toThrow('needs review');
+  expect(await fs.readFile(path.join(retained, 'image.oci'), 'utf8')).toBe('preserve on mismatched authority');
+  expect(release).not.toHaveBeenCalled();
+});
+it('removes a staging symlink without traversing into the frozen recovery copy', async () => {
+  const active = await journal();
+  const frozen = path.join(root, 'protected-frozen-recovery');
+  await fs.mkdir(frozen);
+  await fs.writeFile(path.join(frozen, 'image.oci'), 'Root-owned recovery evidence');
+  const retained = path.join(active.directory, 'retained');
+  await fs.symlink(frozen, retained, 'dir');
+  const pointId = randomUUID();
+  boundary.receiptRead.mockResolvedValue({ ownerId: 7, binding: { pointId } });
+  boundary.admissionRead.mockResolvedValue({ sha256: 'd'.repeat(64) });
+  boundary.rootStatus.mockResolvedValue({ pointId, state: 'rolled-back', decision: 'rollback', admissionSha256: 'd'.repeat(64) });
+  vi.mocked(operationStatus.readRootRestorationState).mockResolvedValue('idle');
+  expect((await service.retainedStatus(active, 7)).job.status).toBe('rolled-back');
+  await expect(fs.lstat(retained)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(await fs.readFile(path.join(frozen, 'image.oci'), 'utf8')).toBe('Root-owned recovery evidence');
 });
 it('continues checking a lost begin without requiring a process restart', async () => {
   const active = await journal();
