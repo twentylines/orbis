@@ -30,6 +30,125 @@ D = load('orbis-host-retained-restore-runtime.py', 'retained_restore_driver_test
 S = load('orbis-host-service.py', 'retained_restore_service_test')
 
 
+class BootstrapQueueBindingTests(unittest.TestCase):
+    def fixture(self):
+        network = {'NetworkID': 'a' * 64, 'IPAddress': '172.20.0.2'}
+        raw = {'Id': '1' * 64, 'Name': '/runtipi-queue', 'Image': 'sha256:' + 'b' * 64,
+               'Config': {'Labels': {'com.docker.compose.project': 'runtipi',
+                                    'com.docker.compose.service': 'runtipi-queue',
+                                    'com.docker.compose.project.working_dir': '/fixture/installation'}},
+               'HostConfig': {'RestartPolicy': {'Name': 'unless-stopped', 'MaximumRetryCount': 0}},
+               'Mounts': [], 'NetworkSettings': {'Networks': {'main': network}}, 'RestartCount': 0,
+               'State': {'Running': True, 'Restarting': False, 'Paused': False, 'StartedAt': '2026-11-15T00:00:00Z'}}
+        record = {'source': {'container': {'NetworkSettings': {'Networks': {'main': copy.deepcopy(network)}}}}}
+        runtime = object.__new__(D.DockerRestoreRuntime)
+        runtime.root, runtime.context, runtime.P = Path('/fixture/installation'), 'fixture', M.P
+        runtime.inspect = mock.Mock(return_value=raw)
+        runtime.bounded_output = mock.Mock(return_value=b'RabbitMQ application is running\n')
+        return runtime, record, raw
+
+    def test_unmonitored_running_broker_requires_bounded_application_probe(self):
+        runtime, record, raw = self.fixture()
+        binding = runtime.bootstrap_queue_binding(record)
+        self.assertEqual(binding, {'id': raw['Id'], 'imageId': raw['Image'],
+                                  'definitionSha256': runtime.definition(raw),
+                                  'restartPolicy': raw['HostConfig']['RestartPolicy'], 'networks': {'main': 'a' * 64}})
+        runtime.bounded_output.assert_called_once_with(
+            ['docker', '--context', 'fixture', 'exec', raw['Id'], 'rabbitmq-diagnostics',
+             '--quiet', '--timeout', '5', 'check_running'], 8192, 8)
+        self.assertEqual(runtime.inspect.call_args_list, [mock.call('runtipi-queue'), mock.call(raw['Id'])])
+
+    def test_explicitly_disabled_monitor_still_checks_application_readiness(self):
+        runtime, record, raw = self.fixture()
+        raw['Config']['Healthcheck'] = {'Test': ['NONE']}
+        runtime.bootstrap_queue_binding(record)
+        runtime.bounded_output.assert_called_once()
+
+    def test_existing_healthy_monitor_preserves_its_readiness_contract(self):
+        runtime, record, raw = self.fixture()
+        raw['Config']['Healthcheck'] = {'Test': ['CMD', 'rabbitmq-diagnostics', 'check_running']}
+        raw['State']['Health'] = {'Status': 'healthy'}
+        self.assertEqual(runtime.bootstrap_queue_binding(record)['id'], raw['Id'])
+        runtime.bounded_output.assert_not_called()
+
+    def test_starting_unhealthy_or_malformed_monitor_never_falls_back_to_probe(self):
+        for health in ({'Status': 'starting'}, {'Status': 'unhealthy'}, {}, 'healthy'):
+            with self.subTest(health=health):
+                runtime, record, raw = self.fixture()
+                raw['State']['Health'] = health
+                with self.assertRaises(ValueError): runtime.bootstrap_queue_binding(record)
+                runtime.bounded_output.assert_not_called()
+
+    def test_configured_monitor_without_observation_is_not_ready(self):
+        for healthcheck in ({'Test': ['CMD', 'check']}, {'Test': ['CMD-SHELL', 'check']},
+                            {'Test': ['unknown']}, 'disabled'):
+            with self.subTest(healthcheck=healthcheck):
+                runtime, record, raw = self.fixture()
+                raw['Config']['Healthcheck'] = healthcheck
+                with self.assertRaises(ValueError): runtime.bootstrap_queue_binding(record)
+                runtime.bounded_output.assert_not_called()
+
+    def test_failed_or_timed_out_application_probe_cannot_bind_queue(self):
+        runtime, record, _ = self.fixture()
+        runtime.bounded_output.side_effect = ValueError('bounded readiness probe failed')
+        with self.assertRaises(ValueError): runtime.bootstrap_queue_binding(record)
+        runtime.bounded_output.assert_called_once()
+        self.assertEqual(runtime.inspect.call_count, 1)
+
+    def test_probe_requires_unchanged_owned_running_generation(self):
+        for change in ('id', 'image', 'restart-policy', 'started', 'restart-count', 'stopped',
+                       'paused', 'restarting', 'unhealthy', 'network', 'endpoint', 'mount'):
+            with self.subTest(change=change):
+                runtime, record, raw = self.fixture()
+                after = copy.deepcopy(raw)
+                if change == 'id': after['Id'] = '2' * 64
+                if change == 'image': after['Image'] = 'sha256:' + 'c' * 64
+                if change == 'restart-policy': after['HostConfig']['RestartPolicy']['Name'] = 'always'
+                if change == 'started': after['State']['StartedAt'] = '2026-11-15T00:00:01Z'
+                if change == 'restart-count': after['RestartCount'] = 1
+                if change == 'stopped': after['State']['Running'] = False
+                if change == 'paused': after['State']['Paused'] = True
+                if change == 'restarting': after['State']['Restarting'] = True
+                if change == 'unhealthy': after['State']['Health'] = {'Status': 'unhealthy'}
+                if change == 'network': after['NetworkSettings']['Networks']['main']['NetworkID'] = 'c' * 64
+                if change == 'endpoint': after['NetworkSettings']['Networks']['main']['IPAddress'] = '172.20.0.3'
+                if change == 'mount': after['Mounts'].append({'Type': 'bind', 'Source': '/foreign', 'Destination': '/foreign', 'RW': True})
+                runtime.inspect.side_effect = [raw, after]
+                with self.assertRaises(ValueError): runtime.bootstrap_queue_binding(record)
+                runtime.bounded_output.assert_called_once()
+
+    def test_unknown_generation_is_not_promoted_by_application_probe(self):
+        for field, value in (('StartedAt', None), ('StartedAt', '0001-01-01T00:00:00Z'),
+                             ('RestartCount', None), ('RestartCount', False), ('RestartCount', -1)):
+            with self.subTest(field=field, value=value):
+                runtime, record, raw = self.fixture()
+                (raw['State'] if field == 'StartedAt' else raw)[field] = value
+                with self.assertRaises(ValueError): runtime.bootstrap_queue_binding(record)
+                runtime.bounded_output.assert_not_called()
+        runtime, record, raw = self.fixture()
+        after = copy.deepcopy(raw)
+        after['RestartCount'] = False
+        runtime.inspect.side_effect = [raw, after]
+        with self.assertRaises(ValueError): runtime.bootstrap_queue_binding(record)
+        runtime.bounded_output.assert_called_once()
+
+    def test_foreign_unavailable_or_unnetworked_broker_is_rejected_before_probe(self):
+        for change in ('project', 'service', 'root', 'stopped', 'paused', 'restarting', 'network', 'missing-network'):
+            with self.subTest(change=change):
+                runtime, record, raw = self.fixture()
+                if change in {'project', 'service', 'root'}:
+                    key = {'project': 'com.docker.compose.project', 'service': 'com.docker.compose.service',
+                           'root': 'com.docker.compose.project.working_dir'}[change]
+                    raw['Config']['Labels'][key] = 'foreign'
+                if change == 'stopped': raw['State']['Running'] = False
+                if change == 'paused': raw['State']['Paused'] = True
+                if change == 'restarting': raw['State']['Restarting'] = True
+                if change == 'network': raw['NetworkSettings']['Networks']['main']['NetworkID'] = 'c' * 64
+                if change == 'missing-network': raw['NetworkSettings']['Networks'] = {}
+                with self.assertRaises(ValueError): runtime.bootstrap_queue_binding(record)
+                runtime.bounded_output.assert_not_called()
+
+
 class ResetAuthorityMountTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

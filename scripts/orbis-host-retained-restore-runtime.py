@@ -1932,21 +1932,43 @@ class DockerRestoreRuntime:
         return {'operationSha256': hashes[0], 'imageCaptureSha256': hashes[1], 'imageInventorySha256': hashes[2]}
 
     def bootstrap_queue_binding(self, record):
+        def observe(raw):
+            labels, state = raw['Config'].get('Labels') or {}, raw['State']
+            health = state.get('Health')
+            if (not re.fullmatch(r'[a-f0-9]{64}', str(raw.get('Id')))
+                    or raw.get('Name') != '/runtipi-queue' or labels.get('com.docker.compose.project') != 'runtipi'
+                    or labels.get('com.docker.compose.service') != 'runtipi-queue'
+                    or labels.get('com.docker.compose.project.working_dir') != str(self.root)
+                    or state.get('Running') is not True or state.get('Restarting') or state.get('Paused')
+                    or health is not None and (not isinstance(health, dict) or health.get('Status') != 'healthy')):
+                raise fail()
+            monitor = raw['Config'].get('Healthcheck')
+            if health is None and monitor is not None and (not isinstance(monitor, dict) or monitor.get('Test') not in (None, ['NONE'])):
+                raise fail()
+            networks = {name: item.get('NetworkID') for name, item in raw['NetworkSettings']['Networks'].items()}
+            if (not networks or any(not isinstance(value, str) or not re.fullmatch(r'[a-f0-9]{64}', value) for value in networks.values())
+                    or not any(networks.get(name) == item.get('NetworkID')
+                               for name, item in record['source']['container']['NetworkSettings']['Networks'].items())):
+                raise fail()
+            return {'id': raw['Id'], 'imageId': raw['Image'], 'definitionSha256': self.definition(raw),
+                    'restartPolicy': copy.deepcopy(raw['HostConfig']['RestartPolicy']), 'networks': networks}
+
         raw = self.inspect('runtipi-queue')
-        labels, state = raw['Config'].get('Labels') or {}, raw['State']
-        if (raw.get('Name') != '/runtipi-queue' or labels.get('com.docker.compose.project') != 'runtipi'
-                or labels.get('com.docker.compose.service') != 'runtipi-queue'
-                or labels.get('com.docker.compose.project.working_dir') != str(self.root)
-                or state.get('Running') is not True or state.get('Restarting') or state.get('Paused')
-                or (state.get('Health') or {}).get('Status') != 'healthy'):
-            raise fail()
-        networks = {name: item.get('NetworkID') for name, item in raw['NetworkSettings']['Networks'].items()}
-        if (not networks or any(not isinstance(value, str) or not re.fullmatch(r'[a-f0-9]{64}', value) for value in networks.values())
-                or not any(networks.get(name) == item.get('NetworkID')
-                           for name, item in record['source']['container']['NetworkSettings']['Networks'].items())):
-            raise fail()
-        return {'id': raw['Id'], 'imageId': raw['Image'], 'definitionSha256': self.definition(raw),
-                'restartPolicy': copy.deepcopy(raw['HostConfig']['RestartPolicy']), 'networks': networks}
+        binding = observe(raw)
+        if raw['State'].get('Health') is None:
+            started = raw['State'].get('StartedAt')
+            if (not isinstance(started, str) or not started or started.startswith('0001-')
+                    or type(raw.get('RestartCount')) is not int or raw['RestartCount'] < 0):
+                raise fail()
+            # Older managed brokers have no Docker healthcheck. Check the RabbitMQ application, not only its Erlang node.
+            self.bounded_output(['docker', '--context', self.context, 'exec', binding['id'], 'rabbitmq-diagnostics',
+                                 '--quiet', '--timeout', '5', 'check_running'], 8192, 8)
+            after = self.inspect(binding['id'])
+            if (observe(after) != binding or after['State'].get('StartedAt') != started
+                    or type(after.get('RestartCount')) is not int or after['RestartCount'] != raw['RestartCount']
+                    or after['NetworkSettings']['Networks'] != raw['NetworkSettings']['Networks']):
+                raise fail()
+        return binding
 
     def normal_bootstrap_material(self, record, proof):
         policy = record['source'].get('proxyHostIdentity')
