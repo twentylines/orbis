@@ -286,6 +286,75 @@ class Runtime:
         self.event('terminal-restart-policy')
 
 
+class RetainedCaptureOriginTests(unittest.TestCase):
+    def setUp(self):
+        from test_orbis_host_capture_authority import A, CaptureAuthorityTests
+        self.capture = CaptureAuthorityTests()
+        self.capture.capture_v3 = True
+        self.capture.setUp()
+        self.addCleanup(self.capture.doCleanups)
+        self.authority = A
+        self.manager = M.RestoreManager(self.capture.service, runtime=SimpleNamespace())
+
+    def finalize_apps(self):
+        capture, authority = self.capture, self.authority
+        original = capture.app_fixture()
+        stopped = copy.deepcopy(original)
+        stopped.pop('sha256')
+        for item in stopped['containers']:
+            item['wasRunning'] = False
+        stopped = authority.APP.seal(stopped, authority.app_expectations(
+            authority.load_preparation(capture.fixture.state, capture.fixture.point), 'c' * 64))
+        with mock.patch.object(capture.service, 'proxy_host_identity', return_value={'version': 1, 'descriptor': capture.proxy_fixture()}), \
+                mock.patch.object(authority.APP, 'observe', return_value=original) as observer:
+            capture.service.prepare_controller_app_runtime(capture.fixture.point, capture.proxy_request())
+            observer.return_value = stopped
+            return capture.service.finalize_controller_capture_authority(
+                capture.fixture.point, capture.token, io.BytesIO(capture.archive), len(capture.archive),
+                proxy_policy=True, app_policy=True)
+
+    def test_restore_uses_finalized_app_authority_with_exact_app_bindings(self):
+        expected = self.finalize_apps()
+        self.assertEqual(expected['version'], 4)
+        original = self.manager.capture_origin(self.capture.fixture.point)
+        self.assertEqual(json.loads(original.authority_bytes), expected)
+        self.assertEqual(original.configuration_bytes, self.authority.load_effective_origin(
+            self.capture.fixture.state, self.capture.fixture.root, 'fixture', self.capture.fixture.point).configuration_bytes)
+
+    def test_corrupt_app_finalization_never_falls_back_to_valid_proxy_authority(self):
+        self.finalize_apps()
+        (self.capture.authority_path() / 'app-finalized.json').write_bytes(b'{}')
+        with self.assertRaises(ValueError):
+            self.manager.capture_origin(self.capture.fixture.point)
+
+    def test_changed_app_runtime_never_falls_back_to_valid_proxy_authority(self):
+        self.finalize_apps()
+        (self.capture.authority_path() / 'app-runtime.json').write_bytes(b'{}')
+        with self.assertRaises(ValueError):
+            self.manager.capture_origin(self.capture.fixture.point)
+
+    def test_symlinked_app_finalization_never_falls_back_to_valid_proxy_authority(self):
+        self.finalize_apps()
+        marker = self.capture.authority_path() / 'app-finalized.json'
+        marker.unlink()
+        marker.symlink_to('proxy-finalized.json')
+        with self.assertRaises((ValueError, OSError)):
+            self.manager.capture_origin(self.capture.fixture.point)
+
+    def test_original_capture_authority_remains_usable_without_newer_finalization(self):
+        expected = self.capture.finalize()
+        self.assertEqual(json.loads(self.manager.capture_origin(self.capture.fixture.point).authority_bytes), expected)
+
+    def test_proxy_capture_authority_remains_usable_without_app_finalization(self):
+        capture = self.capture
+        with mock.patch.object(capture.service, 'proxy_host_identity', return_value={'version': 1, 'descriptor': capture.proxy_fixture()}):
+            capture.service.prepare_controller_proxy_identity(capture.fixture.point, capture.proxy_request())
+            expected = capture.service.finalize_controller_capture_authority(
+                capture.fixture.point, capture.token, io.BytesIO(capture.archive), len(capture.archive), proxy_policy=True)
+        self.assertEqual(expected['version'], 2)
+        self.assertEqual(json.loads(self.manager.capture_origin(capture.fixture.point).authority_bytes), expected)
+
+
 class RetainedRestoreTests(unittest.TestCase):
     def test_node_fingerprint_matches_actual_legacy_node_enumeration_for_numeric_and_unicode_labels(self):
         from test_orbis_host_app_runtime import fixture

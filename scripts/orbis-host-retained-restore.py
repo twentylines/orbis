@@ -284,12 +284,10 @@ class RestoreManager:
 
     def capture_origin(self, point):
         try:
-            path = CAPTURE.directory(self.state, point)
+            CAPTURE.directory(self.state, point)
         except FileNotFoundError:
             return CAPTURE.load_origin(self.state, self.root, self.context, point)
-        extra = path / 'proxy-finalized.json'
-        return (CAPTURE.load_proxy_origin(self.state, self.root, self.context, point) if extra.exists() or extra.is_symlink()
-                else CAPTURE.load_origin(self.state, self.root, self.context, point))
+        return CAPTURE.load_effective_origin(self.state, self.root, self.context, point)
 
     def run_phase(self, record, phase, commit_stage=None):
         if phase not in PHASES:
