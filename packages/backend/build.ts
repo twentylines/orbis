@@ -80,3 +80,18 @@ const capturePublication = await Bun.build({
 });
 if (!capturePublication.success) throw new AggregateError(capturePublication.logs, 'Core capture publication verifier build failed');
 await assertNoPrivateBuildPaths(capturePublication.outputs);
+
+const recoveryAuthentication = await Bun.build({
+  entrypoints: ['./src/sentinel-recovery-auth.ts'],
+  outdir: './dist',
+  naming: { entry: '[name].mjs' },
+  format: 'esm',
+  target: 'node',
+  env: 'disable',
+  define: { 'process.env.NODE_ENV': JSON.stringify('production') },
+  sourcemap: true,
+  minify: true,
+  external: productionExternals,
+});
+if (!recoveryAuthentication.success) throw new AggregateError(recoveryAuthentication.logs, 'Recovery authentication worker build failed');
+await assertNoPrivateBuildPaths(recoveryAuthentication.outputs);
