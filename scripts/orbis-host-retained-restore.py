@@ -476,6 +476,8 @@ class RestoreManager:
     def _rollback(self, record):
         if record['decision'] == 'commit':
             raise fail()
+        self.runtime.quiesce_owned(record)
+        unstarted = self.runtime.seal_unstarted_preparation(record)
         record['decision'] = 'rollback'
         record['phase'] = 'rolling-back'
         record['grant'] = None
@@ -484,7 +486,7 @@ class RestoreManager:
         if record['stage'].get('metadata', {}).get('schema') == 'orbis.time-machine-runtime.v6':
             self.runtime.historical_apps(record, 'rollback')
         self.runtime.retire_provisional(record)
-        if record.get('workerId') and record.get('dataTouched'):
+        if record.get('workerId') and record.get('dataTouched') and not unstarted:
             self.runtime.restart_coordinator(record)
             self.run_phase(record, 'rollback')
         self.runtime.restore_original_controller(record)
@@ -552,13 +554,13 @@ class RestoreManager:
             # coordinator can then safely execute a new bounded recovery grant.
             self.runtime.quiesce_owned(record)
             self.runtime.restore_overlay(record)
+            if record['decision'] != 'commit':
+                return self._rollback(record)
             if record.get('workerId'):
                 self.runtime.restart_coordinator(record)
             record['grant'] = None
             self.save(record)
-            if record['decision'] == 'commit':
-                return self._finish(record, app_recovery=True)
-            return self._rollback(record)
+            return self._finish(record, app_recovery=True)
 
     def interrupted(self, identifier):
         with self.metadata_lock:

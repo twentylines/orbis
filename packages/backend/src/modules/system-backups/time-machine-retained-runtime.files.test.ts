@@ -104,6 +104,15 @@ it('loads v6 replica images after materialization and before prepared without cr
   expect(test.events).toEqual(['worker', 'preparing', 'stop', 'materialized', 'loaded', 'prepared']);
   expect(prepareRetainedImagePins).not.toHaveBeenCalled();
 });
+it('does not stop writers or prepare payloads when the durable preparing barrier fails', async () => {
+  const test = fixture();
+  vi.mocked(test.options.journal.advance).mockRejectedValueOnce(new Error('journal sync failed'));
+  await expect(retainedPhaseRuntime(test.options).prepare(new AbortController().signal)).rejects.toThrow('journal sync failed');
+  expect(test.runtime.stopWriters).not.toHaveBeenCalled();
+  expect(prepareRetainedImagePins).not.toHaveBeenCalled();
+  expect(loadRetainedV6Images).not.toHaveBeenCalled();
+  expect(prepareRestorePayload).not.toHaveBeenCalled();
+});
 it('does not mark v6 prepared when its protected descriptor is missing', async () => {
   const test = fixture();
   vi.mocked(prepareRestorePayload).mockImplementationOnce(async (options) => {

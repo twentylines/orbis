@@ -384,6 +384,9 @@ class Runtime:
     def quiesce_owned(self, record):
         self.event('quiesce')
 
+    def seal_unstarted_preparation(self, record):
+        return False
+
     def restart_coordinator(self, record):
         self.event('restart-worker')
 
@@ -521,6 +524,245 @@ class RetainedRestoreTests(unittest.TestCase):
         review = self.manager.review(self.request)
         request = {**self.request, 'currentRevision': review['currentRevision'], 'stageRevision': review['stageRevision'], 'clientKey': self.key}
         return self.manager.begin(request), request
+
+    def unstarted_fixture(self):
+        self.begin()
+        record = self.manager.read(self.request['restoreId'])
+        runtime = D.DockerRestoreRuntime(self.manager)
+        node = self.root / ('unstarted-' + str(uuid.uuid4()))
+        node.mkdir(mode=0o700)
+        for name in ('roots', 'source', 'retained'):
+            (node / name).mkdir(mode=0o700)
+        for name in ('bootstrap.json', 'controller-ownership.json', 'retained-binding.json',
+                     'retained-root-request.json', 'time-machine-admission.json'):
+            (node / name).write_bytes(b'{}'); (node / name).chmod(0o600)
+        original = {'version': 1, 'id': record['id'], 'nonce': record['nonce'], 'phase': 'staging', 'decision': None,
+                    'originalController': '1' * 64, 'candidateController': '1' * 64, 'worker': '6' * 64,
+                    'verifierController': '7' * 64, 'roots': ['state', 'apps']}
+        rebound = {**original, 'candidateController': record['candidateId'], 'worker': record['workerId'],
+                   'verifierController': record['verifierId']}
+        (node / 'restore.json').write_bytes(runtime.P.canonical(rebound)); (node / 'restore.json').chmod(0o600)
+        record.update(phase='preparing', decision=None, dataTouched=True, sequence=1,
+                      grant={'phase': 'prepare', 'sequence': 1, 'status': 'running', 'commitStage': None},
+                      frozenSourceInventorySha256='e' * 64, definitions={}, intents={})
+        record['source'].update(definition='f' * 64, coordinatorCapabilitySha256=D.hashed(runtime.P.canonical(
+            {'phase': D.CAPABILITY, 'terminal': D.TERMINAL_CAPABILITY})), container={'NetworkSettings': {'Networks': {}}})
+        record['stage'].update(journalPath=str(node), journal=original, bootstrap={}, provisional={}, destinationAppRuntimeSha256='a' * 64,
+                               metadata={'schema': 'orbis.time-machine-runtime.v6'})
+        record['stage']['sourceBinding']['originalJournalSha256'] = D.hashed(runtime.P.canonical(original))
+        rows = {}
+        for role, field in (('coordinator', 'workerId'), ('candidate', 'candidateId'), ('verifier', 'verifierId')):
+            raw = {'Id': record[field], 'Name': '/orbis-retained-' + record['id'] + '-' + role,
+                   'Image': record['source']['imageId'], 'Config': {'Labels': {'io.orbis.restore': record['id']}},
+                   'HostConfig': {'RestartPolicy': {'Name': 'no', 'MaximumRetryCount': 0}}, 'Mounts': [],
+                   'NetworkSettings': {'Networks': {}}, 'ExecIDs': None, 'RestartCount': 0,
+                   'State': {'Running': False, 'Restarting': False, 'Paused': False, 'Pid': 0, 'Status': 'exited' if role == 'coordinator' else 'created',
+                             'StartedAt': '2026-11-15T00:00:00Z' if role == 'coordinator' else '0001-01-01T00:00:00Z'}}
+            rows[raw['Id']] = raw
+            record['definitions'][role] = runtime.definition(raw)
+            record['intents'][role] = {'body': {'fixture': 'protected create intent'}}
+        runtime.inspect = mock.Mock(side_effect=lambda identifier: rows[identifier])
+        runtime.check_intent = mock.Mock()
+        runtime.check_source = mock.Mock()
+        runtime.observe_unstarted_destination = mock.Mock()
+        runtime.terminal_survivor_database = mock.Mock(return_value=({'id': '1' * 64}, {'oid': 42}))
+        self.manager.save(record)
+        return runtime, record, node, rows
+
+    def test_unstarted_preparation_seals_before_rollback_and_keeps_data_touched(self):
+        runtime, record, node, rows = self.unstarted_fixture()
+        self.assertTrue(runtime.seal_unstarted_preparation(record))
+        private = self.manager.directory(record['id']) / 'unstarted-preparation.json'
+        self.assertEqual(D.hashed(private.read_bytes()), self.manager.read(record['id'])['unstartedPreparationSha256'])
+        self.assertTrue(record['dataTouched'])
+        self.assertEqual(record['decision'], None)
+        self.assertEqual(runtime.check_intent.call_count, 3)
+        runtime.inspect.side_effect = AssertionError('sealed proof must survive container retirement')
+        record.update(phase='rolling-back', decision='rollback', grant=None)
+        self.assertTrue(runtime.seal_unstarted_preparation(record))
+        self.assertEqual(runtime.read_unstarted_preparation(record, (node / 'restore.json').read_bytes())['database']['oid'], 42)
+
+    def test_only_first_unacknowledged_prepare_can_seal(self):
+        runtime, record, node, rows = self.unstarted_fixture()
+        for changes in ({'phase': 'prepared'}, {'phase': 'rolling-back'}, {'decision': 'rollback'}, {'decision': 'commit'},
+                        {'sequence': 2}, {'sequence': True}, {'dataTouched': False},
+                        {'grant': {'phase': 'rollback', 'sequence': 1, 'status': 'running', 'commitStage': None}},
+                        {'grant': {'phase': 'prepare', 'sequence': 1, 'status': 'complete', 'commitStage': None}}):
+            with self.subTest(changes=changes):
+                self.assertFalse(runtime.seal_unstarted_preparation({**record, **changes}))
+        journal = json.loads((node / 'restore.json').read_bytes())
+        for phase in ('preparing', 'prepared', 'promoting', 'rolling-back', 'completed', 'discarded'):
+            (node / 'restore.json').write_bytes(runtime.P.canonical({**journal, 'phase': phase}))
+            self.assertFalse(runtime.seal_unstarted_preparation(record))
+        runtime.inspect.assert_not_called()
+
+    def test_older_runtime_formats_keep_normal_worker_recovery(self):
+        runtime, record, node, rows = self.unstarted_fixture()
+        for schema in ('orbis.time-machine-runtime.v4', 'orbis.time-machine-runtime.v5', None):
+            record['stage']['metadata'] = {'schema': schema}
+            self.assertFalse(runtime.seal_unstarted_preparation(record))
+        runtime.inspect.assert_not_called()
+
+    def test_unstarted_proof_rejects_changed_binding_and_any_acknowledged_effect(self):
+        runtime, record, node, rows = self.unstarted_fixture()
+        for key in ('preparedOperationSha256', 'phaseOperationSha256', 'nodePhaseAtAcknowledgement',
+                    'nodeJournalSha256AtAcknowledgement', 'preparedAuthorityDigest', 'incomingEnvSha256',
+                    'commitAuthorized', 'candidateActivationLease', 'appStatusIntent'):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                runtime.seal_unstarted_preparation({**record, key: 'observed'})
+        changed = copy.deepcopy(record); changed['stage']['sourceBinding']['originalJournalSha256'] = '0' * 64
+        with self.assertRaises(ValueError): runtime.seal_unstarted_preparation(changed)
+        changed = copy.deepcopy(record); changed['source']['coordinatorCapabilitySha256'] = '0' * 64
+        with self.assertRaises(ValueError): runtime.seal_unstarted_preparation(changed)
+        journal = json.loads((node / 'restore.json').read_bytes())
+        for key, value in (('worker', '9' * 64), ('roots', ['media']), ('decision', 'rollback'), ('nonce', str(uuid.uuid4()))):
+            (node / 'restore.json').write_bytes(runtime.P.canonical({**journal, key: value}))
+            with self.subTest(key=key), self.assertRaises(ValueError): runtime.seal_unstarted_preparation(record)
+        self.assertFalse((self.manager.directory(record['id']) / 'unstarted-preparation.json').exists())
+
+    def test_unstarted_proof_requires_exact_empty_preparation_layout(self):
+        runtime, record, node, rows = self.unstarted_fixture()
+        for name in ('runtime.json', 'operation.json', 'incoming.env', 'outcome.json', '.unrecognized.tmp'):
+            path = node / name; path.write_bytes(b'{}'); path.chmod(0o600)
+            with self.subTest(name=name), self.assertRaises(ValueError): runtime.seal_unstarted_preparation(record)
+            path.unlink()
+        for name in ('node-runtime.json', 'historical-app-effects', 'prepared-authority.json', 'commit.json'):
+            path = self.manager.directory(record['id']) / name; path.symlink_to('missing')
+            with self.subTest(name=name), self.assertRaises(ValueError): runtime.seal_unstarted_preparation(record)
+            path.unlink()
+        (node / 'roots' / 'state').mkdir(mode=0o700)
+        with self.assertRaises(ValueError): runtime.seal_unstarted_preparation(record)
+
+    def test_unstarted_proof_rejects_nonquiescent_or_started_roles(self):
+        runtime, record, node, rows = self.unstarted_fixture()
+        worker = rows[record['workerId']]
+        for key, value in (('Running', True), ('Restarting', True), ('Paused', True), ('Pid', 1), ('Pid', False), ('Pid', None),
+                           ('Status', 'dead'), ('Status', 'removing'), ('Status', None)):
+            before = worker['State'][key]; worker['State'][key] = value
+            with self.subTest(key=key, value=value), self.assertRaises(ValueError): runtime.seal_unstarted_preparation(record)
+            worker['State'][key] = before
+        worker['ExecIDs'] = ['a' * 64]
+        with self.assertRaises(ValueError): runtime.seal_unstarted_preparation(record)
+        worker['ExecIDs'] = None
+        for role in ('candidateId', 'verifierId'):
+            raw = rows[record[role]]; raw['State']['StartedAt'] = '2026-11-15T00:00:00Z'
+            with self.subTest(role=role), self.assertRaises(ValueError): runtime.seal_unstarted_preparation(record)
+            raw['State']['StartedAt'] = '0001-01-01T00:00:00Z'
+        worker['HostConfig']['RestartPolicy']['Name'] = 'always'
+        with self.assertRaises(ValueError): runtime.seal_unstarted_preparation(record)
+
+    def test_unstarted_proof_requires_unchanged_cohort_source_and_survivor(self):
+        runtime, record, node, rows = self.unstarted_fixture()
+        runtime.check_source.side_effect = ValueError('changed source')
+        with self.assertRaises(ValueError): runtime.seal_unstarted_preparation(record)
+        runtime.check_source.side_effect = None
+        runtime.observe_unstarted_destination.side_effect = ValueError('changed cohort')
+        with self.assertRaises(ValueError): runtime.seal_unstarted_preparation(record)
+        runtime.observe_unstarted_destination.side_effect = None
+        runtime.terminal_survivor_database.side_effect = ValueError('unhealthy original or changed database')
+        with self.assertRaises(ValueError): runtime.seal_unstarted_preparation(record)
+
+    def test_recovery_observes_root_bound_cohort_without_reentering_idle_capture(self):
+        from test_orbis_host_app_runtime import fixture
+        runtime, record, node, rows = self.unstarted_fixture()
+        del runtime.observe_unstarted_destination
+        app = self.manager.CAPTURE.APP
+        descriptor, expected = fixture(); descriptor.pop('sha256')
+        record['source']['daemonId'] = 'fixture-daemon'
+        expected.update(pointId=record['pointId'], rootSha256=D.hashed(str(self.root).encode()),
+                        dockerContextSha256=D.hashed(runtime.context.encode()), daemonSha256=D.hashed(b'fixture-daemon'))
+        descriptor.update(expected); descriptor = app.seal(descriptor, expected)
+        bindings = app.observe_bindings(descriptor)
+        record['stage']['destinationAppRuntimeSha256'] = runtime.destination_app_digest(descriptor, bindings)
+        private = self.manager.directory(record['id'])
+        for name, value, field in (('destination-app-runtime.json', descriptor, 'destinationAppRuntimeSha256'),
+                                   ('destination-app-bindings.json', bindings, 'destinationAppBindingsSha256')):
+            body = app.canonical(value); self.manager.CAPTURE.immutable(private / name, body); record[field] = D.hashed(body)
+        environment = self.root / 'unstarted.env'; environment.write_bytes(b'POSTGRES_DBNAME=fixture\n'); environment.chmod(0o600)
+        record['source']['files'] = {'.env': D.hashed(environment.read_bytes())}
+        runtime.map_path = mock.Mock(return_value=environment)
+        runtime.image = mock.Mock(return_value={'Os': 'linux', 'Architecture': 'arm64', 'Variant': 'v8'})
+        self.manager.service.busy = True
+        self.manager.service._capture_controller_config_locked = mock.Mock(side_effect=AssertionError('ordinary capture must remain blocked'))
+        observed = copy.deepcopy(descriptor); observed['capturedAt'] += 1
+        with mock.patch.object(app, 'observe', return_value=observed) as observer:
+            runtime.observe_unstarted_destination(record)
+            prepared = observer.call_args.args[1]
+            self.assertEqual(base64.b64decode(prepared['configuration']['files'][0]['data']), environment.read_bytes())
+            self.assertEqual(prepared['configuration']['controller']['id'], record['source']['controllerId'])
+            self.assertEqual(observer.call_args.kwargs, {'driver': runtime})
+            observed['apps'][0]['pendingRestart'] = False
+            with self.assertRaises(ValueError): runtime.observe_unstarted_destination(record)
+            observed['apps'][0]['pendingRestart'] = True
+            environment.write_bytes(b'POSTGRES_DBNAME=other\n')
+            with self.assertRaises(ValueError): runtime.observe_unstarted_destination(record)
+        self.manager.service._capture_controller_config_locked.assert_not_called()
+
+    def test_unstarted_proof_checks_journal_again_after_observation(self):
+        runtime, record, node, rows = self.unstarted_fixture()
+        def changed(current):
+            journal = json.loads((node / 'restore.json').read_bytes())
+            (node / 'restore.json').write_bytes(runtime.P.canonical({**journal, 'phase': 'preparing'}))
+            return {'id': '1' * 64}, {'oid': 42}
+        runtime.terminal_survivor_database.side_effect = changed
+        with self.assertRaises(ValueError): runtime.seal_unstarted_preparation(record)
+
+    def test_unstarted_proof_crash_before_journal_pin_can_reseal_exact_material(self):
+        runtime, record, node, rows = self.unstarted_fixture()
+        original = copy.deepcopy(record)
+        with mock.patch.object(self.manager, 'save', side_effect=RuntimeError('crash before pin')):
+            with self.assertRaises(RuntimeError): runtime.seal_unstarted_preparation(record)
+        self.assertNotIn('unstartedPreparationSha256', self.manager.read(record['id']))
+        self.assertTrue(runtime.seal_unstarted_preparation(original))
+        self.assertEqual(original['unstartedPreparationSha256'], record['unstartedPreparationSha256'])
+
+    def test_unstarted_proof_rejects_tamper_after_seal(self):
+        runtime, record, node, rows = self.unstarted_fixture()
+        runtime.seal_unstarted_preparation(record)
+        body = (node / 'restore.json').read_bytes()
+        for changes in ({'sequence': 2}, {'decision': 'commit'}, {'phase': 'promoting'}, {'dataTouched': False}, {'nonce': str(uuid.uuid4())}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                runtime.read_unstarted_preparation({**record, **changes}, body)
+        with self.assertRaises(ValueError): runtime.read_unstarted_preparation(record, body + b' ')
+        artifact = node / 'runtime.json'; artifact.write_bytes(b'{}'); artifact.chmod(0o600)
+        with self.assertRaises(ValueError): runtime.read_unstarted_preparation(record, body)
+        artifact.unlink()
+        private = self.manager.directory(record['id']) / 'unstarted-preparation.json'
+        private.write_bytes(private.read_bytes() + b' ')
+        with self.assertRaises(ValueError): runtime.read_unstarted_preparation(record, body)
+
+    def test_terminal_unstarted_proof_requires_retirement_and_same_database(self):
+        runtime, record, node, rows = self.unstarted_fixture()
+        runtime.seal_unstarted_preparation(record)
+        record.update(phase='rolled-back', decision='rollback', grant=None,
+                      cleaned={role: record[field] for role, field in (('candidate', 'candidateId'), ('verifier', 'verifierId'), ('coordinator', 'workerId'))})
+        runtime.reader = mock.Mock(); runtime.reader._read.return_value = ''
+        proof = runtime.terminal_material(record)
+        self.assertEqual(proof['nodePhase'], 'staging')
+        self.assertEqual(proof['operationSha256'], None)
+        self.assertTrue(record['dataTouched'])
+        runtime.terminal_survivor_database.return_value = ({'id': '1' * 64}, {'oid': 43})
+        with self.assertRaises(ValueError): runtime.terminal_material(record)
+        runtime.terminal_survivor_database.return_value = ({'id': '1' * 64}, {'oid': 42})
+        runtime.reader._read.return_value = record['workerId']
+        with self.assertRaises(ValueError): runtime.terminal_material(record)
+
+    def test_manager_unstarted_recovery_never_restarts_worker_or_issues_rollback_grant(self):
+        self.begin()
+        identifier = self.request['restoreId']
+        record = self.manager.read(identifier); record.update(phase='preparing', dataTouched=True, sequence=1)
+        self.manager.save(record)
+        def seal(current):
+            self.assertIn('quiesce', self.runtime.events)
+            self.assertIsNone(current['decision'])
+            return True
+        self.runtime.seal_unstarted_preparation = mock.Mock(side_effect=seal)
+        result = self.manager.recover(identifier, self.key)
+        self.assertEqual(result['state'], 'rolled-back')
+        self.assertNotIn('restart-worker', self.runtime.events)
+        self.assertNotIn('rollback', self.runtime.events)
+        self.assertTrue(self.manager.read(identifier)['dataTouched'])
+        self.assertEqual(self.manager.read(identifier)['sequence'], 1)
 
     def test_absent_restore_store_does_not_require_owned_installation_parent(self):
         original = self.manager.authority.protected_directory

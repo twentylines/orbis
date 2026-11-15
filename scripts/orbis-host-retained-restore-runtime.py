@@ -2150,6 +2150,159 @@ class DockerRestoreRuntime:
                 raise fail()
         return self.json_bytes(body), pin
 
+    def unstarted_preparation_binding(self, record):
+        return {'schema': 'orbis.retained-unstarted-preparation.v1', 'version': 1,
+                'transactionId': record['id'], 'pointId': record['pointId'], 'nonce': record['nonce'],
+                'root': str(self.root), 'context': self.context, 'sourceBinding': record['stage']['sourceBinding'],
+                'sourceImageId': record['source']['imageId'], 'sourceDefinitionSha256': record['source']['definition'],
+                'capabilitySha256': record['source']['coordinatorCapabilitySha256'],
+                'frozenSourceInventorySha256': record['frozenSourceInventorySha256'],
+                'destinationAppRuntimeSha256': record['stage']['destinationAppRuntimeSha256'],
+                'roles': {role: {'id': record[field], 'definitionSha256': record['definitions'][role]}
+                          for role, field in (('coordinator', 'workerId'), ('candidate', 'candidateId'), ('verifier', 'verifierId'))}}
+
+    def observe_unstarted_destination(self, record):
+        app = self.manager.CAPTURE.APP
+        directory = self.manager.directory(record['id'])
+        body = self.read_file(directory / 'destination-app-runtime.json', app.MAX_BYTES)
+        bindings_body = self.read_file(directory / 'destination-app-bindings.json', app.MAX_BYTES)
+        if hashed(body) != record['destinationAppRuntimeSha256'] or hashed(bindings_body) != record['destinationAppBindingsSha256']:
+            raise fail()
+        descriptor, bindings = app.parse(body), app.parse(bindings_body)
+        expected = {key: descriptor[key] for key in ('pointId', 'rootSha256', 'dockerContextSha256', 'daemonSha256',
+                                                    'configurationSetSha256', 'preparationSha256')}
+        app.validate(descriptor, expected)
+        if (descriptor['pointId'] != record['pointId'] or descriptor['rootSha256'] != hashed(str(self.root).encode())
+                or descriptor['dockerContextSha256'] != hashed(self.context.encode())
+                or descriptor['daemonSha256'] != hashed(record['source']['daemonId'].encode())
+                or self.destination_app_digest(descriptor, bindings) != record['stage']['destinationAppRuntimeSha256']):
+            raise fail()
+        environment = self.read_file(self.map_path(record['source']['container'], '/data/.env'), 1024 * 1024)
+        if hashed(environment) != record['source']['files']['.env']:
+            raise fail()
+        image = self.image(record['source']['imageId'])
+        platform = {'os': image.get('Os'), 'architecture': image.get('Architecture')}
+        if image.get('Variant'):
+            platform['variant'] = image['Variant']
+        app.platform(platform)
+        # Recovery owns the host operation, so ordinary capture's idle admission
+        # is intentionally not invoked. Its immutable Root snapshot supplies all
+        # observation inputs; APP.observe still inventories every managed writer.
+        prepared = {'configuration': {'controller': {'id': record['source']['controllerId'], 'imageId': record['source']['imageId']},
+                    'configurationSetSha256': descriptor['configurationSetSha256'],
+                    'files': [{'path': '.env', 'present': True, 'bytes': len(environment), 'sha256': hashed(environment),
+                               'data': base64.b64encode(environment).decode('ascii')}]},
+                    'publicationReceipt': {'preparationSha256': descriptor['preparationSha256'], 'proof': {'platform': platform}}}
+        observed = app.observe(self.manager.service, prepared, self.host, record['pointId'], driver=self)
+        observed_bindings = app.observe_bindings(observed)
+        if self.destination_app_digest(observed, observed_bindings) != record['stage']['destinationAppRuntimeSha256']:
+            raise fail()
+
+    def read_unstarted_preparation(self, record, journal_body):
+        pin = record.get('unstartedPreparationSha256')
+        if pin is None:
+            return False
+        body = self.read_file(self.manager.directory(record['id']) / 'unstarted-preparation.json', 16384)
+        proof = self.json_bytes(body)
+        if (hashed(body) != pin or not self.P.exact(proof, {'binding', 'nodeJournalSha256', 'survivor', 'database'})
+                or proof['binding'] != self.unstarted_preparation_binding(record)
+                or proof['nodeJournalSha256'] != hashed(journal_body)
+                or record['decision'] not in (None, 'rollback') or record['phase'] not in {'preparing', 'rolling-back', 'rolled-back'}
+                or record.get('dataTouched') is not True or type(record.get('sequence')) is not int or record['sequence'] != 1):
+            raise fail()
+        self.unstarted_preparation_layout(record)
+        self.check_source(record)
+        return proof
+
+    def unstarted_preparation_layout(self, record):
+        protected = self.manager.directory(record['id'])
+        for name in ('node-runtime.json', 'historical-app-effects', 'prepared-authority.json', 'commit.json'):
+            try:
+                (protected / name).lstat()
+            except FileNotFoundError:
+                continue
+            raise fail()
+        path = Path(record['stage']['journalPath'])
+        allowed = {'bootstrap.json', 'controller-ownership.json', 'restore.json', 'retained', 'retained-binding.json',
+                   'retained-root-request.json', 'roots', 'source', 'time-machine-admission.json'}
+        with self.a.protected_directory(path) as directory:
+            if set(os.listdir(directory)) != allowed:
+                raise fail()
+        for name in allowed - {'roots', 'source', 'retained'}:
+            self.read_file(path / name, 1024 * 1024)
+        for name in ('source', 'retained'):
+            with self.a.protected_directory(path / name):
+                pass
+        with self.a.protected_directory(path / 'roots') as directory:
+            if os.listdir(directory):
+                raise fail()
+
+    def seal_unstarted_preparation(self, record):
+        path = Path(record['stage']['journalPath'])
+        if record.get('unstartedPreparationSha256') is not None:
+            return bool(self.read_unstarted_preparation(record, self.read_file(path / 'restore.json', 16384)))
+        # The phase-v1 prepare contract durably advances the Node journal before
+        # stopping writers or preparing data. A rollback grant has no such
+        # staging barrier, so only the FIRST, unacknowledged prepare is eligible.
+        grant = record.get('grant') or {}
+        if (record['stage'].get('metadata', {}).get('schema') != 'orbis.time-machine-runtime.v6'
+                or record['phase'] != 'preparing' or record['decision'] is not None or record.get('dataTouched') is not True
+                or type(record.get('sequence')) is not int or record['sequence'] != 1
+                or grant.get('phase') != 'prepare' or type(grant.get('sequence')) is not int or grant['sequence'] != 1
+                or grant.get('status') not in {'issued', 'running'} or grant.get('commitStage') is not None):
+            return False
+        journal_body = self.read_file(path / 'restore.json', 16384)
+        journal = self.json_bytes(journal_body)
+        if journal.get('phase') != 'staging':
+            return False
+        original = record['stage']['journal']
+        rebound = {**original, 'candidateController': record['candidateId'], 'worker': record['workerId'],
+                   'verifierController': record['verifierId']}
+        capability = hashed(self.P.canonical({'phase': CAPABILITY, 'terminal': TERMINAL_CAPABILITY}))
+        if (original.get('phase') != 'staging' or original.get('decision') is not None
+                or hashed(self.P.canonical(original)) != record['stage']['sourceBinding']['originalJournalSha256']
+                or self.P.canonical(journal) != self.P.canonical(rebound)
+                or journal.get('id') != record['id'] or journal.get('nonce') != record['nonce']
+                or journal.get('originalController') != record['source']['controllerId']
+                or record['source']['coordinatorCapabilitySha256'] != capability
+                or any(record.get(key) is not None for key in ('preparedOperationSha256', 'phaseOperationSha256',
+                    'nodePhaseAtAcknowledgement', 'nodeJournalSha256AtAcknowledgement', 'preparedAuthorityDigest',
+                    'incomingEnvSha256', 'commitAuthorized', 'candidateActivationLease', 'appStatusIntent'))):
+            raise fail()
+        self.check_source(record)
+        protected = self.manager.directory(record['id'])
+        self.unstarted_preparation_layout(record)
+        # Docker stop kills the coordinator's execs. Reinspect every exact owned
+        # role after that stop; elapsed time or a missing host PID is insufficient.
+        for role, field in (('coordinator', 'workerId'), ('candidate', 'candidateId'), ('verifier', 'verifierId')):
+            raw = self.inspect(record[field])
+            self.verify_networks(record, raw)
+            self.check_intent(raw, record['intents'][role]['body'])
+            state = raw['State']
+            if (raw['Id'] != record[field] or self.definition(raw) != record['definitions'][role]
+                    or raw['Config'].get('Labels', {}).get('io.orbis.restore') != record['id']
+                    or state.get('Running') is not False or state.get('Restarting') is not False or state.get('Paused') is not False
+                    or type(state.get('Pid')) is not int or state['Pid'] != 0 or 'ExecIDs' not in raw or raw['ExecIDs'] not in (None, [])
+                    or state.get('Status') not in {'created', 'exited'} or type(raw.get('RestartCount')) is not int or raw['RestartCount'] != 0
+                    or raw['HostConfig'].get('RestartPolicy') != {'Name': 'no', 'MaximumRetryCount': 0}
+                    or role == 'coordinator' and raw['Image'] != record['source']['imageId']
+                    or role != 'coordinator' and not self.never_started(raw)):
+                raise fail()
+        self.observe_unstarted_destination(record)
+        survivor, database = self.terminal_survivor_database(record)
+        self.unstarted_preparation_layout(record)
+        if self.read_file(path / 'restore.json', 16384) != journal_body:
+            raise fail()
+        proof = {'binding': self.unstarted_preparation_binding(record), 'nodeJournalSha256': hashed(journal_body),
+                 'survivor': survivor, 'database': database}
+        # No grant can run under the exclusive operation/host lock. Seal before
+        # deciding rollback so a crash never relies on an in-memory shortcut.
+        body = self.P.canonical(proof)
+        self.manager.CAPTURE.immutable(protected / 'unstarted-preparation.json', body)
+        record['unstartedPreparationSha256'] = hashed(body)
+        self.manager.save(record)
+        return True
+
     def terminal_survivor_database(self, record, sealed=None):
         committed = record['decision'] == 'commit'
         survivor_id = record['candidateId'] if committed else record['source']['controllerId']
@@ -2216,7 +2369,8 @@ class DockerRestoreRuntime:
         if phase == 'staging':
             original = record['stage']['journal']
             rebound = {**original, 'candidateController': record.get('candidateId'), 'worker': record.get('workerId'), 'verifierController': record.get('verifierId')}
-            if (record.get('dataTouched') or hashed(self.P.canonical(original)) != record['stage']['sourceBinding']['originalJournalSha256']
+            if (record.get('dataTouched') and not self.read_unstarted_preparation(record, journal_body)
+                    or hashed(self.P.canonical(original)) != record['stage']['sourceBinding']['originalJournalSha256']
                     or self.P.canonical(journal) not in {self.P.canonical(original), self.P.canonical(rebound)}):
                 raise fail()
         else:
@@ -2251,6 +2405,10 @@ class DockerRestoreRuntime:
                 raise fail()
             retired.append({'role': role, 'id': identifier})
         survivor, database = self.terminal_survivor_database(record)
+        if phase == 'staging' and record.get('dataTouched'):
+            unstarted = self.read_unstarted_preparation(record, journal_body)
+            if survivor != unstarted['survivor'] or database != unstarted['database']:
+                raise fail()
         return {'_journalBody': journal_body, 'nodePhase': phase, 'nodeJournalSha256': hashed(journal_body), 'operationSha256': operation_sha,
                 'survivor': survivor, 'database': database, 'retired': retired}
 
