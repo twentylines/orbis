@@ -139,4 +139,43 @@ describe('host volume capture responses', () => {
     ];
     expect(() => decodeHostVolumeInventories({ ...base, inventories: [{ ...inventory(), entries: longName }] }, binding, plan)).toThrow();
   });
+
+  it('rejects an excessive inventory count before reading its entries', () => {
+    const oversized = Array(250001);
+    let accessed = false;
+    Object.defineProperty(oversized, 0, {
+      get: () => {
+        accessed = true;
+        throw new Error('Entry was inspected');
+      },
+    });
+    expect(() => decodeHostVolumeInventories({ ...base, inventories: [{ ...inventory(), entries: oversized }] }, binding, plan)).toThrow(
+      'App volume capture response could not be verified.',
+    );
+    expect(accessed).toBe(false);
+  });
+
+  it('accepts Unicode paths and relative links while rejecting unsafe code points in either', () => {
+    const unicode = [
+      { name: '.', kind: 'directory' },
+      { name: 'data', kind: 'directory' },
+      { name: 'data/🪐', kind: 'socket' },
+      { name: 'link', kind: 'symlink', target: 'data/🪐' },
+    ];
+    expect(decodeHostVolumeInventories({ ...base, inventories: [{ ...inventory(), entries: unicode }] }, binding, plan)[0]?.entries).toEqual(unicode);
+    for (const invalid of ['\u0000', '\u001f', '\u007f', '\\', '\ufffd', '\ud800', '\udfff']) {
+      for (const entry of [
+        { name: `bad${invalid}`, kind: 'socket' },
+        { name: 'link', kind: 'symlink', target: `bad${invalid}` },
+      ]) {
+        expect(() =>
+          decodeHostVolumeInventories(
+            { ...base, inventories: [{ ...inventory(), entries: [{ name: '.', kind: 'directory' }, entry] }] },
+            binding,
+            plan,
+          ),
+        ).toThrow();
+      }
+    }
+  });
 });

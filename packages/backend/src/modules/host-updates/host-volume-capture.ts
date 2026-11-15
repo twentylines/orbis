@@ -72,10 +72,11 @@ export function decodeHostVolumePlan(raw: unknown, binding: HostVolumeCaptureBin
 }
 
 function safe(value: string) {
-  return !Array.from(value).some((char) => {
+  for (const char of value) {
     const code = char.codePointAt(0) ?? 0;
-    return code < 32 || code === 127 || char === '\\' || code === 0xfffd || (code >= 0xd800 && code <= 0xdfff);
-  });
+    if (code < 32 || code === 127 || char === '\\' || code === 0xfffd || (code >= 0xd800 && code <= 0xdfff)) return false;
+  }
+  return true;
 }
 function name(value: unknown): value is string {
   return (
@@ -137,7 +138,8 @@ export function decodeHostVolumeInventories(
       typeof item.sourceName !== 'string' ||
       typeof item.containerId !== 'string' ||
       !hash.test(item.containerId) ||
-      !Array.isArray(item.entries)
+      !Array.isArray(item.entries) ||
+      item.entries.length > 250000 - entriesTotal
     )
       throw fail();
     const volume = volumes.get(item.key);
