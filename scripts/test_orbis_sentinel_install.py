@@ -1,4 +1,5 @@
 import hashlib
+import io
 import importlib.util
 import json
 import os
@@ -79,6 +80,12 @@ class PreparationTests(unittest.TestCase):
     def activate(self, prepared, *, command=None):
         with mock.patch.object(INSTALL, 'RELEASE', self.release), mock.patch.object(INSTALL, '_run', side_effect=command or self.command):
             return INSTALL.activate(prepared)
+
+    def prepare_selected(self, release):
+        with mock.patch.object(INSTALL, 'TOOLKIT', self.toolkit), \
+                mock.patch.object(INSTALL, '_download', side_effect=self.download), \
+                mock.patch.object(INSTALL, '_run', side_effect=self.command):
+            return INSTALL.prepare_release(self.root, release)
 
     def test_preparation_checks_toolkit_then_verifier_then_publisher_without_activation(self):
         prepared = self.prepare()
@@ -208,6 +215,114 @@ class PreparationTests(unittest.TestCase):
             env=INSTALL._environment(self.root), pass_fds=(descriptor,), capture_output=True, timeout=10)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(path.stat().st_size, 0)
+
+    def test_selected_release_uses_shared_publisher_verification_without_changing_installer_default(self):
+        default = dict(INSTALL.RELEASE)
+        self.release = {**self.release, 'version': '0.2.0-beta.1', 'sourceCommit': 'a' * 40}
+        selected = dict(self.release)
+        prepared = self.prepare_selected(selected)
+        self.assertEqual(INSTALL.RELEASE, default)
+        self.assertEqual(prepared.release, selected)
+        package = next(url for name, url, _ in self.downloads if name == 'orbis-sentinel-0.2.0-beta.1.tar.gz')
+        self.assertEqual(package, 'https://github.com/twentylines/orbis-sentinel/releases/download/v0.2.0-beta.1/orbis-sentinel-0.2.0-beta.1.tar.gz')
+        self.assertEqual(self.commands[-1][0], 'verify-package')
+        self.assertEqual(self.commands[-1][2][-2:], ['--source-commit', selected['sourceCommit']])
+        selected['version'] = '9.9.9'
+        self.assertEqual(prepared.release['version'], '0.2.0-beta.1')
+        with mock.patch.object(INSTALL, '_run', side_effect=self.command):
+            result = INSTALL.activate(prepared)
+        self.assertEqual(result['version'], '0.2.0-beta.1')
+        self.assertEqual(INSTALL.RELEASE, default)
+        with self.assertRaises(INSTALL.SentinelInstallError):
+            INSTALL.activate(prepared)
+
+    def test_invalid_release_identity_is_refused_before_host_files_or_network(self):
+        for value in (None, [], {}, {**self.release, 'url': 'https://untrusted.example/'},
+                      {**self.release, 'version': None}, {**self.release, 'sha256': 'F' * 64},
+                      {**self.release, 'sourceCommit': 'main'}):
+            with self.subTest(value=value), mock.patch.object(INSTALL, 'require_host') as host:
+                with self.assertRaises(INSTALL.SentinelInstallError):
+                    INSTALL.prepare_release(self.root, value)
+                host.assert_not_called()
+        self.assertEqual(self.downloads, [])
+        self.assertEqual(self.commands, [])
+        self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_selected_version_requires_canonical_semver_and_cannot_change_download_paths(self):
+        for version in ('v1.2.3', '1.2.3\n', '../1.2.3', '1.2.3/other', '01.2.3',
+                        '1.2.3-dev.01', '1.2.3-a..b', '1.2.3+a..b', '1.2.3-', '1.2.3+', 'x' * 129):
+            with self.subTest(version=version):
+                with self.assertRaises(INSTALL.SentinelInstallError):
+                    INSTALL.prepare_release(self.root, {**self.release, 'version': version})
+        for version in ('1.2.3', '1.2.3-dev.0', '1.2.3-dev.10', '1.2.3-0a+001.build'):
+            self.assertEqual(INSTALL._release_identity({**self.release, 'version': version})['version'], version)
+        self.assertEqual(self.downloads, [])
+
+    def test_changed_selected_identity_or_file_records_never_execute_activation(self):
+        def change_release(prepared):
+            prepared.release['sourceCommit'] = 'f' * 40
+        def change_file(prepared):
+            prepared.files[0] = {**prepared.files[0], 'sha256': 'f' * 64}
+        def change_verifier(prepared):
+            prepared.verifier = prepared.work / 'other-verifier'
+        for change in (change_release, change_file, change_verifier):
+            with self.subTest(change=change.__name__):
+                prepared = self.prepare_selected(self.release)
+                change(prepared)
+                with mock.patch.object(INSTALL, '_run') as run:
+                    with self.assertRaises(INSTALL.SentinelInstallError):
+                        INSTALL.activate(prepared)
+                    run.assert_not_called()
+                self.assertTrue(prepared.used)
+
+    def test_copying_a_prepared_object_does_not_copy_activation_authority(self):
+        prepared = self.prepare()
+        copied = INSTALL.Prepared(prepared.work, prepared.identity, prepared.files, prepared.release, prepared.verifier)
+        with mock.patch.object(INSTALL, '_run') as run:
+            with self.assertRaises(INSTALL.SentinelInstallError):
+                INSTALL.activate(copied)
+            run.assert_not_called()
+        self.assertTrue(copied.used)
+        self.assertFalse(prepared.used)
+
+    def test_default_preparation_still_requires_its_original_pinned_policy(self):
+        prepared = self.prepare()
+        with mock.patch.object(INSTALL, 'RELEASE', {**self.release, 'sourceCommit': 'f' * 40}), \
+                mock.patch.object(INSTALL, '_run') as run:
+            with self.assertRaises(INSTALL.SentinelInstallError):
+                INSTALL.activate(prepared)
+            run.assert_not_called()
+
+    def test_cli_requires_all_selected_identity_fields_before_preparing(self):
+        for arguments in (['--release-version', '1.2.3'], ['--release-sha256', 'a' * 64],
+                          ['--release-source-commit', 'a' * 40],
+                          ['--release-version', '1.2.3', '--release-sha256', 'a' * 64]):
+            with self.subTest(arguments=arguments), \
+                    mock.patch.object(INSTALL.sys, 'argv', ['installer', '--state-dir', str(self.root), *arguments]), \
+                    mock.patch.object(INSTALL, 'prepare') as default, \
+                    mock.patch.object(INSTALL, 'prepare_release') as selected, \
+                    mock.patch.object(INSTALL.sys, 'stderr', io.StringIO()):
+                with self.assertRaises(SystemExit) as result:
+                    INSTALL.main()
+                self.assertEqual(result.exception.code, 1)
+                default.assert_not_called()
+                selected.assert_not_called()
+
+    def test_cli_selected_prepare_only_never_calls_activation(self):
+        prepared = self.prepare_selected(self.release)
+        arguments = ['installer', '--state-dir', str(self.root), '--prepare-only',
+                     '--release-version', self.release['version'], '--release-sha256', self.release['sha256'],
+                     '--release-source-commit', self.release['sourceCommit']]
+        with mock.patch.object(INSTALL.sys, 'argv', arguments), \
+                mock.patch.object(INSTALL, 'prepare_release', return_value=prepared) as selected, \
+                mock.patch.object(INSTALL, 'prepare') as default, \
+                mock.patch.object(INSTALL, 'activate') as activate, \
+                mock.patch.object(INSTALL.sys, 'stdout', io.StringIO()) as output:
+            self.assertEqual(INSTALL.main(), 0)
+            selected.assert_called_once_with(self.root, self.release)
+            default.assert_not_called()
+            activate.assert_not_called()
+            self.assertEqual(json.loads(output.getvalue()), {'prepared': True, 'activated': False, 'version': self.release['version']})
 
 
 if __name__ == '__main__':

@@ -11,6 +11,7 @@ import stat
 import subprocess
 import sys
 import uuid
+import weakref
 
 
 OWNER = 0
@@ -27,6 +28,7 @@ RELEASE = {'version': '0.1.0-dev.11',
            'sha256': '11c45eec2da2a4a28790ce5b231f72a2256b440bda3abdf42511f5ac7db7ff1a',
            'sourceCommit': 'c9b44e69cb70fc0f8c7f48f4dd183b2c3f099f3a'}
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+_PREPARATIONS = weakref.WeakKeyDictionary()
 
 
 class SentinelInstallError(ValueError):
@@ -251,8 +253,41 @@ class Prepared:
 
 
 def prepare(state_dir):
+    return _prepare(state_dir, _release_identity(RELEASE), pinned=True)
+
+
+def prepare_release(state_dir, release):
+    return _prepare(state_dir, _release_identity(release), pinned=False)
+
+
+def _release_identity(value):
+    if (type(value) is not dict or set(value) != {'version', 'sha256', 'sourceCommit'}
+            or any(type(item) is not str for item in value.values())):
+        raise SentinelInstallError('Choose one complete Sentinel release identity')
+    version = value['version']
+    if (not 0 < len(version) <= 128 or not re.fullmatch(
+            r'(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?', version)
+            or not re.fullmatch(r'[0-9a-f]{64}', value['sha256'])
+            or not re.fullmatch(r'[0-9a-f]{40}', value['sourceCommit'])):
+        raise SentinelInstallError('Sentinel release version, checksum or source revision is invalid')
+    prerelease = version.split('+', 1)[0].partition('-')[2]
+    build = version.partition('+')[2]
+    for identifiers, numeric in ((prerelease, True), (build, False)):
+        if identifiers and any(not part or (numeric and part.isdigit() and len(part) > 1 and part.startswith('0'))
+                               for part in identifiers.split('.')):
+            raise SentinelInstallError('Sentinel release version is not canonical')
+    return dict(value)
+
+
+def _preparation_identity(prepared):
+    return (prepared.work, prepared.identity, prepared.verifier,
+            tuple(sorted(prepared.release.items())),
+            tuple((record['path'], record['bytes'], record['sha256'], record['mode'], record['identity'])
+                  for record in prepared.files))
+
+
+def _prepare(state_dir, release, *, pinned):
     require_host()
-    release = dict(RELEASE)
     with Directory(state_dir, private=True) as state:
         work = state.mkdir('sentinel-install-' + uuid.uuid4().hex)
         verifiers = state.mkdir('sentinel-verifiers', existing=True)
@@ -299,7 +334,9 @@ def prepare(state_dir):
         _confirmed(validated, release, activated=False)
         _check_files(files)
         directory.check()
-        return Prepared(work, directory.identity(), files, release, verifier)
+        prepared = Prepared(work, directory.identity(), files, release, verifier)
+        _PREPARATIONS[prepared] = (_preparation_identity(prepared), pinned)
+        return prepared
 
 
 def _confirmed(result, release, *, activated):
@@ -314,8 +351,15 @@ def activate(prepared):
     if not isinstance(prepared, Prepared) or prepared.used:
         raise SentinelInstallError('Sentinel preparation has already been consumed')
     prepared.used = True
+    sealed = _PREPARATIONS.pop(prepared, None)
+    try:
+        current = _preparation_identity(prepared)
+    except (TypeError, KeyError, AttributeError):
+        raise SentinelInstallError('Prepared Sentinel identity changed') from None
+    if sealed is None or current != sealed[0] or (sealed[1] and prepared.release != RELEASE):
+        raise SentinelInstallError('Prepared Sentinel identity changed')
     with Directory(prepared.work, private=True) as directory:
-        if directory.identity() != prepared.identity or prepared.release != RELEASE:
+        if directory.identity() != prepared.identity:
             raise SentinelInstallError('Prepared Sentinel namespace changed')
         _check_files(prepared.files)
         filename = 'orbis-sentinel-' + prepared.release['version'] + '.tar.gz'
@@ -334,9 +378,19 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state-dir', type=Path, required=True)
     parser.add_argument('--prepare-only', action='store_true')
+    parser.add_argument('--release-version')
+    parser.add_argument('--release-sha256')
+    parser.add_argument('--release-source-commit')
     args = parser.parse_args()
     try:
-        prepared = prepare(args.state_dir)
+        selected = (args.release_version, args.release_sha256, args.release_source_commit)
+        if any(value is not None for value in selected):
+            if any(value is None for value in selected):
+                raise SentinelInstallError('Choose a release version, checksum and source revision together')
+            prepared = prepare_release(args.state_dir, {
+                'version': args.release_version, 'sha256': args.release_sha256, 'sourceCommit': args.release_source_commit})
+        else:
+            prepared = prepare(args.state_dir)
         result = {'prepared': True, 'activated': False, 'version': prepared.release['version']} if args.prepare_only else activate(prepared)
     except (OSError, ValueError, subprocess.SubprocessError):
         parser.exit(1, 'Sentinel setup did not complete; retained preparation and activation records require inspection.\n')
