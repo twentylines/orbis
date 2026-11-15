@@ -17,6 +17,7 @@ import { HostSensorsService } from '../host-sensors.service';
 import { HostDeviceHistoryService } from '../host-device-history.service';
 import { DriveHealthService } from '../drive-health.service';
 import { SentinelService } from '../sentinel.service';
+import { SentinelReleasesService } from '../sentinel-releases.service';
 
 describe('SystemController certificate security', () => {
   let app: INestApplication;
@@ -32,6 +33,7 @@ describe('SystemController certificate security', () => {
   const hostHistory = mock<HostDeviceHistoryService>();
   const drives = mock<DriveHealthService>();
   const sentinel = mock<SentinelService>();
+  const sentinelReleases = mock<SentinelReleasesService>();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -46,6 +48,7 @@ describe('SystemController certificate security', () => {
         { provide: HostDeviceHistoryService, useValue: hostHistory },
         { provide: DriveHealthService, useValue: drives },
         { provide: SentinelService, useValue: sentinel },
+        { provide: SentinelReleasesService, useValue: sentinelReleases },
         { provide: OrbisReleaseService, useValue: orbisReleases },
         { provide: OrbisReleaseChannelsService, useValue: releaseChannels },
         {
@@ -78,6 +81,7 @@ describe('SystemController certificate security', () => {
     orbisReleases.latest.mockReset();
     drives.read.mockReset();
     sentinel.read.mockReset();
+    sentinelReleases.list.mockReset();
     releaseChannels.read.mockReset().mockResolvedValue({ version: 1, channel: 'stable', revision: 'a65a9a64-f57e-4c73-9dc8-8d35d0b5b5a1' });
     releaseChannels.status.mockReset().mockResolvedValue({
       phase: 'development',
@@ -90,6 +94,42 @@ describe('SystemController certificate security', () => {
         { id: 'nightly', available: true },
       ],
     });
+  });
+
+  it('authenticates independent Sentinel release discovery before any upstream request', async () => {
+    const catalog = { schema: 'orbis.sentinel-releases.v1' as const, channel: 'nightly' as const, releases: [], truncated: false };
+    sentinelReleases.list.mockResolvedValue(catalog);
+    expect((await request(app.getHttpServer()).get('/system/sentinel-releases?channel=nightly')).status).toBe(401);
+    expect(sentinelReleases.list).not.toHaveBeenCalled();
+    const response = await request(app.getHttpServer()).get('/system/sentinel-releases?channel=nightly').set('Authorization', 'Bearer cli-token');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(catalog);
+    expect(sentinelReleases.list).toHaveBeenCalledWith('nightly');
+  });
+
+  it('defaults Sentinel discovery to Stable independently from the Orbis channel', async () => {
+    sentinelReleases.list.mockResolvedValue({ schema: 'orbis.sentinel-releases.v1', channel: 'stable', releases: [], truncated: false });
+    const response = await request(app.getHttpServer()).get('/system/sentinel-releases').set('Authorization', 'Bearer cli-token');
+    expect(response.status).toBe(200);
+    expect(sentinelReleases.list).toHaveBeenCalledWith('stable');
+    expect(releaseChannels.read).not.toHaveBeenCalled();
+  });
+
+  it('rejects unknown and repeated Sentinel release channels before discovery', async () => {
+    for (const query of ['channel=development', 'channel=stable&channel=nightly']) {
+      const response = await request(app.getHttpServer()).get(`/system/sentinel-releases?${query}`).set('Authorization', 'Bearer cli-token');
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe('Choose a valid Sentinel release channel.');
+    }
+    expect(sentinelReleases.list).not.toHaveBeenCalled();
+  });
+
+  it('keeps a failed Sentinel catalog explicit instead of claiming no updates', async () => {
+    sentinelReleases.list.mockRejectedValue(new ServiceUnavailableException('Sentinel releases could not be checked right now.'));
+    const response = await request(app.getHttpServer()).get('/system/sentinel-releases').set('Authorization', 'Bearer cli-token');
+    expect(response.status).toBe(503);
+    expect(response.body.message).toBe('Sentinel releases could not be checked right now.');
+    expect(response.body).not.toHaveProperty('releases');
   });
 
   it('authenticates Sentinel status and preserves explicit unavailability', async () => {

@@ -14,6 +14,7 @@ import { HostDeviceHistoryService } from './host-device-history.service';
 import { MonitoringActivityModule } from '@/core/monitoring/monitoring-activity.module';
 import { OrbisReleaseChannelsService } from './orbis-release-channels.service';
 import { SentinelService } from './sentinel.service';
+import { SentinelReleasesService } from './sentinel-releases.service';
 
 @Module({
   imports: [DockerModule, AppsModule, MonitoringActivityModule],
@@ -21,6 +22,7 @@ import { SentinelService } from './sentinel.service';
   providers: [
     SystemService,
     SentinelService,
+    SentinelReleasesService,
     OrbisReleaseService,
     OrbisReleaseChannelsService,
     ContainerTelemetryService,

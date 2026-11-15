@@ -17,6 +17,7 @@ import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/sc
 import { requireReleaseChannel } from './orbis-release-channel';
 import { OrbisReleaseChannelsService } from './orbis-release-channels.service';
 import { SentinelService } from './sentinel.service';
+import { SentinelReleasesService } from './sentinel-releases.service';
 
 @Controller('system')
 export class SystemController {
@@ -32,6 +33,7 @@ export class SystemController {
     private readonly drives: DriveHealthService,
     private readonly channels: OrbisReleaseChannelsService,
     private readonly sentinel: SentinelService,
+    private readonly sentinelReleases: SentinelReleasesService,
   ) {}
 
   @UseGuards(AuthGuard)
@@ -113,6 +115,14 @@ export class SystemController {
   @Get('/sentinel')
   sentinelStatus() {
     return this.sentinel.read();
+  }
+
+  @UseGuards(AuthGuard)
+  @Get('/sentinel-releases')
+  sentinelReleaseCatalog(@Query('channel') channel: unknown) {
+    if (channel !== undefined && channel !== 'stable' && channel !== 'nightly')
+      throw new BadRequestException('Choose a valid Sentinel release channel.');
+    return this.sentinelReleases.list(channel ?? 'stable');
   }
 
   @UseGuards(AuthGuard)
