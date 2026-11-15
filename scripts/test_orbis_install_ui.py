@@ -67,7 +67,7 @@ class InstallerPresentationTests(unittest.TestCase):
                     self.assertTrue(output.getvalue().startswith("Orbis  "))
                 else:
                     self.assertNotIn("Server installation", output.getvalue())
-                    self.assertIn(UI.ORBIS_MARK[0], output.getvalue())
+                    self.assertIn(next(line for line in UI.ORBIS_MARK if line.strip()), output.getvalue())
                 self.assertTrue(all(len(line) <= width for line in output.getvalue().splitlines()))
 
     def test_active_completed_and_failed_frames_fit_very_narrow_and_resized_terminals(self):
@@ -322,7 +322,7 @@ class SpaceflightTests(unittest.TestCase):
                 for tick in (0, 20, 95):
                     for line in ui.scene(tick):
                         self.assertLessEqual(len(re.sub(r"\x1b\[\d+(?:;\d+)*m", "", line)), width - 1)
-                        self.assertLessEqual(set(re.findall(r"\x1b\[([0-9;]+)m", line)), {"0", "90", "36", "37"})
+                        self.assertLessEqual(set(re.findall(r"\x1b\[([0-9;]+)m", line)), {"0", "1", "90", "36", "37"})
 
     def test_large_field_starts_at_the_terminal_gutter_and_colored_output_preserves_cells(self):
         plain = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"}, color=False)
@@ -332,7 +332,14 @@ class SpaceflightTests(unittest.TestCase):
                 rows = plain.scene(20)
                 clean = [re.sub(r"\x1b\[[0-9;]+m", "", row) for row in colored.scene(20)]
                 self.assertEqual(rows, clean)
-                self.assertEqual(rows, UI.spaceflight(min(96, width - 1), 20, 12))
+                field = [line.ljust(min(96, width - 1)) for line in UI.spaceflight(min(96, width - 1), 20, 12)]
+                mark_width = 24 + min(96, width - 1) % 2
+                inset = (min(96, width - 1) - mark_width) // 2
+                self.assertEqual(inset * 2 + mark_width, min(96, width - 1))
+                for row, stars in zip(rows, field):
+                    self.assertEqual(row[:inset], stars[:inset])
+                    self.assertEqual(row[inset + mark_width:], stars[inset + mark_width:].rstrip())
+                self.assertGreater(sum(row[inset:inset + mark_width].count("*") for row in rows), 30)
                 self.assertTrue(all(len(row) <= width - 1 for row in rows))
 
     def test_reduced_effects_and_short_terminals_never_draw_the_scene(self):
@@ -370,6 +377,47 @@ class SpaceflightTests(unittest.TestCase):
         self.assertIs(signal.getsignal(signal.SIGTERM), previous)
         self.assertIn("[stopped]", output.getvalue()); self.assertNotIn("[ok]", output.getvalue())
         self.assertTrue(output.getvalue().endswith("\033[?25h\n"))
+
+
+
+
+
+class OrbisLogoTests(unittest.TestCase):
+    def test_three_arm_logo_forms_once_and_rests_instead_of_spinning_the_finished_mark(self):
+        for unicode in (False, True):
+            frames = [UI.logo_frame(26, 13, tick, unicode) for tick in (0, 4, 8, 12, 40)]
+            self.assertNotEqual(frames[0], frames[1])
+            self.assertNotEqual(frames[1], frames[2])
+            self.assertNotEqual(frames[2], frames[3])
+            self.assertEqual(frames[3], frames[4])
+            self.assertGreater(sum(len(line.strip()) for line in frames[3]), sum(len(line.strip()) for line in frames[0]))
+            self.assertTrue(all(len(line) == 26 for frame in frames for line in frame))
+
+    def test_logo_cells_are_bounded_for_resize_and_ascii_fallback(self):
+        for width, height in ((1, 1), (12, 6), (26, 13), (48, 16), (500, 500)):
+            for unicode in (False, True):
+                for tick in (0, 1, 6, 12, 1000000):
+                    rows = UI.logo_frame(width, height, tick, unicode)
+                    self.assertEqual(len(rows), min(height, 16))
+                    self.assertTrue(all(len(line) == min(width, 48) for line in rows))
+                    self.assertNotIn("\x1b", "".join(rows))
+                    if not unicode:
+                        self.assertTrue(set("".join(rows)) <= {" ", "*"})
+
+    def test_scene_does_not_restart_logo_formation_between_installer_stages(self):
+        ui = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"}, color=False)
+        ui.unicode = True
+        clock = [10.0]
+        with mock.patch.object(UI.time, "monotonic", side_effect=lambda: clock[0]), mock.patch.object(ui, "width", return_value=80), mock.patch.object(ui, "height", return_value=25):
+            initial = ui.scene(0)
+            clock[0] += 2
+            settled = ui.scene(0)
+            self.assertNotEqual(initial, settled)
+            clock[0] += 1
+            following_stage = ui.scene(0)
+            def mark(rows):
+                return [line[26:53] for line in rows]
+            self.assertEqual(mark(settled), mark(following_stage))
 
 
 if __name__ == "__main__":

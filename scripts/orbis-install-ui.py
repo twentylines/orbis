@@ -103,13 +103,81 @@ class PullProgress:
         return f"layers {ready}/{len(self.layers)}"
 
 
-# The circle, tilted orbit and centre reflect the application mark using ASCII cells.
-ORBIS_MARK = (
-    r"   .---. /",
-    r"  /  .  X",
-    "  \\    /",
-    r"   '---'",
-)
+# The same three-arm geometry used by the application logo.
+_LOGO_ARM = 'M32.19 27C31.93 26.82 31.25 26.2 30.65 25.92C30.06 25.65 29.34 25.44 28.61 25.37C27.87 25.31 27.03 25.34 26.23 25.54C25.42 25.73 24.55 26.05 23.76 26.53C22.97 27.01 22.17 27.64 21.49 28.39C20.81 29.15 20.17 30.07 19.7 31.07C19.23 32.08 18.85 33.24 18.66 34.43C18.48 35.63 18.44 36.95 18.6 38.24C18.77 39.54 19.12 40.91 19.68 42.2C20.23 43.49 20.99 44.81 21.94 45.98C22.89 47.15 24.05 48.28 25.36 49.21C26.67 50.14 28.19 50.96 29.79 51.54C31.39 52.12 33.18 52.54 34.98 52.68C36.78 52.81 38.71 52.74 40.58 52.38C42.45 52.02 44.4 51.4 46.2 50.52C48 49.63 49.8 48.47 51.38 47.08C52.96 45.69 54.47 44.01 55.69 42.17C56.91 40.33 58.2 37.06 58.7 36.03'
+
+
+def _logo_points():
+    coordinates = list(map(float, re.findall(r"-?\d+(?:\.\d+)?", _LOGO_ARM)))
+    start_x, start_y = coordinates[:2]
+    samples = [(start_x, start_y, 0.0)]
+    distance = 0.0
+    for offset in range(2, len(coordinates), 6):
+        x1, y1, x2, y2, end_x, end_y = coordinates[offset:offset + 6]
+        for step in range(1, 17):
+            t, u = step / 16, 1 - step / 16
+            x = u ** 3 * start_x + 3 * u ** 2 * t * x1 + 3 * u * t ** 2 * x2 + t ** 3 * end_x
+            y = u ** 3 * start_y + 3 * u ** 2 * t * y1 + 3 * u * t ** 2 * y2 + t ** 3 * end_y
+            distance += math.hypot(x - samples[-1][0], y - samples[-1][1])
+            samples.append((x, y, distance))
+        start_x, start_y = end_x, end_y
+    points = []
+    for arm in range(3):
+        angle = arm * math.tau / 3
+        for step in range(42):
+            target = (step / 41) * distance
+            index = next(index for index in range(1, len(samples)) if samples[index][2] >= target)
+            before, after = samples[index - 1], samples[index]
+            amount = (target - before[2]) / (after[2] - before[2])
+            x, y = before[0] + (after[0] - before[0]) * amount, before[1] + (after[1] - before[1]) * amount
+            tangent = math.atan2(after[1] - before[1], after[0] - before[0])
+            for side in (-1, 1):
+                local_x, local_y = x - math.sin(tangent) * side * 0.65 - 32, y + math.cos(tangent) * side * 0.65 - 32
+                points.append((32 + local_x * math.cos(angle) - local_y * math.sin(angle),
+                               32 + local_x * math.sin(angle) + local_y * math.cos(angle), 0.42))
+    return (*points, (32, 32, 3.2), (20, 11, 0.7), (52, 24, 0.9), (39, 55, 0.6))
+
+
+_LOGO_POINTS = _logo_points()
+_BRAILLE = ((1, 8), (2, 16), (4, 32), (64, 128))
+
+
+def logo_frame(width, height, tick=12, unicode=False):
+    """Form the actual mark; the animation does not represent installation progress."""
+    width, height = max(1, min(48, width)), max(1, min(16, height))
+    columns, rows = (width * 2, height * 4) if unicode else (width, height)
+    scale_x, scale_y = (columns - 1) / 64, (rows - 1) / 64
+    if not unicode:
+        scale_x = min(scale_x, scale_y * 2)
+        scale_y = scale_x / 2
+    else:
+        scale_x = scale_y = min(scale_x, scale_y)
+    amount = 1 - (1 - min(1, max(0, tick) / 12)) ** 3
+    twist = (1 - amount) * 1.4
+    dots = [[0] * columns for _ in range(rows)]
+    for x, y, radius in _LOGO_POINTS:
+        local_x, local_y = (x - 32) * amount, (y - 32) * amount
+        centre_x = (columns - 1) / 2 + (local_x * math.cos(twist) - local_y * math.sin(twist)) * scale_x
+        centre_y = (rows - 1) / 2 + (local_x * math.sin(twist) + local_y * math.cos(twist)) * scale_y
+        reach_x, reach_y = max(0.5, radius * scale_x), max(0.5, radius * scale_y)
+        dots[min(rows - 1, max(0, round(centre_y)))][min(columns - 1, max(0, round(centre_x)))] = 1
+        for row in range(max(0, math.ceil(centre_y - reach_y)), min(rows, math.floor(centre_y + reach_y) + 1)):
+            for column in range(max(0, math.ceil(centre_x - reach_x)), min(columns, math.floor(centre_x + reach_x) + 1)):
+                if ((column - centre_x) / reach_x) ** 2 + ((row - centre_y) / reach_y) ** 2 <= 1:
+                    dots[row][column] = 1
+    if not unicode:
+        return ["".join("*" if dot else " " for dot in row) for row in dots]
+    result = []
+    for row in range(height):
+        line = []
+        for column in range(width):
+            mask = sum(_BRAILLE[y][x] for y in range(4) for x in range(2) if dots[row * 4 + y][column * 2 + x])
+            line.append(chr(0x2800 + mask) if mask else " ")
+        result.append("".join(line))
+    return result
+
+
+ORBIS_MARK = tuple(logo_frame(12, 6))
 
 
 class Presentation:
@@ -124,6 +192,7 @@ class Presentation:
         self.total = None
         self._frame_lines = []
         self._frame_width = None
+        self._scene_started = None
         self.unicode = "utf" in (getattr(self.stream, "encoding", None) or env.get("LC_ALL") or env.get("LANG", "")).lower()
 
     def paint(self, value, code):
@@ -181,9 +250,10 @@ class Presentation:
         if self.tty and self.width() >= 40:
             available = max(1, self.width() - 1 - len(ORBIS_MARK[1]) - len("  Orbis  "))
             release_lines = textwrap.wrap(release, width=available, break_long_words=True, break_on_hyphens=False) or [""]
-            for index, line in enumerate(ORBIS_MARK):
-                suffix = f"  Orbis  {release_lines[0]}" if index == 1 else ""
-                self.write(self.paint(line, "36") + suffix + "\n")
+            mark = logo_frame(12, 6, unicode=self.unicode)
+            for index, line in enumerate(mark):
+                suffix = f"  Orbis  {release_lines[0]}" if index == 2 else ""
+                self.write(self.paint(line, "1") + suffix + "\n")
             for line in release_lines[1:]:
                 self.write(" " * (len(ORBIS_MARK[1]) + len("  Orbis  ")) + line + "\n")
             self.write("\n")
@@ -195,11 +265,21 @@ class Presentation:
         if width < 40 or height < 18:
             return []
         field_width = min(96, width - 1)
-        lines = spaceflight(field_width, tick, min(13, height - 12), self.unicode)
+        if self._scene_started is None:
+            self._scene_started = time.monotonic()
+        tick = max(tick, int((time.monotonic() - self._scene_started) * 10))
+        field_height = min(13, height - 12)
+        lines = [line.ljust(field_width) for line in spaceflight(field_width, tick, field_height, self.unicode)]
+        mark_width = min(field_width, field_height * 2 + field_width % 2)
+        mark = logo_frame(mark_width, field_height, tick, self.unicode)
+        inset = (field_width - mark_width) // 2
         def color_run(match):
             value = match.group(0)
             return self.paint(value, "37" if value[0] in {"*", "•"} else "36" if value[0] == "·" else "90")
-        return [re.sub(r"([.*·•])\1*", color_run, line) for line in lines]
+        def stars(line):
+            return re.sub(r"([.*·•])\1*", color_run, line)
+        return [stars(line[:inset]) + self.paint(mark[index], "1") + stars(line[inset + mark_width:]).rstrip()
+                for index, line in enumerate(lines)]
 
     def set_remaining_steps(self, count):
         if type(count) is not int or not 1 <= count <= 128:
