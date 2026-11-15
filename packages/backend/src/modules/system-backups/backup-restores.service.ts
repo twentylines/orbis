@@ -698,6 +698,7 @@ export class BackupRestoresService implements OnModuleDestroy {
       if (!pending || pending.id !== journal.state.id) throw failed();
       this.pending = undefined;
       pending.release();
+      this.watchRetainedTerminal(journal, options.ownerId);
       return await this.retainedStatus(journal, options.ownerId);
     } catch (error) {
       if (!beginPrepared && this.pending?.id === journal.state.id) {
@@ -785,7 +786,10 @@ export class BackupRestoresService implements OnModuleDestroy {
           } finally {
             await directory.close();
           }
-        } else await transaction.launch('recover', options.signal);
+        } else {
+          await transaction.launch('recover', options.signal);
+          this.watchRetainedTerminal(journal, options.ownerId);
+        }
         const pending = this.pending;
         if (!pending || pending.id !== options.restoreId) throw failed();
         this.pending = undefined;

@@ -333,7 +333,7 @@ it('reviews, binds and starts only the protected retained transaction after acco
   });
   boundary.rootReview.mockResolvedValue({ publication });
   const verifyAccount = vi.fn().mockResolvedValue(undefined);
-  vi.spyOn(service, 'retainedStatus').mockResolvedValue({
+  const status = vi.spyOn(service, 'retainedStatus').mockResolvedValue({
     job: {
       requiresFreshAuthentication: true,
       id: journal.state.id,
@@ -347,23 +347,32 @@ it('reviews, binds and starts only the protected retained transaction after acco
       canRecover: false,
     },
   });
-  await expect(
-    service.beginRetainedRoot({
-      journal,
-      importId,
-      ownerId: 7,
-      binding,
-      admitted: admitted as never,
-      expectedRuntimeManifestSha256: 'd'.repeat(64),
-      verifyAccount,
-      signal: new AbortController().signal,
-    }),
-  ).resolves.toMatchObject({ job: { id: journal.state.id, status: 'running' } });
-  expect(verifyAccount).toHaveBeenCalledTimes(3);
-  expect(boundary.rootBind).toHaveBeenCalledOnce();
-  expect(boundary.rootWorker).toHaveBeenCalledOnce();
-  expect(boundary.rootLaunch).toHaveBeenCalledWith('activate', expect.any(AbortSignal));
-  expect(start).not.toHaveBeenCalled();
+  vi.useFakeTimers();
+  try {
+    await expect(
+      service.beginRetainedRoot({
+        journal,
+        importId,
+        ownerId: 7,
+        binding,
+        admitted: admitted as never,
+        expectedRuntimeManifestSha256: 'd'.repeat(64),
+        verifyAccount,
+        signal: new AbortController().signal,
+      }),
+    ).resolves.toMatchObject({ job: { id: journal.state.id, status: 'running' } });
+    expect(verifyAccount).toHaveBeenCalledTimes(3);
+    expect(boundary.rootBind).toHaveBeenCalledOnce();
+    expect(boundary.rootWorker).toHaveBeenCalledOnce();
+    expect(boundary.rootLaunch).toHaveBeenCalledWith('activate', expect.any(AbortSignal));
+    expect(start).not.toHaveBeenCalled();
+    expect(status).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(2000);
+    await vi.waitFor(() => expect(status).toHaveBeenCalledTimes(2));
+  } finally {
+    service.onModuleDestroy();
+    vi.useRealTimers();
+  }
 });
 
 it('preserves the journal and maintenance hold if root begin loses its reply', async () => {
@@ -653,6 +662,36 @@ it('recovers incomplete root allocation only after the protected admission hash 
   await expect(service.recoverRetainedRoot(options)).resolves.toEqual({ restoreId: active.state.id });
   expect(boundary.rootLaunch).toHaveBeenCalledExactlyOnceWith('recover', expect.any(AbortSignal));
   expect(verifyAccount).toHaveBeenCalledTimes(3);
+});
+
+it('continues terminal settlement after an accepted recovery without a process restart', async () => {
+  const active = await journal();
+  const pointId = randomUUID();
+  const binding = { pointId, reviewId: randomUUID(), archiveSha256: 'a'.repeat(64), manifestSha256: 'b'.repeat(64), machineId: 'c'.repeat(64) };
+  boundary.receiptRead.mockResolvedValue({ ownerId: 7, binding });
+  boundary.admissionRead.mockResolvedValue({ sha256: 'd'.repeat(64) });
+  boundary.rootStatus.mockResolvedValue({ pointId, state: 'rolled-back', decision: 'rollback', admissionSha256: 'd'.repeat(64) });
+  const status = vi.spyOn(service, 'retainedStatus').mockResolvedValue({ job: { status: 'rolled-back' } } as never);
+  vi.useFakeTimers();
+  try {
+    await service.recoverRetainedRoot({
+      restoreId: active.state.id,
+      pointId,
+      ownerId: 7,
+      binding,
+      verifyAccount: vi.fn().mockResolvedValue(undefined),
+      signal: new AbortController().signal,
+    });
+    expect(boundary.rootLaunch).toHaveBeenCalledExactlyOnceWith('recover', expect.any(AbortSignal));
+    expect(status).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2000);
+    await vi.waitFor(() => expect(status).toHaveBeenCalledOnce());
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(status).toHaveBeenCalledOnce();
+  } finally {
+    service.onModuleDestroy();
+    vi.useRealTimers();
+  }
 });
 
 it('cleans an unbegun handoff only after root revokes its exact request and authenticates the admission', async () => {
