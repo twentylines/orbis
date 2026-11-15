@@ -1115,7 +1115,7 @@ class DockerRestoreRuntime:
                 if list(self.a.seal((root / item['path']).lstat())) != item['seal']:
                     raise fail()
 
-    def preflight_images(self, record, required):
+    def image_load_requirement(self, record):
         self.check_source(record)
         capture_body = self.read_file(Path(record['retainedPath']) / 'image-capture.json', 4 * 1024 * 1024)
         capture = self.P.metadata(capture_body, byte_limit=4 * 1024 * 1024)
@@ -1134,7 +1134,17 @@ class DockerRestoreRuntime:
             if type(size) is not int or not 0 < size <= MAX_STAGE or type(expanded) is not int or not 0 <= expanded <= MAX_STAGE:
                 raise fail()
             expected += size + expanded * 2
-        if expected != required or required > 2 ** 53 - 1:
+        if expected > 2 ** 53 - 1:
+            raise fail()
+        return expected
+
+    def preflight_preparation(self, record):
+        # Reject before issuing a phase grant or stopping the existing workspace.
+        # The image loader still repeats its own bound immediately before loading.
+        return self.preflight_images(record, self.image_load_requirement(record))
+
+    def preflight_images(self, record, required):
+        if type(required) is not int or self.image_load_requirement(record) != required:
             raise fail()
         daemon = self.reader._object(['info', '--format', '{{json .}}'])
         path = Path(daemon.get('DockerRootDir', ''))

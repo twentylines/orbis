@@ -388,6 +388,7 @@ class RestoreManager:
                 raise fail()
             self.origin(record)
             self.runtime.validate_rebind(record)
+            self.runtime.preflight_preparation(record)
             self.runtime.retire_provisional(record)
             record['phase'] = 'preparing'
             record['dataTouched'] = True

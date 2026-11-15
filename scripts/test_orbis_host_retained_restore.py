@@ -321,6 +321,9 @@ class Runtime:
     def validate_rebind(self, record):
         self.event('rebind')
 
+    def preflight_preparation(self, record):
+        self.event('preparation-capacity')
+
     def validate_overlay(self, record):
         self.event('overlay-check')
 
@@ -524,6 +527,27 @@ class RetainedRestoreTests(unittest.TestCase):
         review = self.manager.review(self.request)
         request = {**self.request, 'currentRevision': review['currentRevision'], 'stageRevision': review['stageRevision'], 'clientKey': self.key}
         return self.manager.begin(request), request
+
+    def test_capacity_rejection_keeps_allocated_restore_and_original_workspace_untouched(self):
+        self.begin()
+        self.runtime.fail_at = 'preparation-capacity'
+        before = self.manager.read(self.request['restoreId'])
+        with self.assertRaises(RuntimeError):
+            self.manager.prepare(self.request['restoreId'], self.key)
+        self.assertEqual(self.manager.read(self.request['restoreId']), before)
+        self.assertEqual(before['phase'], 'allocated')
+        self.assertFalse(before['dataTouched'])
+        self.assertEqual(before['sequence'], 0)
+        self.assertIsNone(before['grant'])
+        self.assertNotIn('retire-provisional', self.runtime.events)
+        self.assertNotIn('prepare', self.runtime.events)
+
+    def test_capacity_check_follows_rebind_and_precedes_first_mutating_phase(self):
+        self.begin()
+        self.manager.prepare(self.request['restoreId'], self.key)
+        events = self.runtime.events
+        self.assertLess(events.index('rebind'), events.index('preparation-capacity'))
+        self.assertLess(events.index('preparation-capacity'), events.index('prepare'))
 
     def unstarted_fixture(self):
         self.begin()
@@ -1012,8 +1036,13 @@ class RetainedRestoreTests(unittest.TestCase):
             result = runtime.preflight_images(record, required)
             self.assertEqual(result['availableBytes'], required + 100)
             statfs.assert_called_once_with(self.base)
+            statfs.reset_mock()
+            self.assertEqual(runtime.preflight_preparation(record), result)
+            statfs.assert_called_once_with(self.base)
             with self.assertRaises(ValueError):
                 runtime.preflight_images(record, required - 1)
+            with self.assertRaises(ValueError):
+                runtime.preflight_images(record, True)
             runtime.reader._object.return_value['ID'] = 'substituted-daemon'
             with self.assertRaises(ValueError):
                 runtime.preflight_images(record, required)
@@ -1021,6 +1050,14 @@ class RetainedRestoreTests(unittest.TestCase):
         with mock.patch.object(D.os, 'statvfs', return_value=SimpleNamespace(**{**vars(space), 'f_favail': 63})):
             with self.assertRaises(ValueError):
                 runtime.preflight_images(record, required)
+            with self.assertRaises(ValueError):
+                runtime.preflight_preparation(record)
+        with mock.patch.object(D.os, 'statvfs', return_value=SimpleNamespace(**{**vars(space), 'f_bavail': required - 1})):
+            with self.assertRaises(ValueError):
+                runtime.preflight_preparation(record)
+        runtime.read_file.return_value = body + b' '
+        with self.assertRaises(ValueError):
+            runtime.preflight_preparation(record)
 
     def test_root_core_maintenance_distinguishes_actual_jobs_and_requires_terminal_health(self):
         service = S.HostService.__new__(S.HostService)
