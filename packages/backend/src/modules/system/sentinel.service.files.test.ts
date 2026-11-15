@@ -32,10 +32,13 @@ describe('SentinelService local status', () => {
   let socketPath: string;
   let server: http.Server | undefined;
   let oldPath: string | undefined;
+  let oldHostPath: string | undefined;
   let calls: number;
 
   beforeEach(() => {
     oldPath = process.env.ORBIS_SENTINEL_SOCKET;
+    oldHostPath = process.env.ORBIS_HOST_SOCKET;
+    delete process.env.ORBIS_HOST_SOCKET;
     directory = mkdtempSync(path.join(os.tmpdir(), 'sentinel-'));
     const linkParent = process.env.ORBIS_TEST_SOCKET_DIR || os.tmpdir();
     link = path.join(linkParent, `sentinel-test-${process.pid}-${path.basename(directory)}`);
@@ -53,6 +56,8 @@ describe('SentinelService local status', () => {
     rmSync(directory, { recursive: true, force: true });
     if (oldPath === undefined) delete process.env.ORBIS_SENTINEL_SOCKET;
     else process.env.ORBIS_SENTINEL_SOCKET = oldPath;
+    if (oldHostPath === undefined) delete process.env.ORBIS_HOST_SOCKET;
+    else process.env.ORBIS_HOST_SOCKET = oldHostPath;
   });
 
   async function start(handler: http.RequestListener = (_req, res) => res.end(JSON.stringify(payload()))) {
@@ -76,6 +81,60 @@ describe('SentinelService local status', () => {
     await service.read();
     expect(calls).toBe(1);
     expect(service.inspections).toBe(2);
+  });
+
+  it('reads Sentinel through the protected host socket when no direct socket is configured', async () => {
+    delete process.env.ORBIS_SENTINEL_SOCKET;
+    process.env.ORBIS_HOST_SOCKET = socketPath;
+    await start((req, res) => {
+      expect(req.url).toBe('/v1/sentinel/status');
+      res.end(JSON.stringify({ version: 1, available: true, status: payload() }));
+    });
+    const service = new TestService();
+    const results = await Promise.all([service.read(), service.read()]);
+    expect(results).toEqual(Array(2).fill({ available: true, ...payload().components.sentinel }));
+    expect(calls).toBe(1);
+    expect(service.inspections).toBe(2);
+  });
+
+  it('keeps older helpers and invalid host envelopes unavailable', async () => {
+    delete process.env.ORBIS_SENTINEL_SOCKET;
+    process.env.ORBIS_HOST_SOCKET = socketPath;
+    let status = 404;
+    let body: unknown = {};
+    await start((_req, res) => {
+      res.statusCode = status;
+      res.end(JSON.stringify(body));
+    });
+    expect(await new TestService().read()).toEqual(unavailable);
+    status = 200;
+    for (body of [
+      { version: 1, available: false, status: null },
+      { version: 2, available: true, status: payload() },
+      { version: 1, available: true, status: payload(), extra: true },
+      { version: 1, available: true, status: {} },
+    ])
+      expect(await new TestService().read()).toEqual(unavailable);
+  });
+
+  it('does not replace invalid explicit Sentinel configuration with the host bridge', async () => {
+    process.env.ORBIS_SENTINEL_SOCKET = 'relative';
+    process.env.ORBIS_HOST_SOCKET = socketPath;
+    await start();
+    expect(await new TestService().read()).toEqual(unavailable);
+    expect(calls).toBe(0);
+  });
+
+  it('separates direct and host cache entries even when they share a socket pathname', async () => {
+    process.env.ORBIS_HOST_SOCKET = socketPath;
+    await start((req, res) =>
+      res.end(JSON.stringify(req.url === '/v1/sentinel/status' ? { version: 1, available: false, status: null } : payload())),
+    );
+    const service = new TestService();
+    expect((await service.read()).available).toBe(true);
+    delete process.env.ORBIS_SENTINEL_SOCKET;
+    expect(await service.read()).toEqual(unavailable);
+    expect(calls).toBe(2);
   });
 
   it('treats absent or nonabsolute configuration as unavailable', async () => {

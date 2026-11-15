@@ -8,9 +8,11 @@ transport boundary; the web API must separately authenticate its user.
 import argparse
 import base64
 import hashlib
+import http.client
 import http.server
 import importlib.util
 import json
+import io
 import secrets
 import os
 import re
@@ -2122,6 +2124,80 @@ def trusted_capture_peer(connection):
     return pid > 0 and uid == os.geteuid() == 0
 
 
+def sentinel_component_status(socket_path=Path('/run/orbis-sentinel/api.sock')):
+    unavailable = {'version': 1, 'available': False, 'status': None}
+    maximum = 64 * 1024
+    version = re.compile(r'(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?')
+    def valid_component(value):
+        return (isinstance(value, dict) and set(value) == {'installedVersion', 'availableVersion', 'state'}
+                and isinstance(value['state'], str) and value['state'] in {'unknown', 'healthy', 'unavailable', 'updating', 'recovering'}
+                and all(item is None or (isinstance(item, str) and len(item) <= 128 and version.fullmatch(item))
+                        for item in (value['installedVersion'], value['availableVersion'])))
+    def pairs(items):
+        result = dict(items)
+        if len(result) != len(items):
+            raise ValueError('Duplicate Sentinel status key')
+        return result
+    def socket_info(directory):
+        info = os.stat(socket_path.name, dir_fd=directory, follow_symlinks=False)
+        if not stat.S_ISSOCK(info.st_mode) or info.st_uid != HOST.AUTHORITY.OWNER or stat.S_IMODE(info.st_mode) != 0o600:
+            raise ValueError('Sentinel socket authority is unavailable')
+        return HOST.AUTHORITY.seal(info)
+    try:
+        with HOST.AUTHORITY.protected_directory(socket_path.parent, private=False) as directory:
+            before = socket_info(directory)
+            deadline = time.monotonic() + 1
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as transport:
+                transport.settimeout(max(0.001, deadline - time.monotonic()))
+                transport.connect(str(socket_path))
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ValueError('Sentinel status timed out')
+                transport.settimeout(remaining)
+                transport.sendall(b'GET /sentinel/api/v1/status HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n')
+                wire = bytearray()
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise ValueError('Sentinel status timed out')
+                    transport.settimeout(remaining)
+                    chunk = transport.recv(min(16384, maximum + 16384 + 1 - len(wire)))
+                    if not chunk:
+                        break
+                    wire.extend(chunk)
+                    if len(wire) > maximum + 16384:
+                        raise ValueError('Sentinel response exceeds its limit')
+            class ResponseBuffer(io.BytesIO):
+                # Keep the final offset after HTTPResponse closes its input.
+                def close(self):
+                    pass
+            stream = ResponseBuffer(wire)
+            response = http.client.HTTPResponse(SimpleNamespace(makefile=lambda *args, **kwargs: stream))
+            try:
+                response.begin()
+                if (len(response.headers.get_all('Content-Length', [])) > 1
+                        or ('Content-Length' in response.headers and 'Transfer-Encoding' in response.headers)):
+                    raise ValueError('Sentinel HTTP framing is ambiguous')
+                body = response.read()
+                if response.status != 200 or len(body) > maximum or stream.tell() != len(wire):
+                    raise ValueError('Sentinel status is unavailable')
+            finally:
+                response.close()
+                io.BytesIO.close(stream)
+            if socket_info(directory) != before:
+                raise ValueError('Sentinel socket changed')
+            value = json.loads(body.decode('utf-8'), object_pairs_hook=pairs)
+            if (not isinstance(value, dict) or set(value) != {'schema', 'protocolVersion', 'components'}
+                    or value['schema'] != 'orbis-sentinel.status.v1' or type(value['protocolVersion']) is not int
+                    or value['protocolVersion'] != 1 or not isinstance(value['components'], dict)
+                    or set(value['components']) != {'orbis', 'sentinel'}
+                    or not all(valid_component(item) for item in value['components'].values())):
+                raise ValueError('Sentinel status is invalid')
+        return {'version': 1, 'available': True, 'status': value}
+    except (OSError, ValueError, TypeError, http.client.HTTPException):
+        return unavailable
+
+
 def core_capture_reader(service):
     reader = getattr(service, '_core_capture_reader', None)
     if reader is not None:
@@ -2251,6 +2327,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return data
 
     def do_GET(self) -> None:
+        if self.path == '/v1/sentinel/status':
+            if not trusted_capture_peer(self.connection):
+                self.send_json(403, {'error': 'Sentinel status is unavailable.'})
+                return
+            self.send_json(200, sentinel_component_status())
+            return
         if self.path == '/v1/sentinel-observer/capability':
             if not trusted_capture_peer(self.connection):
                 self.send_json(403, {'error': 'Observer capability is unavailable'})

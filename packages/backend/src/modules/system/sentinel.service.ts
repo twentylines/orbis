@@ -5,6 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 
 const ENDPOINT = '/sentinel/api/v1/status';
+const HOST_ENDPOINT = '/v1/sentinel/status';
 const MAX_BYTES = 64 * 1024;
 const VERSION = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?(?![\s\S])/;
 const STATES = ['unknown', 'healthy', 'unavailable', 'updating', 'recovering'] as const;
@@ -60,29 +61,32 @@ function sameSocket(a: Stats, b: Stats): boolean {
 
 @Injectable()
 export class SentinelService {
-  private cached?: { path: string | undefined; until: number; value: SentinelStatus };
-  private pending?: { path: string | undefined; promise: Promise<SentinelStatus> };
+  private cached?: { key: string; until: number; value: SentinelStatus };
+  private pending?: { key: string; promise: Promise<SentinelStatus> };
 
   protected socketInfo(socketPath: string): Promise<Stats> {
     return lstat(socketPath);
   }
 
   read(): Promise<SentinelStatus> {
-    const socketPath = process.env.ORBIS_SENTINEL_SOCKET;
-    if (this.cached && this.cached.path === socketPath && this.cached.until > Date.now()) return Promise.resolve({ ...this.cached.value });
-    if (this.pending && this.pending.path === socketPath) return this.pending.promise.then((value) => ({ ...value }));
-    const promise = this.readOnce(socketPath).then((value) => {
+    const direct = process.env.ORBIS_SENTINEL_SOCKET;
+    const socketPath = direct ?? process.env.ORBIS_HOST_SOCKET;
+    const endpoint = direct === undefined ? HOST_ENDPOINT : ENDPOINT;
+    const key = JSON.stringify([socketPath, endpoint]);
+    if (this.cached && this.cached.key === key && this.cached.until > Date.now()) return Promise.resolve({ ...this.cached.value });
+    if (this.pending && this.pending.key === key) return this.pending.promise.then((value) => ({ ...value }));
+    const promise = this.readOnce(socketPath, endpoint).then((value) => {
       if (this.pending?.promise === promise) {
-        this.cached = { path: socketPath, until: Date.now() + 1000, value };
+        this.cached = { key, until: Date.now() + 1000, value };
         this.pending = undefined;
       }
       return value;
     });
-    this.pending = { path: socketPath, promise };
+    this.pending = { key, promise };
     return promise.then((value) => ({ ...value }));
   }
 
-  private async readOnce(socketPath: string | undefined): Promise<SentinelStatus> {
+  private async readOnce(socketPath: string | undefined, endpoint: typeof ENDPOINT | typeof HOST_ENDPOINT): Promise<SentinelStatus> {
     if (!socketPath || !path.isAbsolute(socketPath) || socketPath.includes('\0') || Buffer.byteLength(socketPath) > 107) return unavailable();
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -96,11 +100,14 @@ export class SentinelService {
       try {
         const before = await this.socketInfo(socketPath);
         if (controller.signal.aborted || !safeSocket(before)) return unavailable();
-        const body = await this.request(socketPath, controller.signal);
+        const body = await this.request(socketPath, endpoint, controller.signal);
         if (controller.signal.aborted) return unavailable();
         const after = await this.socketInfo(socketPath);
         if (controller.signal.aborted || !safeSocket(after) || !sameSocket(before, after)) return unavailable();
-        return parseStatus(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body)));
+        const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body));
+        if (endpoint === ENDPOINT) return parseStatus(value);
+        if (!exactObject(value, ['version', 'available', 'status']) || value.version !== 1) return unavailable();
+        return value.available === true ? parseStatus(value.status) : unavailable();
       } catch {
         return unavailable();
       }
@@ -112,9 +119,9 @@ export class SentinelService {
     }
   }
 
-  private request(socketPath: string, signal: AbortSignal): Promise<Buffer> {
+  private request(socketPath: string, endpoint: typeof ENDPOINT | typeof HOST_ENDPOINT, signal: AbortSignal): Promise<Buffer> {
     return new Promise((resolve, reject) => {
-      const req = http.request({ socketPath, path: ENDPOINT, method: 'GET', agent: false, signal }, (res) => {
+      const req = http.request({ socketPath, path: endpoint, method: 'GET', agent: false, signal }, (res) => {
         if (res.statusCode !== 200) {
           res.destroy();
           reject(new Error('Unavailable'));
