@@ -86,6 +86,14 @@ class AdoptionTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.base = Path(self.tmp.name).resolve()
+        self.mountinfo = self.base / 'daemon-mountinfo'
+        self.mountinfo.write_text('1 0 8:1 / / rw - ext4 /dev/fixture rw\n')
+        aliases = M.require_aliases
+        # The simulated daemon has a stable topology; explicit alias fixtures keep their own mount table.
+        def require_aliases(root, containers, source_id, target_id=None, reviewed_writers=(), mountinfo=None):
+            return aliases(root, containers, source_id, target_id, reviewed_writers,
+                           self.mountinfo if mountinfo is None else mountinfo)
+        self.patch(M, 'require_aliases', side_effect=require_aliases)
         self.root = self.base / 'installation'; self.root.mkdir(mode=0o775)
         (self.root / 'traefik/shared').mkdir(parents=True)
         (self.root / 'traefik').chmod(0o777)
@@ -335,6 +343,23 @@ class AdoptionTests(unittest.TestCase):
         self.engine.rows['e' * 64]['State'].update(Status='exited', StartedAt=started())
         with self.assertRaisesRegex(ValueError, 'network generation changed'):
             self.adoption.lookup_target(self.adoption.read())
+
+    def test_alias_guard_still_rejects_mount_topology_change_during_review(self):
+        read = M.L.R._mount_entries
+        calls = 0
+        def mounts(file):
+            nonlocal calls
+            value = read(file)
+            calls += 1
+            if calls == 1:
+                self.mountinfo.write_text('1 0 8:2 / / rw - ext4 /dev/replaced rw\n')
+            return value
+        before = copy.deepcopy(self.engine.calls)
+        with mock.patch.object(M.L.R, '_mount_entries', side_effect=mounts):
+            with self.assertRaisesRegex(ValueError, 'host mount topology changed during alias review'):
+                M.require_aliases(self.root, [], 'a' * 64)
+        self.assertEqual(calls, 2)
+        self.assertEqual(self.engine.calls, before)
 
     def test_original_and_target_intents_preserve_config_and_network_aliases(self):
         record = self.approve()
