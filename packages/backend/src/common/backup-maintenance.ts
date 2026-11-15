@@ -34,12 +34,14 @@ export const holdCoreCaptureRecovery = () => {
   captureRecoveryRequired = true;
 };
 let active = 0;
+const mutationScopes = new WeakMap<() => void, { released: boolean }>();
 const drained = new Set<() => void>();
 const available = new Set<() => void>();
 const requests = new WeakMap<Request, { release: () => void; entered: boolean; disconnected: boolean }>();
 
 export const backupMaintenanceActive = () =>
   held ||
+  acquiring ||
   recoveryRequired ||
   restoreRecoveryRequired ||
   resetRecoveryRequired ||
@@ -207,16 +209,39 @@ export async function waitForBackupMutation() {
   return release;
 }
 
-export function enterBackupMutation(): (() => void) | null {
-  if (backupMaintenanceActive()) return null;
+function holdBackupMutation(): () => void {
   active++;
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
+  const scope = { released: false };
+  const release = () => {
+    if (scope.released) return;
+    scope.released = true;
     active--;
     if (!active) for (const notify of drained) notify();
   };
+  mutationScopes.set(release, scope);
+  return release;
+}
+
+export function enterBackupMutation(): (() => void) | null {
+  return backupMaintenanceActive() ? null : holdBackupMutation();
+}
+
+// A queued continuation must finish before its already-admitted parent can drain.
+export function borrowBackupMutation(parent: () => void): (() => void) | null {
+  const scope = mutationScopes.get(parent);
+  if (
+    !scope ||
+    scope.released ||
+    held ||
+    recoveryRequired ||
+    restoreRecoveryRequired ||
+    resetRecoveryRequired ||
+    settingsRestoreRecoveryRequired ||
+    captureRecoveryRequired ||
+    captureInitializing
+  )
+    return null;
+  return holdBackupMutation();
 }
 
 export async function acquireBackupMaintenance(signal: AbortSignal): Promise<() => void> {
@@ -263,6 +288,7 @@ export async function acquireBackupMaintenance(signal: AbortSignal): Promise<() 
     };
   } finally {
     acquiring = false;
+    if (!backupMaintenanceActive()) for (const notify of available) notify();
   }
 }
 

@@ -51,6 +51,101 @@ describe('QueueFactory', () => {
     });
   });
 
+  it('finishes a pre-admitted RPC through maintenance drain and still refuses new publications', async () => {
+    const factory = new QueueFactory(loggerService, configurationService);
+    const queue = await factory.createQueue({ queueName: 'drain-continuation', eventSchema: type({ event: 'string' }) });
+    const rpc = rabbit.createRPCClient.mock.results.at(-1)?.value;
+    const sent = Promise.withResolvers<{ body: unknown; headers?: Record<string, unknown> }>();
+    const response = Promise.withResolvers<{ body: unknown }>();
+    rpc.send.mockImplementation((envelope: unknown, body: unknown) => {
+      sent.resolve({ body, headers: (envelope as { headers?: Record<string, unknown> }).headers });
+      return response.promise;
+    });
+    const callback = vi.fn();
+    queue.onEvent(async (_event, reply) => {
+      callback();
+      await reply({ success: true, message: 'done' });
+    });
+    const consumer = rabbit.createConsumer.mock.calls.at(-1)?.[1];
+    if (!consumer) throw new Error('Missing consumer');
+    const publishing = queue.publish({ event: 'before-drain' });
+    const request = await sent.promise;
+    const abort = new AbortController();
+    const waiting = maintenance.acquireBackupMaintenance(abort.signal);
+    let release: (() => void) | undefined;
+    const delivery = Promise.resolve(
+      consumer({ ...request, redelivered: false } as never, async (value) => {
+        response.resolve({ body: value });
+      }),
+    );
+    try {
+      await vi.waitFor(() => expect(callback).toHaveBeenCalledOnce());
+      expect(await publishing).toEqual({ success: true, message: 'done' });
+      await delivery;
+      release = await waiting;
+      expect(maintenance.backupMaintenanceLeaseHeld()).toBe(true);
+      expect((await queue.publish({ event: 'after-drain' })).success).toBe(false);
+      expect(rpc.send).toHaveBeenCalledOnce();
+    } finally {
+      abort.abort();
+      await Promise.allSettled([publishing, delivery]);
+      (release ?? (await waiting.catch(() => undefined)))?.();
+      await factory.onModuleDestroy();
+    }
+  });
+
+  it('does not lend a local RPC admission to a changed payload or a replayed delivery', async () => {
+    const factory = new QueueFactory(loggerService, configurationService);
+    const queue = await factory.createQueue({ queueName: 'drain-bound-payload', eventSchema: type({ event: 'string' }) });
+    const rpc = rabbit.createRPCClient.mock.results.at(-1)?.value;
+    const sent = Promise.withResolvers<{ body: unknown; headers?: Record<string, unknown> }>();
+    const response = Promise.withResolvers<{ body: unknown }>();
+    const finishOriginal = Promise.withResolvers<void>();
+    rpc.send.mockImplementation((envelope: unknown, body: unknown) => {
+      sent.resolve({ body, headers: (envelope as { headers?: Record<string, unknown> }).headers });
+      return response.promise;
+    });
+    const callback = vi.fn();
+    queue.onEvent(async (event, reply) => {
+      callback(event.event);
+      if (event.event === 'original' && callback.mock.calls.length === 1) await finishOriginal.promise;
+      await reply({ success: true, message: 'done' });
+    });
+    const consumer = rabbit.createConsumer.mock.calls.at(-1)?.[1];
+    if (!consumer) throw new Error('Missing consumer');
+    const publishing = queue.publish({ event: 'original' });
+    const request = await sent.promise;
+    const abort = new AbortController();
+    const waiting = maintenance.acquireBackupMaintenance(abort.signal);
+    const reply = async (body: unknown) => {
+      response.resolve({ body });
+    };
+    const changed = Promise.resolve(consumer({ ...request, body: { event: 'changed' }, redelivered: false } as never, reply));
+    const original = Promise.resolve(consumer({ ...request, redelivered: false } as never, reply));
+    let release: (() => void) | undefined;
+    let replay: Promise<unknown> | undefined;
+    try {
+      await vi.waitFor(() => expect(callback).toHaveBeenCalledExactlyOnceWith('original'));
+      replay = Promise.resolve(consumer({ ...request, redelivered: true } as never, reply));
+      await Promise.resolve();
+      expect(callback).toHaveBeenCalledOnce();
+      finishOriginal.resolve();
+      await publishing;
+      await original;
+      release = await waiting;
+      expect(callback).toHaveBeenCalledOnce();
+      release();
+      await Promise.all([changed, replay]);
+      expect(callback.mock.calls.map((call) => call[0]).sort()).toEqual(['changed', 'original', 'original']);
+    } finally {
+      finishOriginal.resolve();
+      abort.abort();
+      (release ?? (await waiting.catch(() => undefined)))?.();
+      await Promise.allSettled([publishing, original, changed, ...(replay ? [replay] : [])]);
+      await factory.onModuleDestroy();
+    }
+  });
+
   async function pausedCapture(signal = new AbortController().signal) {
     const held = vi.spyOn(maintenance, 'coreCaptureRecoveryRequired').mockReturnValue(false);
     const factory = new QueueFactory(loggerService, configurationService);

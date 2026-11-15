@@ -7,8 +7,10 @@ import {
   backupMaintenanceActive,
   backupMaintenanceMiddleware,
   enterBackupMutation,
+  borrowBackupMutation,
   setBackupRecoveryRequired,
   setRestoreRecoveryRequired,
+  setResetRecoveryRequired,
   waitForBackupMutation,
 } from '@/common/backup-maintenance';
 import { Subject } from 'rxjs';
@@ -17,6 +19,7 @@ import type { ExecutionContext } from '@nestjs/common';
 afterEach(() => {
   setBackupRecoveryRequired(false);
   setRestoreRecoveryRequired(false);
+  setResetRecoveryRequired(false);
 });
 it('retains independent restore and backup recovery holds until both are cleared', async () => {
   setBackupRecoveryRequired(true);
@@ -56,16 +59,22 @@ it('closes admission, drains existing operations and releases exactly once', asy
   expect(first).not.toBeNull();
   const waiting = acquireBackupMaintenance(new AbortController().signal);
   const concurrent = enterBackupMutation();
-  expect(concurrent).not.toBeNull();
-  concurrent?.();
-  first?.();
-  first?.();
-  const release = await waiting;
-  expect(backupMaintenanceActive()).toBe(true);
-  expect(enterBackupMutation()).toBeNull();
-  await expect(acquireBackupMaintenance(new AbortController().signal)).rejects.toThrow('Another full backup');
-  release();
-  release();
+  let release: (() => void) | undefined;
+  try {
+    expect(concurrent).toBeNull();
+    first?.();
+    first?.();
+    release = await waiting;
+    expect(backupMaintenanceActive()).toBe(true);
+    expect(enterBackupMutation()).toBeNull();
+    await expect(acquireBackupMaintenance(new AbortController().signal)).rejects.toThrow('Another full backup');
+  } finally {
+    concurrent?.();
+    first?.();
+    const unlock = release ?? (await waiting);
+    unlock();
+    unlock();
+  }
   const next = enterBackupMutation();
   expect(next).not.toBeNull();
   next?.();
@@ -78,6 +87,89 @@ it('cancels a waiting snapshot without stranding the admission lock', async () =
   await expect(waiting).rejects.toThrow('cancelled');
   release?.();
   expect(backupMaintenanceActive()).toBe(false);
+});
+
+it('drains an admitted continuation while refusing new, forged and released admissions', async () => {
+  const parent = enterBackupMutation();
+  if (!parent) throw new Error('Missing parent admission');
+  const abort = new AbortController();
+  const waiting = acquireBackupMaintenance(abort.signal);
+  let lock: (() => void) | undefined;
+  let child: (() => void) | null = null;
+  let acquired = false;
+  void waiting.then(
+    () => {
+      acquired = true;
+    },
+    () => {},
+  );
+  try {
+    expect(enterBackupMutation()).toBeNull();
+    expect(borrowBackupMutation(() => {})).toBeNull();
+    child = borrowBackupMutation(parent);
+    expect(child).not.toBeNull();
+    parent();
+    expect(borrowBackupMutation(parent)).toBeNull();
+    await Promise.resolve();
+    expect(acquired).toBe(false);
+    child?.();
+    child?.();
+    lock = await waiting;
+    expect(acquired).toBe(true);
+    expect(enterBackupMutation()).toBeNull();
+    expect(child && borrowBackupMutation(child)).toBeNull();
+  } finally {
+    parent();
+    child?.();
+    abort.abort();
+    (lock ?? (await waiting.catch(() => undefined)))?.();
+  }
+});
+
+it('does not lend an existing admission across independent recovery holds', () => {
+  const parent = enterBackupMutation();
+  if (!parent) throw new Error('Missing parent admission');
+  try {
+    setRestoreRecoveryRequired(true);
+    expect(borrowBackupMutation(parent)).toBeNull();
+    setRestoreRecoveryRequired(false);
+    setResetRecoveryRequired(true);
+    expect(borrowBackupMutation(parent)).toBeNull();
+    setResetRecoveryRequired(false);
+    setBackupRecoveryRequired(true);
+    expect(borrowBackupMutation(parent)).toBeNull();
+  } finally {
+    parent();
+    setRestoreRecoveryRequired(false);
+    setResetRecoveryRequired(false);
+    setBackupRecoveryRequired(false);
+  }
+});
+
+it('wakes a queued mutation when a pending maintenance request is cancelled', async () => {
+  const parent = enterBackupMutation();
+  if (!parent) throw new Error('Missing parent admission');
+  const abort = new AbortController();
+  const maintenance = acquireBackupMaintenance(abort.signal);
+  let admitted = false;
+  const waiting = waitForBackupMutation().then((release) => {
+    admitted = true;
+    return release;
+  });
+  try {
+    await Promise.resolve();
+    expect(admitted).toBe(false);
+    abort.abort();
+    await expect(maintenance).rejects.toThrow('cancelled');
+    const release = await waiting;
+    expect(admitted).toBe(true);
+    release();
+  } finally {
+    parent();
+    abort.abort();
+    await maintenance.catch(() => {});
+    (await waiting)();
+  }
 });
 it('keeps writes and background operations blocked when app recovery is required', () => {
   setBackupRecoveryRequired(true);

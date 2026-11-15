@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { createHash, randomUUID } from 'node:crypto';
 import type { LoggerService } from '@/core/logger/logger.service';
 import * as Sentry from '@sentry/nestjs';
 import { AMQPConnectionError, AMQPError, ConsumerStatus, type Connection, type RPCClient, type Consumer } from 'rabbitmq-client';
@@ -6,7 +7,13 @@ import { type } from 'arktype';
 import { scheduleCron, validateCronPattern, type ScheduledCronTask } from './cron-scheduler';
 import type { EventPublisher } from './event.publisher';
 import { INSTALLATION_MESSAGE, installationHeld, installationMode } from '@/common/installation-mode';
-import { backupMaintenanceActive, coreCaptureRecoveryRequired, enterBackupMutation, waitForBackupMutation } from '@/common/backup-maintenance';
+import {
+  backupMaintenanceActive,
+  coreCaptureRecoveryRequired,
+  enterBackupMutation,
+  borrowBackupMutation,
+  waitForBackupMutation,
+} from '@/common/backup-maintenance';
 
 export type ArkTypeSchema<TOut = unknown, TIn = unknown> = {
   (data: TIn): TOut | type.errors;
@@ -17,6 +24,7 @@ export type ArkTypeSchema<TOut = unknown, TIn = unknown> = {
 type Infer<T extends { infer: unknown }> = T['infer'];
 type InferIn<T extends { infer: unknown; inferIn?: unknown }> = T extends { inferIn: infer I } ? I : T['infer'];
 export type QueueObserver<T> = { queued: (event: T) => Promise<void>; unconfirmed: (event: T) => Promise<void> };
+const admissionHeader = 'x-orbis-local-admission';
 const captureRefusals = new WeakSet<object>();
 export const queueCaptureWasRefused = (error: unknown) => !!error && typeof error === 'object' && captureRefusals.has(error);
 function refuseCapture(message: string) {
@@ -30,7 +38,7 @@ export class QueueLifecycle {
   private sealed = false;
   private active = 0;
   private readonly idle = new Set<() => void>();
-  private readonly worker = new AsyncLocalStorage<{ active: boolean }>();
+  private readonly worker = new AsyncLocalStorage<{ active: boolean; admission?: () => void }>();
 
   private enter() {
     this.active++;
@@ -51,13 +59,25 @@ export class QueueLifecycle {
   public async runWorker(callback: () => Promise<void>) {
     if (this.sealed) return ConsumerStatus.REQUEUE;
     const leave = this.enter();
-    const context = { active: true };
+    const context: { active: boolean; admission?: () => void } = { active: true };
     try {
       await this.worker.run(context, callback);
     } finally {
       context.active = false;
+      context.admission = undefined;
       leave();
     }
+  }
+
+  public bindMutation(release: () => void) {
+    const scope = this.worker.getStore();
+    if (!scope?.active) throw new Error('Queue worker admission is unavailable.');
+    scope.admission = release;
+  }
+
+  public borrowMutation() {
+    const scope = this.worker.getStore();
+    return scope?.active && scope.admission ? borrowBackupMutation(scope.admission) : null;
   }
 
   public async drainAndSeal() {
@@ -73,6 +93,7 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
   private consumer?: Consumer;
   private backupPaused = false;
   private admittedPublications = 0;
+  private readonly admittedConsumers = new Map<string, { parent: () => void; fingerprint: string; claimed: boolean }>();
   private readonly publicationsDrained = new Set<() => void>();
   private readonly repeatables = new Map<string, ScheduledCronTask>();
   private consumerClose?: Promise<void>;
@@ -195,11 +216,12 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
         },
         async (req, reply) =>
           this.lifecycle.runWorker(async () => {
-            const release = await waitForBackupMutation();
+            const release = this.claimAdmittedConsumer(req) ?? (await waitForBackupMutation());
             let rpcSuccess = false;
             let rpcResultMessage = '';
 
             try {
+              this.lifecycle.bindMutation(release);
               await callback(req.body, reply, { redelivered: req.redelivered });
               rpcSuccess = true;
               rpcResultMessage = 'RPC processed successfully.';
@@ -246,12 +268,13 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
 
   private async publishWhileRunning(event: unknown): Promise<{ success: boolean; message: string } | Infer<R>> {
     if (!this.enabled) return { success: false, message: INSTALLATION_MESSAGE };
-    if (this.backupPaused) return { success: false, message: 'A full backup is draining the queue. Retry when it finishes.' };
-    const release = enterBackupMutation();
+    const continuation = this.lifecycle.borrowMutation();
+    if (this.backupPaused && !continuation) return { success: false, message: 'A full backup is draining the queue. Retry when it finishes.' };
+    const release = continuation ?? enterBackupMutation();
     if (!release) return { success: false, message: 'A full backup or app recovery is in progress. Retry when it finishes.' };
     this.admittedPublications++;
     try {
-      return await this.publishAdmitted(event);
+      return await this.publishAdmitted(event, release);
     } finally {
       this.admittedPublications--;
       if (!this.admittedPublications) {
@@ -262,7 +285,29 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
     }
   }
 
-  private async publishAdmitted(event: unknown): Promise<{ success: boolean; message: string } | Infer<R>> {
+  private fingerprint(body: unknown) {
+    return createHash('sha256')
+      .update(this.queueName)
+      .update('\0')
+      .update(JSON.stringify(body) ?? 'undefined')
+      .digest('hex');
+  }
+
+  private claimAdmittedConsumer(request: { headers?: Record<string, unknown>; body: unknown }) {
+    const token = request.headers?.[admissionHeader];
+    const scope = typeof token === 'string' ? this.admittedConsumers.get(token) : undefined;
+    if (!scope || scope.claimed) return null;
+    try {
+      if (scope.fingerprint !== this.fingerprint(request.body)) return null;
+    } catch {
+      return null;
+    }
+    const release = borrowBackupMutation(scope.parent);
+    if (release) scope.claimed = true;
+    return release;
+  }
+
+  private async publishAdmitted(event: unknown, parent: () => void): Promise<{ success: boolean; message: string } | Infer<R>> {
     let accepted: Infer<T> | undefined;
     try {
       const eventData = this.eventSchema(event as never);
@@ -272,7 +317,14 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
       accepted = eventData;
       await this.observe('queued', eventData);
 
-      const res = await this.rpcClient.send(this.queueName, eventData);
+      const admission = randomUUID();
+      this.admittedConsumers.set(admission, { parent, fingerprint: this.fingerprint(eventData), claimed: false });
+      let res: Awaited<ReturnType<RPCClient['send']>>;
+      try {
+        res = await this.rpcClient.send({ routingKey: this.queueName, headers: { [admissionHeader]: admission } }, eventData);
+      } finally {
+        this.admittedConsumers.delete(admission);
+      }
       const response = this.resultSchema(res.body as never);
       if (!(response instanceof type.errors)) {
         return response;
