@@ -64,6 +64,7 @@ SCRIPTS = (
     "orbis-host-sentinel-publication.py",
     "orbis-host-sentinel-auto-publication.py",
     "orbis-host-sentinel-reader.py",
+    "orbis-sentinel-install.py",
     "orbis-host-core-capture-worker.py",
     "orbis-host-core-capture-lease.py",
     "orbis-host-core-capture-reservation.py",

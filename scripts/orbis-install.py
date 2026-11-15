@@ -33,6 +33,7 @@ UI = load("orbis-install-ui.py", "orbis_guided_ui")
 CHANNELS = load("orbis-host-service.py", "orbis_guided_channels")
 BOOT = load("install-orbis.py", "orbis_guided_platform")
 PREREQUISITES = load("orbis-install-prerequisites.py", "orbis_guided_prerequisites")
+SENTINEL = load("orbis-sentinel-install.py", "orbis_guided_sentinel")
 
 
 DOCKER_INSTALL_HELP = "Install Docker Engine and the Docker Compose plugin first, then rerun this installer. For 64-bit Raspberry Pi OS or Debian: https://docs.docker.com/engine/install/debian/ ; for Ubuntu: https://docs.docker.com/engine/install/ubuntu/ . Automatic setup supports the local default Docker context on 64-bit Debian 12/13 and Ubuntu 22.04/24.04; other layouts need a separate review."
@@ -354,7 +355,18 @@ def require_helper_capabilities(status):
         raise HostServiceCompatibilityError("The host service did not confirm the required update capabilities. Repair or upgrade it before retrying; no core update was started")
 
 
-def update_existing(root, reader, target, display, *, without_host_service=False, selected_channel=None):
+def prepare_sentinel(display, state_dir):
+    state = BOOT.private_directory(state_dir or Path('/var/lib/orbis/installer'))
+    with display.step("Preparing Sentinel"):
+        return SENTINEL.prepare(state)
+
+
+def activate_sentinel(display, prepared):
+    with display.step("Enabling Sentinel"):
+        return SENTINEL.activate(prepared)
+
+
+def update_existing(root, reader, target, display, *, without_host_service=False, selected_channel=None, state_dir=None):
     upgrade = load("orbis-host-service-upgrade.py", "orbis_guided_helper_upgrade")
     current = upgrade.SERVICE.installed_manifest(root, reader.context)
     channel = upgrade.SERVICE.read_channel(root)
@@ -365,10 +377,12 @@ def update_existing(root, reader, target, display, *, without_host_service=False
         raise ValueError(f"Installed {UI.display_release(current['tag'])} is newer than this installer. Use the latest installer; no downgrade was made")
     if current["tag"] == target["tag"] and current["digest"] != target["digest"]:
         raise ValueError("The same release tag has a different digest; inspect its published identity before updating")
-    display.set_remaining_steps((2 if without_host_service else 4) + (0 if shutil.which("rsync") else 1))
+    display.set_remaining_steps((4 if without_host_service else 6) + (0 if shutil.which("rsync") else 1))
     with display.step("Verifying the Orbis release"):
         REPLACE.UPDATE.verify_release(target)
     prepare_backup_tools(display)
+    prepared_sentinel = prepare_sentinel(display, state_dir)
+    activate_sentinel(display, prepared_sentinel)
     if not without_host_service:
         with display.step("Updating the host service"):
             enable = load("orbis-host-service-enable.py", "orbis_guided_update_enable")
@@ -440,7 +454,7 @@ def main():
     parser.add_argument("--accept-nightly", action="store_true", help="acknowledge Nightly risks and follow Nightly updates")
     parser.add_argument("--channel", choices=("stable", "nightly"), help="keep following the selected release channel")
     parser.add_argument("--host-writers-stopped", action="store_true")
-    parser.add_argument("--without-host-service", action="store_true")
+    parser.add_argument("--without-host-service", action="store_true", help="skip optional host administration; Sentinel remains installed")
     parser.add_argument("--no-animation", action="store_true", help="show static installation progress")
     parser.add_argument("--no-color", action="store_true", help="disable terminal colours")
     parser.add_argument("--http-port", type=int, default=80)
@@ -454,6 +468,8 @@ def main():
         raise ValueError("This release is not available on the selected update channel")
     if channel == "nightly" and args.yes and not args.accept_nightly:
         raise ValueError("Nightly installation was not approved. Use --accept-nightly only after reviewing this warning")
+    if not args.inspect:
+        SENTINEL.require_host()
     reader = APPS.Docker(args.docker_context)
     require_docker_prerequisites(reader, state_dir=args.state_dir, accepted=args.yes, inspect_only=args.inspect, check_engine=True)
     if args.inspect:
@@ -498,7 +514,7 @@ def main():
         if selected and selected["product"] == "orbis":
             if args.mode:
                 raise ValueError("Orbis is already installed. Use Settings for resets or Updates for a core update")
-            result = update_existing(root, reader, manifest, display, without_host_service=args.without_host_service, selected_channel=channel)
+            result = update_existing(root, reader, manifest, display, without_host_service=args.without_host_service, selected_channel=channel, state_dir=args.state_dir.expanduser())
             print(json.dumps(result, indent=2))
             show_browser_address(root)
             return 0
@@ -527,7 +543,7 @@ def main():
         if new:
             args.http_port, args.https_port = new.choose_ports(root, reader, args.http_port, args.https_port, None if args.yes else ask)
         remaining = 4 if selected else 3 + len(new.IMAGES)
-        display.set_remaining_steps(remaining + (0 if args.without_host_service else 1) + (0 if shutil.which("rsync") else 1))
+        display.set_remaining_steps(remaining + 2 + (0 if args.without_host_service else 1) + (0 if shutil.which("rsync") else 1))
         enable = load("orbis-host-service-enable.py", "orbis_guided_enable")
         if not args.without_host_service:
             enable.available(root, reader.context)
@@ -544,6 +560,7 @@ def main():
                     raise RuntimeError(f"Docker could not pull the verified image; inspect the private logs in {state}")
         UI.retry_download(pull_core, None if args.yes else ask)
         enable.require_scoped_cleanup(root, reader.context, REPLACE.target_image(manifest))
+        prepared_sentinel = prepare_sentinel(display, state)
 
         def confirm(chosen):
             if selected and not args.host_writers_stopped:
@@ -554,6 +571,7 @@ def main():
                 raise ValueError("Installation cancelled; no controller was replaced")
             if not selected:
                 prepare_backup_tools(display)
+            activate_sentinel(display, prepared_sentinel)
 
         if selected:
             prepare_backup_tools(display)

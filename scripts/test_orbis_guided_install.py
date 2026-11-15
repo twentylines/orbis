@@ -127,7 +127,15 @@ class DockerPrerequisiteTests(unittest.TestCase):
             execute.assert_not_called()
 
 
-class GuidedTests(unittest.TestCase):
+class GuidedFixture(unittest.TestCase):
+    def setUp(self):
+        for target, name in ((GUIDE, 'prepare_sentinel'), (GUIDE, 'activate_sentinel'), (GUIDE.SENTINEL, 'require_host')):
+            patch = mock.patch.object(target, name)
+            patch.start()
+            self.addCleanup(patch.stop)
+
+
+class GuidedTests(GuidedFixture):
     def test_release_channel_acknowledgement_only_prompts_for_nightly_and_yes_does_not_imply_consent(self):
         ask = mock.Mock(return_value="y")
         GUIDE.acknowledge_release_channel(MANIFEST, ask=ask)
@@ -830,7 +838,7 @@ class HostEnableTests(unittest.TestCase):
         self.assertEqual(self.app.read_bytes(), b"accepted app data")
 
 
-class CompletionAddressTests(unittest.TestCase):
+class CompletionAddressTests(GuidedFixture):
     def test_default_port_quoted_values_and_custom_ipv4_ipv6_ports(self):
         for content, expected in [
             ('INTERNAL_IP="192.0.2.40"\nexport NGINX_PORT=80 # standard\n', 'http://192.0.2.40'),
@@ -892,7 +900,7 @@ class CompletionAddressTests(unittest.TestCase):
 
 
 
-class ExplicitChannelTests(unittest.TestCase):
+class ExplicitChannelTests(GuidedFixture):
     def test_32_bit_guided_entry_stops_before_manifest_or_docker_inspection(self):
         argv = ["installer", "--manifest", "/nonexistent/manifest.json", "--state-dir", "/nonexistent/state"]
         with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE.BOOT.platform, "machine", return_value="aarch64"), mock.patch.object(GUIDE.sys, "maxsize", 2**31 - 1), mock.patch.object(GUIDE, "require_docker_prerequisites"), mock.patch.object(GUIDE.APPS, "Docker") as docker, mock.patch.object(GUIDE, "prepare_backup_tools") as packages:

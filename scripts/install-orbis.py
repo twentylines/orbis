@@ -64,6 +64,8 @@ REQUIRED |= {
     "scripts/orbis-host-core-capture-namespace.py",
     "scripts/orbis-host-core-capture-abort.py", "scripts/orbis-host-core-capture-empty-abort.py", "scripts/orbis-host-core-capture-unused-abort.py",
 }
+
+REQUIRED |= {"scripts/orbis-sentinel-install.py"}
 FILE_LIMITS = {"orbis.installer-bundle.v1": 66, "orbis.installer-bundle.v2": 66,
                "orbis.installer-bundle.v3": 128, "orbis.installer-bundle.v4": 128}
 

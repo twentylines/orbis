@@ -28,6 +28,12 @@ TARGET = {**CURRENT, 'tag': 'v0.1.0-beta.77', 'commit': 'c' * 40, 'digest': 'sha
 
 
 class InstallerUpdateTests(unittest.TestCase):
+    def setUp(self):
+        for target, name in ((GUIDE, 'prepare_sentinel'), (GUIDE, 'activate_sentinel'), (GUIDE.SENTINEL, 'require_host')):
+            patch = mock.patch.object(target, name)
+            patch.start()
+            self.addCleanup(patch.stop)
+
     def test_installed_entry_updates_without_an_extra_offer_or_replacement(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder).resolve()
