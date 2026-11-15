@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { type } from 'arktype';
+import { WALLPAPER_LIMIT } from '../desktop-preferences/desktop-wallpaper-limits';
 
 /**
  * The reset journal contract and the exact preference scope.
@@ -22,6 +23,17 @@ export const resetJournalSchema = type({
 export type ResetJournal = typeof resetJournalSchema.infer;
 
 export const resetScopes = ['desktop', 'onboarding', 'theme-settings', 'theme-packs', 'wallpapers'] as const;
+
+export const RESET_PREFERENCE_FILE_LIMIT = 8 * 1024 * 1024;
+
+/** Resolve from the original target, never from a descriptor path or a staging filename. */
+export function resetPreferenceFileLimit(dataDir: string, target: string) {
+  const name = path.basename(target);
+  const account = /^([1-9][0-9]*)\.image(?:\.saved)?$/.exec(name)?.[1];
+  return path.dirname(target) === path.join(path.resolve(dataDir), 'state', 'wallpapers') && account && Number.isSafeInteger(Number(account))
+    ? WALLPAPER_LIMIT
+    : RESET_PREFERENCE_FILE_LIMIT;
+}
 
 /** Preference targets are relative to the data directory so both storage layouts derive the same list. */
 export function resetTargetNames(value: ResetJournal) {

@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { type } from 'arktype';
 import { lookupResetMount } from './reset-authority';
+import { RESET_PREFERENCE_FILE_LIMIT, resetPreferenceFileLimit } from './reset-contract';
 
 /**
  * Pinned preference erasure for reset.
@@ -28,7 +29,6 @@ import { lookupResetMount } from './reset-authority';
 export const STAGE_PREFIX = '.orbis-reset-stage-';
 const MAX_TARGETS = 4096;
 const MAX_ENTRIES = 12_000;
-const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_BINDING_BYTES = 256 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHARED_STATE_MOUNT = Symbol('verified shared state mount');
@@ -268,7 +268,7 @@ export class ResetPreferenceStore {
     return { parent, name };
   }
 
-  private async inspect(target: string, count = { value: 0 }): Promise<void> {
+  private async inspect(target: string, maxFileBytes = RESET_PREFERENCE_FILE_LIMIT, count = { value: 0 }): Promise<void> {
     const stat = await fs.lstat(target).catch((error: unknown) => {
       if (missing(error)) throw new ResetPreferenceError('identity-changed');
       throw error;
@@ -278,9 +278,9 @@ export class ResetPreferenceStore {
     if (stat.isDirectory()) {
       for (const name of await fs.readdir(target)) {
         if (!safeName(name)) throw new ResetPreferenceError('unsafe', { reason: 'staged' });
-        await this.inspect(path.join(target, name), count);
+        await this.inspect(path.join(target, name), RESET_PREFERENCE_FILE_LIMIT, count);
       }
-    } else if (!stat.isFile() || stat.nlink !== 1 || stat.size > MAX_FILE_BYTES) throw new ResetPreferenceError('unsafe', { reason: 'staged' });
+    } else if (!stat.isFile() || stat.nlink !== 1 || stat.size > maxFileBytes) throw new ResetPreferenceError('unsafe', { reason: 'staged' });
   }
 
   /**
@@ -352,6 +352,7 @@ export class ResetPreferenceStore {
           else {
             const observed = await Promise.all(
               list.map(async ({ index, name }) => {
+                const maxFileBytes = resetPreferenceFileLimit(this.dataDir, path.join(parent, name));
                 const stat = await pin.lstat(name).catch((error: unknown) => {
                   if (missing(error)) return null;
                   throw error;
@@ -360,7 +361,7 @@ export class ResetPreferenceStore {
                 if (stat.isSymbolicLink() || (this.uid !== undefined && stat.uid !== this.uid))
                   throw new ResetPreferenceError('unsafe', { reason: 'target' });
                 if (!stat.isDirectory() && !stat.isFile()) throw new ResetPreferenceError('unsafe', { reason: 'target' });
-                if (stat.isFile() && (stat.nlink !== 1 || stat.size > MAX_FILE_BYTES)) throw new ResetPreferenceError('unsafe', { reason: 'target' });
+                if (stat.isFile() && (stat.nlink !== 1 || stat.size > maxFileBytes)) throw new ResetPreferenceError('unsafe', { reason: 'target' });
                 if (stat.isDirectory()) await this.inspect(pin.child(name));
                 if (!Number.isFinite(stat.birthtimeMs) || stat.birthtimeMs <= 0)
                   throw new ResetPreferenceError('unsafe', { reason: 'generation-unavailable' });
@@ -470,7 +471,8 @@ export class ResetPreferenceStore {
         if (live.isSymbolicLink() || (this.uid !== undefined && live.uid !== this.uid))
           throw new ResetPreferenceError('unsafe', { reason: 'target' });
         if (!live.isDirectory() && !live.isFile()) throw new ResetPreferenceError('unsafe', { reason: 'target' });
-        if (live.isFile() && (live.nlink !== 1 || live.size > MAX_FILE_BYTES)) throw new ResetPreferenceError('unsafe', { reason: 'target' });
+        if (live.isFile() && (live.nlink !== 1 || live.size > resetPreferenceFileLimit(this.dataDir, path.join(group.parent, target.name))))
+          throw new ResetPreferenceError('unsafe', { reason: 'target' });
         const kind = live.isDirectory() ? 'directory' : 'file';
         if (!Number.isFinite(live.birthtimeMs) || live.birthtimeMs <= 0)
           throw new ResetPreferenceError('unsafe', { reason: 'generation-unavailable' });
@@ -500,7 +502,7 @@ export class ResetPreferenceStore {
         if (!staged) continue;
         if (staged.isSymbolicLink() || staged.dev !== target.dev || staged.ino !== target.ino || staged.birthtimeMs !== target.birthtimeMs)
           throw new ResetPreferenceError('identity-changed', { name: target.name });
-        await this.inspect(stagePin.child(target.name));
+        await this.inspect(stagePin.child(target.name), resetPreferenceFileLimit(this.dataDir, path.join(group.parent, target.name)));
         await fs.rm(stagePin.child(target.name), { recursive: true, force: false }).catch(() => {
           throw new ResetPreferenceError('unsafe', { reason: 'staged' });
         });

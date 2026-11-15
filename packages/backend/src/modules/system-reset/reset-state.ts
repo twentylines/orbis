@@ -1,7 +1,16 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { resetJournalSchema, resetTargetNames, resetTargetPath, resetTargetPaths, type ResetAccounts, type ResetJournal } from './reset-contract';
+import {
+  RESET_PREFERENCE_FILE_LIMIT,
+  resetPreferenceFileLimit,
+  resetJournalSchema,
+  resetTargetNames,
+  resetTargetPath,
+  resetTargetPaths,
+  type ResetAccounts,
+  type ResetJournal,
+} from './reset-contract';
 import {
   acquireAuthorityLease,
   authorityJournalState,
@@ -239,13 +248,13 @@ export class ResetState {
     }
   }
 
-  private async inspect(target: string, count = { value: 0 }) {
+  private async inspect(target: string, maxFileBytes = RESET_PREFERENCE_FILE_LIMIT, count = { value: 0 }) {
     const stat = await fs.lstat(target);
     if (++count.value > 12000 || stat.isSymbolicLink() || (process.getuid && stat.uid !== process.getuid()))
       throw new Error('Reset preferences need local review.');
     if (stat.isDirectory()) {
-      for (const name of await fs.readdir(target)) await this.inspect(path.join(target, name), count);
-    } else if (!stat.isFile() || stat.nlink !== 1 || stat.size > 8 * 1024 * 1024) throw new Error('Reset preferences need local review.');
+      for (const name of await fs.readdir(target)) await this.inspect(path.join(target, name), RESET_PREFERENCE_FILE_LIMIT, count);
+    } else if (!stat.isFile() || stat.nlink !== 1 || stat.size > maxFileBytes) throw new Error('Reset preferences need local review.');
   }
 
   private async legacyPreflight(value: ResetJournal) {
@@ -254,7 +263,7 @@ export class ResetState {
       const target = resetTargetPath(this.dataDir, relative);
       try {
         await this.directory(path.dirname(target));
-        await this.inspect(target);
+        await this.inspect(target, resetPreferenceFileLimit(this.dataDir, target));
       } catch (error) {
         if (!missing(error)) throw error;
       }
@@ -270,7 +279,7 @@ export class ResetState {
       const staged = path.join(staging, String(index));
       try {
         await this.directory(path.dirname(target));
-        await this.inspect(target);
+        await this.inspect(target, resetPreferenceFileLimit(this.dataDir, target));
         try {
           await fs.lstat(staged);
           throw new Error('Reset preference was recreated during recovery.');
@@ -285,8 +294,9 @@ export class ResetState {
       }
     }
     for (const name of await fs.readdir(staging)) {
-      if (!/^\d+$/.test(name) || Number(name) >= this.targets(value).length) throw new Error('Reset staging needs local review.');
-      await this.inspect(path.join(staging, name));
+      const relative = this.targets(value)[Number(name)];
+      if (!/^(0|[1-9][0-9]*)$/.test(name) || !relative) throw new Error('Reset staging needs local review.');
+      await this.inspect(path.join(staging, name), resetPreferenceFileLimit(this.dataDir, resetTargetPath(this.dataDir, relative)));
       await fs.rm(path.join(staging, name), { recursive: true });
     }
     await this.sync(staging);

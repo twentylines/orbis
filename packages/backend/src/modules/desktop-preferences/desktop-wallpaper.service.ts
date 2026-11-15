@@ -5,8 +5,9 @@ import fs from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { DesktopPreferencesService } from './desktop-preferences.service';
+import { WALLPAPER_LIMIT } from './desktop-wallpaper-limits';
 
-export const WALLPAPER_LIMIT = 32 * 1024 * 1024;
+export { WALLPAPER_LIMIT };
 const TYPES = { png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp' } as const;
 
 function metadata(data: Buffer, hash = createHash('sha256').update(data).digest('hex')) {
