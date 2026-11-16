@@ -11,7 +11,7 @@ export const timeMachineBuiltinPhotographs = {
   graphite: 'graphite-v2.webp',
   forest: 'forest-v3.webp',
   stone: 'stone-v2.webp',
-  ocean: 'ocean-v3.webp',
+  ocean: 'ocean-v4.webp',
   blush: 'blush-v4.webp',
 } as const;
 const legacy = { sandstone: 'stone', tidal: 'ocean', canopy: 'forest' } as const;

@@ -332,7 +332,7 @@ describe('dedicated journal', () => {
       return handle;
     });
     expect(await code(saveAuthorityJournal(capability, journal()))).toBe('journal-unsafe');
-    expect(await fs.readFile(replacement, 'utf8')).toBe('keep foreign staging');
+    expect(await fs.readFile(path.join(authority, path.basename(replacement)), 'utf8')).toBe('keep foreign staging');
     await expect(fs.lstat(path.join(authority, 'active.json'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
