@@ -4,7 +4,7 @@ import { isoCBOR } from '@simplewebauthn/server/helpers';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { TotpAuthenticator } from '../auth/utils/totp-authenticator';
 import { verifyRecoveryCredentials } from './authentication';
-import { readRecoveryIdentity, RecoveryIdentityError, type RecoveryIdentity } from './identity';
+import { describeRecoveryIdentity, readRecoveryIdentity, RecoveryIdentityError, type RecoveryIdentity } from './identity';
 
 const password = 'synthetic-recovery-password';
 const challenge = randomBytes(32).toString('base64url');
@@ -89,6 +89,30 @@ function passkey({
 const authenticate = (request: unknown, profile = identity()) => verifyRecoveryCredentials({ ...encoded(profile), challenge, request });
 
 describe('protected standalone recovery identity', () => {
+  it('describes exact protected identity metadata without exporting either credential secret or an authentication claim', () => {
+    const input = encoded(identity({ totpEnabled: true, totpSecret: 'JBSWY3DPEHPK3PXP', requireTotpAfterPasskey: true }));
+    const description = describeRecoveryIdentity(input.identityBytes, input.expectedIdentitySha256);
+    expect(description).toEqual({
+      schema: 'orbis.sentinel-identity-description.v1',
+      identitySha256: input.expectedIdentitySha256,
+      revision: 'd'.repeat(64),
+      accountId: 1,
+      origin,
+      totpEnabled: true,
+      requireTotpAfterPasskey: true,
+      credentials: { [credentialId]: 3 },
+    });
+    const body = JSON.stringify(description);
+    for (const secret of [enrolledHash, 'JBSWY3DPEHPK3PXP', publicKey, handle, 'verified', 'token', 'grant']) expect(body).not.toContain(secret);
+    input.identityBytes[0] = 0x20;
+    expect(() => describeRecoveryIdentity(input.identityBytes, input.expectedIdentitySha256)).toThrow(RecoveryIdentityError);
+  });
+
+  it('does not advertise passkeys from a different recovery realm', () => {
+    const input = encoded(identity({ credentials: [{ id: credentialId, publicKey, counter: 3, rpID: 'other.example' }] }));
+    expect(describeRecoveryIdentity(input.identityBytes, input.expectedIdentitySha256).credentials).toEqual({});
+  });
+
   it('binds actual identity bytes to the independently supplied protected digest', () => {
     const input = encoded();
     expect(readRecoveryIdentity(input.identityBytes, input.expectedIdentitySha256)).toEqual(identity());

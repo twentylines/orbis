@@ -16,6 +16,20 @@ export type RecoveryIdentity = {
   credentials: RecoveryCredential[];
 };
 
+export function describeRecoveryIdentity(bytes: Uint8Array, expectedSha256: string) {
+  const identity = readRecoveryIdentity(bytes, expectedSha256);
+  return {
+    schema: 'orbis.sentinel-identity-description.v1' as const,
+    identitySha256: expectedSha256,
+    revision: identity.revision,
+    accountId: identity.accountId,
+    origin: identity.realm.origin,
+    totpEnabled: identity.totpEnabled,
+    requireTotpAfterPasskey: identity.requireTotpAfterPasskey,
+    credentials: Object.fromEntries(identity.credentials.filter((key) => key.rpID === identity.realm.rpID).map((key) => [key.id, key.counter])),
+  };
+}
+
 export class RecoveryIdentityError extends Error {
   constructor() {
     super('The protected recovery identity could not be verified.');

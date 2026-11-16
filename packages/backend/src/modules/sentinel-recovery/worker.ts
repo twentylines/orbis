@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import type { BigIntStats } from 'node:fs';
 import type { FileHandle } from 'node:fs/promises';
 import { verifyRecoveryCredentials } from './authentication';
-import { RecoveryIdentityError, recoveryBase64 } from './identity';
+import { RecoveryIdentityError, recoveryBase64, describeRecoveryIdentity } from './identity';
 
 const profilePath = '/run/orbis-recovery/identity.json';
 const parents = ['/', '/run', '/run/orbis-recovery'];
@@ -22,6 +22,8 @@ export const recoveryAuthenticationCapability = Object.freeze({
 
 export function recoveryAuthenticationArguments(args: readonly string[]) {
   if (args.length === 1 && args[0] === '--capability') return { mode: 'capability' as const };
+  if (args.length === 2 && args[0] === '--describe-identity' && typeof args[1] === 'string' && /^[a-f0-9]{64}$/.test(args[1]))
+    return { mode: 'describe-identity' as const, identitySha256: args[1] };
   if (
     args.length !== 3 ||
     args[0] !== '--verify' ||
@@ -110,6 +112,8 @@ export async function runRecoveryAuthenticationWorker(args: readonly string[]) {
   const operation = recoveryAuthenticationArguments(args);
   if (operation.mode === 'capability') return recoveryAuthenticationCapability;
   if (process.platform !== 'linux' || process.getuid?.() !== 0) throw new RecoveryIdentityError();
+  if (operation.mode === 'describe-identity')
+    return withProtectedIdentity(async (identityBytes) => describeRecoveryIdentity(identityBytes, operation.identitySha256));
   const request: unknown = await readRequest();
   return withProtectedIdentity((identityBytes) =>
     verifyRecoveryCredentials({

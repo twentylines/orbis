@@ -17,6 +17,13 @@ describe('independent recovery authentication worker protocol', () => {
     });
   });
 
+  it('describes only the fixed protected profile without accepting a file path or a credential request', () => {
+    expect(recoveryAuthenticationArguments(['--describe-identity', 'a'.repeat(64)])).toEqual({
+      mode: 'describe-identity',
+      identitySha256: 'a'.repeat(64),
+    });
+  });
+
   it.each(
     [
       [],
@@ -26,6 +33,9 @@ describe('independent recovery authentication worker protocol', () => {
       ['--verify', 'A'.repeat(64), randomBytes(32).toString('base64url')],
       ['--verify', 'a'.repeat(64), randomBytes(31).toString('base64url')],
       ['--profile', '/another/file'],
+      ['--describe-identity'],
+      ['--describe-identity', 'A'.repeat(64)],
+      ['--describe-identity', 'a'.repeat(64), '/another/file'],
       ['--verify', 'a'.repeat(64), randomBytes(32).toString('base64url'), '--bypass'],
     ].map((args) => ({ args })),
   )('rejects unsupported arguments %# without printing input', ({ args }) => {

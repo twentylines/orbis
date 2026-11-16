@@ -6,7 +6,7 @@ import {
 
 let timer: ReturnType<typeof setTimeout> | undefined;
 try {
-  if (recoveryAuthenticationArguments(process.argv.slice(2)).mode === 'verify') {
+  if (recoveryAuthenticationArguments(process.argv.slice(2)).mode !== 'capability') {
     timer = setTimeout(() => {
       process.stderr.write('Recovery authentication could not be completed.\n');
       process.exit(1);
