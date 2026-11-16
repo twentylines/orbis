@@ -956,7 +956,7 @@ class RetainedRestoreTests(unittest.TestCase):
         self.begin()
         endpoint = self.base / 'host.sock'
         server = S.UnixHTTPServer(str(endpoint), S.Handler)
-        server.service = SimpleNamespace(retained_restores=lambda: self.manager)
+        server.service = SimpleNamespace(retained_restores=lambda: self.manager, restore_maintenance=lambda: self.manager.maintenance())
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.addCleanup(server.server_close)
