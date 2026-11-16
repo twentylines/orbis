@@ -48,12 +48,12 @@ export class TimeMachineController {
   @Get('points')
   list(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
     response.setHeader('Cache-Control', 'no-store');
-    return this.timeMachine.list(backupOperator(request));
+    return this.timeMachine.list(backupOperator(request), request);
   }
   @Get('points/:id')
   inspect(@Req() request: Request, @Param('id') id: string, @Res({ passthrough: true }) response: Response) {
     response.setHeader('Cache-Control', 'no-store');
-    return this.timeMachine.inspect(id, backupOperator(request));
+    return this.timeMachine.inspect(id, backupOperator(request), request);
   }
   @Get('points/:id/icons/:identity')
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
@@ -63,7 +63,7 @@ export class TimeMachineController {
     @Param('identity') identity: string,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const data = await this.timeMachine.appIcons(id, backupOperator(request), identity);
+    const data = await this.timeMachine.appIcons(id, backupOperator(request), identity, request);
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
@@ -77,7 +77,7 @@ export class TimeMachineController {
     @Param('identity') identity: string,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.timeMachine.wallpaper(id, backupOperator(request), identity);
+    const result = await this.timeMachine.wallpaper(id, backupOperator(request), identity, request);
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
@@ -115,7 +115,7 @@ export class TimeMachineController {
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   async captureCore(@Req() request: Request, @Body() body: unknown, @Res({ passthrough: true }) response: Response) {
     const owner = backupOperator(request);
-    const { label, experimentalAcknowledged, ...credentials } = object(body);
+    const { label, experimentalAcknowledged, selection, ...credentials } = object(body);
     if (Object.keys(credentials).some((key) => !['password', 'totpCode'].includes(key))) throw timeMachineConflict('invalid-request');
     const point = await this.timeMachine.captureCore(
       owner,
@@ -123,11 +123,18 @@ export class TimeMachineController {
       {
         label,
         ...(experimentalAcknowledged !== undefined ? { experimentalAcknowledged } : {}),
+        ...(selection !== undefined ? { selection } : {}),
       },
       request,
     );
     this.launchAfterResponse(point.id, owner, response);
     return point;
+  }
+  @Post('capture-review')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 6, ttl: 60_000 } })
+  captureReview(@Req() request: Request, @Body() body: unknown) {
+    return this.timeMachine.captureReview(backupOperator(request), request, body);
   }
   @Post('onboarding-captures')
   @HttpCode(202)
@@ -168,7 +175,7 @@ export class TimeMachineController {
   review(@Req() request: Request, @Param('id') id: string, @Body() body: unknown = {}) {
     const owner = backupOperator(request);
     if (Object.keys(object(body)).length) throw timeMachineConflict('invalid-request');
-    return this.timeMachine.restoreReview(id, owner);
+    return this.timeMachine.restoreReview(id, owner, request);
   }
   @Get('points/:id/restore-review')
   @Throttle({ default: { limit: 30, ttl: 60_000 } })

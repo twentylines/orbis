@@ -1,3 +1,5 @@
+import { currentSessionMorphExit } from '@/components/startup/session-morph';
+
 const logoutStorageKey = 'orbis-session-exit';
 
 export const sessionExitBootstrap = `(()=>{
@@ -31,52 +33,12 @@ export function isLoggingOff() {
   }
 }
 
-export function animateSessionExit(desktop: HTMLElement | null, reduced: boolean) {
-  const animations: Animation[] = [];
-  if (desktop && !reduced) {
-    const parts = [
-      { selector: '.desktop-system-bar', transform: 'translateY(-16px) scale(.985)', duration: 280 },
-      { selector: '.desktop-main', transform: 'translateY(18px) scale(.985)', duration: 320 },
-      { selector: '.desktop-dock', transform: 'translate(-50%, 25px) scale(.93)', duration: 360 },
-    ];
-    for (const part of parts) {
-      const element = desktop.querySelector<HTMLElement>(part.selector);
-      if (element && typeof element.animate === 'function') {
-        animations.push(
-          element.animate(
-            [
-              { opacity: 1, transform: getComputedStyle(element).transform },
-              { opacity: 0, transform: part.transform },
-            ],
-            { duration: part.duration, easing: 'cubic-bezier(.4, 0, .6, 1)', fill: 'forwards' },
-          ),
-        );
-      }
-    }
-  }
-  return {
-    finished: Promise.allSettled(animations.map((animation) => animation.finished)),
-    cancel: () => {
-      for (const animation of animations) animation.cancel();
-    },
-  };
+export function animateSessionExit(_desktop: HTMLElement | null, _reduced: boolean) {
+  return currentSessionMorphExit();
 }
 
-export function animateAuthExit(reduced: boolean) {
-  const element = document.querySelector<HTMLElement>('.desktop-auth-container');
-  const current = element ? getComputedStyle(element) : null;
-  const animation =
-    element && !reduced
-      ? element.animate(
-          [
-            { opacity: current?.opacity ?? '1', transform: current?.transform ?? 'none' },
-            { opacity: 0, transform: current?.transform ?? 'none' },
-          ],
-          { duration: 360, easing: 'cubic-bezier(.22, .7, .24, 1)', fill: 'forwards' },
-        )
-      : null;
-  if (animation) animation.id = 'orbis-auth-exit';
-  return { finished: animation?.finished.catch(() => undefined) ?? Promise.resolve(), cancel: () => animation?.cancel() };
+export function animateAuthExit(_reduced: boolean) {
+  return currentSessionMorphExit();
 }
 
 export function animateStartupExit(element: HTMLElement | null, reduced: boolean) {

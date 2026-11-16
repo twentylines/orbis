@@ -28,7 +28,7 @@ import {
 } from './task-history.js';
 import type { ContainerReading, ContainerTelemetry } from './container-telemetry.js';
 import type { DockerApp, DockerApps, DockerAppRemoval } from './docker-apps.js';
-import type { HostFilesystem, HostNetwork, HostDisk, HostTelemetry } from './host-telemetry.js';
+import type { HostBattery, HostFilesystem, HostNetwork, HostDisk, HostTelemetry } from './host-telemetry.js';
 import type { HostHistorySelection, HostHistoryDevice, HostHistoryPoint, HostDeviceHistory } from './host-device-history.js';
 import type { HostProcess, HostProcesses } from './host-processes.js';
 import type { HostSensorStatus, HostTemperature, HostFan, HostGpu, HostSensors } from './host-sensors.js';
@@ -118,6 +118,7 @@ export {
   type DockerApps,
   type DockerAppRemoval,
   type HostFilesystem,
+  type HostBattery,
   type HostNetwork,
   type HostDisk,
   type HostTelemetry,

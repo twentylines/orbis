@@ -4,7 +4,7 @@ import { appendFileSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Readable } from 'node:stream';
 import {
   backupGcmPlaintextLimit,
@@ -13,6 +13,7 @@ import {
   decryptBackup as decryptBackupFile,
   encryptBackup as encryptBackupFile,
   backupMetadataBytes,
+  inspectBackupCiphertext,
 } from './backup-crypto';
 
 function initializeDarwinInput(file: string) {
@@ -45,7 +46,62 @@ beforeEach(async () => {
   restored = path.join(directory, 'restored.tar.gz');
   await fs.writeFile(source, 'application data and saved configuration', { mode: 0o600 });
 });
-afterEach(async () => fs.rm(directory, { recursive: true, force: true }));
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await fs.rm(directory, { recursive: true, force: true });
+});
+
+it.each([0, 32, 33 * 1024 * 1024])('authenticates and hashes %i plaintext bytes without writing or returning plaintext', async (bytes) => {
+  const data = Buffer.alloc(bytes, 0x71);
+  await fs.writeFile(source, data);
+  await encryptBackup({ source, destination: archive, passphrase });
+  initializeDarwinInput(archive);
+  const readFile = vi.spyOn(fs, 'readFile');
+  const result = await inspectBackupCiphertext({ source: archive, passphrase, plaintextBytes: bytes, signal: new AbortController().signal });
+  expect(result).toEqual({ plaintextBytes: bytes, plaintextSha256: createHash('sha256').update(data).digest('hex') });
+  expect(Object.isFrozen(result)).toBe(true);
+  expect(readFile).not.toHaveBeenCalled();
+  expect((await fs.readdir(directory)).sort()).toEqual([path.basename(archive), path.basename(source)].sort());
+});
+
+it('withholds plaintext digest for a wrong key, damaged tag, truncation or declared length mismatch', async () => {
+  await encryptBackup({ source, destination: archive, passphrase });
+  initializeDarwinInput(archive);
+  const original = await fs.readFile(archive);
+  const bytes = (await fs.stat(source)).size;
+  await expect(
+    inspectBackupCiphertext({ source: archive, passphrase: 'wrong backup secret', plaintextBytes: bytes, signal: new AbortController().signal }),
+  ).rejects.toMatchObject({ code: 'invalid-archive' });
+  await expect(
+    inspectBackupCiphertext({ source: archive, passphrase, plaintextBytes: bytes + 1, signal: new AbortController().signal }),
+  ).rejects.toMatchObject({ code: 'invalid-archive' });
+  const corrupt = Buffer.from(original);
+  corrupt[corrupt.length - 1] = (corrupt.at(-1) ?? 0) ^ 1;
+  for (const data of [corrupt, original.subarray(0, original.length - 1)]) {
+    await fs.writeFile(archive, data);
+    initializeDarwinInput(archive);
+    await expect(
+      inspectBackupCiphertext({ source: archive, passphrase, plaintextBytes: bytes, signal: new AbortController().signal }),
+    ).rejects.toMatchObject({ code: 'invalid-archive' });
+  }
+});
+
+it('rejects linked or permissive ciphertext and checks cancellation without creating output', async () => {
+  await encryptBackup({ source, destination: archive, passphrase });
+  initializeDarwinInput(archive);
+  const options = { source: archive, passphrase, plaintextBytes: (await fs.stat(source)).size, signal: new AbortController().signal };
+  await fs.link(archive, path.join(directory, 'linked'));
+  await expect(inspectBackupCiphertext(options)).rejects.toThrow();
+  await fs.unlink(path.join(directory, 'linked'));
+  await fs.chmod(archive, 0o644);
+  await expect(inspectBackupCiphertext(options)).rejects.toThrow();
+  await fs.chmod(archive, 0o600);
+  const abort = new AbortController();
+  abort.abort();
+  await expect(inspectBackupCiphertext({ ...options, signal: abort.signal })).rejects.toMatchObject({ code: 'cancelled' });
+  await expect(inspectBackupCiphertext({ ...options, plaintextBytes: backupGcmPlaintextLimit + 1 })).rejects.toThrow();
+  expect((await fs.readdir(directory)).length).toBe(2);
+});
 
 it.each([0, 128, 4 * 1024 * 1024])('round-trips %i bytes without changing data and reports measured progress', async (size) => {
   const data = randomBytes(size);

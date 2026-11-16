@@ -22,7 +22,7 @@ export const presetWallpaperSources: Record<ThemePreset, string> = {
   graphite: '/wallpapers/graphite-v2.webp',
   forest: '/wallpapers/forest-v3.webp',
   stone: '/wallpapers/stone-v2.webp',
-  ocean: '/wallpapers/ocean-v3.webp',
+  ocean: '/wallpapers/ocean-v4.webp',
   blush: '/wallpapers/blush-v4.webp',
 };
 export const presetWallpaperPreviews = Object.fromEntries(

@@ -10,7 +10,8 @@ import { Providers } from './components/providers/providers';
 import { FallbackSurface } from './components/error/error-page';
 import { ConfirmationDialog } from './desktop/confirmation';
 import { StartupBoundary, useStartupReady } from './components/startup/startup-boundary';
-import { appearanceBootstrap } from './desktop/appearance-cache';
+import { appearanceBootstrap, readCachedAppearance } from './desktop/appearance-cache';
+import { resolveColourMode, readSystemColourMode } from './desktop/colour-mode';
 import { sessionExitBootstrap } from './desktop/session-motion';
 import { coreUpdateIsPending } from './desktop/host-update-watch';
 import { claimPreloadRetry } from './components/startup/preload-retry';
@@ -24,9 +25,11 @@ import { themeApplyHandoffBootstrap, themeApplyPrepaintCss } from './modules/the
 
 export const links: Route.LinksFunction = () => [
   { rel: 'preload', href: '/fonts/source-sans-3-variable.woff2', as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' },
+  { rel: 'preload', href: '/startup/interstellar-v1.webp', as: 'image', type: 'image/webp' },
   { rel: 'stylesheet', href: stylesheet },
-  { rel: 'icon', type: 'image/svg+xml', href: '/icons/orbis.svg' },
-  { rel: 'manifest', href: '/icons/site.webmanifest' },
+  { rel: 'icon', type: 'image/svg+xml', href: '/icons/orbis.svg?v=c1eb491eafa0' },
+  { rel: 'apple-touch-icon', sizes: '180x180', href: '/icons/apple-touch-icon.png?v=c1eb491eafa0' },
+  { rel: 'manifest', href: '/icons/site.webmanifest?v=c1eb491eafa0' },
 ];
 
 let navigationRecoveryChecked = false;
@@ -82,6 +85,8 @@ export function HydrateFallback() {
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const bootAppearance = typeof window === 'undefined' ? null : readCachedAppearance();
+  const appearanceRoot = typeof document === 'undefined' ? null : document.documentElement;
   useEffect(() => {
     const handlePreloadError = (event: Event) => {
       if (coreUpdateIsPending()) {
@@ -105,17 +110,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      data-desktop-preset={appearanceRoot?.dataset.desktopPreset ?? bootAppearance?.preset}
+      data-desktop-mode={
+        appearanceRoot?.dataset.desktopMode ??
+        (bootAppearance ? resolveColourMode(bootAppearance.mode, readSystemColourMode() === 'dark') : undefined)
+      }
+    >
       <head>
         <meta charSet="UTF-8" />
         <title>Orbis</title>
+        <style data-orbis-boot-background>{'html{background:#05080e}'}</style>
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Static code validates and consumes only a bounded same-tab operation marker. */}
         <script data-orbis-operation-boot dangerouslySetInnerHTML={{ __html: operationPrepaintBootstrap }} />
         <style data-orbis-theme-reload>{themeApplyPrepaintCss}</style>
+        {/* Function serialization varies by build target; retain the prepaint scripts that already ran. */}
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Static code validates only a bounded public theme identity and timestamp. */}
-        <script data-orbis-theme-reload dangerouslySetInnerHTML={{ __html: themeApplyHandoffBootstrap }} />
+        <script data-orbis-theme-reload suppressHydrationWarning dangerouslySetInnerHTML={{ __html: themeApplyHandoffBootstrap }} />
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Only static code and a fixed allowlist enter this script. */}
-        <script data-orbis-appearance dangerouslySetInnerHTML={{ __html: appearanceBootstrap }} />
+        <script data-orbis-appearance suppressHydrationWarning dangerouslySetInnerHTML={{ __html: appearanceBootstrap }} />
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Static code reads only a timestamp from this tab's session storage. */}
         <script data-orbis-session dangerouslySetInnerHTML={{ __html: sessionExitBootstrap }} />
         <script src="/js/tabler.min.js" async />

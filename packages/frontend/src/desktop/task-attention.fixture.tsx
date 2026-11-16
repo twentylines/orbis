@@ -1,5 +1,5 @@
 import { expect, mock } from 'bun:test';
-import { act, useLayoutEffect, type ReactNode } from 'react';
+import { act, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
 import { taskAttentionKey, type TaskRecord } from '@runtipi/common/schemas/task-history';
 
 const scenario = process.argv[2];
@@ -24,15 +24,39 @@ const win = {
   location: { origin: 'https://tasks.example.test' },
 };
 doc.defaultView = win;
-Object.assign(globalThis, { window: win, document: doc, IS_REACT_ACT_ENVIRONMENT: true });
+Object.assign(globalThis, {
+  window: win,
+  document: doc,
+  IS_REACT_ACT_ENVIRONMENT: true,
+  ResizeObserver: class {
+    observe = () => undefined;
+    disconnect = () => undefined;
+  },
+});
 type View = { label: string; title: string; state?: string; count: number | null; alert: boolean };
 let link!: { onClick: () => void };
 let badge: { count: number; alert: boolean } | null = null;
 const views: View[] = [];
 mock.module('react-router', () => ({
   useLocation: () => ({ pathname: taskPage ? '/tasks' : '/dashboard' }),
-  Link: (props: { children: ReactNode; onClick: () => void; title: string; 'aria-label': string; 'data-attention-state'?: string }) => {
-    link = props;
+  Link: ({ children }: { children: ReactNode }) => children,
+}));
+const dialog = await import('@radix-ui/react-dialog');
+let changeOpen!: (open: boolean) => void;
+mock.module('@radix-ui/react-dialog', () => ({
+  ...dialog,
+  Root: ({ children, onOpenChange }: { children: ReactNode; onOpenChange: (open: boolean) => void }) => {
+    changeOpen = onOpenChange;
+    return children;
+  },
+  Trigger: ({
+    children,
+  }: {
+    children: ReactElement<{ children: ReactNode; title: string; 'aria-label': string; 'data-attention-state'?: string }>;
+  }) => {
+    expect(children.type).toBe('button');
+    const props = children.props;
+    link = { onClick: () => changeOpen(true) };
     useLayoutEffect(() => {
       views.push({
         label: props['aria-label'],
@@ -44,6 +68,7 @@ mock.module('react-router', () => ({
     });
     return props.children;
   },
+  Portal: () => null,
 }));
 mock.module('framer-motion', () => ({
   animate: () => ({ stop: () => undefined }),

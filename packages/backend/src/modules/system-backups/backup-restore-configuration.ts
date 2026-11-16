@@ -102,15 +102,36 @@ function sourceSettings(value: unknown) {
   return parsed;
 }
 
-export function rebaseBackupConfiguration(options: {
+type RebaseOptions = {
   targetEnvironment: string;
   databaseName: string;
   recovery: { jwtSecret: string; userSettings: unknown };
-}) {
+};
+
+export function rebaseBackupConfiguration(options: RebaseOptions) {
+  return rebase(options, false);
+}
+
+export function rebaseCoreTargetConfiguration(options: RebaseOptions) {
+  return rebase(options, true);
+}
+
+function rebase(options: RebaseOptions, core: boolean) {
   try {
     const { encoded, decoded } = environment(options.targetEnvironment);
-    if (!/^orbis_restore_[a-f0-9]{32}$/.test(options.databaseName) || options.databaseName === decoded.POSTGRES_DBNAME) throw failed();
-    if (typeof options.recovery.jwtSecret !== 'string' || !options.recovery.jwtSecret || options.recovery.jwtSecret.length > 4096) throw failed();
+    const validDatabase = core
+      ? typeof options.databaseName === 'string' &&
+        /^[A-Za-z_][A-Za-z0-9_]{0,62}$/.test(options.databaseName) &&
+        !['postgres', 'template0', 'template1'].includes(options.databaseName.toLowerCase())
+      : /^orbis_restore_[a-f0-9]{32}$/.test(options.databaseName);
+    if (!validDatabase || options.databaseName === decoded.POSTGRES_DBNAME) throw failed();
+    if (
+      typeof options.recovery.jwtSecret !== 'string' ||
+      options.recovery.jwtSecret.length < (core ? 32 : 1) ||
+      options.recovery.jwtSecret.length > 4096
+    )
+      throw failed();
+    if (core && (!decoded.APPS_REPO_URL || !decoded.APPS_REPO_ID)) throw failed();
     for (const field of [
       'POSTGRES_HOST',
       'POSTGRES_DBNAME',
@@ -128,7 +149,7 @@ export function rebaseBackupConfiguration(options: {
     if (!['amd64', 'arm64'].includes(decoded.ARCHITECTURE as string)) throw failed();
     for (const field of ['ROOT_FOLDER_HOST', 'RUNTIPI_APP_DATA_PATH']) if (!decoded[field]?.startsWith('/')) throw failed();
     const source = sourceSettings(options.recovery.userSettings);
-    const repositoryMigrated = source.appsRepoUrl === 'https://github.com/meienberger/runtipi-appstore';
+    const repositoryMigrated = !core && source.appsRepoUrl === 'https://github.com/meienberger/runtipi-appstore';
     if (repositoryMigrated) source.appsRepoUrl = DEFAULT_REPO_URL;
     const boolean = (key: string, fallback: boolean) => {
       if (decoded[key] === undefined) return fallback;
@@ -172,11 +193,11 @@ export function rebaseBackupConfiguration(options: {
     const settings = { ...target };
     const restored: (keyof typeof portable)[] = [];
     for (const key of Object.keys(portable) as (keyof typeof portable)[]) {
-      const value = source[key] ?? target[key];
+      const value = core && key === 'appsRepoUrl' ? target[key] : (source[key] ?? target[key]);
       if (value === undefined) throw failed();
       Object.assign(settings, { [key]: value });
-      encoded.set(portable[key], encode(portable[key], String(value)));
-      if (source[key] !== undefined) restored.push(key);
+      if (!core || key !== 'appsRepoUrl') encoded.set(portable[key], encode(portable[key], String(value)));
+      if (source[key] !== undefined && (!core || key !== 'appsRepoUrl')) restored.push(key);
     }
     // Startup writes settings values back without quoting. Refuse any value it would reinterpret.
     for (const [key, field] of Object.entries(generatedSettings)) {
@@ -184,27 +205,31 @@ export function rebaseBackupConfiguration(options: {
       if (unsafe(value) || value.includes('$') || (value && dotenv.parse(`${field}=${value}`)[field] !== value)) throw failed();
     }
     if (settings.appDataPath?.endsWith('/app-data')) throw failed();
-    encoded.set(
-      'APPS_REPO_ID',
-      encode(
+    if (!core)
+      encoded.set(
         'APPS_REPO_ID',
-        createHash('sha256')
-          .update(settings.appsRepoUrl as string)
-          .digest('hex'),
-      ),
-    );
+        encode(
+          'APPS_REPO_ID',
+          createHash('sha256')
+            .update(settings.appsRepoUrl as string)
+            .digest('hex'),
+        ),
+      );
     encoded.set('POSTGRES_DBNAME', encode('POSTGRES_DBNAME', options.databaseName));
     encoded.set('JWT_SECRET', encode('JWT_SECRET', options.recovery.jwtSecret));
     const output = `${Array.from(encoded, ([key, value]) => `${key}=${value}`).join('\n')}\n`;
     const actual = environment(output).decoded;
     if (Buffer.byteLength(output) > limit) throw failed();
+    const changed = core
+      ? ['JWT_SECRET', 'POSTGRES_DBNAME', ...Object.values(portable).filter((field) => field !== 'APPS_REPO_URL')]
+      : ['JWT_SECRET', 'POSTGRES_DBNAME', 'APPS_REPO_ID', ...Object.values(portable)];
     for (const [key, value] of Object.entries(decoded)) {
-      if (!['JWT_SECRET', 'POSTGRES_DBNAME', 'APPS_REPO_ID', ...Object.values(portable)].includes(key) && actual[key] !== value) throw failed();
+      if (!changed.includes(key) && actual[key] !== value) throw failed();
     }
     return {
       environment: output,
       settings: `${JSON.stringify(settings)}\n`,
-      review: { restored, preserved: [...preserved], repositoryMigrated },
+      review: { restored, preserved: core ? [...preserved, 'appsRepoUrl'] : [...preserved], repositoryMigrated },
     };
   } catch {
     throw failed();

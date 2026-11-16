@@ -1,38 +1,31 @@
 import { SourceRestoreRequests } from '@/modules/host-transfer/source-restore-requests';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { IconActivity, IconArrowUpRight, IconCheck, IconClock, IconAlertTriangle } from '@tabler/icons-react';
 import { useTasks, taskLabels, taskStates, taskIsActive } from '@/desktop/tasks';
-import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
-import { useQuery } from '@tanstack/react-query';
 import type { TaskRecord } from '@runtipi/common/schemas';
 import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { useTimeMachineActivity } from '@/modules/time-machine/use-time-machine-activity';
 import { TimeMachineCaptureProgress } from '@/modules/time-machine/capture-progress';
 import { useAppContext } from '@/context/app-context';
-import { dismissSetupFailureTask, mergeSetupCaptureTasks, setupFailureTasks, type SetupFailureTask } from '@/components/welcome/setup-capture-task';
+import { isSetupFailureTask, useTaskCentreRecords } from '@/desktop/task-centre-records';
+import { useSystemTaskActivity } from '@/desktop/use-system-task-activity';
+import { SystemTaskActivitySection } from '@/desktop/system-task-activity-view';
 import './tasks.css';
 
 export default function Tasks() {
   const { user } = useAppContext();
   const tasks = useTasks();
   const captures = useTimeMachineActivity();
-  const apps = useQuery(getInstalledAppsOptions());
   const [filter, setFilter] = useState('all');
-  const [setupFailureState, setSetupFailureState] = useState(() => ({ ownerId: user.id, tasks: setupFailureTasks(user.id) }));
   const [params, setParams] = useSearchParams();
-  useEffect(() => {
-    const refreshSetupFailures = () => setSetupFailureState({ ownerId: user.id, tasks: setupFailureTasks(user.id) });
-    refreshSetupFailures();
-    window.addEventListener('storage', refreshSetupFailures);
-    return () => window.removeEventListener('storage', refreshSetupFailures);
-  }, [user.id]);
   const requestedApp = params.get('app');
   const appScope = requestedApp && requestedApp.length <= 180 && /^[^:]+:[^:]+$/.test(requestedApp) ? requestedApp : null;
+  const systemActivity = useSystemTaskActivity(!appScope, 'page');
   const serverRecords = tasks.data?.tasks ?? [];
-  const setupFailures = setupFailureState.ownerId === user.id ? setupFailureState.tasks : setupFailureTasks(user.id);
-  const records = mergeSetupCaptureTasks(serverRecords, setupFailures).filter((task) => !appScope || task.appUrn === appScope);
-  const names = new Map(apps.data?.installed.map(({ info }) => [info.urn, info.name]));
+  const centre = useTaskCentreRecords(serverRecords, user.id);
+  const records = centre.records.filter((task) => !appScope || task.appUrn === appScope);
+  const { names } = centre;
   const active = records.filter(taskIsActive);
   const activeCount = active.length + (!appScope && captures.activity ? 1 : 0);
   const review = records.filter((task) => ['failed', 'interrupted', 'unconfirmed'].includes(task.status));
@@ -82,9 +75,15 @@ export default function Tasks() {
         <div>
           <h2>
             {tasks.data
-              ? activeCount
-                ? `${activeCount} operation${activeCount === 1 ? '' : 's'} in progress`
-                : 'No operations in progress'
+              ? !appScope && systemActivity.records.some((record) => record.bucket === 'active')
+                ? 'Operations in progress'
+                : activeCount
+                  ? `${activeCount} operation${activeCount === 1 ? '' : 's'} in progress`
+                  : !appScope && systemActivity.loading
+                    ? 'Reading system activity'
+                    : !appScope && systemActivity.incomplete
+                      ? 'Some activity is unavailable'
+                      : 'No operations in progress'
               : tasks.isError
                 ? 'Operation history unavailable'
                 : 'Reading operations'}
@@ -129,7 +128,11 @@ export default function Tasks() {
         <span>{tasks.data ? `Checked ${new Date(tasks.data.sampledAt).toLocaleTimeString()}` : 'Loading history'}</span>
       </div>
       {tasks.isPending ? <p>Loading operations…</p> : null}
-      {!tasks.isPending && !visible.length && (appScope || !captures.activity || !['all', 'active'].includes(filter)) ? (
+      {appScope ? null : <SystemTaskActivitySection activity={systemActivity} filter={filter} />}
+      {!tasks.isPending &&
+      !visible.length &&
+      (appScope || (!systemActivity.loading && !systemActivity.incomplete && !systemActivity.records.length)) &&
+      (appScope || !captures.activity || !['all', 'active'].includes(filter)) ? (
         <div className="task-empty">
           <IconClock size={32} stroke={1.4} aria-hidden="true" />
           <h2>{filter === 'all' ? 'No recorded operations' : 'No matching operations'}</h2>
@@ -223,8 +226,7 @@ export default function Tasks() {
                         className="btn btn-outline"
                         aria-label={`Dismiss ${preferenceFailure ? 'Time Machine preference' : 'Time Machine setup capture'} failure`}
                         onClick={() => {
-                          if (dismissSetupFailureTask(user.id, setupFailure.id))
-                            setSetupFailureState({ ownerId: user.id, tasks: setupFailureTasks(user.id) });
+                          centre.dismiss(setupFailure.id);
                         }}
                       >
                         Dismiss
@@ -239,8 +241,4 @@ export default function Tasks() {
       </ol>
     </div>
   );
-}
-
-function isSetupFailureTask(task: TaskRecord | SetupFailureTask): task is SetupFailureTask {
-  return 'setupFailureOutcome' in task;
 }

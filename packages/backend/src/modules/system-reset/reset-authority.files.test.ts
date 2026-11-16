@@ -2,7 +2,9 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResetState, type ResetJournal } from './reset-state';
 import {
   MAX_MOUNTINFO_BYTES,
@@ -16,7 +18,7 @@ import {
   saveAuthorityJournal,
 } from './reset-authority';
 
-const journal = (overrides: Partial<ResetJournal> = {}): ResetJournal => ({
+const journal = (overrides: Partial<Extract<ResetJournal, { version: 1 }>> = {}): ResetJournal => ({
   version: 1,
   id: randomUUID(),
   controller: os.hostname(),
@@ -40,6 +42,7 @@ beforeEach(async () => {
   legacy = path.join(root, 'state/orbis-reset');
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
   await fs.rm(root, { recursive: true, force: true });
 });
 
@@ -78,6 +81,46 @@ describe('mount table parsing', () => {
 });
 
 describe('authority selection', () => {
+  const record = (target: string, backing: string, options = 'rw', id = 36) =>
+    `${id} 35 98:0 ${backing} ${target} ${options},relatime - ext4 /dev/sda1 rw`;
+
+  it.each(['/protected', '/protected/reset', '/protected/reset/nested'])(
+    'rejects a writable bind exposing backing scope %s before writing any journal',
+    async (backing) => {
+      await fs.mkdir(authority, { mode: 0o700 });
+      const mounts = mountTable(record(authority, '/protected/reset'), record('/other-writer', backing, 'rw', 37));
+      expect(await code(resolveResetAuthority({ dataDir: root, readMounts: read(mounts) }))).toBe('authority-unsafe');
+      expect(await fs.readdir(authority)).toEqual([]);
+    },
+  );
+
+  it('allows a read-only alias and a distinct sibling backing scope', async () => {
+    await fs.mkdir(authority, { mode: 0o700 });
+    const mounts = mountTable(
+      record(authority, '/protected/reset'),
+      record('/reader', '/protected', 'ro', 37),
+      record('/sibling', '/protected/reset-other', 'rw', 38),
+    );
+    const capability = await resolveResetAuthority({ dataDir: root, readMounts: read(mounts) });
+    if (capability.mode !== 'dedicated') throw new Error('Expected mounted authority');
+    const value = journal();
+    await saveAuthorityJournal(capability, value);
+    expect(await readAuthorityJournal(capability)).toEqual(value);
+  });
+
+  it.each(['rw', 'ro'])('rejects a %s nested mount that could hide part of the authority', async (access) => {
+    await fs.mkdir(authority, { mode: 0o700 });
+    const mounts = mountTable(record(authority, '/protected/reset'), record(`${authority}/active.json`, '/foreign/file', access, 37));
+    expect(await code(resolveResetAuthority({ dataDir: root, readMounts: read(mounts) }))).toBe('authority-unsafe');
+  });
+
+  it('rejects a read-only authority mount', async () => {
+    await fs.mkdir(authority, { mode: 0o700 });
+    expect(await code(resolveResetAuthority({ dataDir: root, readMounts: read(mountTable(record(authority, '/protected/reset', 'ro'))) }))).toBe(
+      'authority-unsafe',
+    );
+  });
+
   it('keeps the strict legacy layout when no dedicated mount exists and never creates the directory', async () => {
     const resolved = await resolveResetAuthority({
       dataDir: root,
@@ -206,6 +249,97 @@ describe('authority selection', () => {
 describe('dedicated journal', () => {
   beforeEach(async () => {
     await fs.mkdir(authority, { mode: 0o700 });
+  });
+
+  it.each(['mount-id', 'backing-root', 'device', 'source'])(
+    'rejects %s drift behind an admitted authority before reading, writing or taking a lease',
+    async (kind) => {
+      let mounts = mountTable(line(authority));
+      const capability = await resolveResetAuthority({ dataDir: root, readMounts: async () => mounts });
+      if (capability.mode !== 'dedicated') throw new Error('Expected mounted authority');
+      mounts = mountTable(
+        line(authority).replace(
+          kind === 'mount-id' ? '36 35' : kind === 'backing-root' ? '98:0 / ' : kind === 'device' ? '98:0' : '/dev/sda1',
+          kind === 'mount-id' ? '37 35' : kind === 'backing-root' ? '98:0 /replacement ' : kind === 'device' ? '99:0' : '/dev/sdb1',
+        ),
+      );
+      for (const operation of [
+        () => readAuthorityJournal(capability),
+        () => saveAuthorityJournal(capability, journal()),
+        () => acquireAuthorityLease(capability),
+      ])
+        expect(await code(operation())).toBe('authority-unsafe');
+      expect(await fs.readdir(authority)).toEqual([]);
+    },
+  );
+
+  it('refuses a replaced private root while preserving the prior journal and replacement contents', async () => {
+    const capability = await dedicated();
+    const saved = journal();
+    await saveAuthorityJournal(capability, saved);
+    await fs.rename(authority, `${authority}-original`);
+    await fs.mkdir(authority, { mode: 0o700 });
+    await fs.writeFile(path.join(authority, 'canary'), 'keep replacement', { mode: 0o600 });
+    expect(await code(saveAuthorityJournal(capability, journal()))).toBe('authority-unsafe');
+    expect(await fs.readFile(path.join(authority, 'canary'), 'utf8')).toBe('keep replacement');
+    expect(JSON.parse(await fs.readFile(path.join(`${authority}-original`, 'active.json'), 'utf8'))).toEqual(saved);
+  });
+
+  it('withholds journal publication after mount identity changes during its staged write', async () => {
+    let mounts = mountTable(line(authority));
+    const capability = await resolveResetAuthority({ dataDir: root, readMounts: async () => mounts });
+    if (capability.mode !== 'dedicated') throw new Error('Expected mounted authority');
+    const open = fs.open.bind(fs);
+    vi.spyOn(fs, 'open').mockImplementation(async (...args) => {
+      const handle = await open(...args);
+      if (String(args[0]).includes('/.journal-')) mounts = mountTable(line(authority).replace('36 35', '37 35'));
+      return handle;
+    });
+    expect(await code(saveAuthorityJournal(capability, journal()))).toBe('authority-unsafe');
+    expect(await fs.readdir(authority)).toEqual([]);
+  });
+
+  it('preserves a held lock when a writable alias appears before release', async () => {
+    let mounts = mountTable(line(authority));
+    const capability = await resolveResetAuthority({ dataDir: root, readMounts: async () => mounts });
+    if (capability.mode !== 'dedicated') throw new Error('Expected mounted authority');
+    const release = await acquireAuthorityLease(capability);
+    mounts = mountTable(line(authority), line('/other-writer'));
+    expect(await code(release())).toBe('authority-unsafe');
+    expect((await fs.lstat(path.join(authority, 'operation.lock'))).isFile()).toBe(true);
+  });
+
+  it('keeps an orphan lock from being reported as an absent journal', async () => {
+    const capability = await dedicated();
+    const release = await acquireAuthorityLease(capability);
+    expect(await code(authorityJournalState(capability))).toBe('journal-unsafe');
+    expect(await code(readAuthorityJournal(capability))).toBe('journal-unsafe');
+    await release();
+    expect(await authorityJournalState(capability)).toEqual({ journal: null, state: 'absent' });
+  });
+
+  it('preserves a foreign replacement for its unpublished journal staging file', async () => {
+    const capability = await dedicated();
+    const open = fs.open.bind(fs);
+    let replacement = '';
+    vi.spyOn(fs, 'open').mockImplementation(async (...args) => {
+      const handle = await open(...args);
+      if (String(args[0]).includes('/.journal-')) {
+        replacement = String(args[0]);
+        await fs.unlink(replacement);
+        await fs.writeFile(replacement, 'keep foreign staging', { mode: 0o600 });
+      }
+      return handle;
+    });
+    expect(await code(saveAuthorityJournal(capability, journal()))).toBe('journal-unsafe');
+    expect(await fs.readFile(replacement, 'utf8')).toBe('keep foreign staging');
+    await expect(fs.lstat(path.join(authority, 'active.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it.each(['active.json', 'operation.lock'])('rejects a non-regular %s without blocking on a FIFO', async (name) => {
+    const capability = await dedicated();
+    await promisify(execFile)('mkfifo', ['-m', '600', path.join(authority, name)]);
+    expect(await code(authorityJournalState(capability))).toBe('journal-unsafe');
   });
 
   it('rejects unverified private directories and rechecks a resolved mount before writes', async () => {

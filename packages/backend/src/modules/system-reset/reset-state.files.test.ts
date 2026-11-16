@@ -2,12 +2,13 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ResetAuthorityError } from './reset-authority';
-import { STAGE_PREFIX } from './reset-preference-store';
+import { ResetPreferenceStore, STAGE_PREFIX } from './reset-preference-store';
+import { archiveBackedResetJournal } from './reset-contract';
 import { ResetState, type ResetJournal, type ResetStateOptions } from './reset-state';
 
-const journal = (overrides: Partial<ResetJournal> = {}): ResetJournal => ({
+const journal = (overrides: Partial<Extract<ResetJournal, { version: 1 }>> = {}): ResetJournal => ({
   version: 1,
   id: randomUUID(),
   controller: os.hostname(),
@@ -17,7 +18,8 @@ const journal = (overrides: Partial<ResetJournal> = {}): ResetJournal => ({
   createdAt: Date.now(),
   ...overrides,
 });
-const mountLine = (mount: string, fsType = 'ext4', source = '/dev/sda1') => `36 35 98:0 / ${mount} rw,relatime - ${fsType} ${source} rw`;
+const mountLine = (mount: string, fsType = 'ext4', source = '/dev/sda1') =>
+  `${mount === authority ? 37 : 36} 35 98:0 ${mount === authority ? '/protected-reset' : '/application-data'} ${mount} rw,relatime - ${fsType} ${source} rw`;
 const mountTable = (...lines: string[]) => `${lines.join('\n')}\n`;
 const authorityCode = (promise: Promise<unknown>) =>
   promise.then(
@@ -38,6 +40,7 @@ beforeEach(async () => {
   mounts = mountTable(mountLine(root));
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
   await fs.rm(root, { recursive: true, force: true });
 });
 
@@ -198,6 +201,71 @@ it('refuses to stage preferences before this journal is durable in the authority
   await expect(dedicatedState.erasePreferences(pending)).rejects.toThrow('Reset storage needs local review');
   await dedicatedState.save(journal());
   await expect(dedicatedState.erasePreferences(pending)).rejects.toThrow('Reset storage needs local review');
+  expect(await fs.readFile(target, 'utf8')).toBe('old preference');
+  expect(await stages(path.dirname(target))).toEqual([]);
+});
+
+it.each(['mount', 'root', 'unmounted', 'journal', 'complete', 'version'])(
+  'retains staged preferences when the admitted %s changes after the first move',
+  async (change) => {
+    const pending = journal();
+    const first = await file('state/desktop/7.json');
+    const kept = await file('state/desktop/8.json');
+    const next = await file('state/wallpapers/7.image');
+    let moved = 0;
+    const selected = await dedicated({
+      rename: async (from, to) => {
+        await fs.rename(from, to);
+        if (++moved !== 1) return;
+        if (change === 'mount') mounts = mounts.replace('37 35 98:0', '38 35 98:0');
+        else if (change === 'unmounted') mounts = mountTable(mountLine(root));
+        else if (change === 'root') {
+          await fs.rename(authority, `${authority}-retained`);
+          await fs.mkdir(authority, { mode: 0o700 });
+        } else {
+          let changed: unknown = change === 'complete' ? { ...pending, phase: 'complete' } : { ...pending, id: randomUUID() };
+          if (change === 'version') {
+            if (pending.version !== 1) throw new Error('Legacy fixture required');
+            changed = archiveBackedResetJournal(pending, {
+              format: 'orbis-reset-safety-commitment',
+              version: 1,
+              resetId: pending.id,
+              backupId: randomUUID(),
+              accounts: pending.accounts,
+              users: pending.users,
+              selectionSha256: 'a'.repeat(64),
+              fullScopeSha256: 'b'.repeat(64),
+              exportInventorySha256: 'c'.repeat(64),
+              targetInventorySha256: 'd'.repeat(64),
+              sha256: 'e'.repeat(64),
+              bytes: 1024,
+            });
+          }
+          await fs.writeFile(path.join(authority, 'active.json'), JSON.stringify(changed), { mode: 0o600 });
+        }
+      },
+    });
+    await selected.save(pending);
+    await expect(selected.erasePreferences(pending)).rejects.toThrow('Reset storage needs local review');
+    expect(moved).toBe(1);
+    await expect(fs.lstat(first)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await fs.readFile(path.join(path.dirname(first), `${STAGE_PREFIX}${pending.id}`, '7.json'), 'utf8')).toBe('old preference');
+    expect(await fs.readFile(kept, 'utf8')).toBe('old preference');
+    expect(await fs.readFile(next, 'utf8')).toBe('old preference');
+    if (change === 'root') expect(await fs.readdir(authority)).toEqual([]);
+  },
+);
+
+it('withholds preflight readiness if the authority changes as the preference plan returns', async () => {
+  const selected = await dedicated();
+  const target = await file('state/desktop/7.json');
+  const original = ResetPreferenceStore.prototype.preflight;
+  vi.spyOn(ResetPreferenceStore.prototype, 'preflight').mockImplementation(async function (this: ResetPreferenceStore, ...args) {
+    const plan = await original.apply(this, args);
+    mounts = mounts.replace('37 35 98:0', '38 35 98:0');
+    return plan;
+  });
+  await expect(selected.preflight(journal())).rejects.toMatchObject({ code: 'authority-unsafe' });
   expect(await fs.readFile(target, 'utf8')).toBe('old preference');
   expect(await stages(path.dirname(target))).toEqual([]);
 });

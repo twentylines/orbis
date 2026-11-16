@@ -1,8 +1,111 @@
 .orbis-logo {
+  --orbis-logo-colour: var(--orbis-logo-accent, color-mix(in srgb, var(--desktop-accent, #8cb9a7) 65%, white));
+  --orbis-logo-light: color-mix(in srgb, var(--orbis-logo-colour) 28%, white);
   display: block;
   flex: none;
   width: var(--orbis-logo-size);
   height: var(--orbis-logo-size);
   aspect-ratio: 1;
   overflow: visible;
+}
+.orbis-logo[data-plain="true"] {
+  --orbis-logo-colour: var(--orbis-logo-accent, var(--desktop-accent, #8cb9a7));
+}
+.orbis-logo-galaxy,
+.orbis-logo-core,
+.orbis-logo-stars {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+}
+.orbis-logo[data-animated="true"] .orbis-logo-dot-group {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: orbis-galaxy-gather 940ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.orbis-logo[data-progress] .orbis-logo-dot-group {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: none;
+  transition:
+    transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 320ms ease;
+}
+@keyframes orbis-galaxy-gather {
+  from {
+    transform: rotate(var(--orbis-dot-turn)) scale(var(--orbis-dot-scale));
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.65;
+  }
+  to {
+    transform: translate(0, 0) rotate(0);
+    opacity: 1;
+  }
+}
+.orbis-logo[data-animated="true"] .orbis-logo-galaxy {
+  animation: orbis-galaxy-arrive 920ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.orbis-logo[data-animated="true"] .orbis-logo-arm {
+  stroke-dasharray: 1;
+  animation: orbis-galaxy-draw 800ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.orbis-logo[data-animated="true"] .orbis-logo-arm:nth-child(2) {
+  animation-delay: 60ms;
+}
+.orbis-logo[data-animated="true"] .orbis-logo-arm:nth-child(3) {
+  animation-delay: 120ms;
+}
+.orbis-logo[data-animated="true"] :is(.orbis-logo-core, .orbis-logo-stars) {
+  animation: orbis-galaxy-core 700ms 180ms ease-out both;
+}
+@keyframes orbis-galaxy-arrive {
+  from {
+    transform: rotate(-28deg) scale(0.84);
+  }
+  to {
+    transform: rotate(0) scale(1);
+  }
+}
+@keyframes orbis-galaxy-draw {
+  from {
+    stroke-dashoffset: 1;
+    opacity: 0.35;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+@keyframes orbis-galaxy-core {
+  from {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbis-logo[data-animated="true"] :is(.orbis-logo-galaxy, .orbis-logo-arm, .orbis-logo-core, .orbis-logo-stars, .orbis-logo-dot-group) {
+    animation: none;
+  }
+  .orbis-logo[data-progress] .orbis-logo-dot-group {
+    transition: none;
+  }
+}
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"]) .orbis-logo[data-progress] .orbis-logo-dot-group {
+  transition: none;
+}
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"])
+  .orbis-logo[data-animated="true"]
+  :is(.orbis-logo-galaxy, .orbis-logo-arm, .orbis-logo-core, .orbis-logo-stars, .orbis-logo-dot-group) {
+  animation: none;
+}
+@media (forced-colors: active) {
+  .orbis-logo :is(circle, ellipse, path) {
+    fill: none;
+    stroke: CanvasText;
+  }
 }

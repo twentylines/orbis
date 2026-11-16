@@ -1,4 +1,5 @@
 import { type } from 'arktype';
+import { digestCapturedPreview } from './historical-preview-task';
 import {
   timeMachineIdSchema,
   timeMachineHashSchema,
@@ -6,6 +7,8 @@ import {
   timeMachinePreferencesSchema,
   timeMachinePreferencesUpdateSchema,
   timeMachineCaptureSchema,
+  timeMachineCaptureReviewSchema,
+  type TimeMachineCaptureSelection,
   type TimeMachinePoint,
 } from '@runtipi/common/schemas/time-machine';
 import {
@@ -85,6 +88,8 @@ const issueMessages: Record<string, string> = {
   'activation-not-integrated': 'Restoring a Time Machine point is not available on this server.',
   'host-capture-support-required':
     'Update and verify the Orbis host service with controller configuration capture support before creating this restore point.',
+  'capture-selection-conflict':
+    'Selected app storage changed, overlaps excluded storage or has another writer. Review the storage choices. Omitted apps were not stopped.',
   'proxy-layout-migration-required':
     'The proxy storage layout needs migration before a capture can begin. Existing server data and HTTPS identity were preserved.',
 };
@@ -186,10 +191,25 @@ export async function readTimeMachine(signal: AbortSignal): Promise<TimeMachineS
     list,
   };
 }
-export async function captureTimeMachine(label: string, credentials: Partial<BackupCredentials>, signal: AbortSignal) {
-  const body = { label };
+export async function captureTimeMachine(
+  label: string,
+  credentials: Partial<BackupCredentials>,
+  signal: AbortSignal,
+  selection?: TimeMachineCaptureSelection,
+) {
+  const body = { label, ...(selection ? { selection } : {}) };
   if (!timeMachineCaptureSchema.allows(body)) throw new Error('Review the capture name before continuing.');
   return parseTimeMachine(pointSchema, await request('/core-captures', 'POST', { ...body, ...credentials }, signal));
+}
+export async function reviewTimeMachineCapture(appUrns: string[], signal: AbortSignal) {
+  if (
+    appUrns.length < 1 ||
+    appUrns.length > 512 ||
+    new Set(appUrns).size !== appUrns.length ||
+    appUrns.some((urn) => !/^[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+$/.test(urn))
+  )
+    throw new Error('Choose installed Docker apps to review.');
+  return parseTimeMachine(timeMachineCaptureReviewSchema, await request('/capture-review', 'POST', { appUrns }, signal));
 }
 export async function readOnboardingCapture(attemptId: string, signal: AbortSignal) {
   if (!timeMachineIdSchema.allows(attemptId)) throw new Error('The setup capture receipt could not be verified.');
@@ -326,11 +346,7 @@ export async function readHistoricalWallpaper(point: TimeMachinePoint, signal: A
   if (response.headers.get('Content-Type')?.split(';')[0] !== asset.mime) throw new Error('The historical wallpaper type changed.');
   const bytes = await boundedBody(response, asset.bytes);
   if (bytes.length !== asset.bytes) throw new Error('The historical wallpaper was incomplete.');
-  if (globalThis.crypto?.subtle) {
-    const digest = await crypto.subtle.digest('SHA-256', bytes.buffer);
-    const identity = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
-    if (identity !== asset.identity) throw new Error('The captured wallpaper could not be verified.');
-  }
+  if ((await digestCapturedPreview(bytes, signal)) !== asset.identity) throw new Error('The captured wallpaper could not be verified.');
   signal.throwIfAborted();
   return new Blob([bytes.buffer], { type: asset.mime });
 }

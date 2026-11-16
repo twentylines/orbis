@@ -43,6 +43,31 @@ class BundleTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 BUILD.build({key: data for key, data in self.files.items() if key != name}, self.release_bytes)
 
+    def test_current_restore_dependencies_are_required_in_both_bundle_types(self):
+        names = {'scripts/orbis-host-core-pg-profiles.py', 'scripts/orbis-host-core-clean-target-reconcile.py'}
+        self.assertTrue(names <= BUILD.REQUIRED)
+        manifest = BOOT.verify_manifest(self.assets[BUILD.MANIFEST], self.identity)
+        self.assertTrue(names <= set(manifest['files']))
+        for name in names:
+            missing = {key: data for key, data in self.files.items() if key != name}
+            with self.subTest(name=name, kind='release'), self.assertRaises(ValueError):
+                BUILD.build(missing, self.release_bytes)
+            with self.subTest(name=name, kind='independent'), self.assertRaises(ValueError):
+                BUILD.build_installer(missing, 'c' * 40)
+
+    def test_restoration_review_bridge_is_required_without_changing_legacy_requirements(self):
+        names = {'scripts/orbis-host-core-restoration-review.py', 'scripts/orbis-host-core-reconciliation-service.py',
+                 'scripts/orbis-host-core-preparation-service.py', 'scripts/orbis-host-core-local-inspection-service.py'}
+        self.assertTrue(names <= BUILD.REQUIRED & BOOT.REQUIRED)
+        self.assertFalse(names & BUILD.LEGACY_REQUIRED)
+        self.assertFalse(names & BOOT.LEGACY_REQUIRED)
+        for name in names:
+            missing = {key: value for key, value in self.files.items() if key != name}
+            with self.subTest(name=name, kind='release'), self.assertRaises(ValueError):
+                BUILD.build(missing, self.release_bytes)
+            with self.subTest(name=name, kind='independent'), self.assertRaises(ValueError):
+                BUILD.build_installer(missing, 'c' * 40)
+
     def test_reset_authority_is_required_by_release_and_independent_installer_bundles(self):
         name = 'scripts/orbis-reset-authority.py'
         self.assertIn(name, BUILD.REQUIRED & BOOT.REQUIRED)

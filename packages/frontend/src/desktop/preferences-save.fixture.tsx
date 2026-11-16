@@ -1,7 +1,8 @@
 import { expect, mock } from 'bun:test';
 import { PreferenceSession } from './preference-save-queue';
 import { usePreferenceNameDraft } from './preference-name-draft';
-import { act } from 'react';
+import { act, useState } from 'react';
+import { useWorkspaceSortable } from './workspace-sortable';
 const events = new EventTarget();
 const documentEvents = new EventTarget();
 // React mounts its real provider/hooks; the null-output host does not model browser layout.
@@ -125,11 +126,25 @@ const client = (id: string) => {
   return current;
 };
 let nameDraft: ReturnType<typeof usePreferenceNameDraft>;
+let sortable: ReturnType<typeof useWorkspaceSortable<string>>;
+const sortCommits: string[][] = [];
+function SortableProbe() {
+  const [items, setItems] = useState(['first', 'second', 'third']);
+  sortable = useWorkspaceSortable(
+    items,
+    (next) => {
+      sortCommits.push(next);
+      setItems(next);
+    },
+    true,
+  );
+  return null;
+}
 function Probe({ id = 'main' }: { id?: string }) {
   controls = (refreshedPreferences?.useDesktopPreferences ?? useDesktopPreferences)();
   clients.set(id, controls);
   nameDraft = usePreferenceNameDraft(controls.preferences.serverName);
-  return null;
+  return process.argv[2]?.startsWith('workspace-sort-') ? <SortableProbe /> : null;
 }
 type RequestRecord = { url: string; method: string; body: string; signal: AbortSignal | null | undefined; generation: string | null };
 const requests: RequestRecord[] = [];
@@ -137,6 +152,7 @@ let server = structuredClone(defaultDesktopPreferences);
 let onboardingComplete =
   !process.argv[2]?.startsWith('onboarding-capture-') && process.argv[2] !== 'provider-composition' && process.argv[2] !== 'two-clients-onboarding';
 let generation: string | null = null;
+let layoutCapability = ['workspace-capable-backend', 'workspace-capability-downgrade'].includes(process.argv[2] ?? '');
 let intercept: ((r: RequestRecord) => Promise<Response> | undefined) | undefined;
 Object.assign(globalThis, {
   fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -159,7 +175,12 @@ Object.assign(globalThis, {
       if (generation && r.generation !== generation) return new Response('', { status: 409 });
       server = JSON.parse(r.body);
     }
-    return Response.json(server, { headers: { 'X-Orbis-Reset-Generation': generation ?? 'none' } });
+    return Response.json(server, {
+      headers: {
+        'X-Orbis-Reset-Generation': generation ?? 'none',
+        ...(layoutCapability ? { 'X-Orbis-Preference-Capabilities': 'workspace-layout-v1 toolbar-order-v1' } : {}),
+      },
+    });
   },
 });
 const deferred = () => {
@@ -216,6 +237,174 @@ const switchSession = async () => {
   });
 };
 const scenarios: Record<string, () => Promise<void>> = {
+  'workspace-sort-keyboard': async () => {
+    const key = async (key: string) =>
+      act(async () => {
+        sortable.gripProps('first', 'First').onKeyDown({
+          key,
+          preventDefault() {
+            return undefined;
+          },
+        } as never);
+      });
+    await key(' ');
+    await key('ArrowDown');
+    expect(sortable.order).toEqual(['second', 'first', 'third']);
+    expect(sortCommits).toHaveLength(0);
+    await key('Escape');
+    expect(sortable.order).toEqual(['first', 'second', 'third']);
+    expect(sortCommits).toHaveLength(0);
+    await key(' ');
+    await key('End');
+    await key('Enter');
+    expect(sortable.order).toEqual(['second', 'third', 'first']);
+    expect(sortCommits).toEqual([['second', 'third', 'first']]);
+  },
+  'workspace-sort-pointer': async () => {
+    const frames = new Map<number, FrameRequestCallback>();
+    let frameId = 0;
+    Object.assign(globalThis, {
+      requestAnimationFrame: (fn: FrameRequestCallback) => {
+        frames.set(++frameId, fn);
+        return frameId;
+      },
+      cancelAnimationFrame: (id: number) => frames.delete(id),
+    });
+    Object.assign(win, {
+      innerHeight: 600,
+      scrollBy() {
+        return undefined;
+      },
+    });
+    let captured = false;
+    const capture = {
+      setPointerCapture() {
+        captured = true;
+      },
+      hasPointerCapture() {
+        return captured;
+      },
+      releasePointerCapture() {
+        captured = false;
+      },
+    };
+    const nodes = new Map<string, HTMLElement>();
+    for (const id of sortable.order) {
+      const props = sortable.itemProps(id);
+      const style: Record<string, unknown> = {
+        removeProperty(key: string) {
+          delete style[key];
+        },
+        setProperty(key: string, value: string) {
+          style[key] = value;
+        },
+      };
+      const node = {
+        style,
+        dataset: { sortableGroup: props['data-sortable-group'], sortableId: id },
+        parentElement: capture,
+        getBoundingClientRect: () => ({ left: 0, right: 200, top: sortable.order.indexOf(id) * 100, bottom: sortable.order.indexOf(id) * 100 + 90 }),
+        closest() {
+          return node;
+        },
+      } as unknown as HTMLElement;
+      nodes.set(id, node);
+      props.ref(node);
+    }
+    Object.assign(doc, { elementFromPoint: () => nodes.get('second') });
+    const target = {
+      setPointerCapture() {
+        return undefined;
+      },
+    };
+    await act(async () => {
+      sortable.gripProps('first', 'First').onPointerDown({ button: 0, pointerId: 1, clientX: 50, clientY: 20, currentTarget: target } as never);
+    });
+    await act(async () => {
+      window.dispatchEvent(Object.assign(new Event('pointermove', { cancelable: true }), { pointerId: 1, clientX: 50, clientY: 120 }));
+    });
+    expect(captured).toBe(true);
+    if (process.argv[2] === 'workspace-sort-fast-pointer') {
+      expect(sortable.order).toEqual(['first', 'second', 'third']);
+      expect(frames.size).toBe(1);
+    } else {
+      const frame = frames.values().next().value;
+      if (!frame) throw new Error('Missing active drag frame');
+      frames.clear();
+      await act(async () => {
+        frame(16);
+      });
+      expect(sortable.order).toEqual(['first', 'second', 'third']);
+      expect(sortable.itemProps('second')['data-sortable-over']).toBe(true);
+      for (let tick = 0; tick < 3; tick++) {
+        const next = frames.values().next().value;
+        if (!next) throw new Error('Missing steady drag frame');
+        frames.clear();
+        await act(async () => next(32 + tick * 16));
+        expect(sortable.order).toEqual(['first', 'second', 'third']);
+      }
+      expect(captured).toBe(true);
+    }
+    expect(sortCommits).toHaveLength(0);
+    await act(async () => {
+      window.dispatchEvent(Object.assign(new Event('pointerup'), { pointerId: 1, clientX: 50, clientY: 120 }));
+    });
+    expect(sortCommits).toEqual([['second', 'first', 'third']]);
+    expect(captured).toBe(false);
+    expect(frames.size).toBe(0);
+    expect(nodes.get('first')?.style.translate).toBeUndefined();
+  },
+
+  'workspace-sort-fast-pointer': async () => {
+    await scenarios['workspace-sort-pointer']?.();
+  },
+
+  'workspace-capability-downgrade': async () => {
+    expect(controls.workspaceCapabilities).toEqual({ toolbarOrder: true, workspaceLayout: true });
+    layoutCapability = false;
+    server = structuredClone(defaultDesktopPreferences);
+    await act(async () => {
+      window.dispatchEvent(new Event('orbis-desktop-preferences-changed'));
+    });
+    expect(controls.workspaceCapabilities).toEqual({ toolbarOrder: false, workspaceLayout: false });
+    await act(async () => {
+      await controls.commit({ serverName: 'Downgraded server' });
+    });
+    const payload = JSON.parse(puts().at(-1)?.body ?? '{}');
+    expect(payload).not.toHaveProperty('toolbarOrder');
+    expect(payload.workspace).not.toHaveProperty('layout');
+  },
+  'workspace-old-backend': async () => {
+    expect(controls.workspaceCapabilities).toEqual({ toolbarOrder: false, workspaceLayout: false });
+    await act(async () => {
+      await controls.commit({ serverName: 'Old server compatible' });
+    });
+    const payload = JSON.parse(puts().at(-1)?.body ?? '{}');
+    expect(payload).not.toHaveProperty('toolbarOrder');
+    expect(payload.workspace).not.toHaveProperty('layout');
+    expect(server.serverName).toBe('Old server compatible');
+  },
+  'workspace-capable-backend': async () => {
+    expect(controls.workspaceCapabilities).toEqual({ toolbarOrder: true, workspaceLayout: true });
+    const toolbarOrder = ['search', 'mode', 'tasks', 'battery', 'logout', 'connection'] as const;
+    const workspace = {
+      ...controls.preferences.workspace,
+      layout: { version: 1 as const, appView: 'icons' as const, widgets: { activity: { columns: 3 as const, height: 480 } } },
+    };
+    await act(async () => {
+      await controls.commit({ toolbarOrder: [...toolbarOrder], workspace });
+    });
+    expect(JSON.parse(puts().at(-1)?.body ?? '{}')).toMatchObject({ toolbarOrder: [...toolbarOrder], workspace });
+    expect(controls.preferences.workspace.layout).toEqual(workspace.layout);
+    await act(async () => {
+      controls.update({ toolbarOrder: [...toolbarOrder].reverse() });
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    expect(JSON.parse(puts().at(-1)?.body ?? '{}').toolbarOrder).toEqual([...toolbarOrder].reverse());
+  },
+
   'two-clients-onboarding': async () => {
     expect(client('first').requiresOnboarding).toBe(true);
     expect(client('second').requiresOnboarding).toBe(true);

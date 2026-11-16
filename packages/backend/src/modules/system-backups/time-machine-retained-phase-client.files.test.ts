@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import * as hostConfig from '../host-updates/host-controller-config';
-import { RetainedPhaseClient } from './time-machine-retained-phase-client';
+import { callProtectedRetainedRoot, RetainedPhaseClient } from './time-machine-retained-phase-client';
 import { runAuthenticatedRetainedPhase } from './time-machine-retained-phase-bridge';
 import { BackupRestoreJournal } from './backup-restore-journal';
 import { BackupDirectorySwap } from './backup-directory-swap';
@@ -142,6 +142,45 @@ async function fixture() {
     },
   };
 }
+it.each([
+  '/v1/core-bootstrap-source-inspection/prepare',
+  '/v1/core-bootstrap-source-inspection/approve',
+  '/v1/core-restore-runtime/wait',
+  '/v1/core-clean-target-preparation/wait',
+  '/v1/core-clean-target-reconciliation/wait',
+])('permits bounded long background waits only for %s', async (route) => {
+  const test = await fixture();
+  try {
+    await expect(
+      callProtectedRetainedRoot('/run/orbis/host.sock', route, {}, new AbortController().signal, 32768, 200, 1_900_000),
+    ).resolves.toBeTruthy();
+  } finally {
+    await test.close();
+  }
+});
+it.each([
+  ['/v1/core-restore-runtime/status', 'POST'],
+  ['/v1/core-clean-target-preparation/status', 'POST'],
+  ['/v1/core-clean-target-reconciliation/prepare', 'POST'],
+  ['/v1/core-clean-target-reconciliation/wait', 'GET'],
+  ['/v1/core-restore-runtime/wait', 'GET'],
+  ['/v1/core-restore-runtime/wait?retry=true', 'POST'],
+  ['/v1/core-bootstrap-source-inspection/prepare/', 'POST'],
+  ['/v1/retained-restore/phase', 'POST'],
+] as const)('rejects a longer timeout for unrelated or altered route %s %s before transport', async (route, method) => {
+  const identity = vi.spyOn(hostConfig, 'controllerCaptureSocketIdentity');
+  await expect(
+    callProtectedRetainedRoot('/run/orbis/host.sock', route, {}, new AbortController().signal, 32768, 200, 900_001, method),
+  ).rejects.toThrow();
+  expect(identity).not.toHaveBeenCalled();
+});
+it('rejects waits beyond the closed upper bound before transport', async () => {
+  const identity = vi.spyOn(hostConfig, 'controllerCaptureSocketIdentity');
+  await expect(
+    callProtectedRetainedRoot('/run/orbis/host.sock', '/v1/core-restore-runtime/wait', {}, new AbortController().signal, 32768, 200, 1_900_001),
+  ).rejects.toThrow();
+  expect(identity).not.toHaveBeenCalled();
+});
 it('redeems a single fixed phase and completes exactly once without serializing its capability', async () => {
   const test = await fixture();
   try {

@@ -20,8 +20,10 @@ export const pointSchema = type({
   issue: timeMachineIssueSchema.or('null'),
   backupJobId: timeMachineIdSchema.or('null'),
   metadata: timeMachineMetadataSchema.or('null'),
+  'captureBinding?': type({ version: '1', corePointId: timeMachineIdSchema, componentsPointId: timeMachineIdSchema }).onUndeclaredKey('reject'),
 })
   .onUndeclaredKey('reject')
+  .narrow((point) => !point.captureBinding || point.captureBinding.componentsPointId === point.id)
   .narrow((point) =>
     point.status === 'sealed'
       ? point.metadata !== null && point.metadata.id === point.id && point.metadata.createdAt === point.createdAt

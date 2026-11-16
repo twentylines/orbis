@@ -73,6 +73,7 @@ ENV ORBIS_VERSION=${ORBIS_VERSION}
 ENV ORBIS_COMMIT=${ORBIS_COMMIT}
 LABEL io.orbis.installation-protocol="orbis.installation-state.v1"
 LABEL io.orbis.network-prune-scope="orbis.managed"
+LABEL io.orbis.core-restore-runtime="orbis.core-restore-release.v1"
 
 WORKDIR /app
 
@@ -97,6 +98,13 @@ EXPOSE 3000
 
 RUN mv main.js main.mjs && mv restore-worker.js restore-worker.mjs && mv retained-worker-capability.js retained-worker-capability.mjs && \
     mv core-capture-publication.js core-capture-publication.mjs && mv core-capture-seal.js core-capture-seal.mjs && \
-    mv core-capture-catalog.js core-capture-catalog.mjs && mv core-capture-image-inventory.js core-capture-image-inventory.mjs
+    mv core-capture-catalog.js core-capture-catalog.mjs && mv components-capture-catalog.js components-capture-catalog.mjs && \
+    mv core-capture-image-inventory.js core-capture-image-inventory.mjs && \
+    mv core-portable-worker.js core-portable-worker.mjs && mv core-inspection-worker.js core-inspection-worker.mjs && \
+    mv core-source-configuration-worker.js core-source-configuration-worker.mjs && \
+    mv core-clean-target-worker.js core-clean-target-worker.mjs && \
+    mv core-clean-target-bootstrap-worker.js core-clean-target-bootstrap-worker.mjs && \
+    mv core-restoration-worker.js core-restoration-worker.mjs && \
+    mv core-live-reconciliation-worker.js core-live-reconciliation-worker.mjs
 
 CMD ["node", "./main.mjs"]

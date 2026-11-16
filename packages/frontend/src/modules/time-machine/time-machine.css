@@ -783,8 +783,12 @@
   justify-items: center;
   gap: 18px;
   width: min(100%, 46rem);
-  margin: clamp(24px, 6vh, 56px) auto;
+  margin: clamp(20px, 3vh, 32px) auto;
   text-align: center;
+}
+.tm-disabled-setup-icon {
+  color: var(--desktop-accent);
+  flex: none;
 }
 
 .tm-disabled-setup-copy {
@@ -800,16 +804,27 @@
 .tm-disabled-setup-copy h4 {
   margin: 0;
   color: var(--desktop-ink);
+  font-size: clamp(1.5rem, 3cqi, 2rem);
 }
 
 .tm-disabled-capture-list {
   display: grid;
   gap: 10px;
-  width: fit-content;
+  width: 100%;
   max-width: 100%;
   margin: 0 auto;
-  padding-inline-start: 1.4rem;
+  padding: 0;
+  list-style: none;
   text-align: start;
+}
+.tm-disabled-capture-list li {
+  display: grid;
+  gap: 4px;
+  padding-block: 8px;
+  line-height: 1.5;
+}
+.tm-disabled-capture-list span {
+  color: var(--desktop-muted);
 }
 
 .tm-activation-status {

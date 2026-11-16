@@ -1,3 +1,4 @@
+import { packageRestartRequired, packageUpdateLimit, selectedPackageNames, startPackageUpdate } from '../package-updates';
 import { UpdateDownloadProgress } from '@/components/recovery-progress/update-download-progress';
 import type { DownloadProgress } from '@/desktop/download-progress';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
@@ -8,7 +9,7 @@ import { InstalledVersions } from '@/components/installed-versions/installed-ver
 import { OrbisReleaseNotes } from './orbis-release-notes';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
 import { useAppContext } from '@/context/app-context';
-import { IconAlertTriangle, IconArrowRight, IconBrandGithub, IconPackage, IconRefresh, IconServerCog } from '@tabler/icons-react';
+import { IconAlertTriangle, IconArrowRight, IconBrandGithub, IconPackage, IconRefresh, IconServerCog, IconSettings } from '@tabler/icons-react';
 import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -31,6 +32,7 @@ import { installedOrbisBuildOptions, orbisReleaseErrorMessage, orbisReleasesOpti
 import { useReviewExpired } from '@/desktop/use-review-expired';
 import { orbisReleaseChannelsOptions, releaseChannelErrorMessage } from '@/desktop/release-channels';
 import { formatOrbisVersion } from '@/desktop/orbis-version';
+import { SentinelStatus } from './sentinel-status';
 
 type HostJob = {
   id: string;
@@ -97,13 +99,6 @@ type HostPackageChangelog = {
   body?: string;
   truncated?: boolean;
   reason?: string;
-};
-type HostPackagePlan = {
-  planId: string;
-  createdAt: number;
-  expiresAt?: number;
-  selected: HostPackage[];
-  operations: Array<{ name: string; installedVersion: string | null; candidateVersion: string; action: 'install' | 'upgrade' }>;
 };
 type HostPackageJob = {
   id: string;
@@ -227,17 +222,21 @@ function LocalUpdates() {
   const [packageSearch, setPackageSearch] = useState('');
   const [showAllPackages, setShowAllPackages] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
-  const [selectedPackages, setSelectedPackages] = useState<string[]>([]);
-  const [reviewPackagePlan, setReviewPackagePlan] = useState<HostPackagePlan | null>(null);
-  const packageReviewIntent = useRef(0);
-  const packageReviewButton = useRef<HTMLButtonElement>(null);
-  const packageSelectionKey = useMemo(() => [...selectedPackages].sort().join('\0'), [selectedPackages]);
-  const previousPackageSelection = useRef(packageSelectionKey);
-  const packageReviewExpired = useReviewExpired(reviewPackagePlan?.expiresAt === undefined ? undefined : reviewPackagePlan.expiresAt * 1000);
-  const closePackageReview = () => {
-    packageReviewIntent.current += 1;
-    setReviewPackagePlan(null);
-  };
+  const systemPackages = useQuery({
+    queryKey: ['orbis-host-packages'],
+    queryFn: ({ signal }) => hostRequest<HostPackageInventory>('packages', undefined, signal),
+    enabled: visible && user?.operator === true,
+    staleTime: 60_000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const [chosenPackages, setSelectedPackages] = useState<string[] | null>(null);
+  const selectedPackages = useMemo(
+    () => selectedPackageNames(systemPackages.data?.packages ?? [], chosenPackages),
+    [systemPackages.data?.packages, chosenPackages],
+  );
+  const [packageRequestStage, setPackageRequestStage] = useState<'checking' | 'starting'>('checking');
   const lastReviewScope = useRef({ section, entry });
   useLayoutEffect(() => {
     const previous = lastReviewScope.current;
@@ -245,20 +244,12 @@ function LocalUpdates() {
       lastReviewScope.current = { section, entry };
       setCoreReview(null);
       setRestartPlan(null);
-      setReviewPackagePlan(null);
     }
     return () => {
       coreReviewIntent.current += 1;
       restartReviewIntent.current += 1;
-      packageReviewIntent.current += 1;
     };
   }, [section, entry]);
-  useLayoutEffect(() => {
-    if (previousPackageSelection.current === packageSelectionKey) return;
-    previousPackageSelection.current = packageSelectionKey;
-    packageReviewIntent.current += 1;
-    setReviewPackagePlan(null);
-  }, [packageSelectionKey]);
   const lastRefreshedCoreJob = useRef<string | null>(null);
   const lastRefreshedPackageJob = useRef<string | null>(null);
   const apps = useQuery({
@@ -296,15 +287,6 @@ function LocalUpdates() {
     refetchInterval: (query) => (['running', 'recovering'].includes(query.state.data?.job?.state ?? '') ? 4000 : 30_000),
     retry: 1,
   });
-  const systemPackages = useQuery({
-    queryKey: ['orbis-host-packages'],
-    queryFn: ({ signal }) => hostRequest<HostPackageInventory>('packages', undefined, signal),
-    enabled: visible && user?.operator === true,
-    staleTime: 60_000,
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: false,
-    retry: false,
-  });
   const packageChangelog = useQuery({
     queryKey: ['orbis-host-package-changelog', selectedPackage],
     queryFn: ({ signal }) =>
@@ -333,8 +315,7 @@ function LocalUpdates() {
     mutationFn: () => hostRequest<{ jobId: string; state: string }>('packages/refresh', {}),
     retry: false,
     onMutate: () => {
-      setReviewPackagePlan(null);
-      setSelectedPackages([]);
+      setSelectedPackages(null);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['orbis-host-package-job'] }),
   });
@@ -349,28 +330,25 @@ function LocalUpdates() {
       previous.control.focus();
     }
   }, [section, refreshPackages.isPending, refreshPackages.isError, reviewRestart.isPending, reviewRestart.isError]);
-  const planPackages = useMutation({
+  const installPackages = useMutation({
     meta: { invalidates: false },
-    mutationFn: (names: string[]) => hostRequest<HostPackagePlan>('packages/plan', { names }),
-    onMutate: () => ({ intent: ++packageReviewIntent.current }),
-    onSuccess: (result, _variables, context) => {
-      if (context?.intent === packageReviewIntent.current) {
-        applyPackages.reset();
-        setReviewPackagePlan(result);
-      }
+    mutationFn: (names: string[]) => {
+      const inventory = systemPackages.data?.packages ?? [];
+      const selected = names.map((name) => inventory.find((item) => item.name === name));
+      if (selected.some((item) => !item)) throw new Error('The package list changed. Check for updates before trying again.');
+      return startPackageUpdate(selected as HostPackage[], hostRequest, setPackageRequestStage);
     },
     retry: false,
-  });
-  const applyPackages = useMutation({
-    mutationFn: (planId: string) => hostRequest<{ jobId: string; state: string }>('packages/apply', { planId }),
-    retry: false,
-    onSuccess: () => {
-      setReviewPackagePlan(null);
-      setSelectedPackages([]);
-      void packageJob.refetch();
+    onSuccess: async (result) => {
+      await queryClient.cancelQueries({ queryKey: ['orbis-host-package-job'] });
+      queryClient.setQueryData<HostPackageJobStatus>(['orbis-host-package-job'], {
+        available: true,
+        job: { id: result.jobId, state: result.state, createdAt: Date.now() / 1000 },
+      });
+      setSelectedPackages(null);
     },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['orbis-host-package-job'] }),
   });
-  const packageNeedsReview = packageReviewExpired || applyPackages.isError || planPackages.isError;
   const reviewCore = useMutation({
     meta: { invalidates: false },
     mutationKey: ['orbis-compatibility', 'update', user.id, build.data?.version ?? ''],
@@ -466,6 +444,7 @@ function LocalUpdates() {
   const packageJobNeedsInspection = !failedRefresh && (packageJobState === 'failed' || packageJobState === 'interrupted');
   const packageControlsBlocked =
     refreshPackages.isPending ||
+    installPackages.isPending ||
     packageJob.isPending ||
     packageJob.isError ||
     packageJobBusy ||
@@ -473,14 +452,26 @@ function LocalUpdates() {
     jobBusy ||
     job?.state === 'interrupted';
   const refreshSupported = host.data?.capabilities?.includes('packages.refresh.v1') === true;
+  const packageUpdateBlocked =
+    packageControlsBlocked ||
+    host.isError ||
+    !host.data?.available ||
+    !host.data.enrolled ||
+    !host.data.imageMatches ||
+    host.data.coreHealth !== 'healthy' ||
+    host.data.coreState !== 'running' ||
+    !packageJob.data?.available ||
+    !systemPackages.data?.available;
   const missingHostFeatures = host.data?.available
     ? [refreshSupported ? null : 'checking for system updates', host.data.capabilities?.includes('restart.v1') ? null : 'server restarts'].filter(
         (feature): feature is string => feature !== null,
       )
     : [];
   const matchingSelection =
-    matchingPackages.length > 0 && matchingPackages.length <= 250 && matchingPackages.every((item) => selectedPackages.includes(item.name));
-  const matchingSelectionExceedsLimit = new Set([...selectedPackages, ...matchingPackages.map((item) => item.name)]).size > 250;
+    matchingPackages.length > 0 &&
+    matchingPackages.length <= packageUpdateLimit &&
+    matchingPackages.every((item) => selectedPackages.includes(item.name));
+  const matchingSelectionExceedsLimit = new Set([...selectedPackages, ...matchingPackages.map((item) => item.name)]).size > packageUpdateLimit;
   useEffect(() => {
     if (job?.state === 'complete' && job.id !== lastRefreshedCoreJob.current) {
       lastRefreshedCoreJob.current = job.id;
@@ -492,8 +483,9 @@ function LocalUpdates() {
     if (completedId && completedId !== lastRefreshedPackageJob.current) {
       lastRefreshedPackageJob.current = completedId;
       void systemPackages.refetch();
+      void queryClient.invalidateQueries({ queryKey: serverRestartQueryKey });
     }
-  }, [packageJob.data?.job?.id, packageJobState, systemPackages.refetch]);
+  }, [packageJob.data?.job?.id, packageJobState, systemPackages.refetch, queryClient]);
 
   return (
     <div className="desktop-updates">
@@ -550,8 +542,8 @@ function LocalUpdates() {
             </button>
           ))}
         </SelectionGroup>
-        <Link className="desktop-update-link" to="/settings?tab=updates">
-          Settings
+        <Link className="desktop-updates-settings" to="/settings?tab=updates" aria-label="Update settings" title="Update settings">
+          <IconSettings size={20} aria-hidden="true" />
         </Link>
       </div>
       <div className="desktop-updates-grid">
@@ -804,6 +796,7 @@ function LocalUpdates() {
                   </>
                 ) : null}
               </div>
+              <SentinelStatus active={visible && section === 'orbis'} />
             </aside>
           </div>
           {user?.operator !== true ? <p className="desktop-update-note">Sign in with an administrator account to update Orbis.</p> : null}
@@ -887,8 +880,7 @@ function LocalUpdates() {
                     host.data.coreHealth !== 'healthy' ||
                     host.data.coreState !== 'running' ||
                     packageControlsBlocked ||
-                    planPackages.isPending ||
-                    applyPackages.isPending ||
+                    installPackages.isPending ||
                     reviewRestart.isPending ||
                     applyRestart.isPending ||
                     coreWatchIsActive(watch)
@@ -906,28 +898,30 @@ function LocalUpdates() {
                     {refreshPackages.isPending || (packageJobBusy && packageJob.data?.job?.kind === 'refresh') ? 'Checking…' : 'Check for updates'}
                   </span>
                 </button>
-                <button
-                  type="button"
-                  className="desktop-update-action"
-                  aria-describedby={missingHostFeatures.length ? `${tabsId}-host-help` : undefined}
-                  disabled={
-                    !restart?.available ||
-                    restartError ||
-                    reviewRestart.isPending ||
-                    applyRestart.isPending ||
-                    restart.job?.state === 'restarting' ||
-                    packageControlsBlocked ||
-                    coreWatchIsActive(watch)
-                  }
-                  onClick={(event) => {
-                    systemActionFocus.current =
-                      document.activeElement === event.currentTarget ? { control: event.currentTarget, kind: 'restart' } : null;
-                    restartReviewButton.current = event.currentTarget;
-                    reviewRestart.mutate();
-                  }}
-                >
-                  {reviewRestart.isPending ? 'Checking…' : 'Restart'}
-                </button>
+                {packageRestartRequired(systemPackages.data, restart) ? (
+                  <button
+                    type="button"
+                    className="desktop-update-action"
+                    aria-describedby={missingHostFeatures.length ? `${tabsId}-host-help` : undefined}
+                    disabled={
+                      !restart?.available ||
+                      restartError ||
+                      reviewRestart.isPending ||
+                      applyRestart.isPending ||
+                      restart.job?.state === 'restarting' ||
+                      packageControlsBlocked ||
+                      coreWatchIsActive(watch)
+                    }
+                    onClick={(event) => {
+                      systemActionFocus.current =
+                        document.activeElement === event.currentTarget ? { control: event.currentTarget, kind: 'restart' } : null;
+                      restartReviewButton.current = event.currentTarget;
+                      reviewRestart.mutate();
+                    }}
+                  >
+                    {reviewRestart.isPending ? 'Checking…' : 'Restart'}
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -1082,7 +1076,6 @@ function LocalUpdates() {
                                 ? selectedPackages.filter((name) => !names.includes(name))
                                 : [...new Set([...selectedPackages, ...names])],
                             );
-                            setReviewPackagePlan(null);
                           }}
                         >
                           {matchingSelection
@@ -1095,93 +1088,27 @@ function LocalUpdates() {
                         </button>
                         <button
                           type="button"
-                          disabled={selectedPackages.length === 0 || planPackages.isPending || packageControlsBlocked}
-                          onClick={(event) => {
-                            packageReviewButton.current = event.currentTarget;
-                            planPackages.mutate(selectedPackages);
-                          }}
+                          disabled={selectedPackages.length === 0 || packageUpdateBlocked}
+                          onClick={() => installPackages.mutate([...selectedPackages])}
                         >
-                          {planPackages.isPending ? 'Checking updates…' : 'Update selected'}
+                          {installPackages.isPending
+                            ? packageRequestStage === 'checking'
+                              ? 'Checking updates…'
+                              : 'Starting update…'
+                            : 'Update packages'}
                         </button>
                       </div>
                     </div>
                   </div>
-                  {planPackages.isError ? <p role="alert">{planPackages.error.message}</p> : null}
-                  {applyPackages.isError ? <p role="alert">{applyPackages.error.message}. Check the host package job before trying again.</p> : null}
-                  <Dialog
-                    open={Boolean(reviewPackagePlan)}
-                    onOpenChange={(open) => {
-                      if (!open && !applyPackages.isPending) closePackageReview();
-                    }}
-                  >
-                    <DialogContent
-                      size="lg"
-                      className="desktop-package-review"
-                      closeDisabled={applyPackages.isPending}
-                      restoreFocusTo={packageReviewButton}
-                    >
-                      <DialogHeader>
-                        <DialogTitle>Update system packages</DialogTitle>
-                        <DialogDescription>
-                          {reviewPackagePlan?.selected.length ?? 0} selected {reviewPackagePlan?.selected.length === 1 ? 'update' : 'updates'} ·{' '}
-                          {reviewPackagePlan?.operations.length ?? 0} package {reviewPackagePlan?.operations.length === 1 ? 'change' : 'changes'}
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="desktop-host-package-plan">
-                        <textarea
-                          readOnly
-                          spellCheck={false}
-                          rows={Math.min(8, Math.max(3, (reviewPackagePlan?.operations.length ?? 0) * 2))}
-                          aria-label="Planned package changes"
-                          value={
-                            reviewPackagePlan?.operations
-                              .map(
-                                (operation) =>
-                                  `${operation.action === 'install' ? 'Install' : 'Upgrade'} ${operation.name}: ${operation.installedVersion ? `${operation.installedVersion} → ` : ''}${operation.candidateVersion}`,
-                              )
-                              .join('\n') ?? ''
-                          }
-                        />
-                        <p>
-                          Services may restart during installation. The host will not reboot automatically. Package changes have no automatic
-                          rollback.
-                        </p>
-                        {packageReviewExpired && !applyPackages.isPending ? (
-                          <output>This review expired. Check the package changes again before installing.</output>
-                        ) : null}
-                        {planPackages.isError || applyPackages.isError ? (
-                          <p role="alert">{planPackages.error?.message || applyPackages.error?.message}</p>
-                        ) : null}
-                      </div>
-                      <DialogFooter className="desktop-update-plan-actions">
-                        <button type="button" disabled={applyPackages.isPending} onClick={closePackageReview}>
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          disabled={applyPackages.isPending || planPackages.isPending || !reviewPackagePlan || packageControlsBlocked}
-                          onClick={() => {
-                            if (!reviewPackagePlan) return;
-                            if (
-                              packageNeedsReview ||
-                              (reviewPackagePlan.expiresAt !== undefined && reviewPackagePlan.expiresAt * 1000 <= Date.now())
-                            ) {
-                              applyPackages.reset();
-                              planPackages.mutate(reviewPackagePlan.selected.map((item) => item.name));
-                            } else applyPackages.mutate(reviewPackagePlan.planId);
-                          }}
-                        >
-                          {applyPackages.isPending
-                            ? 'Starting update…'
-                            : planPackages.isPending
-                              ? 'Initialising…'
-                              : packageNeedsReview
-                                ? 'Check again'
-                                : 'Install updates'}
-                        </button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
+                  <p className="desktop-update-note">
+                    Services may restart during installation. The server will not reboot automatically. Package changes have no automatic rollback.
+                  </p>
+                  {(systemPackages.data.packages?.length ?? 0) > packageUpdateLimit ? (
+                    <p className="desktop-update-note">
+                      Up to {packageUpdateLimit} packages can be updated at a time. Remaining updates will be listed after installation.
+                    </p>
+                  ) : null}
+                  {installPackages.isError ? <p role="alert">{installPackages.error.message}</p> : null}
                   <ul className="desktop-host-package-list" aria-label="Available host package updates">
                     {visiblePackages.map((item) => (
                       <li className="desktop-host-package" key={item.name}>
@@ -1191,17 +1118,17 @@ function LocalUpdates() {
                             aria-label={`Select ${item.name} for update`}
                             checked={selectedPackages.includes(item.name)}
                             disabled={
+                              installPackages.isPending ||
                               packageJob.isPending ||
                               packageJob.isError ||
                               packageJobBusy ||
                               packageJobNeedsInspection ||
-                              (!selectedPackages.includes(item.name) && selectedPackages.length >= 250)
+                              (!selectedPackages.includes(item.name) && selectedPackages.length >= packageUpdateLimit)
                             }
                             onChange={(event) => {
                               setSelectedPackages(
                                 event.target.checked ? [...selectedPackages, item.name] : selectedPackages.filter((name) => name !== item.name),
                               );
-                              setReviewPackagePlan(null);
                             }}
                           />
                           <strong title={item.name}>

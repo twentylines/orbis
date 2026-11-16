@@ -2,7 +2,7 @@ import { markResetAccepted } from '@/components/recovery-progress/operation-stat
 import { operationContinuityStorageName } from '@/components/recovery-progress/operation-continuity';
 import { expect, test } from 'bun:test';
 import { resetPayload, submitReset } from './reset-api';
-import { resetCompletion, rememberResetCompletion, clearCompletedResetContinuity } from './reset-completion';
+import { resetCompletion, rememberResetCompletion, clearCompletedResetContinuity, hasAcceptedResetReceipt } from './reset-completion';
 const proof = { method: 'password' as const, password: 'test-only' };
 test('requires an explicit account choice and the confirmation words, ignoring case and outer whitespace', () => {
   expect(() => resetPayload('keep', 'reset', proof)).toThrow();
@@ -146,4 +146,23 @@ test('a different reset receipt or a changed/newer browser operation is never cl
   storage.setItem(operationContinuityStorageName, newer);
   expect(clearCompletedResetContinuity(idle, resetId, storage, 3000)).toBe(true);
   expect(storage.getItem(operationContinuityStorageName)).toBe(newer);
+});
+
+test('only a validated accepted receipt survives blocked storage as same-document reset evidence', () => {
+  expect(hasAcceptedResetReceipt()).toBe(false);
+  const storage = {
+    getItem: () => null,
+    setItem: () => {
+      throw new Error('blocked');
+    },
+    removeItem: () => undefined,
+  };
+  rememberResetCompletion({ id: 'invalid', state: 'resetting' }, storage, 2000);
+  expect(hasAcceptedResetReceipt()).toBe(false);
+  rememberResetCompletion({ id: resetId, state: 'resetting' }, storage, 2000);
+  expect(hasAcceptedResetReceipt()).toBe(true);
+  expect(clearCompletedResetContinuity({ state: 'checking', supported: true }, resetId, storage, 3000)).toBe(false);
+  expect(hasAcceptedResetReceipt()).toBe(true);
+  expect(clearCompletedResetContinuity(idle, resetId, storage, 3000)).toBe(true);
+  expect(hasAcceptedResetReceipt()).toBe(false);
 });

@@ -9,6 +9,7 @@ import {
   reviewTimeMachinePoint,
   startOnboardingCapture,
   captureTimeMachine,
+  reviewTimeMachineCapture,
 } from './time-machine-api';
 import { saveTimeMachineEnabled } from './time-machine-preferences-query';
 import { timeMachineRetentionSummary, timeMachineSettingsMode } from './time-machine-settings-state';
@@ -18,6 +19,53 @@ import { readSetupCapture, reconcileSetupCapture, reserveSetupCapture } from '@/
 const originalFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = originalFetch;
+});
+test('manual selected capture submits the exact Root review and explicit mount IDs through the real core endpoint', async () => {
+  const initial = historicalPoint();
+  const point = {
+    ...initial,
+    status: 'capturing',
+    metadata: null,
+    captureBinding: { version: 1 as const, corePointId: '22222222-2222-4222-8222-222222222222', componentsPointId: initial.id },
+  };
+  const selection = {
+    version: 1 as const,
+    reviewId: '11111111-1111-4111-8111-111111111111',
+    reviewSha256: 'a'.repeat(64),
+    apps: [{ urn: 'jellyfin:_user', mountIds: ['b'.repeat(64)] }],
+  };
+  const fetcher = mock(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json(point));
+  globalThis.fetch = fetcher as unknown as typeof fetch;
+  const accepted = await captureTimeMachine('Jellyfin settings', {}, new AbortController().signal, selection);
+  expect(accepted.captureBinding).toEqual(point.captureBinding);
+  expect(fetcher.mock.calls[0]?.[0]).toBe('/api/system-backups/time-machine/core-captures');
+  expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({ label: 'Jellyfin settings', selection });
+});
+test('a selected capture response cannot bind another wrapper to its core observer', async () => {
+  const point = {
+    ...historicalPoint(),
+    status: 'capturing',
+    metadata: null,
+    captureBinding: { version: 1, corePointId: '22222222-2222-4222-8222-222222222222', componentsPointId: '33333333-3333-4333-8333-333333333333' },
+  };
+  globalThis.fetch = mock(async () => Response.json(point)) as unknown as typeof fetch;
+  await expect(captureTimeMachine('Selected app capture', {}, new AbortController().signal)).rejects.toThrow();
+});
+
+test('storage review is authenticated read-only transport and rejects unbounded or duplicated app input before fetching', async () => {
+  const review = {
+    version: 1,
+    reviewId: '11111111-1111-4111-8111-111111111111',
+    reviewSha256: 'a'.repeat(64),
+    apps: [{ urn: 'jellyfin:_user', mounts: [] }],
+  };
+  const fetcher = mock(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json(review));
+  globalThis.fetch = fetcher as unknown as typeof fetch;
+  await reviewTimeMachineCapture(['jellyfin:_user'], new AbortController().signal);
+  expect(fetcher.mock.calls[0]?.[0]).toBe('/api/system-backups/time-machine/capture-review');
+  expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({ appUrns: ['jellyfin:_user'] });
+  await expect(reviewTimeMachineCapture(['jellyfin:_user', 'jellyfin:_user'], new AbortController().signal)).rejects.toThrow();
+  expect(fetcher).toHaveBeenCalledTimes(1);
 });
 
 test('manual capture uses the Orbis-only endpoint without default app data or password proof and preserves optional policy proof', async () => {

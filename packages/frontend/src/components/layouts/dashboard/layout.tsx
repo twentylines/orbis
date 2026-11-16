@@ -1,3 +1,5 @@
+import { SystemToolbar } from '@/desktop/system-toolbar';
+import { workspaceEditingEvent } from '@/desktop/workspace-layout';
 import { RecoveryScene } from '@/components/recovery-progress/recovery-scene';
 import { UpdateDownloadProgress } from '@/components/recovery-progress/update-download-progress';
 import { StartupSurface } from '@/components/startup/startup-surface';
@@ -17,6 +19,7 @@ import { DesktopTaskLink } from '@/desktop/desktop-task-link';
 import { CommandSearch } from '@/desktop/command-search';
 import { desktopNavigation as navigation } from '@/desktop/navigation';
 import { useSectionMotion } from '@/desktop/section-motion';
+import { useEscapeBack } from '@/desktop/use-escape-back';
 import { RouteSurface } from '@/desktop/route-surface';
 import { DelayedRouteLoading } from '@/desktop/route-loading';
 import { clearNavigation, rememberNavigation } from '@/components/startup/navigation-recovery';
@@ -30,10 +33,11 @@ import { Button } from '@/components/ui/Button';
 import { DockActivity } from '@/desktop/desktop-activity';
 import { DockGlass, useDockStartupReveal } from '@/desktop/dock-companion';
 import { DockSelection } from '@/desktop/dock-selection';
-import { useNavigationWarmup } from '@/desktop/navigation-warmup';
+import { useNavigationPreload, useNavigationWarmup } from '@/desktop/navigation-warmup';
 import { OrbisUpdateIcon, OrbisUpdateNotice } from '@/desktop/orbis-update-notice';
 import { revealPageFocus } from '@/desktop/window-viewport';
 import { ClusterConnection, ClusterProvider, ClusterServerLabel, ClusterSwitcher } from '@/desktop/cluster';
+import { HostBatteryIndicator } from '@/desktop/host-battery';
 import { IconLogout, IconMoon, IconSun } from '@tabler/icons-react';
 import { QueryErrorResetBoundary } from '@tanstack/react-query';
 import { lazy, Suspense, useLayoutEffect, useRef, useState, type PropsWithChildren } from 'react';
@@ -80,9 +84,20 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const leaving = useRef(false);
   const desktop = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
+  useEscapeBack(!requiresOnboarding && !loggingOff);
   const dock = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const receive = (event: Event) => {
+      const editing = Boolean((event as CustomEvent<boolean>).detail);
+      desktop.current?.toggleAttribute('data-workspace-editing', editing);
+      if (dock.current) dock.current.inert = editing;
+    };
+    window.addEventListener(workspaceEditingEvent, receive);
+    return () => window.removeEventListener(workspaceEditingEvent, receive);
+  }, []);
   useDockStartupReveal(desktop, !requiresOnboarding);
-  const warmNavigation = useNavigationWarmup();
+  const preloadNavigation = useNavigationPreload(!requiresOnboarding && !loggingOff);
+  const warmNavigation = useNavigationWarmup(preloadNavigation);
   useLayoutEffect(() => {
     if (requiresOnboarding) return;
     const element = dock.current;
@@ -215,24 +230,34 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               <span className="desktop-current" aria-current="page">
                 <span className="desktop-current-label">{sectionLabel}</span>
               </span>
-              <div className="desktop-system-actions">
+              <SystemToolbar
+                actions={{
+                  mode: (
+                    <button
+                      type="button"
+                      className="desktop-mode-toggle"
+                      aria-label={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
+                      aria-pressed={resolvedMode === 'dark'}
+                      title={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
+                      onClick={() => update({ mode: resolvedMode === 'dark' ? 'light' : 'dark' })}
+                    >
+                      {resolvedMode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
+                    </button>
+                  ),
+                  tasks: <DesktopTaskLink />,
+                  battery: <HostBatteryIndicator />,
+                  search: <CommandSearch />,
+                  connection: (
+                    <>
+                      <ClusterConnection />
+                      <ClusterSwitcher />
+                    </>
+                  ),
+                  logout: <DesktopLogoutButton disabled={!isLoggedIn || loggingOff} onClick={() => void handleLogout()} />,
+                }}
+              >
                 <OrbisUpdateNotice />
-                <DesktopTaskLink />
-                <button
-                  type="button"
-                  className="desktop-mode-toggle"
-                  aria-label={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
-                  aria-pressed={resolvedMode === 'dark'}
-                  title={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
-                  onClick={() => update({ mode: resolvedMode === 'dark' ? 'light' : 'dark' })}
-                >
-                  {resolvedMode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
-                </button>
-                <CommandSearch />
-                <ClusterConnection />
-                <ClusterSwitcher />
-                <DesktopLogoutButton disabled={!isLoggedIn || loggingOff} onClick={() => void handleLogout()} />
-              </div>
+              </SystemToolbar>
             </header>
 
             <main
@@ -268,7 +293,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                     <Link
                       key={path}
                       to={path}
-                      prefetch="intent"
+                      prefetch={preloadNavigation ? 'render' : 'intent'}
                       onPointerEnter={() => warmNavigation(path)}
                       onTouchStart={() => warmNavigation(path)}
                       onFocus={(event) => {

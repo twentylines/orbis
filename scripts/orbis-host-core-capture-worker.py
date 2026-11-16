@@ -35,6 +35,7 @@ SUPERVISOR = load('orbis-host-core-capture-supervisor.py', 'orbis_capture_worker
 LEASE = load('orbis-host-core-capture-lease.py', 'orbis_capture_worker_lease')
 RESERVED = load('orbis-host-core-capture-reserved.py', 'orbis_capture_worker_reserved')
 SERVICE = load('orbis-host-service.py', 'orbis_capture_worker_manifest')
+SELECTED = load('orbis-host-selected-capture.py', 'orbis_capture_worker_selected')
 A, P = CORE.HOST.AUTHORITY, CORE.HOST.IDENTITY.PUBLICATION
 WORKER = Path(__file__).absolute()
 BINDINGS = {'id', 'root', 'context', 'snapshots', 'sourceSha256', 'leaseNonce'}
@@ -293,7 +294,12 @@ def run_worker(state_dir, point):
             if CORE.TX.APPS.digest(capture.source()) != admission.request['sourceSha256']:
                 raise AdmissionError('The admitted source changed')
             admission.unchanged()
-            settlement = capture.capture(admission.point, host_writers_stopped=True)
+            selected_binding = admission.state / 'selected-captures' / admission.point / 'binding.json'
+            if selected_binding.exists() or selected_binding.is_symlink():
+                selected = SELECTED.SelectedCapture(capture.service, capture, CORE.HOST)
+                settlement = selected.execute(admission, lambda: capture.capture(admission.point, host_writers_stopped=True))
+            else:
+                settlement = capture.capture(admission.point, host_writers_stopped=True)
             record = capture.read(capture.base / admission.point)
             if record['settlement'] != settlement:
                 raise AdmissionError('The capture settlement changed')
@@ -377,6 +383,7 @@ def worker_environment():
         if len(value) > 8192 or any(ord(char) < 32 or ord(char) == 127 for char in value):
             raise AdmissionError('The resolved Docker client environment could not be preserved')
     return ['--setenv=' + name + '=' + value for name, value in values.items()]
+
 
 def launch_worker(state_dir, point):
     admission = Admission(state_dir, point)

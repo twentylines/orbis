@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
 
-test('closing exposes the already-mounted top bar while its trigger stays hidden until the morph ends', async () => {
+test('both directions retain the same mounted top-bar material while controls stay masked until the morph ends', async () => {
   const css = await Bun.file(new URL('./command-search.css', import.meta.url)).text();
   expect(css).toMatch(/\.desktop-search-trigger\[data-search-open="true"\]\s*\{\s*opacity:\s*0;/);
-  expect(css).toMatch(/:has\(\.desktop-search-trigger\[data-search-open="true"\]\[data-search-closing="true"\]\) > \*\s*\{\s*visibility:\s*visible;/);
+  expect(css).toMatch(/:has\(\.desktop-search-trigger\[data-search-open="true"\]\) > \*\s*\{\s*visibility:\s*hidden;/);
+  expect(css).not.toMatch(/visibility:\s*visible/);
   expect(css).not.toMatch(/\.desktop-system-bar > \*\s*\{[^}]*transition:\s*opacity/s);
 });
 
@@ -22,13 +23,14 @@ test('the original bounds morph retains its opening and closing durations withou
   expect(openHeader).not.toContain('opacity: 0');
 });
 
-test('closing bar masks underlying controls with an opaque palette base without overriding the morph', async () => {
+test('closing does not add an opaque paint layer or compositing boundary over the opening material', async () => {
   const css = await Bun.file(new URL('./command-search.css', import.meta.url)).text();
-  const fill = css.match(/\.desktop-search-surface\[data-closing="true"\] \.desktop-search-input::before\s*\{([^}]*)\}/s)?.[1] ?? '';
-  expect(fill).toContain('inset: 0');
-  expect(fill).toContain('border-radius: inherit');
-  expect(fill).toContain('linear-gradient(to bottom, var(--desktop-chrome), var(--desktop-chrome)), var(--desktop-chrome-opaque)');
-  expect(fill).not.toMatch(/animation:|transition:/);
+  expect(css).not.toContain('.desktop-search-input::before');
+  expect(css).not.toContain('isolation: isolate');
+  expect(css).not.toContain('--desktop-chrome-opaque');
+  const input = css.match(/\.desktop-search-input\s*\{([^}]*)\}/s)?.[1] ?? '';
+  expect(input).toContain('background: transparent');
+  expect(input).not.toMatch(/opacity:|filter:/);
 });
 
 test('closing crossfades the label while preserving the actual query and accessible name', async () => {

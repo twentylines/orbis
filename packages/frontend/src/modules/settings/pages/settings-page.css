@@ -125,7 +125,23 @@
   padding: 14px 12px;
   color: var(--desktop-muted);
 }
+@media (min-width: 761px) {
+  .settings-header-search .settings-search-field {
+    min-height: 38px;
+  }
+  .settings-header-search .settings-search-field input {
+    min-height: 36px;
+    padding-block: 4px;
+  }
+  .settings-header-search .settings-search-field > button {
+    width: 36px;
+    min-height: 36px;
+  }
+}
 @media (max-width: 760px) {
+  .desktop-route-page[data-route-section="settings"] .settings-status-reserve {
+    display: none;
+  }
   .desktop-route-page[data-route-section="settings"] .desktop-page-toolbar {
     flex: 1 1 100%;
     flex-wrap: wrap;
@@ -192,6 +208,7 @@
 }
 .settings-content-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -269,7 +286,8 @@
   color: var(--desktop-muted);
 }
 .settings-general-form {
-  max-width: 48rem;
+  width: 100%;
+  max-width: none;
 }
 .settings-general-form > .d-flex > svg {
   display: none;
@@ -464,11 +482,13 @@
 }
 .settings-save-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
   flex: none;
   min-width: 0;
+  max-width: 100%;
 }
 .settings-save-activity {
   color: var(--desktop-muted);

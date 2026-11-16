@@ -3,7 +3,7 @@
   "short_name": "Orbis",
   "icons": [
     {
-      "src": "/icons/orbis.svg",
+      "src": "/icons/orbis.svg?v=c1eb491eafa0",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"

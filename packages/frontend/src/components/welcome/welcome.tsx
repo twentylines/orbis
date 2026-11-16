@@ -1,4 +1,4 @@
-import { DepthTravel } from '@/components/recovery-progress/depth-travel';
+import { InterstellarBackdrop } from '@/components/startup/interstellar-backdrop';
 import { useStartupSession } from '@/components/startup/startup-boundary';
 import { acknowledgeWelcome } from '@/api-client';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
@@ -36,6 +36,7 @@ import { readManualProtection, saveManualProtection } from '@/modules/time-machi
 import { timeMachinePreferencesQueryKey } from '@/modules/time-machine/time-machine-preferences-query';
 import { TimeMachineApiError } from '@/modules/time-machine/time-machine-api';
 import { nextSetupStep, previousSetupStep, setupCanFinish, setupPosition, setupStepCopy, type SetupEntry, type SetupStep } from './setup-navigation';
+import { setupShortcut } from './setup-shortcuts';
 import {
   acknowledgeSetupCapture,
   readSetupCapture,
@@ -51,10 +52,11 @@ import {
 import { recordSetupFailureTask } from './setup-capture-task';
 import { SetupStage } from './setup-stage';
 import './welcome.css';
+import { setupPreparationMinimum } from '@/components/startup/startup-timing';
 
 const defaultAutomatic: AutomaticUpdateSettings = { orbis: { enabled: false, mode: 'idle' }, schedule: { time: '03:00', timezone: 'UTC' } };
-const setupEase = [0.22, 1, 0.36, 1] as const;
-const SetupSpace = memo(DepthTravel);
+const setupEase = [0.22, 0.72, 0.18, 1] as const;
+const SetupSpace = memo(InterstellarBackdrop);
 const loadSetupBackups = () => import('@/modules/system-backups/system-backups-settings');
 const loadSetupTransfer = () => import('@/modules/host-transfer/host-transfer-panel');
 const SetupBackups = lazy(() => loadSetupBackups().then(({ SystemBackupsSettings }) => ({ default: SystemBackupsSettings })));
@@ -159,40 +161,42 @@ function SetupStepPanel({
   direction: number;
   reduced: boolean;
   onReady: (element: HTMLElement) => void;
-  onSettled: () => void;
+  onSettled: (heading: string) => void;
   headingId: string;
 }) {
   const element = useRef<HTMLElement>(null);
   const present = useIsPresent();
+  const currentPresence = useRef(present);
+  currentPresence.current = present;
   const reported = useRef(false);
   useLayoutEffect(() => {
     if (!reported.current && element.current) {
       reported.current = true;
       onReady(element.current);
     }
-    if (reduced && present) onSettled();
-  }, [onReady, onSettled, reduced, present]);
+    if (reduced && present) onSettled(headingId);
+  }, [onReady, onSettled, reduced, present, headingId]);
   return (
     <motion.section
       ref={element}
       className="orbis-setup-step"
       aria-labelledby={headingId}
-      onAnimationComplete={() => {
-        if (present) onSettled();
+      onAnimationComplete={(definition) => {
+        if (definition === 'active' && currentPresence.current) onSettled(headingId);
       }}
       aria-hidden={!present || undefined}
       data-present={present}
       inert={!present}
       custom={direction}
       variants={{
-        enter: (next: number) => ({ opacity: 0, z: next * 80 }),
-        active: { opacity: 1, z: 0 },
-        exit: (next: number) => ({ opacity: 0, z: -next * 80, transition: { duration: 0.3, ease: setupEase } }),
+        enter: (next: number) => ({ opacity: 1, x: `${next * 100}%` }),
+        active: { opacity: 1, x: '0%' },
+        exit: (next: number) => ({ opacity: 0, x: `${-next * 28}%`, transition: { duration: 0.36, ease: setupEase } }),
       }}
       initial={reduced ? false : 'enter'}
       animate="active"
-      exit={reduced ? { opacity: 0, z: 0, transition: { duration: 0 } } : 'exit'}
-      transition={{ duration: reduced ? 0 : 0.38, ease: setupEase }}
+      exit={reduced ? { opacity: 0, x: '0%', transition: { duration: 0 } } : 'exit'}
+      transition={{ duration: reduced ? 0 : 0.56, ease: setupEase }}
     >
       {children}
     </motion.section>
@@ -212,10 +216,12 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     }
   });
   const resumingCapture = ['pending', 'submitted', 'accepted'].includes(captureState.receipt?.phase ?? '') || Boolean(captureState.error);
-  const [draft, setDraft] = useState(preferences);
+  const [draft, setDraft] = useState(() => (onboardingOrigin === 'fresh' ? { ...preferences, mode: 'system' as const } : preferences));
   const resolvedSetupMode = useResolvedColourMode(draft.mode);
   const [name, setName] = useState(preferences.serverName);
   const [step, setStep] = useState<SetupStep>(resumingCapture ? 'ready' : onboardingOrigin === 'runtipi' ? 'customisation' : 'choose');
+  const currentStep = useRef(step);
+  currentStep.current = step;
   const [entry, setEntry] = useState<SetupEntry>(resumingCapture ? 'fresh' : onboardingOrigin === 'runtipi' ? 'migration' : null);
   const [restoreBusy, setRestoreBusy] = useState(false);
   const [direction, setDirection] = useState(1);
@@ -237,6 +243,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   const transitionLock = useRef(false);
   const [transitioning, setTransitioning] = useState(false);
   const firstStep = useRef(true);
+  const focusStepWhenSettled = useRef(false);
   const navigate = useNavigate();
   const startupSession = useStartupSession();
   const reduceMotion = useReducedMotion();
@@ -294,9 +301,14 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
       setAutomatic(updateSettings.data.settings);
     }
   }, [updateSettings.data, automaticEdited]);
-  const onStepSettled = useCallback(() => {
+  const onStepSettled = useCallback((completedHeading: string) => {
+    if (completedHeading !== `setup-heading-${currentStep.current}`) return;
     transitionLock.current = false;
     setTransitioning(false);
+    if (focusStepWhenSettled.current) {
+      focusStepWhenSettled.current = false;
+      document.getElementById(completedHeading)?.focus({ preventScroll: true });
+    }
   }, []);
   const onStepReady = useCallback((element: HTMLElement) => {
     setStepElement(element);
@@ -305,8 +317,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
       return;
     }
     if (stage.current) stage.current.scrollTop = 0;
-    heading.current?.focus({ preventScroll: true });
-    heading.current?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    focusStepWhenSettled.current = true;
   }, []);
 
   const position = setupPosition(step, entry);
@@ -426,7 +437,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
             () => import('@/modules/dashboard/pages/dashboard'),
             () => queryClient.fetchQuery({ ...getInstalledAppsOptions(), staleTime: 10_000, retry: false }),
             document.fonts.ready,
-            new Promise<void>((resolve) => window.setTimeout(resolve, 300)),
+            new Promise<void>((resolve) => window.setTimeout(resolve, reduceSetupMotion ? 0 : setupPreparationMinimum)),
           );
           return captured;
         });
@@ -473,19 +484,43 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     setAutomatic(value);
   };
 
+  const shortcuts = useRef<{ back: () => void; next: () => void; blocked: boolean }>({
+    back: () => undefined,
+    next: () => undefined,
+    blocked: true,
+  });
+  shortcuts.current = {
+    blocked: saving || restoreBusy || transitioning || recoveryStep || syncState === 'loading',
+    back: () => go(previousSetupStep(step, entry)),
+    next: () => {
+      const submit = document.querySelector<HTMLButtonElement>('.orbis-setup-footer button[form="setup-form"]');
+      if (submit && !submit.disabled) submit.form?.requestSubmit(submit);
+    },
+  };
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const controlFocused = Boolean(target?.closest('input, textarea, select, button, a, [contenteditable], [role="button"], [role="combobox"]'));
+      const overlayOpen = Boolean(
+        document.querySelector(
+          '.orbis-startup-overlay, [role="dialog"][data-state="open"], [role="alertdialog"], [role="menu"][data-state="open"], [role="listbox"][data-state="open"]',
+        ),
+      );
+      const action = setupShortcut(event, controlFocused, shortcuts.current.blocked || overlayOpen);
+      if (!action) return;
+      event.preventDefault();
+      shortcuts.current[action]();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   return (
     <DesktopPreferencesPreview value={draft} onChange={setDraft}>
       <AuthLayout
         busy={saving}
         setup
-        scene={
-          <SetupSpace
-            mode={saving ? 'travel' : 'ambient'}
-            variant="onboarding"
-            distance={position.current + (saving ? 1 : 0)}
-            className="orbis-setup-space"
-          />
-        }
+        scene={<SetupSpace className="orbis-setup-space" />}
         progress={
           <header className="orbis-setup-header">
             <div className="orbis-setup-progress-label">

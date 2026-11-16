@@ -77,7 +77,11 @@ export function HomeSystemStatus() {
   const cpuPercent = system.data?.cpu.totalPercent;
   const network = statusNetwork(host.isError ? undefined : host.data, system.data);
   return (
-    <section className="workspace-activity" aria-labelledby="workspace-activity-title">
+    <section
+      className="workspace-activity"
+      aria-labelledby="workspace-activity-title"
+      data-startup-ready={!system.isPending && !host.isPending && !sensors.isPending}
+    >
       <div className="workspace-section-heading">
         <div>
           <h2 id="workspace-activity-title">System status</h2>

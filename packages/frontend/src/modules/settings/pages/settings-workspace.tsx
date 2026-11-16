@@ -82,7 +82,12 @@ export function SettingsSearch({ access, onSetting }: { access: SettingsAccess; 
           autoComplete="off"
           aria-controls={query.trim() ? `${id}-results` : undefined}
           onKeyDown={(event) => {
-            if (event.key === 'Escape') setQuery('');
+            if (event.key === 'Escape' && query) {
+              event.preventDefault();
+              event.stopPropagation();
+              setQuery('');
+              return;
+            }
             if (event.key === 'Enter' && results[0]) {
               event.preventDefault();
               choose(results[0]);
@@ -126,6 +131,8 @@ export function SettingsSearch({ access, onSetting }: { access: SettingsAccess; 
                   onClick={() => choose(entry)}
                   onKeyDown={(event) => {
                     if (event.key === 'Escape') {
+                      event.preventDefault();
+                      event.stopPropagation();
                       setQuery('');
                       search.current?.focus();
                     }
@@ -170,9 +177,7 @@ export function SettingsWorkspace({
   onSetting: (entry: SettingEntry) => void;
   panels: Record<SettingsSection, ReactNode>;
 }) {
-  const displayed = useRef(current);
-  if (!pending) displayed.current = current;
-  const active = displayed.current;
+  const active = current;
   const [visited, setVisited] = useState<ReadonlySet<SettingsSection>>(() => new Set([active]));
   useEffect(() => {
     setVisited((previous) => retainSettingsSections(previous, active));
@@ -221,7 +226,7 @@ export function SettingsWorkspace({
         <div className="settings-content">
           <div className="settings-heading-container">
             <header className="settings-content-heading">
-              <h2>{pending ? <output>Loading Updates…</output> : section.label}</h2>
+              <h2>{pending && active === 'updates' ? <output>Loading Updates…</output> : section.label}</h2>
               <SettingsSaveActions>
                 <SettingsSaveButton hideWhenClean={active === 'about'} />
               </SettingsSaveActions>

@@ -166,7 +166,12 @@ class CoreCaptureCompletion:
 
     def observed(self, admission, reader, record, preparation, hold_body):
         manager, worker = self.manager, self.worker
-        manager.capture.verify(reader, record)
+        verification = record
+        selected_binding = admission.state / 'selected-captures' / admission.point / 'binding.json'
+        if selected_binding.exists() or selected_binding.is_symlink():
+            verification = worker.SELECTED.SelectedCapture(manager.service, manager.capture, worker.CORE.HOST).completion_record(
+                admission, reader, record)
+        manager.capture.verify(reader, verification)
         if worker.CORE.TX.APPS.digest(manager.capture.source()) != admission.request['sourceSha256']:
             raise CompletionError('The installation source changed before completion')
         controller = preparation['controller']
@@ -180,7 +185,7 @@ class CoreCaptureCompletion:
             if record['expected'][identifier]['state'] != 'running':
                 raise CompletionError('A captured core dependency is not running')
             require_dependency_ready(worker, reader, identifier, record['checkpoint']['roles'][identifier])
-        manager.capture.verify(reader, record)
+        manager.capture.verify(reader, verification)
         return {'id': actual['id'], 'imageId': actual['imageId'], 'startedAt': actual['startedAt'],
                 'definitionSha256': controller['definitionSha256']}
 

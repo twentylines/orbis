@@ -7,11 +7,14 @@ import { BackupRestoreJournal } from '@/modules/system-backups/backup-restore-jo
 import { ResetState } from '@/modules/system-reset/reset-state';
 import { parseCoreUpdateProgress } from './core-update-progress';
 import { Subject } from 'rxjs';
-import { waitForBackupMutation } from './backup-maintenance';
+import { resetOperationActive, resetRecoveryHeld, waitForBackupMutation } from './backup-maintenance';
 
 const clientStatusChanges = new Subject<void>();
 let clientStatusPending = false;
 export const observeClientStatusChanges = () => clientStatusChanges.asObservable();
+export const notifyResetStarted = () => {
+  if (resetOperationActive()) clientStatusChanges.next();
+};
 export const notifyClientStatusChanged = () => {
   if (clientStatusPending) return;
   clientStatusPending = true;
@@ -88,6 +91,8 @@ export async function readOperationStatus(
     const reset = await readReset();
     if (reset && reset.phase !== 'complete')
       return { state: 'resetting', stage: reset.phase === 'recovery' ? 'recovering' : reset.phase === 'prepared' ? 'preparing' : 'resetting' };
+    if (resetOperationActive()) return { state: 'resetting', stage: 'resetting' };
+    if (resetRecoveryHeld()) return reset ? { state: 'resetting', stage: 'recovering' } : { state: 'checking' };
   } catch {
     return { state: 'checking' };
   }

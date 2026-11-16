@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
   RESET_PREFERENCE_FILE_LIMIT,
+  assertResetJournalReplacement,
   resetPreferenceFileLimit,
   resetJournalSchema,
   resetTargetNames,
@@ -15,9 +16,12 @@ import {
   acquireAuthorityLease,
   authorityJournalState,
   type DedicatedResetAuthority,
+  type ResetAuthority,
+  ResetAuthorityError,
   readAuthorityJournal,
   resolveResetAuthority,
   saveAuthorityJournal,
+  verifyResetAuthority,
 } from './reset-authority';
 import { type DescriptorRoot, ResetPreferenceStore, type RenameOperation } from './reset-preference-store';
 
@@ -49,6 +53,7 @@ const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'E
  */
 export class ResetState {
   private readonly preferences: ResetPreferenceStore;
+  private authoritySelection: Promise<ResetAuthority> | undefined;
 
   constructor(
     private readonly dataDir: string,
@@ -71,8 +76,19 @@ export class ResetState {
   private async authority(): Promise<DedicatedResetAuthority | null> {
     // Development hosts and existing non-Linux tests have no reset mount namespace; keep their storage strict legacy.
     if (!this.options.readMounts && process.platform !== 'linux') return null;
-    const resolved = await resolveResetAuthority({ dataDir: this.dataDir, ...this.options });
-    return resolved.mode === 'dedicated' ? resolved : null;
+    const options = { dataDir: this.dataDir, ...this.options };
+    // A lease and its subsequent journal writes must retain the same admitted storage.
+    this.authoritySelection ??= resolveResetAuthority(options).catch((error: unknown) => {
+      this.authoritySelection = undefined;
+      throw error;
+    });
+    const resolved = await this.authoritySelection;
+    if (resolved.mode === 'dedicated') {
+      await verifyResetAuthority(resolved);
+      return resolved;
+    }
+    if ((await resolveResetAuthority(options)).mode !== 'legacy') throw new ResetAuthorityError('authority-unsafe', { reason: 'authority-changed' });
+    return null;
   }
 
   async read(): Promise<ResetJournal | null> {
@@ -88,10 +104,10 @@ export class ResetState {
   }
 
   async save(value: ResetJournal) {
-    resetJournalSchema.assert(value);
+    const captured = resetJournalSchema.assert(structuredClone(value));
     const authority = await this.authority();
-    if (authority) return saveAuthorityJournal(authority, value);
-    return this.legacySave(value);
+    if (authority) return saveAuthorityJournal(authority, captured);
+    return this.legacySave(captured);
   }
 
   async acquireLease() {
@@ -101,31 +117,39 @@ export class ResetState {
   }
 
   async preflight(value: ResetJournal) {
-    resetJournalSchema.assert(value);
+    const captured = resetJournalSchema.assert(structuredClone(value));
     const authority = await this.authority();
-    if (!authority) return this.legacyPreflight(value);
-    const plan = await this.preferences.preflight(value.id, resetTargetPaths(this.dataDir, value));
+    if (!authority) return this.legacyPreflight(captured);
+    const plan = await this.preferences.preflight(captured.id, resetTargetPaths(this.dataDir, captured), () => verifyResetAuthority(authority));
     await plan.close();
+    await verifyResetAuthority(authority);
   }
 
   async erasePreferences(value: ResetJournal) {
-    resetJournalSchema.assert(value);
+    const captured = resetJournalSchema.assert(structuredClone(value));
+    if (captured.version === 2) throw new Error('The reset archive needs recovery verification before preferences can be erased.');
     const authority = await this.authority();
-    if (!authority) return this.legacyErasePreferences(value);
-    const stored = await readAuthorityJournal(authority);
+    if (!authority) return this.legacyErasePreferences(captured);
     // Staging may only begin once this journal is durable on the authority mount. A missing or different
     // journal means no intent has been recorded, so the request fails closed instead of inventing one.
-    if (
-      !stored ||
-      stored.id !== value.id ||
-      stored.controller !== value.controller ||
-      stored.accounts !== value.accounts ||
-      stored.users.length !== value.users.length ||
-      stored.users.some((id, index) => id !== value.users[index]) ||
-      stored.phase === 'complete'
-    )
-      throw new Error('Reset storage needs local review.');
-    return this.preferences.erase(value.id, resetTargetPaths(this.dataDir, value));
+    const check = async () => {
+      const stored = await readAuthorityJournal(authority);
+      if (
+        !stored ||
+        stored.version !== captured.version ||
+        stored.id !== captured.id ||
+        stored.controller !== captured.controller ||
+        stored.accounts !== captured.accounts ||
+        stored.createdAt !== captured.createdAt ||
+        stored.users.length !== captured.users.length ||
+        stored.users.some((id, index) => id !== captured.users[index]) ||
+        stored.phase === 'complete'
+      )
+        throw new Error('Reset storage needs local review.');
+    };
+    await check();
+    await this.preferences.erase(captured.id, resetTargetPaths(this.dataDir, captured), check);
+    await check();
   }
 
   targets(value: ResetJournal) {
@@ -223,6 +247,7 @@ export class ResetState {
   private async legacySave(value: ResetJournal) {
     resetJournalSchema.assert(value);
     await this.directory(this.root(), true);
+    assertResetJournalReplacement(await this.legacyRead(), value);
     const temporary = path.join(this.root(), `.journal-${randomUUID()}`);
     const handle = await fs.open(temporary, 'wx', 0o600);
     try {

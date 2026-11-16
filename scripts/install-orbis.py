@@ -51,6 +51,13 @@ REQUIRED |= {
 
 LEGACY_REQUIRED = frozenset(REQUIRED)
 REQUIRED |= {
+    "scripts/orbis-host-core-restoration-review.py",
+    "scripts/orbis-host-core-restoration.py",
+    "scripts/orbis-host-core-live-restoration.py",
+    "scripts/orbis-host-core-live-import.py",
+    "scripts/orbis-host-core-reconciliation-service.py",
+    "scripts/orbis-host-core-preparation-service.py",
+    "scripts/orbis-host-core-local-inspection-service.py",
     "scripts/orbis-release-policy.py", "scripts/orbis-host-service.py", "scripts/orbis-host-service-setup.py", "scripts/orbis-host-sentinel-observer.py",
     "scripts/orbis-host-observer-profile.py",
     "scripts/orbis-host-time-machine-core.py", "scripts/orbis-host-core-storage-map.py", "scripts/orbis-host-core-checkpoint.py",
@@ -62,6 +69,8 @@ REQUIRED |= {
     "scripts/orbis-host-core-capture-lease.py", "scripts/orbis-host-core-capture-reservation.py", "scripts/orbis-host-core-capture-reserved.py",
     "scripts/orbis-host-core-capture-supervisor.py", "scripts/orbis-host-core-capture-completion.py", "scripts/orbis-host-core-capture-retirement.py",
     "scripts/orbis-host-core-capture-namespace.py",
+    "scripts/orbis-host-core-capture-restart-retirement.py",
+    "scripts/orbis-host-core-capture-failed-recovery.py",
     "scripts/orbis-host-core-capture-abort.py", "scripts/orbis-host-core-capture-empty-abort.py", "scripts/orbis-host-core-capture-unused-abort.py",
 }
 

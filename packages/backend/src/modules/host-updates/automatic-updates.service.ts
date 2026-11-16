@@ -20,6 +20,8 @@ import { MonitoringActivityService } from '@/core/monitoring/monitoring-activity
 import { installationMode } from '@/common/installation-mode';
 import { enterBackupMutation } from '@/common/backup-maintenance';
 import { backupDiskActive } from '@/common/backup-disk';
+import { assertBackupMaintenanceLease, type BackupMaintenanceLease } from '@/common/backup-maintenance-lease';
+import { assertResetExportAccess, type ResetExportPlan, type SettingsExportAccess } from '../system-backups/settings-export-authorization';
 import { castAppUrn } from '@/common/helpers/app-helpers';
 import { AppsRepository } from '../apps/apps.repository';
 import { MarketplaceService } from '../marketplace/marketplace.service';
@@ -507,6 +509,49 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       pauseReason: [this.state.pauseReason, this.appPauseReason].filter(Boolean).join(' ') || null,
       lastAttempt: this.state.orbis,
     };
+  }
+  /** Internal snapshot only: historical attempts are evidence, never instructions to resume. */
+  async snapshotForReset(options: { plan: ResetExportPlan; access: SettingsExportAccess; lease: BackupMaintenanceLease; signal: AbortSignal }) {
+    const plan = structuredClone(options.plan);
+    const guard = async () => {
+      options.signal.throwIfAborted();
+      assertBackupMaintenanceLease(options.lease);
+      await assertResetExportAccess(options.access, plan);
+      options.signal.throwIfAborted();
+      assertBackupMaintenanceLease(options.lease);
+    };
+    await guard();
+    await this.load();
+    const writes = this.writes;
+    await writes;
+    await guard();
+    const fail = () => new ConflictException('Automatic update state needs review before a reset safety backup.');
+    if (!this.policyLoaded || this.storageError || this.systemError || this.pending || this.writes !== writes) throw fail();
+    const value = structuredClone({ state: this.state, system: this.system, policy: this.schedulePolicy });
+    automaticUpdateStateSchema.assert(value.state);
+    systemUpdateStateSchema.assert(value.system);
+    if (await readAutomaticSchedulePending(`${this.scheduleFile()}.pending`)) throw fail();
+    const policy = await readAutomaticSchedulePolicy(this.scheduleFile());
+    if (JSON.stringify(policy) !== JSON.stringify(value.policy)) throw fail();
+    if (
+      policy &&
+      (policy.orbis.revision !== value.state.revision ||
+        policy.system.revision !== value.system.revision ||
+        policy.orbis.enabled !== value.state.settings.orbis.enabled ||
+        policy.system.enabled !== value.system.enabled)
+    )
+      throw fail();
+    await guard();
+    if (this.writes !== writes || JSON.stringify(value) !== JSON.stringify({ state: this.state, system: this.system, policy: this.schedulePolicy }))
+      throw fail();
+    const freeze = <T>(entry: T): T => {
+      if (entry && typeof entry === 'object') {
+        for (const child of Object.values(entry)) freeze(child);
+        Object.freeze(entry);
+      }
+      return entry;
+    };
+    return freeze(value);
   }
   async update(raw: unknown) {
     const body = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : undefined;

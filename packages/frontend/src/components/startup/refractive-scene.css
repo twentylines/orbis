@@ -1,0 +1,35 @@
+.orbis-scene-refraction {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  opacity: 0.5;
+  pointer-events: none;
+}
+.orbis-refraction-image {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: orbis-interstellar-clouds 28s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+  animation-delay: var(--orbis-interstellar-delay, 0ms);
+}
+.desktop-auth-setup[data-desktop-mode="light"] .orbis-scene-refraction {
+  opacity: 0.32;
+}
+:root:is([data-orbis-effects="low"], [data-orbis-transparency="solid"]) .orbis-scene-refraction {
+  display: none;
+}
+:root[data-orbis-motion="reduced"] .orbis-refraction-image {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbis-refraction-image {
+    animation: none;
+  }
+}
+@media (forced-colors: active) {
+  .orbis-scene-refraction {
+    display: none;
+  }
+}

@@ -10,13 +10,16 @@ import {
   setResetRecoveryRequired,
   setRestoreRecoveryRequired,
   backupMaintenanceActive,
+  resetOperationActive,
+  setResetOperationActive,
 } from '@/common/backup-maintenance';
 import { ResetState, type ResetJournal } from './reset-state';
 import { ResetService, resetBinding } from './reset.service';
+import { archiveBackedResetJournal } from './reset-contract';
 import { DEFAULT_DESKTOP_PREFERENCES, DesktopPreferencesService } from '../desktop-preferences/desktop-preferences.service';
 
 const status = vi.hoisted(() => vi.fn());
-vi.mock('@/common/restoration-status', () => ({ readOperationStatus: status, notifyClientStatusChanged: vi.fn() }));
+vi.mock('@/common/restoration-status', () => ({ readOperationStatus: status, notifyClientStatusChanged: vi.fn(), notifyResetStarted: vi.fn() }));
 let root: string;
 const actor = { userId: 7, sessionBinding: 'a'.repeat(64), securityBinding: 'b'.repeat(64) };
 let records: { id: number; password: string; totpEnabled: boolean; hasSeenWelcome: boolean; locale: string }[];
@@ -27,6 +30,12 @@ let keys: { snapshot: ReturnType<typeof vi.fn>; change: ReturnType<typeof vi.fn>
 let sessions: { destroyAllSessionsByUserId: ReturnType<typeof vi.fn> };
 let automatic: { resetOrbisPreferences: ReturnType<typeof vi.fn> };
 let backups: { settings: ReturnType<typeof vi.fn>; updateSettings: ReturnType<typeof vi.fn> };
+let bundles: {
+  reconcileResetOwnership: ReturnType<typeof vi.fn>;
+  prepareResetOwnership: ReturnType<typeof vi.fn>;
+  completeResetOwnership: ReturnType<typeof vi.fn>;
+};
+let captures: typeof bundles & { preferences: ReturnType<typeof vi.fn>; updatePreferences: ReturnType<typeof vi.fn> };
 let service: ResetService;
 let passkeys: { verifySensitive: ReturnType<typeof vi.fn>; sensitiveOptions: ReturnType<typeof vi.fn> };
 const request = {} as Request;
@@ -57,6 +66,7 @@ beforeEach(async () => {
   await fs.mkdir(path.join(root, 'state'), { mode: 0o700 });
   setBackupRecoveryRequired(false);
   setResetRecoveryRequired(false);
+  setResetOperationActive(false);
   setRestoreRecoveryRequired(false);
   status.mockReset().mockResolvedValue({ state: 'idle' });
   records = [{ id: 7, password: 'existing-hash', totpEnabled: true, hasSeenWelcome: true, locale: 'fr' }];
@@ -67,6 +77,18 @@ beforeEach(async () => {
   sessions = { destroyAllSessionsByUserId: vi.fn().mockResolvedValue(undefined) };
   automatic = { resetOrbisPreferences: vi.fn().mockResolvedValue(undefined) };
   backups = { settings: vi.fn().mockResolvedValue({ revision: 9, retentionHours: 720 }), updateSettings: vi.fn().mockResolvedValue({}) };
+  bundles = {
+    reconcileResetOwnership: vi.fn().mockResolvedValue(undefined),
+    prepareResetOwnership: vi.fn().mockResolvedValue(undefined),
+    completeResetOwnership: vi.fn().mockResolvedValue(undefined),
+  };
+  captures = {
+    preferences: vi.fn().mockResolvedValue({ revision: 1 }),
+    updatePreferences: vi.fn().mockResolvedValue({}),
+    reconcileResetOwnership: vi.fn().mockResolvedValue(undefined),
+    prepareResetOwnership: vi.fn().mockResolvedValue(undefined),
+    completeResetOwnership: vi.fn().mockResolvedValue(undefined),
+  };
   passkeys = { verifySensitive: vi.fn().mockRejectedValue(new Error('Invalid passkey proof')), sensitiveOptions: vi.fn().mockResolvedValue({}) };
   const tx = {
     execute: vi.fn(),
@@ -113,13 +135,15 @@ beforeEach(async () => {
     cluster as never,
     sync as never,
     automatic as never,
-    { preferences: vi.fn().mockResolvedValue({ revision: 1 }), updatePreferences: vi.fn().mockResolvedValue({}) } as never,
+    captures as never,
     backups as never,
+    bundles as never,
   );
 });
 afterEach(async () => {
   vi.restoreAllMocks();
   setResetRecoveryRequired(false);
+  setResetOperationActive(false);
   await fs.rm(root, { recursive: true, force: true });
 });
 it('keeps account security, installed app data, app configs and host trust while resetting user preferences', async () => {
@@ -169,7 +193,7 @@ it('keeps account security, installed app data, app configs and host trust while
   expect(await preferences.read(7)).toMatchObject({
     serverName: 'Server',
     preset: 'frost',
-    mode: 'light',
+    mode: 'system',
     workspace: { pinnedApps: [] },
     appearance: { dockPins: [] },
   });
@@ -188,6 +212,136 @@ it('removes sign-in credentials before deleting only the selected accounts and c
   expect(receipts).toHaveLength(1);
   await expect(fs.stat(path.join(root, 'state/password-change-request'))).rejects.toMatchObject({ code: 'ENOENT' });
   expect(mutations).toEqual([link, user, orbisResetReceipt]);
+});
+it('reserves backup and capture ownership before reset and releases both only after the database receipt', async () => {
+  bundles.completeResetOwnership.mockImplementation(async (value: ResetJournal, verify: () => Promise<boolean>) => {
+    expect(value.phase).toBe('complete');
+    expect(records).toEqual([]);
+    expect(await verify()).toBe(true);
+  });
+  captures.completeResetOwnership.mockImplementation(async (value: ResetJournal, verify: () => Promise<boolean>) => {
+    expect(value.phase).toBe('complete');
+    expect(records).toEqual([]);
+    expect(await verify()).toBe(true);
+  });
+  const accepted = await service.accept(request, body('remove'));
+  expect(bundles.prepareResetOwnership).toHaveBeenCalledWith(expect.objectContaining({ id: accepted.job.id, users: [7], accounts: 'remove' }));
+  expect(bundles.completeResetOwnership).not.toHaveBeenCalled();
+  expect(captures.prepareResetOwnership).toHaveBeenCalledWith(expect.objectContaining({ id: accepted.job.id, users: [7], accounts: 'remove' }), [7]);
+  expect(captures.completeResetOwnership).not.toHaveBeenCalled();
+  expect(mutations).toEqual([]);
+  accepted.start();
+  await complete();
+  expect(bundles.completeResetOwnership).toHaveBeenCalledTimes(1);
+  expect(captures.completeResetOwnership).toHaveBeenCalledTimes(1);
+  expect(receipts[0]?.id).toBe(accepted.job.id);
+});
+it('keeps preferences and accounts when capture retention cannot be reserved', async () => {
+  const preference = await file('state/desktop/7.json', 'preserve this preference');
+  captures.prepareResetOwnership.mockRejectedValue(new Error('Capture ownership needs review'));
+  await expect(service.accept(request, body('remove'))).rejects.toThrow('Capture ownership needs review');
+  expect(await fs.readFile(preference, 'utf8')).toBe('preserve this preference');
+  expect(await new ResetState(root).read()).toBeNull();
+  expect(mutations).toEqual([]);
+  expect(records).toHaveLength(1);
+  expect(backupMaintenanceActive()).toBe(false);
+});
+it('keeps every preference and account when saved-backup custody cannot be reserved', async () => {
+  const preference = await file('state/desktop/7.json', 'preserve this preference');
+  bundles.prepareResetOwnership.mockRejectedValue(new Error('Backup ownership needs review'));
+  await expect(service.accept(request, body('remove'))).rejects.toThrow('Backup ownership needs review');
+  expect(await fs.readFile(preference, 'utf8')).toBe('preserve this preference');
+  expect(await new ResetState(root).read()).toBeNull();
+  expect(mutations).toEqual([]);
+  expect(records).toHaveLength(1);
+  expect(sessions.destroyAllSessionsByUserId).not.toHaveBeenCalled();
+  expect(backupMaintenanceActive()).toBe(false);
+});
+it('keeps reset active until backup custody and the held drain have both finished', async () => {
+  let finish!: () => void;
+  bundles.completeResetOwnership.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const accepted = await service.accept(request, body('remove'));
+  expect(resetOperationActive()).toBe(true);
+  accepted.start();
+  await vi.waitFor(async () => expect((await new ResetState(root).read())?.phase).toBe('complete'));
+  expect(resetOperationActive()).toBe(true);
+  expect(backupMaintenanceActive()).toBe(true);
+  finish();
+  await complete();
+  expect(resetOperationActive()).toBe(false);
+});
+it('recovers backup custody from a proven reset commit without deleting accounts a second time', async () => {
+  bundles.completeResetOwnership.mockRejectedValueOnce(new Error('Fixture custody commit interruption'));
+  const accepted = await service.accept(request, body('remove'));
+  accepted.start();
+  await vi.waitFor(async () => {
+    expect((await new ResetState(root).read())?.phase).toBe('recovery');
+    await expect(fs.lstat(path.join(root, 'state/orbis-reset/operation.lock'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+  expect(backupMaintenanceActive()).toBe(true);
+  expect(receipts).toHaveLength(1);
+  const committedMutations = [...mutations];
+  status.mockResolvedValue({ state: 'resetting' });
+  bundles.completeResetOwnership.mockImplementation(async (_value: ResetJournal, verify: () => Promise<boolean>) => {
+    expect(await verify()).toBe(true);
+  });
+  await service.resumePending();
+  expect((await new ResetState(root).read())?.phase).toBe('complete');
+  expect(mutations).toEqual(committedMutations);
+  expect(sessions.destroyAllSessionsByUserId).toHaveBeenCalledTimes(1);
+  expect(backupMaintenanceActive()).toBe(false);
+});
+it('withholds prepared backup custody at startup when the completed reset has no matching database receipt', async () => {
+  const completed = { ...journal(), accounts: 'remove' as const, phase: 'complete' as const };
+  await new ResetState(root).save(completed);
+  bundles.completeResetOwnership.mockImplementation(async (_value: ResetJournal, verify: () => Promise<boolean>) => {
+    if (!(await verify())) throw new Error('Missing receipt');
+  });
+  await service.onModuleInit();
+  expect(backupMaintenanceActive()).toBe(true);
+  expect(mutations).toEqual([]);
+  expect(records).toHaveLength(1);
+});
+it('finishes interrupted capture ownership from the reset receipt without replaying account erasure', async () => {
+  captures.completeResetOwnership.mockRejectedValueOnce(new Error('Fixture capture commit interruption'));
+  const accepted = await service.accept(request, body('remove'));
+  accepted.start();
+  await vi.waitFor(async () => {
+    expect((await new ResetState(root).read())?.phase).toBe('recovery');
+    await expect(fs.lstat(path.join(root, 'state/orbis-reset/operation.lock'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+  const committed = [...mutations];
+  expect(receipts).toHaveLength(1);
+  expect(backupMaintenanceActive()).toBe(true);
+  status.mockResolvedValue({ state: 'resetting' });
+  captures.completeResetOwnership.mockImplementation(async (_value: ResetJournal, verify: () => Promise<boolean>) => {
+    expect(await verify()).toBe(true);
+  });
+  await service.resumePending();
+  expect((await new ResetState(root).read())?.phase).toBe('complete');
+  expect(mutations).toEqual(committed);
+  expect(sessions.destroyAllSessionsByUserId).toHaveBeenCalledTimes(1);
+  expect(backupMaintenanceActive()).toBe(false);
+});
+it('preserves passkey authorization while reserving account-removal backup custody', async () => {
+  passkeys.verifySensitive.mockResolvedValue(undefined);
+  const accepted = await service.accept(request, {
+    accounts: 'remove',
+    confirmation: 'RESET ORBIS',
+    method: 'passkey',
+    challengeId: randomUUID(),
+    response: {},
+  });
+  expect(auth.verifySensitiveAction).not.toHaveBeenCalled();
+  expect(passkeys.verifySensitive).toHaveBeenCalledWith(request, resetBinding('remove'), expect.any(Object));
+  expect(bundles.prepareResetOwnership).toHaveBeenCalledWith(expect.objectContaining({ id: accepted.job.id, accounts: 'remove' }));
+  accepted.start();
+  await complete();
 });
 it('rejects malformed scope, unconfirmed requests and failed fresh authentication before admission', async () => {
   for (const value of [
@@ -290,6 +444,46 @@ it('finishes only a proven database commit after a journal-write interruption', 
 });
 it('binds passkey authorization to the exact keep/remove choice', () => {
   expect(resetBinding('keep')).not.toBe(resetBinding('remove'));
+});
+
+it.each(['prepared', 'complete'] as const)('holds an archive-backed %s journal without using a legacy SQL receipt', async (phase) => {
+  const source = { ...journal(), accounts: 'remove' as const };
+  if (source.version !== 1) throw new Error('Legacy fixture required');
+  const pending = {
+    ...archiveBackedResetJournal(source, {
+      format: 'orbis-reset-safety-commitment',
+      version: 1,
+      resetId: source.id,
+      backupId: randomUUID(),
+      accounts: source.accounts,
+      users: source.users,
+      selectionSha256: 'a'.repeat(64),
+      fullScopeSha256: 'b'.repeat(64),
+      exportInventorySha256: 'c'.repeat(64),
+      targetInventorySha256: 'd'.repeat(64),
+      sha256: 'e'.repeat(64),
+      bytes: 1024,
+    }),
+    phase,
+  };
+  const store = new ResetState(root);
+  await store.save(pending);
+  receipts.push({ id: pending.id, completedAt: 1 });
+  status.mockResolvedValue({ state: 'resetting' });
+  await service.onModuleInit();
+  expect(backupMaintenanceActive()).toBe(true);
+  await service.resumePending();
+  expect(await store.read()).toEqual(pending);
+  expect(bundles.completeResetOwnership).not.toHaveBeenCalled();
+  expect(captures.completeResetOwnership).not.toHaveBeenCalled();
+  expect(automatic.resetOrbisPreferences).not.toHaveBeenCalled();
+  expect(keys.change).not.toHaveBeenCalled();
+  expect(sessions.destroyAllSessionsByUserId).not.toHaveBeenCalled();
+  expect(mutations).toEqual([]);
+  expect(records).toHaveLength(1);
+  for (const recovery of [false, true]) await expect(service.accept(request, body('remove'), recovery)).rejects.toThrow('archive');
+  expect(await store.read()).toEqual(pending);
+  expect(bundles.reconcileResetOwnership).not.toHaveBeenCalled();
 });
 it('requires verified account-bound passkey proof before admitting a reset', async () => {
   await service.options(request, { accounts: 'remove' });

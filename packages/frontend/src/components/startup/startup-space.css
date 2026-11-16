@@ -1,46 +1,333 @@
-.orbis-startup.orbis-startup-setup-space {
-  background: #030508;
-  color: #f1f5f6;
+.orbis-startup.orbis-startup-redesigned {
+  --orbis-logo-accent: color-mix(in srgb, var(--desktop-accent, var(--desktop-base-accent, #8cb9a7)) 72%, var(--desktop-ink, #edf3fa));
+  --orbis-loading-surface: var(--desktop-surface);
+  --orbis-startup-reveal-duration: 420ms;
+  --orbis-loading-size: max(48px, min(clamp(256px, 20vw, 416px), calc(100vw - 64px), calc(100svh - 180px)));
+  --orbis-loading-center-y: 50%;
+  --orbis-loading-copy-gap: 24px;
+  min-height: 100dvh;
+  padding: clamp(24px, 5vw, 64px);
+  background-color: var(--desktop-chrome-opaque, #173431);
+  background-image: linear-gradient(var(--orbis-loading-surface), var(--orbis-loading-surface));
+  color: var(--desktop-ink, #edf3fa);
 }
-
-.orbis-startup-space-field {
+.orbis-startup-redesigned > .desktop-wallpaper-layer {
+  visibility: hidden;
+}
+.orbis-startup-redesigned > .orbis-workspace-space {
   position: absolute;
   inset: 0;
-  z-index: -1;
+  min-height: 100%;
   pointer-events: none;
+  background-image: var(--orbis-workspace-stars);
+  background-position: center;
+  background-size: cover;
+  opacity: 0.42;
 }
-.orbis-startup[data-setup-handoff="true"] .orbis-startup-space-field {
-  opacity: 0;
-  transition: opacity 200ms ease;
+.orbis-startup-redesigned:where([data-workspace-space]) .orbis-startup-content {
+  z-index: 1;
+}
+.orbis-startup-redesigned[data-desktop-mode="light"] > .orbis-workspace-space,
+:root[data-desktop-mode="light"] .orbis-startup-redesigned:not([data-desktop-mode]) > .orbis-workspace-space {
+  filter: invert(1);
+  opacity: 0.3;
+}
+
+.orbis-startup-redesigned .orbis-startup-content {
+  width: min(100%, 32rem);
+  max-width: 100%;
+  gap: 20px;
+  text-align: center;
+}
+.orbis-session-galaxy {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--orbis-loading-size);
+  height: var(--orbis-loading-size);
+  flex: none;
+  aspect-ratio: 1;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: 50%;
+  background: transparent;
+}
+.orbis-startup-beacon {
+  display: grid;
+  place-items: center;
+  color: var(--orbis-logo-accent);
+}
+.orbis-startup-copy {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+}
+.orbis-startup-scan,
+.orbis-startup-progress-meter {
+  width: min(100%, 256px);
+}
+.orbis-startup-progress-meter {
+  display: grid;
+  gap: 8px;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+.orbis-startup-redesigned .orbis-startup-title {
+  max-width: 100%;
+  margin: 0;
+  color: inherit;
+  font-size: clamp(1.05rem, 1.6vw, 1.2rem);
+  font-weight: 450;
+  letter-spacing: 0;
+  line-height: 1.45;
+  overflow-wrap: normal;
+  text-wrap: balance;
+}
+.orbis-startup-redesigned .orbis-startup-detail {
+  max-width: 35ch;
+  margin: 0;
+  color: var(--desktop-muted, #bccbdc);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.orbis-startup-redesigned .orbis-startup-actions {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+}
+.orbis-startup-message-reset,
+.orbis-startup-message-handoff {
+  display: none;
+}
+html[data-orbis-session-state="logging-out"] .orbis-startup-redesigned .orbis-startup-message-loading,
+.orbis-startup.orbis-startup-redesigned[data-session-state="logging-out"] .orbis-startup-message-loading {
+  display: inline;
+}
+html[data-orbis-reset-startup="true"] .orbis-startup-redesigned:not([data-reset-ready]) .orbis-startup-message-loading {
+  display: none;
+}
+html[data-orbis-reset-phase="accepted"] .orbis-startup-redesigned:not([data-reset-ready]) .orbis-startup-message-reset {
+  display: inline;
+}
+html[data-orbis-reset-phase="handoff"] .orbis-startup-redesigned:not([data-reset-ready]) .orbis-startup-message-handoff {
+  display: inline;
+}
+.orbis-startup-redesigned[data-landing="true"] {
+  --orbis-startup-reveal-duration: 1200ms;
+}
+.orbis-startup.orbis-startup-redesigned[data-revealing="true"] {
+  animation: orbis-loading-reveal var(--orbis-startup-reveal-duration) cubic-bezier(0.22, 0.72, 0.18, 1) both;
+}
+.orbis-startup.orbis-startup-redesigned[data-revealing="true"] .orbis-startup-content {
+  animation: orbis-loading-copy-exit var(--orbis-startup-reveal-duration) cubic-bezier(0.22, 0.72, 0.18, 1) both;
+}
+@keyframes orbis-loading-reveal {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes orbis-loading-copy-exit {
+  to {
+    opacity: 0;
+    transform: scale(1.035);
+  }
+}
+@keyframes orbis-workspace-loading-depart {
+  to {
+    opacity: 0;
+    translate: -40px 0;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .orbis-startup[data-setup-handoff="true"] .orbis-startup-space-field {
+  .orbis-startup.orbis-startup-redesigned {
+    --orbis-startup-reveal-duration: 0ms;
+  }
+  .orbis-startup-redesigned,
+  .orbis-startup-redesigned * {
+    animation: none;
     transition: none;
   }
 }
-:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"]) .orbis-startup[data-setup-handoff="true"] .orbis-startup-space-field {
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"]) .orbis-startup.orbis-startup-redesigned {
+  --orbis-startup-reveal-duration: 0ms;
+}
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"]) .orbis-startup-redesigned,
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"]) .orbis-startup-redesigned * {
+  animation: none;
   transition: none;
 }
+@media (forced-colors: active) {
+  .orbis-startup.orbis-startup-redesigned {
+    background: Canvas;
+    color: CanvasText;
+  }
+  .orbis-startup-redesigned :is(.orbis-startup-title, .orbis-startup-detail) {
+    color: CanvasText;
+  }
+}
+.orbis-startup-redesigned[data-desktop-mode="light"] {
+  --orbis-logo-accent: color-mix(in srgb, var(--desktop-accent, #365b52) 80%, var(--desktop-ink, #192c29));
+  color: var(--desktop-ink, #192c29);
+}
+.orbis-startup-redesigned[data-desktop-mode="light"] .orbis-logo {
+  --orbis-logo-light: var(--orbis-logo-colour);
+}
+.orbis-startup-redesigned[data-desktop-mode="light"] .orbis-startup-detail {
+  color: var(--desktop-muted, #485f59);
+}
 
-.orbis-startup-setup-space .orbis-startup-space-content {
-  display: grid;
-  justify-items: center;
-  gap: 20px;
-  width: min(100%, 360px);
-  color: #edf0f3;
+.orbis-startup[data-first-boot] {
+  --orbis-logo-accent: #d6dce4;
+  isolation: isolate;
 }
-.orbis-startup-setup-space .orbis-startup-space-content output,
-html:not([data-desktop-mode="dark"]) .orbis-startup.orbis-startup-setup-space:not([data-desktop-mode="dark"]) .orbis-startup-space-content output {
-  color: var(--orbis-setup-space-ink, #edf0f3);
-  font-size: clamp(1.5rem, 4vw, 2rem);
-  line-height: 1.3;
+.orbis-startup[data-first-boot] .orbis-startup-content {
+  position: relative;
+  z-index: 1;
 }
-.orbis-startup-setup-space .recovery-progress-bar {
-  --desktop-ink: #edf0f3;
-  --desktop-accent: #b7c2cf;
+.orbis-startup[data-first-boot][data-desktop-mode="light"] {
+  --orbis-logo-accent: #46505d;
+  color: #192c29;
+}
+
+.orbis-startup-redesigned[data-centered-loading]:not(.orbis-startup-session) .orbis-startup-content {
+  position: static;
+  inset: auto;
+  width: 100%;
+  height: 0;
+  animation: none;
+}
+.orbis-startup-redesigned[data-centered-loading]:not(.orbis-startup-session) .orbis-session-galaxy {
+  position: fixed;
+  left: 50%;
+  top: var(--orbis-loading-center-y);
+  transform: translate(-50%, -50%);
+}
+.orbis-startup-redesigned[data-centered-loading]:not(.orbis-startup-session) .orbis-startup-copy {
+  position: fixed;
+  left: 50%;
+  top: calc(var(--orbis-loading-center-y) + var(--orbis-loading-size) / 2 + var(--orbis-loading-copy-gap));
+  width: min(calc(100% - 48px), 32rem);
+  transform: translateX(-50%);
+}
+.orbis-startup .orbis-startup-mark {
+  --orbis-loading-size: inherit;
+}
+@keyframes orbis-workspace-loading-enter {
+  from {
+    opacity: 0;
+    transform: translateX(32px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes orbis-workspace-loading-exit {
+  to {
+    opacity: 0;
+    transform: translateX(-40px) scale(0.97);
+  }
+}
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"]) .orbis-startup-redesigned[data-workspace-space] .orbis-startup-content {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root .orbis-startup-redesigned[data-workspace-space][data-centered-loading] .orbis-startup-content {
+    animation: none;
+  }
+}
+@media (max-height: 360px) {
+  .orbis-startup-redesigned[data-centered-loading]:not(.orbis-startup-session) {
+    --orbis-loading-size: max(48px, min(120px, calc(100svh - 140px), calc(100vw - 48px)));
+    --orbis-loading-center-y: calc(50% - 24px);
+    --orbis-loading-copy-gap: 12px;
+  }
+}
+
+.orbis-startup.orbis-startup-redesigned:not(.orbis-startup-session) {
+  --orbis-loading-size: max(48px, min(clamp(224px, 18vw, 320px), calc(100vw - 64px), calc(100svh - 180px)));
+  --orbis-logo-accent: #d8e3f0;
+  background: #05080e;
+  color: #edf2f8;
+  isolation: isolate;
+}
+.orbis-startup-redesigned:not(.orbis-startup-session) .orbis-startup-detail {
+  color: #bdc9d8;
+}
+.orbis-startup-redesigned:not(.orbis-startup-session) > .orbis-interstellar {
+  z-index: 0;
+  clip-path: circle(75vmax at 50% var(--orbis-loading-center-y));
+  transition: clip-path 900ms cubic-bezier(0.22, 0.72, 0.18, 1);
+}
+.orbis-startup-redesigned:not(.orbis-startup-session) .orbis-session-galaxy {
+  transition:
+    width 900ms cubic-bezier(0.22, 0.72, 0.18, 1),
+    height 900ms cubic-bezier(0.22, 0.72, 0.18, 1);
+}
+.orbis-startup-redesigned:not(.orbis-startup-session) .orbis-startup-copy {
+  transition: top 900ms cubic-bezier(0.22, 0.72, 0.18, 1);
+}
+.orbis-startup.orbis-startup-redesigned[data-setup-sign-in] {
+  --orbis-loading-size: max(48px, min(clamp(176px, 9.167vw, 352px), calc(100vw - 48px), calc(100svh - 160px)));
+}
+.orbis-startup-redesigned[data-setup-sign-in] > .orbis-interstellar {
+  clip-path: circle(calc(var(--orbis-loading-size) / 2) at 50% var(--orbis-loading-center-y));
+}
+.orbis-startup-redesigned[data-reset-ready] .orbis-session-galaxy,
+html[data-orbis-reset-startup="true"] .orbis-startup-redesigned:not(.orbis-startup-session) .orbis-session-galaxy {
+  visibility: hidden;
+}
+.orbis-startup-redesigned[data-reset-ready] .orbis-startup-copy,
+html[data-orbis-reset-startup="true"] .orbis-startup-redesigned:not(.orbis-startup-session) .orbis-startup-copy {
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbis-startup-redesigned:not(.orbis-startup-session) :is(.orbis-interstellar, .orbis-session-galaxy, .orbis-startup-copy) {
+    transition: none;
+  }
+}
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"])
+  .orbis-startup-redesigned:not(.orbis-startup-session)
+  :is(.orbis-interstellar, .orbis-session-galaxy, .orbis-startup-copy) {
+  transition: none;
+}
+@media (max-height: 360px) {
+  .orbis-startup.orbis-startup-redesigned[data-centered-loading]:not(.orbis-startup-session) {
+    --orbis-loading-size: max(48px, min(120px, calc(100svh - 140px), calc(100vw - 48px)));
+    --orbis-loading-center-y: calc(50% - 24px);
+    --orbis-loading-copy-gap: 12px;
+  }
 }
 @media (forced-colors: active) {
-  .orbis-startup-setup-space {
-    --orbis-setup-space-ink: CanvasText;
+  .orbis-startup.orbis-startup-redesigned:not(.orbis-startup-session) {
+    background: Canvas;
+    color: CanvasText;
   }
+}
+
+.orbis-startup-redesigned:not(.orbis-startup-session) .orbis-logo {
+  --orbis-logo-light: #d8e3f0;
+  --orbis-logo-colour: #d8e3f0;
+}
+
+@media (max-height: 360px) {
+  .orbis-startup.orbis-startup-redesigned[data-setup-sign-in][data-centered-loading] {
+    --orbis-loading-size: max(48px, min(176px, calc(100svh - 160px), calc(100vw - 48px)));
+  }
+}
+
+.orbis-startup-redesigned:not(.orbis-startup-session) .orbis-session-galaxy > .orbis-startup-mark {
+  width: 100%;
+  height: 100%;
+}
+.orbis-startup .orbis-startup-mark .orbis-logo {
+  width: 78%;
+  height: 78%;
 }

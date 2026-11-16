@@ -4,7 +4,6 @@ import path from 'node:path';
 import { ConflictException, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
 import { settingsBackupSelectionSchema } from '@runtipi/common/schemas/settings-backup';
-import { timeMachineMetadataSchema } from '@runtipi/common/schemas/time-machine';
 import { settingsSchema } from '@/app.dto';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { acquireBackupDisk } from '@/common/backup-disk';
@@ -15,18 +14,35 @@ import { DesktopWallpaperService } from '../desktop-preferences/desktop-wallpape
 import { ThemePacksService } from '../theme-packs/theme-packs.service';
 import { ThemeSettingsService } from '../theme-settings/theme-settings.service';
 import { importCapsule } from '../time-machine-capsules/capsule';
-import { exportPortablePoint } from '../time-machine-capsules/portable-point-export';
-import { verifyCapsuleContents } from '../time-machine-capsules/verify';
+import { exportPortablePointFromReader, type PortablePointReader } from '../time-machine-capsules/portable-point-export';
+import { componentsCapsuleReview, coreCapsuleReview, verifyCapsuleContents, withVerifiedCapsuleContents } from '../time-machine-capsules/verify';
 import { BackupDatabaseService } from './backup-database.service';
-import { backupMetadataBytes } from './backup-crypto';
 import { writeSettingsAssetPart, readSettingsAssetPart } from './settings-backup-assets';
 import { exportSettingsBundle } from './settings-backup-format';
 import { writeSettingsJsonPart } from './settings-backup-json-parts';
 import { splitSettingsPreferences } from './settings-backup-preferences';
 import { openSettingsBackupReview, type SettingsBundlePart, type SettingsBundleInspection } from './settings-backup-review';
 import { TimeMachineService } from './time-machine.service';
+import {
+  authorizeSettingsPasswordExport,
+  withSettingsExportAccess,
+  assertSettingsExportAccess,
+  settingsExportBorrowsMaintenance,
+  type SettingsExportAccess,
+  type SettingsExportTicket,
+} from './settings-export-authorization';
 
 type Credentials = { password: string; totpCode?: string };
+type SourceOptions = {
+  ownerId: number;
+  selection: unknown;
+  passphrase: string;
+  directory: string;
+  destination: string;
+  signal: AbortSignal;
+  progress?: (value: SettingsBackupSourceProgress) => void;
+};
+type AuthorizedSourceOptions = SourceOptions & { exportId: string };
 export type SettingsBackupSourceProgress = {
   stage: 'preparing' | 'encrypting' | 'captures' | 'packaging' | 'verifying' | 'complete';
   completedBytes: number;
@@ -52,8 +68,6 @@ const removeOwnedDirectory = async (directory: string, owned: Awaited<ReturnType
   if (current.dev !== owned.dev || current.ino !== owned.ino) throw fail();
   await fs.rm(directory, { recursive: true });
 };
-const sameActor = (a: Awaited<ReturnType<AuthService['operatorActionContext']>>, b: Awaited<ReturnType<AuthService['operatorActionContext']>>) =>
-  a.userId === b.userId && a.sessionBinding === b.sessionBinding && a.securityBinding === b.securityBinding;
 
 /** Builds a portable export. The calling job service owns its durable job, destination and download authorization. */
 @Injectable()
@@ -69,6 +83,10 @@ export class SettingsBackupSourceService {
     private readonly database: BackupDatabaseService,
   ) {}
 
+  async reconcileCaptureOwnership(ownerId: number, request: Request) {
+    await this.machine.reconcileResetOwnership(ownerId, request);
+  }
+
   inspectors(passphrase: string, directory: string) {
     const assets = async (part: SettingsBundlePart, signal: AbortSignal): Promise<SettingsBundleInspection> => {
       if (part.kind !== 'wallpapers' && part.kind !== 'themes') throw fail();
@@ -79,7 +97,7 @@ export class SettingsBackupSourceService {
       wallpapers: assets,
       themes: assets,
       'time-machine': async (part: SettingsBundlePart, signal: AbortSignal): Promise<SettingsBundleInspection> => {
-        let metadata: ReturnType<typeof timeMachineMetadataSchema.assert> | undefined;
+        let captured: { createdAt: number; orbisVersion: string } | undefined;
         const verified = await importCapsule({
           source: part.file,
           stagingParent: directory,
@@ -87,7 +105,7 @@ export class SettingsBackupSourceService {
           expectedSha256: part.sha256,
           signal,
           verify: async (manifest, content, signal) => {
-            await verifyCapsuleContents({
+            const contents = await verifyCapsuleContents({
               manifest,
               directory: content,
               signal,
@@ -98,17 +116,18 @@ export class SettingsBackupSourceService {
                 architecture: this.config.get('architecture'),
               },
             });
-            const plain = await backupMetadataBytes(await fs.readFile(path.join(content, 'metadata.orbis')), manifest.pointKey, true);
-            try {
-              metadata = timeMachineMetadataSchema.assert(JSON.parse(plain.toString('utf8')).metadata);
-            } finally {
-              plain.fill(0);
-            }
+            const metadata =
+              manifest.schema === 'orbis.time-machine-capsule-private.v3'
+                ? (await componentsCapsuleReview(contents, signal)).metadata
+                : manifest.schema === 'orbis.time-machine-capsule-private.v2'
+                  ? (await coreCapsuleReview(contents, signal)).metadata
+                  : await withVerifiedCapsuleContents(contents, signal, async (value) => value.metadata);
+            captured = { createdAt: metadata.createdAt, orbisVersion: metadata.software.orbis };
           },
         });
         try {
-          if (!metadata || part.kind !== 'time-machine' || verified.pointId !== part.id) throw fail();
-          return { items: 1, pointId: verified.pointId, capturedAt: metadata.createdAt, orbisVersion: metadata.software.orbis };
+          if (!captured || part.kind !== 'time-machine' || verified.pointId !== part.id) throw fail();
+          return { items: 1, pointId: verified.pointId, capturedAt: captured.createdAt, orbisVersion: captured.orbisVersion };
         } finally {
           await verified.dispose();
         }
@@ -116,29 +135,50 @@ export class SettingsBackupSourceService {
     };
   }
 
-  async write(options: {
-    ownerId: number;
-    request: Request;
-    credentials: Credentials;
-    selection: unknown;
-    passphrase: string;
-    directory: string;
-    destination: string;
-    signal: AbortSignal;
-    progress?: (value: SettingsBackupSourceProgress) => void;
-  }) {
+  async write(options: SourceOptions & { request: Request; credentials: Credentials }) {
+    const { request, credentials, ...value } = options;
+    const binding = {
+      exportId: randomUUID(),
+      ownerId: value.ownerId,
+      selection: settingsBackupSelectionSchema.assert(structuredClone(value.selection)),
+    };
+    if (binding.selection.timeMachine.length) await this.reconcileCaptureOwnership(value.ownerId, request);
+    const proof = { password: credentials.password, ...(credentials.totpCode === undefined ? {} : { totpCode: credentials.totpCode }) };
+    const ticket = await authorizeSettingsPasswordExport(this.auth, request, proof, binding);
+    return this.writeAuthorized({ ...value, exportId: binding.exportId }, ticket);
+  }
+
+  async writeAuthorized(options: AuthorizedSourceOptions, ticket: SettingsExportTicket) {
+    const binding = {
+      exportId: options.exportId,
+      ownerId: options.ownerId,
+      selection: settingsBackupSelectionSchema.assert(structuredClone(options.selection)),
+    };
+    return withSettingsExportAccess(ticket, binding, options.signal, (access) => this.writeWithAccess(options, access));
+  }
+
+  async writeForReset(options: AuthorizedSourceOptions, access: SettingsExportAccess) {
+    if (!settingsExportBorrowsMaintenance(access)) throw fail();
+    return this.writeWithAccess(options, access);
+  }
+
+  private async writeWithAccess(options: AuthorizedSourceOptions, access: SettingsExportAccess) {
     const selection = settingsBackupSelectionSchema.assert(structuredClone(options.selection));
     if (typeof options.passphrase !== 'string' || options.passphrase.length < 8 || !options.passphrase.trim() || options.passphrase.length > 1024)
       throw fail();
     options.signal.throwIfAborted();
-    const actor = await this.auth.operatorActionContext(options.request);
-    if (actor.userId !== options.ownerId) throw fail();
-    await this.auth.verifySensitiveAction(options.ownerId, options.credentials.password, options.credentials.totpCode);
     const recheck = async () => {
       options.signal.throwIfAborted();
-      if (!sameActor(actor, await this.auth.operatorActionContext(options.request))) throw fail();
+      await assertSettingsExportAccess(access, { exportId: options.exportId, ownerId: options.ownerId, selection });
     };
     await recheck();
+    const borrowed = settingsExportBorrowsMaintenance(access);
+    const reader: PortablePointReader = {
+      withPortablePoint: (id, ownerId, signal, consume) =>
+        this.machine.withPortablePointForExport(id, ownerId, access, options.exportId, signal, consume),
+      withComponentsPortablePoint: (id, ownerId, signal, consume) =>
+        this.machine.withComponentsPortablePointForExport(id, ownerId, access, options.exportId, signal, consume),
+    };
     await privateDirectory(options.directory);
     if (
       !path.isAbsolute(options.destination) ||
@@ -166,7 +206,7 @@ export class SettingsBackupSourceService {
       progress('preparing');
       const parts: Parameters<typeof exportSettingsBundle>[0]['parts'] = [];
       if (selection.settings || selection.dashboard || selection.wallpapers || selection.themes) {
-        release = await acquireBackupMaintenance(options.signal);
+        if (!borrowed) release = await acquireBackupMaintenance(options.signal);
         await recheck();
         const preferences = splitSettingsPreferences(await this.desktop.backupSnapshot(options.ownerId));
         for (const kind of ['settings', 'dashboard'] as const) {
@@ -222,22 +262,22 @@ export class SettingsBackupSourceService {
             }),
           );
         }
-        release();
+        release?.();
         release = null;
       }
-      release = enterBackupMutation();
-      if (!release) throw fail();
+      if (!borrowed) {
+        release = enterBackupMutation();
+        if (!release) throw fail();
+      }
       await recheck();
       for (const pointId of selection.timeMachine) {
         const destination = path.join(work, `${pointId}.orbis-tm`);
         progress('captures');
-        const point = await exportPortablePoint({
-          machine: this.machine,
+        const point = await exportPortablePointFromReader({
+          reader,
           dataDir: this.config.get('directories').dataDir,
           pointId,
           ownerId: options.ownerId,
-          request: options.request,
-          credentials: options.credentials,
           passphrase: options.passphrase,
           destination,
           signal: options.signal,

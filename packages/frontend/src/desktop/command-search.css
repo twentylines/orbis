@@ -1,12 +1,8 @@
 .desktop-search-trigger[data-search-open="true"] {
   opacity: 0;
 }
-.desktop-system-bar:has(.desktop-search-trigger[data-search-open="true"]:not([data-search-closing="true"])) > * {
+.desktop-system-bar:has(.desktop-search-trigger[data-search-open="true"]) > * {
   visibility: hidden;
-  pointer-events: none;
-}
-.desktop-system-bar:has(.desktop-search-trigger[data-search-open="true"][data-search-closing="true"]) > * {
-  visibility: visible;
   pointer-events: none;
 }
 .desktop-search-backdrop {
@@ -57,32 +53,21 @@
   overflow: hidden;
   border: 1px solid var(--desktop-line);
   border-radius: 20px;
-  background: var(--desktop-surface);
+  background: var(--desktop-menu-surface);
   color: var(--desktop-ink);
-  box-shadow: 0 20px 60px color-mix(in srgb, var(--desktop-chrome) 28%, transparent);
+  box-shadow: none;
   backdrop-filter: var(--desktop-glass-filter);
   -webkit-backdrop-filter: var(--desktop-glass-filter);
   pointer-events: auto;
 }
 .desktop-search-surface[data-glass-blur="true"] .desktop-search-dropdown {
-  background: color-mix(in srgb, var(--desktop-surface) 94%, transparent);
+  background: var(--desktop-menu-surface);
 }
 .desktop-search-surface[data-closing="true"] {
   pointer-events: none;
 }
 .desktop-search-surface[data-closing="true"] :is(.desktop-search-input, .desktop-search-dropdown) {
   pointer-events: none;
-}
-.desktop-search-surface[data-closing="true"] .desktop-search-input {
-  isolation: isolate;
-}
-.desktop-search-surface[data-closing="true"] .desktop-search-input::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  background: linear-gradient(to bottom, var(--desktop-chrome), var(--desktop-chrome)), var(--desktop-chrome-opaque);
 }
 .desktop-search-input > svg {
   flex: none;

@@ -1,0 +1,70 @@
+.tm-capture-choices,
+.tm-capture-choices fieldset,
+.tm-capture-app-storage,
+.tm-capture-review {
+  display: grid;
+  gap: 12px;
+  min-inline-size: 0;
+}
+.tm-capture-choices h3,
+.tm-capture-choices p,
+.tm-capture-choices ul {
+  margin: 0;
+}
+.tm-capture-choices h3,
+.tm-capture-choices legend {
+  font: inherit;
+  font-weight: 600;
+}
+.tm-capture-choices fieldset {
+  margin: 0;
+  padding: 16px 0 0;
+  border: 0;
+  border-block-start: 1px solid var(--desktop-border);
+}
+.tm-capture-choices p,
+.tm-capture-mount-kind {
+  color: var(--desktop-muted);
+  line-height: 1.55;
+}
+.tm-capture-app {
+  min-inline-size: 0;
+  padding-block: 4px;
+}
+.tm-capture-app-storage {
+  padding-block-start: 12px;
+  padding-inline-start: 28px;
+}
+.tm-capture-mount {
+  min-inline-size: 0;
+  padding-block: 6px;
+}
+.tm-capture-mount-name,
+.tm-capture-mount-kind {
+  display: block;
+}
+.tm-capture-mount-name,
+.tm-capture-path {
+  overflow-wrap: anywhere;
+}
+.tm-capture-path {
+  padding-inline-start: 28px;
+  padding-block-start: 4px;
+  font-size: 0.875em;
+}
+.tm-capture-review {
+  padding-block-start: 12px;
+}
+.tm-capture-review ul {
+  display: grid;
+  gap: 8px;
+  padding-inline-start: 20px;
+}
+.tm-capture-review li {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 390px) {
+  .tm-capture-app-storage {
+    padding-inline-start: 12px;
+  }
+}

@@ -13,7 +13,7 @@ export class SettingsBackupsController {
   @Get()
   list(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
     response.setHeader('Cache-Control', 'no-store');
-    return this.backups.list(backupOperator(request));
+    return this.backups.list(backupOperator(request), request);
   }
 
   @Post()

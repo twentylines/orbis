@@ -12,6 +12,7 @@ export type WallpaperSample = {
   x: number;
   y: number;
   dim: number;
+  shade?: readonly [number, number, number, number];
 };
 
 type Rect = { left: number; top: number; width: number; height: number };
@@ -28,7 +29,13 @@ const luminance = (rgb: Colour) => {
 };
 const contrast = (first: number, second: number) => (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
 
-export function wallpaperTextColour(sample: WallpaperSample, viewport: { width: number; height: number }, rect: Rect, base: Colour) {
+export function wallpaperTextColour(
+  sample: WallpaperSample,
+  viewport: { width: number; height: number },
+  rect: Rect,
+  base: Colour,
+  shadowSupported = true,
+) {
   const { pixels } = sample;
   if (Math.min(viewport.width, viewport.height, pixels.sourceWidth, pixels.sourceHeight, rect.width, rect.height) <= 0) return null;
   const scale = Math[sample.fit === 'contain' ? 'min' : 'max'](viewport.width / pixels.sourceWidth, viewport.height / pixels.sourceHeight);
@@ -55,7 +62,11 @@ export function wallpaperTextColour(sample: WallpaperSample, viewport: { width: 
           number,
         ];
       }
-      readings.push(luminance(rgb.map((channel) => channel * dim) as [number, number, number]));
+      const shade = sample.shade;
+      const shadeAlpha = shade ? Math.max(0, Math.min(1, shade[3])) : 0;
+      readings.push(
+        luminance(rgb.map((channel, index) => (channel * (1 - shadeAlpha) + (shade?.[index] ?? 0) * shadeAlpha) * dim) as [number, number, number]),
+      );
     }
   }
   if (!readings.length) return null;
@@ -65,8 +76,8 @@ export function wallpaperTextColour(sample: WallpaperSample, viewport: { width: 
     return Math.min(...readings.map((reading) => contrast(value, reading)));
   };
   const lightScore = score(colours.light);
-  const darkScore = score(colours.dark);
+  const darkScore = score(shadowSupported ? colours.dark : [0, 0, 0]);
   // Mixed photographs need light ink so its dark, diffuse shadow can support the bright areas.
-  if (Math.max(lightScore, darkScore) < 4.5) return wallpaperTextColours.light;
-  return lightScore > darkScore ? wallpaperTextColours.light : wallpaperTextColours.dark;
+  if (shadowSupported && Math.max(lightScore, darkScore) < 4.5) return wallpaperTextColours.light;
+  return lightScore > darkScore ? wallpaperTextColours.light : shadowSupported ? wallpaperTextColours.dark : '#000000';
 }

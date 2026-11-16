@@ -148,10 +148,10 @@ export default () => {
       /* Storage is optional. */
     }
     if (returnTo === '/dashboard') window.dispatchEvent(new Event(endDesktopSessionEvent));
-    setUserContext({ isLoggedIn: true });
-    void refreshUserContext();
     await boot.finish();
     if (!boot.isActive()) return;
+    setUserContext({ isLoggedIn: true });
+    void refreshUserContext();
     if (redirect_url && isSafeRedirect(redirect_url)) {
       try {
         window.location.href = redirectUrl ?? (await createForwardAuthSession(redirect_url));
@@ -204,12 +204,14 @@ export default () => {
   };
   const login = useMutation({
     ...loginMutation(),
+    meta: { invalidates: false },
     onMutate: beginSignIn,
     onSuccess: acceptSignIn,
     onError: (error) => failedSignIn(error, 'credentials'),
   });
   const verifyTotp = useMutation({
     ...verifyTotpMutation(),
+    meta: { invalidates: false },
     onMutate: beginSignIn,
     onError: async (error, variables) => {
       if (challenge.current === variables.body.totpSessionId) await failedSignIn(error, 'authenticator');
@@ -262,7 +264,6 @@ export default () => {
       loading={login.isPending || passkeyPending}
       error={authError?.stage === 'credentials' ? authError.message : undefined}
       onEdit={() => setAuthError(null)}
-      showProgress={boot.visible}
       loginType={loginType}
       onPasskey={() => void beginPasskey()}
       warmPasskey={warmPasskeyClient}

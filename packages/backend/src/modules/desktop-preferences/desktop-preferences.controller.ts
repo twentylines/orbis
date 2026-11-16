@@ -88,6 +88,7 @@ export class DesktopPreferencesController {
     const snapshot = await this.preferences.clientSnapshot(request.user.id);
     response.setHeader('X-Orbis-Reset-Generation', snapshot.generation ?? 'none');
     response.setHeader('Cache-Control', 'private, no-store');
+    response.setHeader('X-Orbis-Preference-Capabilities', 'workspace-layout-v1 toolbar-order-v1');
     return snapshot.preferences;
   }
 

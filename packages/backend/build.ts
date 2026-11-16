@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { writeCoreRestoreRuntimeManifest } from './scripts/core-restore-runtime-manifest';
 import { runtimeDependencies } from './scripts/package-runtime-dependencies';
 import { assertNoPrivateBuildPaths } from './scripts/production-artifact-privacy';
 import { productionHealthAssets } from './scripts/production-health-assets';
@@ -58,17 +60,26 @@ const retainedCapability = await Bun.build({
 if (!retainedCapability.success) throw new AggregateError(retainedCapability.logs, 'Retained worker capability build failed');
 await assertNoPrivateBuildPaths(retainedCapability.outputs);
 
+const captureEntrypoints = [
+  './src/core-capture-publication.ts',
+  './src/core-capture-seal.ts',
+  './src/core-capture-catalog.ts',
+  './src/components-capture-catalog.ts',
+  './src/core-capture-image-inventory.ts',
+  './src/core-portable-worker.ts',
+  './src/core-inspection-worker.ts',
+  './src/core-source-configuration-worker.ts',
+  './src/core-clean-target-worker.ts',
+  './src/core-clean-target-bootstrap-worker.ts',
+  './src/core-restoration-worker.ts',
+  './src/core-live-reconciliation-worker.ts',
+];
 const capturePublication = await Bun.build({
-  entrypoints: [
-    './src/core-capture-publication.ts',
-    './src/core-capture-seal.ts',
-    './src/core-capture-catalog.ts',
-    './src/core-capture-image-inventory.ts',
-  ],
+  entrypoints: captureEntrypoints,
   outdir: './dist',
   format: 'esm',
   splitting: true,
-  naming: { chunk: 'core-publication-[hash].mjs' },
+  naming: { entry: '[name].js', chunk: 'core-publication-[hash].mjs' },
   target: 'node',
   env: 'disable',
   define: { 'process.env.NODE_ENV': JSON.stringify('production') },
@@ -79,7 +90,17 @@ const capturePublication = await Bun.build({
   external: productionExternals,
 });
 if (!capturePublication.success) throw new AggregateError(capturePublication.logs, 'Core capture publication verifier build failed');
+const captureOutputs = new Set(capturePublication.outputs.map((output) => output.path));
+for (const entrypoint of captureEntrypoints) {
+  const filename = path.basename(entrypoint).replace(/\.ts$/, '.js');
+  if (!captureOutputs.has(path.resolve('dist', filename))) throw new Error(`Core capture worker output is missing: ${filename}`);
+}
 await assertNoPrivateBuildPaths(capturePublication.outputs);
+await writeCoreRestoreRuntimeManifest({
+  dist: './dist',
+  migrations: './src/core/database/drizzle',
+  captureOutputs: capturePublication.outputs.map((output) => output.path),
+});
 
 const recoveryAuthentication = await Bun.build({
   entrypoints: ['./src/sentinel-recovery-auth.ts'],

@@ -25,10 +25,25 @@ import type Dockerode from 'dockerode';
 import { DesktopPreferencesModule } from '../desktop-preferences/desktop-preferences.module';
 import { CoreCaptureRecoveryService } from './time-machine-core-recovery.service';
 import { CoreCaptureRecoveryController } from './time-machine-core-recovery.controller';
+import { TimeMachineCoreInspectionController } from './time-machine-core-inspection.controller';
+import { TimeMachineCoreInspectionService } from './time-machine-core-inspection.service';
+import { TimeMachineCorePreparationController } from './time-machine-core-preparation.controller';
+import { TimeMachineCorePreparationService } from './time-machine-core-preparation.service';
+import { TimeMachineCoreReconciliationController } from './time-machine-core-reconciliation.controller';
+import { TimeMachineCoreReconciliationService } from './time-machine-core-reconciliation.service';
 
 @Module({
   imports: [QueueModule, AuthModule, AppsModule, DockerModule, TasksModule, HostUpdatesModule, AppLifecycleModule, DesktopPreferencesModule],
-  controllers: [TimeMachineController, SystemBackupsController, BackupImportsController, BackupRestoresController, CoreCaptureRecoveryController],
+  controllers: [
+    TimeMachineController,
+    SystemBackupsController,
+    BackupImportsController,
+    BackupRestoresController,
+    CoreCaptureRecoveryController,
+    TimeMachineCoreInspectionController,
+    TimeMachineCorePreparationController,
+    TimeMachineCoreReconciliationController,
+  ],
   exports: [SystemBackupsService, BackupImportsService, TimeMachineService, BackupDatabaseService],
   providers: [
     BackupRestoresService,
@@ -41,6 +56,9 @@ import { CoreCaptureRecoveryController } from './time-machine-core-recovery.cont
     TimeMachineRestoreAuthorization,
     TimeMachineCaptureRuntime,
     CoreCaptureRecoveryService,
+    TimeMachineCoreInspectionService,
+    TimeMachineCorePreparationService,
+    TimeMachineCoreReconciliationService,
     { provide: TIME_MACHINE_CAPTURE_IMAGES, useFactory: (docker: Dockerode) => imageCaptureDocker(docker), inject: [DOCKERODE] },
   ],
 })

@@ -65,7 +65,7 @@ export function SetupStage({
       aria-busy={pending || undefined}
       initial={false}
       animate={size ? { height: size.height } : {}}
-      transition={{ duration: reduced || !size?.animate ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: reduced || !size?.animate ? 0 : 0.4, ease: [0.22, 0.72, 0.18, 1] }}
     >
       {children}
     </motion.div>

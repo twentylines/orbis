@@ -8,22 +8,88 @@ import { exportCapsule, capsuleLimits, type CapsuleSource } from './capsule';
 import { capsuleDirectorySeal, sameCapsuleSeal } from './verified-source';
 
 type Credentials = { password: string; totpCode?: string };
+type PortablePointValue = Parameters<Parameters<TimeMachineService['withPortablePoint']>[5]>[0];
+type ComponentsPointValue = Parameters<Parameters<TimeMachineService['withComponentsPortablePoint']>[5]>[0];
 
-export async function exportPortablePoint(options: {
-  machine: Pick<TimeMachineService, 'withPortablePoint'>;
+export type PortablePointReader = {
+  withPortablePoint<T>(id: string, ownerId: number, signal: AbortSignal, consume: (value: PortablePointValue) => Promise<T>): Promise<T>;
+  withComponentsPortablePoint?<T>(
+    id: string,
+    ownerId: number,
+    signal: AbortSignal,
+    consume: (value: ComponentsPointValue) => Promise<T>,
+  ): Promise<T | null>;
+};
+
+type PortablePointExportOptions = {
   dataDir: string;
   pointId: string;
   ownerId: number;
-  request: Request;
-  credentials: Credentials;
   passphrase: string;
   destination: string;
   signal: AbortSignal;
   progress?: (complete: number, total: number) => void;
   admitBytes?: (bytes: number) => void | Promise<void>;
-}) {
-  const { machine, dataDir, pointId, ownerId, request, credentials, passphrase, destination, signal, progress, admitBytes } = options;
-  return machine.withPortablePoint(pointId, ownerId, request, credentials, signal, async (value) => {
+};
+
+export async function exportPortablePoint(
+  options: PortablePointExportOptions & {
+    machine: Pick<TimeMachineService, 'withPortablePoint'> & Partial<Pick<TimeMachineService, 'withComponentsPortablePoint'>>;
+    request: Request;
+    credentials: Credentials;
+  },
+) {
+  const { machine, request, credentials, ...value } = options;
+  const readComponents = machine.withComponentsPortablePoint;
+  const reader: PortablePointReader = {
+    withPortablePoint: (id, ownerId, signal, consume) => machine.withPortablePoint(id, ownerId, request, credentials, signal, consume),
+    ...(readComponents
+      ? {
+          withComponentsPortablePoint: <T>(id: string, ownerId: number, signal: AbortSignal, consume: (point: ComponentsPointValue) => Promise<T>) =>
+            machine.withComponentsPortablePoint?.(id, ownerId, request, credentials, signal, consume) ?? Promise.resolve(null),
+        }
+      : {}),
+  };
+  return exportPortablePointFromReader({ ...value, reader });
+}
+
+/** The caller supplies a server-owned reader; archive packaging never invents an authentication proof. */
+export async function exportPortablePointFromReader(options: PortablePointExportOptions & { reader: PortablePointReader }) {
+  const { reader, dataDir, pointId, ownerId, passphrase, destination, signal, progress, admitBytes } = options;
+  const components = await reader.withComponentsPortablePoint?.(pointId, ownerId, signal, async (value) => {
+    const order = [
+      'core.orbis',
+      'capture-draft.orbis',
+      'metadata.orbis',
+      'apps.orbis',
+      'components-metadata.orbis',
+      'wallpaper.orbis',
+      'icons.orbis',
+    ];
+    const entries = [...value.entries].sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name)) as CapsuleSource[];
+    await admitBytes?.(entries.reduce((total, entry) => total + entry.bytes, 0));
+    const result = await exportCapsule({
+      destination,
+      pointId,
+      createdAt: value.point.createdAt,
+      sourceOwnerId: value.point.ownerId,
+      pointKey: value.pointKey,
+      entries,
+      passphrase,
+      signal: value.signal,
+      progress,
+    });
+    return {
+      bytes: result.bytes,
+      sha256: result.sha256,
+      capsuleId: result.capsuleId,
+      pointId,
+      capturedAt: value.point.createdAt,
+      orbisVersion: value.metadata.software.orbis,
+    };
+  });
+  if (components) return components;
+  return reader.withPortablePoint(pointId, ownerId, signal, async (value) => {
     if (
       ![2, 3].includes(value.point.version) ||
       !value.point.archiveSha256 ||
@@ -96,7 +162,7 @@ export async function exportPortablePoint(options: {
       pointId,
       createdAt: value.point.createdAt,
       pointKey: value.pointKey,
-      ...(value.point.version === 3 ? { sourceOwnerId: ownerId } : {}),
+      ...(value.point.version === 3 ? { sourceOwnerId: value.point.ownerId } : {}),
       entries,
       passphrase,
       signal: value.signal,

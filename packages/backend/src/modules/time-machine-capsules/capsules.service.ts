@@ -15,6 +15,8 @@ import { enterBackupMutation } from '@/common/backup-maintenance';
 import { capsuleLimits, importCapsule } from './capsule';
 import { exportPortablePoint } from './portable-point-export';
 import { verifyCapsuleContents } from './verify';
+import { callCorePortableRoot } from './core-portable-root-client';
+import { callCoreInspectionRoot, type CoreInspectionApproval } from './core-inspection-root-client';
 
 type Credentials = { password: string; totpCode?: string };
 type Stored = CapsuleJob & { ownerId: number; pointId?: string };
@@ -127,6 +129,7 @@ export class CapsulesService {
     const after = await this.auth.operatorActionContext(request);
     if (before.userId !== after.userId || before.sessionBinding !== after.sessionBinding || before.securityBinding !== after.securityBinding)
       throw fail();
+    return { ownerId, sessionBinding: before.sessionBinding, securityBinding: before.securityBinding };
   }
   private async owned(id: string, ownerId: number) {
     await this.initialize();
@@ -360,6 +363,178 @@ export class CapsulesService {
           job.status = 'verified';
         }),
     };
+  }
+  private async coreEnrollmentBinding(job: Stored, create?: string, kind: 'enrollment' | 'inspection' = 'enrollment') {
+    const directory = this.directory(job.id);
+    await privateBackupDirectory(directory);
+    const filename = path.join(directory, `core-${kind}.json`);
+    if (create !== undefined) {
+      if (!uuid.test(create)) throw fail();
+      const handle = await fs.open(filename, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600);
+      try {
+        await handle.writeFile(JSON.stringify({ version: 1, id: create, capsuleJobId: job.id, ownerId: job.ownerId, capsuleSha256: job.sha256 }));
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+      const parent = await fs.open(directory, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
+      try {
+        await parent.sync();
+      } finally {
+        await parent.close();
+      }
+    }
+    let handle: Awaited<ReturnType<typeof fs.open>>;
+    try {
+      handle = await fs.open(filename, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT' && create === undefined) return undefined;
+      throw error;
+    }
+    try {
+      const before = await handle.stat();
+      if (!before.isFile() || before.nlink !== 1 || before.mode & 0o077 || before.uid !== process.getuid?.() || before.size < 1 || before.size > 4096)
+        throw fail();
+      const value = JSON.parse(await handle.readFile('utf8'));
+      const after = await handle.stat();
+      const named = await fs.lstat(filename);
+      if (
+        ['dev', 'ino', 'mode', 'uid', 'gid', 'size', 'nlink', 'mtimeMs', 'ctimeMs'].some(
+          (key) => Reflect.get(before, key) !== Reflect.get(after, key) || Reflect.get(before, key) !== Reflect.get(named, key),
+        ) ||
+        !value ||
+        Object.keys(value).sort().join(',') !== 'capsuleJobId,capsuleSha256,id,ownerId,version' ||
+        value.version !== 1 ||
+        !uuid.test(value.id) ||
+        value.capsuleJobId !== job.id ||
+        value.ownerId !== job.ownerId ||
+        value.capsuleSha256 !== job.sha256
+      )
+        throw fail();
+      return value.id as string;
+    } finally {
+      await handle.close();
+    }
+  }
+  async coreEnrollment(
+    id: string,
+    ownerId: number,
+    request: Request,
+    credentials: Credentials,
+    action: 'prepare' | 'approve' | 'status' | 'reconcile',
+    input?: { passphrase: string } | { reviewSha256: string; approvalNonce: string },
+  ) {
+    const job = await this.owned(id, ownerId);
+    const actor = await this.verifyAccount(request, ownerId, credentials);
+    if (job.kind !== 'import' || job.status !== 'verified' || !job.sha256 || this.active || this.reserved || this.closing) throw fail();
+    let operationId = await this.coreEnrollmentBinding(job);
+    if (action === 'prepare' ? operationId !== undefined : !operationId) throw fail();
+    if (
+      action === 'prepare' &&
+      (!input || !('passphrase' in input) || typeof input.passphrase !== 'string' || input.passphrase.length < 8 || input.passphrase.length > 1024)
+    )
+      throw fail();
+    if (
+      action === 'approve' &&
+      (!input || !('reviewSha256' in input) || !/^[a-f0-9]{64}$/.test(input.reviewSha256) || !/^[a-f0-9]{64}$/.test(input.approvalNonce))
+    )
+      throw fail();
+    const release = enterBackupMutation();
+    if (!release) throw fail();
+    let disk: (() => void) | undefined;
+    const abort = new AbortController();
+    let finish: () => void = () => undefined;
+    const done = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const active = { id, abort, done };
+    this.active = active;
+    try {
+      disk = acquireBackupDisk();
+      if (action === 'prepare') {
+        // Persist the Root operation identity before dispatch. An interrupted
+        // request is inspected/reconciled; it never creates a second worker.
+        operationId = await this.coreEnrollmentBinding(job, randomUUID());
+      }
+      if (!operationId) throw fail();
+      const result = await callCorePortableRoot({
+        action,
+        id: operationId,
+        actor,
+        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(1900_000)]),
+        ...(action === 'prepare' && input && 'passphrase' in input
+          ? { input: { capsuleJobId: job.id, capsuleSha256: job.sha256, passphrase: input.passphrase } }
+          : action === 'approve' && input && 'reviewSha256' in input
+            ? { input }
+            : {}),
+      });
+      const current = await this.auth.operatorActionContext(request);
+      if (current.userId !== actor.ownerId || current.sessionBinding !== actor.sessionBinding || current.securityBinding !== actor.securityBinding)
+        throw fail();
+      if (result.phase === 'enrolled') {
+        job.pointId = result.pointId;
+        await this.save(job);
+      }
+      return result;
+    } finally {
+      disk?.();
+      release();
+      if (this.active === active) this.active = undefined;
+      finish();
+    }
+  }
+  async coreInspection(
+    id: string,
+    ownerId: number,
+    request: Request,
+    credentials: Credentials,
+    action: 'prepare' | 'approve' | 'status',
+    input?: CoreInspectionApproval,
+  ) {
+    const job = await this.owned(id, ownerId);
+    const actor = await this.verifyAccount(request, ownerId, credentials);
+    if (job.kind !== 'import' || job.status !== 'verified' || !job.sha256 || !job.pointId || this.active || this.reserved || this.closing)
+      throw fail();
+    const enrollmentId = await this.coreEnrollmentBinding(job);
+    let operationId = await this.coreEnrollmentBinding(job, undefined, 'inspection');
+    if (!enrollmentId || (action === 'prepare' ? operationId !== undefined : !operationId)) throw fail();
+    const release = enterBackupMutation();
+    if (!release) throw fail();
+    let disk: (() => void) | undefined;
+    const abort = new AbortController();
+    let finish: () => void = () => undefined;
+    const done = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const active = { id, abort, done };
+    this.active = active;
+    try {
+      disk = acquireBackupDisk();
+      if (action === 'prepare') operationId = await this.coreEnrollmentBinding(job, randomUUID(), 'inspection');
+      if (!operationId) throw fail();
+      const result = await callCoreInspectionRoot({
+        action,
+        id: operationId,
+        enrollmentId,
+        actor,
+        ...(action === 'approve' ? { input } : {}),
+        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(1900_000)]),
+      });
+      const current = await this.auth.operatorActionContext(request);
+      if (
+        current.userId !== actor.ownerId ||
+        current.sessionBinding !== actor.sessionBinding ||
+        current.securityBinding !== actor.securityBinding ||
+        result.pointId !== job.pointId
+      )
+        throw fail();
+      return result;
+    } finally {
+      disk?.();
+      release();
+      if (this.active === active) this.active = undefined;
+      finish();
+    }
   }
   async download(id: string, ownerId: number, request: Request, credentials: Credentials) {
     const job = await this.owned(id, ownerId);

@@ -14,7 +14,9 @@ const doc = {
   activeElement: null,
   body: { nodeName: 'BODY' },
   defaultView: {} as object,
+  querySelector: () => null,
   documentElement: {
+    dataset: {},
     setAttribute: (key: string, value: string) => {
       attrs.set(key, value);
     },

@@ -37,6 +37,7 @@ AUTHORITY = load_script("orbis-host-retained-authority.py", "orbis_authority_for
 STATE_NAME = ".orbis-host-state.json"
 LOCK_DESCRIPTOR = ContextVar("orbis_host_lock_descriptor", default=None)
 RESTORE_TRANSACTION = ContextVar("orbis_host_retained_restore_transaction", default=None)
+CORE_LIVE_TRANSACTION = ContextVar("orbis_host_core_live_restore_transaction", default=None)
 CAPTURE_READ_DEADLINE = ContextVar("orbis_host_capture_read_deadline", default=None)
 CORE_CAPTURE_OWNER = ContextVar("orbis_core_capture_owner", default=None)
 
@@ -88,8 +89,9 @@ def require_no_capture_fence(root: Path) -> None:
         if (set(value) != {"schema", "id", "root", "context"}
                 or not isinstance(value.get("id"), str) or not re.fullmatch(r"[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}", value["id"])
                 or not isinstance(value.get("context"), str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", value["context"])
-                or value.get("schema") != "orbis.retained-restore-transaction.v1" or value.get("root") != str(root)
-                or RESTORE_TRANSACTION.get() != value.get("id")):
+                or value.get("root") != str(root)
+                or not ((value.get("schema") == "orbis.retained-restore-transaction.v1" and RESTORE_TRANSACTION.get() == value.get("id"))
+                        or (value.get("schema") == "orbis.core-live-restoration-job.v1" and CORE_LIVE_TRANSACTION.get() == value.get("id")))):
             raise ValueError("a protected retained restore requires completion or recovery")
     path = capture_fence_path(root)
     if path.exists() or path.is_symlink():

@@ -136,3 +136,28 @@ test('one saved app uses singular copy and disclosure is an inline caption rathe
   expect(html).not.toContain('<footer');
   expect(html).toContain('app icons were not captured');
 });
+
+test('versioned Home projection retains icon-only view, logical sizes and registered widget identities without altering legacy captures', () => {
+  const { point, preview } = saved();
+  const legacyColumns = historicalHomeLayout(preview).defaultColumns;
+  preview.desktop.workspace.layout = {
+    version: 1,
+    appView: 'icons',
+    widgets: { applications: { columns: 3, height: 400 }, 'future-widget': { columns: 2, height: 320 } },
+  };
+  const before = JSON.stringify(preview);
+  const layout = historicalHomeLayout(preview);
+  expect(layout.versioned).toBe(true);
+  expect(layout.defaultColumns).toBe(false);
+  expect(layout.sizes.applications).toEqual({ columns: 3, height: 400 });
+  const html = renderToStaticMarkup(<HistoricalHome point={point} />);
+  expect(html).toContain('data-app-view="icons"');
+  expect(html).toContain('--tm-saved-widget-columns:3');
+  expect(html).toContain('--tm-saved-widget-height:400px');
+  expect(html).not.toContain('data-saved-section="future-widget"');
+  expect(html).not.toContain('<button');
+  expect(html).not.toContain('<a ');
+  expect(JSON.stringify(preview)).toBe(before);
+  delete preview.desktop.workspace.layout;
+  expect(historicalHomeLayout(preview).defaultColumns).toBe(legacyColumns);
+});

@@ -13,11 +13,11 @@ type Props = {
   journey?: boolean;
 };
 
-export function RecoveryProgressBar({ label, percentage }: { label: string; percentage?: number }) {
+export function RecoveryProgressBar({ label, percentage, variant = 'bar' }: { label: string; percentage?: number; variant?: 'bar' | 'scan' }) {
   const reduced = useReducedMotion();
   const visible = useWindowVisible();
   return (
-    <div className="recovery-progress-bar" data-known={percentage !== undefined} data-motion={!reduced} data-visible={visible}>
+    <div className="recovery-progress-bar" data-variant={variant} data-known={percentage !== undefined} data-motion={!reduced} data-visible={visible}>
       <progress aria-label={label} max={100} value={percentage} />
       {percentage === undefined ? <span aria-hidden="true" /> : null}
     </div>

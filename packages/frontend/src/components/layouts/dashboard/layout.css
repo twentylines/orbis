@@ -418,6 +418,31 @@ html[data-orbis-motion="reduced"] .orbis-update-spinning {
 .desktop-view {
   min-width: 0;
 }
+html[data-orbis-startup-landing="true"]
+  .desktop-view-home
+  :is(.workspace-heading, .workspace-main-stack > .workspace-widget, .workspace-grid > .workspace-widget, .workspace-auxiliary > .workspace-widget) {
+  animation: orbis-home-landing 900ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+html[data-orbis-startup-landing="true"] .workspace-widget-applications {
+  animation-delay: 60ms;
+}
+html[data-orbis-startup-landing="true"] .workspace-widget-activity {
+  animation-delay: 120ms;
+}
+html[data-orbis-startup-landing="true"] .workspace-widget-storage {
+  animation-delay: 180ms;
+}
+html[data-orbis-startup-landing="true"] .workspace-widget-attention {
+  animation-delay: 220ms;
+}
+@keyframes orbis-home-landing {
+  from {
+    transform: translateX(min(10vw, 96px));
+  }
+  to {
+    transform: translateX(0);
+  }
+}
 .desktop-view-loading {
   padding-inline: var(--desktop-bar-inset);
 }
@@ -581,18 +606,8 @@ html[data-orbis-motion="reduced"] .orbis-update-spinning {
 .desktop-view-app .status-dot-animated {
   animation: none;
 }
-/* Keep forms together on ultra-wide screens while the desktop remains fluid. */
-.desktop-route-window:not([data-window-positioned="true"]):has(.desktop-settings) {
-  max-width: 1720px;
-  margin-inline: auto;
-}
 .desktop-settings {
   width: 100%;
-  max-width: 1600px;
-  margin-inline: auto;
-}
-.desktop-route-window:has(.desktop-settings) .desktop-window-icon {
-  margin-inline-start: max(0px, calc((100% - 1600px) / 2));
 }
 .desktop-settings > .card {
   border: 0;
@@ -826,7 +841,8 @@ html[data-orbis-motion="reduced"] .orbis-update-spinning {
   z-index: 18;
   bottom: 20px;
   left: 50%;
-  transform: translateX(-50%);
+  translate: -50% 0;
+  scale: 1;
   display: flex;
   align-items: center;
   max-width: calc(100% - var(--desktop-inset) * 2);
@@ -837,6 +853,24 @@ html[data-orbis-motion="reduced"] .orbis-update-spinning {
   border: 0;
   border-radius: var(--orbis-dock-radius);
   animation: orbis-dock-enter 0.55s 0.12s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition:
+    translate 550ms cubic-bezier(0.16, 1, 0.3, 1),
+    scale 550ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 550ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.desktop[data-workspace-editing] .desktop-dock {
+  translate: -50% calc(100% + 32px);
+  scale: 0.93;
+  opacity: 0;
+  pointer-events: none;
+}
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"]) .desktop-dock {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-dock {
+    transition: none;
+  }
 }
 .desktop-dock-main {
   position: relative;
@@ -1023,10 +1057,10 @@ html[data-orbis-motion="reduced"] .orbis-update-spinning {
 }
 @keyframes orbis-dock-enter {
   from {
-    transform: translate(-50%, 25px) scale(0.93);
+    transform: translateY(25px) scale(0.93);
   }
   to {
-    transform: translate(-50%, 0) scale(1);
+    transform: translateY(0) scale(1);
   }
 }
 /* Preserve the original 7px, 17px and 23px pulse diameters. */
@@ -1136,9 +1170,6 @@ html[data-orbis-motion="reduced"] .orbis-update-spinning {
     --desktop-inset: 24px;
     --desktop-bar-inset: 7px;
     background-attachment: scroll;
-  }
-  .desktop-mode-toggle {
-    display: none;
   }
   .desktop-system-bar {
     height: 56px;
@@ -1294,30 +1325,57 @@ html[data-orbis-motion="reduced"] .orbis-update-spinning {
   .desktop-brand {
     margin-inline-end: auto;
   }
+  .desktop-system-bar:not(.desktop-guest-bar) .desktop-brand {
+    display: none;
+  }
   .desktop-system-actions {
-    display: contents;
+    display: grid;
+    flex: 1 1 100%;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: center;
+    gap: 8px;
   }
   .desktop-system-actions > :not(.desktop-connection) {
-    order: 2;
+    order: 0;
+  }
+  .desktop-system-actions > .desktop-update-notice {
+    grid-column: 1 / -1;
+  }
+  .desktop-system-actions :is(.desktop-mode-toggle, .desktop-task-trigger, .desktop-battery-trigger, .desktop-search-trigger, .desktop-icon-button) {
+    width: 100%;
+    min-width: 0;
+    height: 44px;
+    min-height: 44px;
+    justify-content: center;
+    padding-inline: 6px;
+  }
+  .desktop-system-actions .desktop-toolbar-action[data-action="connection"] {
+    display: flex;
+    align-items: center;
+    grid-column: span 3;
+    min-width: 0;
   }
   .desktop-connection {
     position: static;
+    grid-column: span 3;
     flex: 1 1 32px;
-    order: 1;
+    order: 0;
     min-width: 0;
     max-width: none;
     font-size: inherit;
     line-height: 1.5;
+    min-height: 44px;
+    padding-inline: 8px;
   }
   .desktop-connection[data-connection-kind="status"] {
     flex: 1 1 32px;
-    order: 1;
+    order: 0;
     min-width: 0;
     gap: 4px;
     white-space: normal;
   }
   .desktop-connection-label {
-    font-size: 0.625rem;
+    font-size: 0.8125rem;
   }
 }
 @media (max-width: 360px) {
@@ -1426,4 +1484,8 @@ html[data-orbis-motion="reduced"] .orbis-update-spinning {
 }
 .desktop-section-unavailable p {
   margin: 0;
+}
+html[data-orbis-keyboard-dismiss] :focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }

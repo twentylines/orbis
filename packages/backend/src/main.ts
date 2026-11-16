@@ -20,6 +20,8 @@ import { BackupRestoreJournal } from './modules/system-backups/backup-restore-jo
 import { BackupRestoresService } from './modules/system-backups/backup-restores.service';
 import { SystemBackupsService } from './modules/system-backups/system-backups.service';
 import { SettingsBackupApplyService } from './modules/system-backups/settings-backup-apply.service';
+import { TimeMachineCorePreparationService } from './modules/system-backups/time-machine-core-preparation.service';
+import { TimeMachineCoreReconciliationService } from './modules/system-backups/time-machine-core-reconciliation.service';
 import { prepareSettingsRestoreEnvironment } from './modules/system-backups/settings-restore-startup';
 import {
   captureRestoreStartupRole,
@@ -96,6 +98,10 @@ async function bootstrap() {
     }),
   );
   app.enableShutdownHooks(['SIGTERM', 'SIGINT']);
+  await verifierDiagnostics.run('recovery', async () => {
+    await app.get(TimeMachineCorePreparationService).prepareStartup();
+    await app.get(TimeMachineCoreReconciliationService).prepareStartup();
+  });
 
   const appService = app.get(AppService);
   await verifierDiagnostics.run('database', () =>

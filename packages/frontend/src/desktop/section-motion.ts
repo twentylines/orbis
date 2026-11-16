@@ -34,12 +34,14 @@ export function useSectionMotion(ready = true) {
     }
     const view = document.querySelector<HTMLElement>('#desktop-content > .desktop-route-page');
     if (!view || prefersReducedMotion() || typeof view.animate !== 'function') return;
+    const content = view.querySelector<HTMLElement>('.desktop-window-content');
+    if (!content) return;
     const bounds = view.getBoundingClientRect();
     const distance = Math.min(24, Math.max(0, bounds.left), Math.max(0, window.innerWidth - bounds.right));
     const direction = sectionDirection(sectionIndex(before.path), sectionIndex(next.path), action, before.index, next.index);
     view.dataset.sectionMotion = 'true';
     view.dataset.sectionPhase = 'card';
-    const animation = view.animate([{ transform: `translate3d(${direction * distance}px, 0, 0)` }, { transform: 'translate3d(0, 0, 0)' }], {
+    const animation = content.animate([{ transform: `translate3d(${direction * distance}px, 0, 0)` }, { transform: 'translate3d(0, 0, 0)' }], {
       duration: sectionMotionTiming.content,
       easing: sectionMotionEasing,
     });

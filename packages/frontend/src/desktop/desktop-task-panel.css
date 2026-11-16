@@ -1,0 +1,144 @@
+.orbis-dropdown-menu.desktop-task-panel {
+  position: fixed;
+  z-index: 1100;
+  box-sizing: border-box;
+  width: 400px;
+  min-width: 0;
+  max-width: calc(100vw - 32px);
+  padding: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding: 8px;
+  color: var(--desktop-ink, var(--tblr-body-color));
+  background: var(--desktop-menu-surface, var(--tblr-bg-surface));
+  border-color: var(--desktop-line, var(--tblr-border-color));
+  border-radius: 18px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  transform-origin: center top;
+}
+.desktop-task-panel-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.desktop-task-panel :is(a, button) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--desktop-ink);
+  background: transparent;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: normal;
+}
+.desktop-task-panel :is(a, button):hover {
+  background: color-mix(in srgb, var(--desktop-preset-tint) 14%, transparent);
+}
+.desktop-task-panel :is(a, button):focus-visible {
+  outline: 2px solid var(--desktop-focus);
+  outline-offset: 2px;
+}
+.desktop-task-panel p {
+  margin: 0 0 8px;
+}
+.desktop-task-panel :is(time, small),
+.desktop-task-panel-record > span,
+.desktop-task-panel-empty {
+  color: var(--desktop-menu-muted, var(--desktop-muted));
+}
+.desktop-task-panel-notice,
+.desktop-task-panel-capture {
+  padding: 12px;
+  margin-block: 12px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+}
+.desktop-task-panel-group {
+  padding-top: 12px;
+  border-top: 1px solid var(--desktop-line);
+  margin-top: 12px;
+}
+.desktop-task-panel-group h3 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 8px;
+  font-size: inherit;
+  font-weight: 700;
+}
+.desktop-task-panel-group h3 > span {
+  flex: none;
+  color: var(--desktop-menu-muted, var(--desktop-muted));
+  font-variant-numeric: tabular-nums;
+}
+.desktop-task-panel-group ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.desktop-task-panel-group li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+  padding-block: 10px;
+}
+.desktop-task-panel-symbol {
+  padding-top: 2px;
+  color: var(--desktop-menu-muted, var(--desktop-muted));
+}
+.desktop-task-panel-record {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.desktop-task-panel :is(time, small) {
+  font-size: 0.875em;
+}
+.desktop-task-panel-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.desktop-task-panel-links a,
+.desktop-task-panel-action,
+.desktop-task-panel-notice button {
+  padding: 8px;
+}
+.desktop-task-panel-capture progress {
+  display: block;
+  width: 100%;
+  margin-block: 10px;
+  accent-color: var(--desktop-accent);
+}
+.desktop-task-panel-capture small {
+  display: block;
+}
+.desktop-task-panel .receiver-request-card {
+  gap: 8px;
+  margin-top: 12px;
+}
+.desktop-task-panel .receiver-request-card h3 {
+  margin: 0;
+  font-size: inherit;
+}
+.desktop-task-panel .receiver-request-list li {
+  display: grid;
+  gap: 8px;
+  justify-content: stretch;
+  padding-block: 12px;
+}
+.desktop-task-panel .receiver-request-list .btn {
+  justify-self: start;
+  padding: 8px 12px;
+}
+html[data-orbis-motion="reduced"] .desktop-task-panel {
+  transition: none;
+  animation: none;
+}

@@ -105,7 +105,8 @@ for name in ('orbis-host-core-capture-reader.py', 'orbis-host-core-capture-servi
              'orbis-host-core-capture-abort.py', 'orbis-host-core-capture-empty-abort.py',
              'orbis-host-core-capture-unused-abort.py',
              'orbis-host-core-checkpoint.py', 'orbis-host-time-machine-core.py',
-             'orbis-host-sentinel-observer.py'):
+             'orbis-host-sentinel-observer.py', 'orbis-host-core-pg-profiles.py',
+             'orbis-host-core-clean-target-bootstrap.py', 'orbis-host-core-clean-target-reconcile.py'):
     load(name)
 setup = load('orbis-host-service-setup.py')
 files, unit = setup.source_files(root)

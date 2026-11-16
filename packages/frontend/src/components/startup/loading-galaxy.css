@@ -1,0 +1,86 @@
+.loading-galaxy-space {
+  position: absolute;
+  inset: 0;
+  min-height: 100%;
+  pointer-events: none;
+}
+.loading-galaxy-particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: -1;
+  pointer-events: none;
+}
+.loading-galaxy-particles i {
+  position: absolute;
+  left: var(--recovery-loading-x, 50%);
+  top: var(--recovery-loading-y, 35%);
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--recovery-light, #c2d0dc);
+  animation: recovery-particle-extract 2200ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+@keyframes recovery-particle-extract {
+  0% {
+    opacity: 0;
+    transform: translate(var(--particle-start-x), var(--particle-start-y)) scale(0.65);
+  }
+  8% {
+    opacity: 0.65;
+  }
+  55% {
+    opacity: 0.9;
+    transform: translate(var(--particle-mid-x), var(--particle-mid-y));
+  }
+  85% {
+    opacity: 0.8;
+    transform: translate(var(--particle-end-x), var(--particle-end-y)) scale(0.45);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--particle-end-x), var(--particle-end-y)) scale(0.45);
+  }
+}
+.recovery-scene[data-visible="false"] .loading-galaxy-particles i {
+  animation-play-state: paused;
+}
+:where(.recovery-scene[data-reduced="true"], :root[data-orbis-effects="low"] .recovery-scene) .loading-galaxy-particles {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce), (forced-colors: active) {
+  .loading-galaxy-particles {
+    display: none;
+  }
+}
+
+.orbis-startup:is([data-first-boot], [data-workspace-space]) .loading-galaxy-particles {
+  z-index: 0;
+}
+.orbis-startup:is([data-first-boot], [data-workspace-space]) .loading-galaxy-particles i {
+  background: var(--orbis-logo-accent);
+}
+:root[data-desktop-mode="light"] .orbis-startup[data-first-boot] .loading-galaxy-space {
+  --depth-light: #52616c;
+  --depth-accent: #a6b1ba;
+  background: #edf0ee;
+}
+:root[data-desktop-mode="light"] .orbis-startup[data-first-boot] .loading-galaxy-space::after {
+  background: radial-gradient(ellipse at 50% 48%, transparent 20%, rgb(237 240 238 / 60%));
+}
+:root[data-desktop-mode="light"] .orbis-startup[data-first-boot] .loading-galaxy-space canvas {
+  visibility: hidden;
+}
+:root[data-desktop-mode="light"] .orbis-startup[data-first-boot] .depth-travel-distant-stars {
+  background-image:
+    radial-gradient(circle at 8% 16%, #52616c 0 0.8px, transparent 1.2px), radial-gradient(circle at 64% 38%, #52616c 0 0.5px, transparent 1px),
+    radial-gradient(circle at 36% 72%, #52616c 0 0.7px, transparent 1.2px), radial-gradient(circle at 86% 88%, #52616c 0 0.5px, transparent 1px);
+  background-size: 320px 360px;
+  opacity: 0.45;
+}
+:root[data-desktop-mode="light"] .orbis-startup[data-first-boot] .depth-travel-horizon::after {
+  opacity: 0.16;
+}
+:where(.orbis-startup[data-revealing], :root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"])) .loading-galaxy-particles {
+  display: none;
+}

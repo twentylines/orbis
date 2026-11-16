@@ -54,7 +54,8 @@ test('historical projection uses sealed metadata without substituting a current 
 
 test('disabled Time Machine setup names the captured content and keeps enabling state honest', () => {
   const ready = renderToStaticMarkup(<TimeMachineSetupView pending={false} onEnable={() => {}} />);
-  expect(ready).toContain('What a Time Machine point includes');
+  expect(ready).toContain('>Time Machine</h4>');
+  expect(ready).toContain('tm-disabled-setup-icon');
   expect(ready).toContain('The server database');
   expect(ready).toContain('Orbis configuration');
   expect(ready).toContain('Managed app data');

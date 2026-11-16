@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -17,6 +17,14 @@ import {
 } from '@/desktop/core-update-state';
 import { OperationStartupContext } from '@/components/startup/operation-startup';
 import { StartupSurface } from '@/components/startup/startup-surface';
+import {
+  beginResetStartup,
+  completeResetStartup,
+  readResetStartupPhase,
+  resetStartupPhaseServerSnapshot,
+  subscribeResetStartup,
+} from '@/components/startup/reset-startup';
+import { resetLoadingPresentation } from '@/components/startup/reset-presentation';
 import { RecoveryScene } from './recovery-scene';
 import { UpdateDownloadProgress } from './update-download-progress';
 import {
@@ -47,7 +55,7 @@ import {
   type OperationSnapshot,
 } from './operation-status';
 import { SystemResetWizard } from '@/modules/system-reset/system-reset';
-import { openResetOnboarding } from '@/modules/system-reset/reset-completion';
+import { hasAcceptedResetReceipt, openResetOnboarding } from '@/modules/system-reset/reset-completion';
 
 const stageCopy = {
   preparing: 'Preparing',
@@ -77,6 +85,7 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
   const revalidator = useRevalidator();
   const released = useRef(false);
   const visible = useWindowVisible();
+  const resetPhase = useSyncExternalStore(subscribeResetStartup, readResetStartupPhase, resetStartupPhaseServerSnapshot);
   const [snapshot, setSnapshot] = useState<OperationSnapshot | null>(null);
   const [job, setJob] = useState<RestoreJob | null>(null);
   const [core, setCore] = useState<CoreUpdateWatch | null>(null);
@@ -96,7 +105,7 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
   const [authAction, setAuthAction] = useState<'recover' | 'cancel' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const observed = useRef(Boolean(initialMarker.current));
-  const observedReset = useRef(hasAcceptedReset());
+  const observedReset = useRef(hasAcceptedReset() || hasAcceptedResetReceipt());
   const resetGenerations = useRef(new ResetGenerationTracker());
   const [resetRecovery, setResetRecovery] = useState(false);
   const startedId = useRef<string | null>(null);
@@ -142,13 +151,17 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
     const check = async () => {
       const shared = await loadOperationStatus(attempt > 0);
       if (!current) return;
-      if (shared.state === 'resetting' || hasAcceptedReset() || resetGenerations.current.observe(shared)) observedReset.current = true;
+      if (shared.state === 'resetting' || hasAcceptedReset() || hasAcceptedResetReceipt() || resetGenerations.current.observe(shared)) {
+        observedReset.current = true;
+        beginResetStartup('accepted');
+      }
       let next = await confirmResetSnapshot(shared, observedReset.current);
       if (!current) return;
       if (next.state === 'resetting') observedReset.current = true;
       if (observedReset.current && next.state === 'idle' && next.supported && !next.unavailable) {
         if (openResetOnboarding(next)) return;
       }
+      if (!observedReset.current && readResetStartupPhase() === 'accepted' && operationAllowsDeparture(next)) completeResetStartup();
       if (next.state !== 'idle') observed.current = true;
       const storage = operationContinuityStorage();
       const marker = storage ? readOperationContinuity(storage) : null;
@@ -350,6 +363,7 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
     (signInRequired && authRoute && snapshot && operationAllowsDeparture(snapshot)) ||
     (!signInRequired && operationShowsContent(snapshot, authRoute, matchingTerminal && !bootReady, continuity.departing));
   const server = snapshot ?? { state: 'checking' as const, supported: true };
+  const resetCopy = resetLoadingPresentation(snapshot);
   const waiting = operationIsWaiting(server);
   const useSpace = operationUsesSpace(snapshot, Boolean(operation.current ?? initialMarker.current?.operation));
   const kind = operation.current ?? 'restore';
@@ -388,35 +402,30 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
             : server.state === 'checking' && !operation.current
               ? 'Checking server'
               : 'Restoring');
-  if (resetSceneVisible(snapshot, observedReset.current))
+  if (resetPhase === 'accepted' || resetSceneVisible(snapshot, observedReset.current))
     return (
       <>
         <div className="reset-scene-backdrop" aria-hidden="true" />
-        <RecoveryScene
-          open={!resetRecovery}
-          title={waiting ? 'Waiting for the server to respond' : server.stage === 'recovering' ? 'Reset needs attention' : 'Resetting Orbis'}
-          status={waiting ? undefined : server.stage === 'recovering' ? 'Waiting for confirmation' : stageCopy[server.stage ?? 'resetting']}
-          active={waiting || server.stage !== 'recovering'}
-          variant="onboarding"
-          detail={
-            waiting
-              ? 'Orbis will reload automatically.'
-              : server.stage === 'recovering'
-                ? 'Confirm the original reset again to continue. Server data stays locked until it finishes.'
-                : undefined
-          }
-          footer="Installed applications and their data are kept."
-          actions={
-            server.stage === 'recovering' ? (
+        {resetRecovery ? null : (
+          <StartupSurface
+            overlay
+            initial
+            setupSpace
+            attention={resetCopy.recovery || Boolean(snapshot?.unavailable)}
+            label={resetCopy.title}
+            progress={snapshot?.progress}
+            status={{ title: resetCopy.stage, message: resetCopy.message }}
+          >
+            {resetCopy.recovery ? (
               <>
                 <Button onClick={() => setResetRecovery(true)}>Recover</Button>
                 <a className="btn" href="/login">
                   Sign in
                 </a>
               </>
-            ) : undefined
-          }
-        />
+            ) : undefined}
+          </StartupSurface>
+        )}
         <SystemResetWizard open={resetRecovery} recovery onClose={() => setResetRecovery(false)} />
       </>
     );
@@ -442,7 +451,7 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
                   ? 'The restore did not complete. Your previous state was restored.'
                   : undefined))
         }
-        progress={core?.phase === 'ready' || core?.phase === 'returned' ? undefined : (restoration?.progress ?? server.progress)}
+        progress={waiting || core?.phase === 'ready' || core?.phase === 'returned' ? undefined : (restoration?.progress ?? server.progress)}
         progressContent={
           !waiting && kind !== 'restore' && core?.phase === 'downloading' && core.download ? (
             <UpdateDownloadProgress value={core.download} />

@@ -9,7 +9,8 @@ import type { BackupDatabaseService } from '../system-backups/backup-database.se
 import { hashCaptureSnapshotFile } from '../system-backups/time-machine-capture-coherence';
 import { capsuleLimits, capsuleManifestSchema, type CapsuleManifest } from './capsule';
 import { verifyCapsulePreview } from './capsule-preview';
-import { reviewCoreCapsule, type CoreCapsuleReview } from './core-capsule-review';
+import { reviewCoreCapsule, type CoreCapsuleReview, type CoreCapsulePayload } from './core-capsule-review';
+import { reviewComponentsCapsule } from './components-capsule-review';
 import { capsuleDirectorySeal, inspectCapsuleEntry, readCapsuleEntry, sameCapsuleDirectorySeal } from './verified-source';
 
 declare const verifiedCapsule: unique symbol;
@@ -24,12 +25,30 @@ type Verification = {
 };
 const verifications = new WeakMap<VerifiedCapsuleContents, Verification>();
 const coreReviews = new WeakMap<VerifiedCapsuleContents, CoreCapsuleReview>();
+const componentsReviews = new WeakMap<VerifiedCapsuleContents, Awaited<ReturnType<typeof reviewComponentsCapsule>>>();
+export async function componentsCapsuleReview(token: VerifiedCapsuleContents, signal: AbortSignal) {
+  const review = componentsReviews.get(token);
+  if (!review) throw fail();
+  await review.recheck(signal);
+  return review.summary;
+}
 /** Read-only review. Core capsules deliberately receive no legacy adoption capability. */
 export async function coreCapsuleReview(token: VerifiedCapsuleContents, signal: AbortSignal) {
   const review = coreReviews.get(token);
   if (!review) throw fail();
   await review.recheck(signal);
   return review.summary;
+}
+/** Core data capability only. Destination Root enrollment must authorize publication separately. */
+export async function withVerifiedCoreCapsuleContents<T>(
+  token: VerifiedCapsuleContents,
+  signal: AbortSignal,
+  consume: (review: Readonly<CoreCapsuleReview>) => Promise<T>,
+): Promise<T> {
+  const review = coreReviews.get(token);
+  if (!review) throw fail();
+  await review.recheck(signal);
+  return consume(review);
 }
 const freeze = <T>(value: T): T => {
   if (value && typeof value === 'object') {
@@ -66,6 +85,7 @@ export async function verifyCapsuleContents(options: {
   signal: AbortSignal;
   database: Pick<BackupDatabaseService, 'review'>;
   target: { orbisVersion: string; runtipiVersion: string; architecture: string };
+  corePayload?: (payload: CoreCapsulePayload) => Promise<void>;
 }): Promise<VerifiedCapsuleContents> {
   const { directory, signal } = options;
   const manifest = freeze(structuredClone(options.manifest));
@@ -78,7 +98,13 @@ export async function verifyCapsuleContents(options: {
   if (manifest.schema === 'orbis.time-machine-capsule-private.v2') {
     const review = await reviewCoreCapsule({ ...options, manifest });
     const token = Object.freeze(Object.create(null)) as VerifiedCapsuleContents;
-    coreReviews.set(token, { ...review, summary: freeze(review.summary) });
+    coreReviews.set(token, { ...review, manifest: freeze(review.manifest), summary: freeze(review.summary) });
+    return token;
+  }
+  if (manifest.schema === 'orbis.time-machine-capsule-private.v3') {
+    const review = await reviewComponentsCapsule({ directory, manifest, signal });
+    const token = Object.freeze(Object.create(null)) as VerifiedCapsuleContents;
+    componentsReviews.set(token, { ...review, summary: freeze(review.summary) });
     return token;
   }
   const originalDirectory = await capsuleDirectorySeal(directory);

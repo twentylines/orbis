@@ -20,14 +20,33 @@ import { desktopAppearanceSchema, normaliseDesktopAppearance, type DesktopAppear
 import { useResolvedColourMode, readSystemColourMode, type ColourMode, type ResolvedColourMode } from './colour-mode';
 import { appearanceFromStored, preferenceStorageKey, preferenceCacheLimit, preferenceChangeEvent, appearanceCacheEvent } from './appearance-cache';
 import { validHomePins } from './workspace-apps';
+import {
+  toolbarActionIds,
+  validToolbarOrder,
+  validWorkspaceLayout,
+  workspaceCapabilities,
+  unavailableWorkspaceCapabilities,
+  preferencePayload,
+  type ToolbarActionId,
+  type WorkspaceLayout,
+  type WorkspaceCapabilities,
+} from './workspace-layout';
 import { resolveWallpaperKey, type ThemePreset } from './wallpaper-presets';
 import { validHiddenRecommendationCategories, type StoreRecommendationCategory } from '@/modules/app/components/store-discover/store-recommendations';
 import { clientStatusHintEvent } from '@/components/recovery-progress/operation-status';
+import { beginResetStartup } from '@/components/startup/reset-startup';
 import { themePacksChanged } from '@/modules/theme-packs/theme-packs-api';
 
 export const widgetIds = ['applications', 'activity', 'storage', 'attention'] as const;
 export type WidgetId = (typeof widgetIds)[number];
-export type WorkspacePreferences = { order: WidgetId[]; hidden: WidgetId[]; wide: WidgetId[]; pinnedApps: string[]; showAllApps: boolean };
+export type WorkspacePreferences = {
+  order: WidgetId[];
+  hidden: WidgetId[];
+  wide: WidgetId[];
+  pinnedApps: string[];
+  showAllApps: boolean;
+  layout?: WorkspaceLayout;
+};
 
 export type DesktopPreferences = {
   serverName: string;
@@ -38,6 +57,7 @@ export type DesktopPreferences = {
   wallpaperMode: 'theme' | 'custom';
   wallpaperPreset: ThemePreset | null;
   workspace: WorkspacePreferences;
+  toolbarOrder?: ToolbarActionId[];
   windows: DesktopWindows;
   appLaunch: AppLaunchPreferences;
   appearance: DesktopAppearance;
@@ -48,7 +68,7 @@ export type DesktopPreferences = {
 export const defaultDesktopPreferences: DesktopPreferences = {
   serverName: 'Server',
   preset: 'frost',
-  mode: 'light',
+  mode: 'system',
   density: 'comfortable',
   wallpaper: 'sandstone',
   wallpaperMode: 'theme',
@@ -106,7 +126,8 @@ export const isWorkspacePreferences = (value: unknown): value is StoredWorkspace
     isWidgetList(workspace.hidden) &&
     isWidgetList(workspace.wide) &&
     (workspace.showAllApps === undefined || typeof workspace.showAllApps === 'boolean') &&
-    (workspace.pinnedApps === undefined || validHomePins(workspace.pinnedApps))
+    (workspace.pinnedApps === undefined || validHomePins(workspace.pinnedApps)) &&
+    (workspace.layout === undefined || validWorkspaceLayout(workspace.layout))
   );
 };
 
@@ -126,6 +147,7 @@ export const isPreferences = (value: unknown): value is StoredDesktopPreferences
       candidate.wallpaperPreset === null ||
       ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'].includes(String(candidate.wallpaperPreset))) &&
     (candidate.workspace === undefined || isWorkspacePreferences(candidate.workspace)) &&
+    (candidate.toolbarOrder === undefined || validToolbarOrder(candidate.toolbarOrder)) &&
     (candidate.windows === undefined || desktopWindowsSchema.allows(candidate.windows)) &&
     (candidate.appLaunch === undefined || appLaunchSchema.allows(candidate.appLaunch)) &&
     (candidate.showStoreRecommendations === undefined || typeof candidate.showStoreRecommendations === 'boolean') &&
@@ -144,17 +166,19 @@ export const normalisePreferences = (value: StoredDesktopPreferences): DesktopPr
   wallpaperMode: value.wallpaperMode ?? (value.wallpaperPreset || value.appearance?.wallpaperImage ? 'custom' : 'theme'),
   wallpaperPreset: value.wallpaperPreset ?? null,
   windows: value.windows ?? {},
+  toolbarOrder: value.toolbarOrder ?? [...toolbarActionIds],
   appLaunch: value.appLaunch ?? defaultAppLaunch,
   showStoreRecommendations: value.showStoreRecommendations ?? true,
   hiddenStoreRecommendationCategories: value.hiddenStoreRecommendationCategories ?? [],
   appearance: normaliseDesktopAppearance(value.appearance),
-  mode: value.mode ?? (value.preset === 'graphite' ? 'dark' : 'light'),
+  mode: value.mode ?? (value.preset === 'graphite' ? 'dark' : 'system'),
   workspace: {
     order: value.workspace?.order ?? [...widgetIds],
     hidden: value.workspace?.hidden ?? [],
     wide: value.workspace?.wide ?? ['applications'],
     pinnedApps: value.workspace?.pinnedApps ?? [],
     showAllApps: value.workspace?.showAllApps ?? false,
+    ...(value.workspace?.layout ? { layout: value.workspace.layout } : {}),
   },
 });
 
@@ -191,6 +215,7 @@ export type PreferenceContext = {
   refreshWallpaper: () => void;
   updateWindow: (id: DesktopWindowId, value: DesktopWindowState) => void;
   reset: () => void;
+  workspaceCapabilities?: WorkspaceCapabilities;
   syncState: 'local' | 'loading' | 'saving' | 'saved' | 'error';
   requiresOnboarding: boolean;
   onboardingOrigin: 'fresh' | 'runtipi';
@@ -242,6 +267,16 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [serverReady, setServerReady] = useState(false);
+  const [capabilities, setCapabilities] = useState(unavailableWorkspaceCapabilities);
+  const capabilityRef = useRef(capabilities);
+  const acceptCapabilities = useCallback((header: string | null) => {
+    capabilityRef.current = workspaceCapabilities(header);
+    setCapabilities((current) =>
+      current.toolbarOrder === capabilityRef.current.toolbarOrder && current.workspaceLayout === capabilityRef.current.workspaceLayout
+        ? current
+        : capabilityRef.current,
+    );
+  }, []);
   const restoreReadiness = restoredPreferencesState(requiresFreshRestore, isLoggedIn, serverReady, loadError);
   useStartupReady(!booting && restoreReadiness !== 'waiting' && !(isLoggedIn && ['/login', '/register', '/reset-password'].includes(pathname)));
   useLayoutEffect(() => {
@@ -297,6 +332,8 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     acknowledgedRevision.current = 0;
     resetGeneration.current = undefined;
     setServerReady(false);
+    capabilityRef.current = unavailableWorkspaceCapabilities;
+    setCapabilities(unavailableWorkspaceCapabilities);
     setInitialLoadComplete(false);
     setPreview(null);
   }, [sessionEpoch]);
@@ -362,6 +399,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     const loadRevision = revision.current;
     const canReplace = loadAttempt === 0 || acknowledgedRevision.current === loadRevision;
     let preferenceGeneration: string | null = null;
+    let preferenceCapabilities: string | null = null;
     setSyncState('loading');
     setLoadError(false);
     Promise.all(
@@ -372,7 +410,10 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
           signal: AbortSignal.any([controller.signal, sessionAbortSignal]),
         });
         if (!response.ok) throw new Error('Preference load failed');
-        if (url === '/api/desktop-preferences') preferenceGeneration = response.headers.get('X-Orbis-Reset-Generation');
+        if (url === '/api/desktop-preferences') {
+          preferenceGeneration = response.headers.get('X-Orbis-Reset-Generation');
+          preferenceCapabilities = response.headers.get('X-Orbis-Preference-Capabilities');
+        }
         return response.json() as Promise<unknown>;
       }),
     )
@@ -385,6 +426,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
           acknowledgedRevision.current = loadRevision;
           replacePreferences(normalisePreferences(value));
         }
+        acceptCapabilities(preferenceCapabilities);
         loadedSession.current = sessionEpoch;
         resetGeneration.current = status.generation;
         setServerReady(true);
@@ -411,7 +453,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [isLoggedIn, loadAttempt, sessionEpoch, sessionAbortSignal, isCurrentSession, replacePreferences]);
+  }, [isLoggedIn, loadAttempt, sessionEpoch, sessionAbortSignal, isCurrentSession, replacePreferences, acceptCapabilities]);
 
   useEffect(() => {
     if (!canSave() || !serverReady) return;
@@ -429,6 +471,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       waiting = false;
       const currentRevision = revision.current;
       let preferenceGeneration: string | null = null;
+      let preferenceCapabilities: string | null = null;
       try {
         const [value, setup] = await Promise.all(
           ['/api/desktop-preferences', '/api/desktop-preferences/onboarding'].map(async (url) => {
@@ -438,15 +481,20 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
               signal: AbortSignal.any([controller.signal, sessionAbortSignal, AbortSignal.timeout(10_000)]),
             });
             if (!response.ok) throw new Error('Preference refresh failed');
-            if (url === '/api/desktop-preferences') preferenceGeneration = response.headers.get('X-Orbis-Reset-Generation');
+            if (url === '/api/desktop-preferences') {
+              preferenceGeneration = response.headers.get('X-Orbis-Reset-Generation');
+              preferenceCapabilities = response.headers.get('X-Orbis-Preference-Capabilities');
+            }
             return response.json() as Promise<unknown>;
           }),
         );
         const status = onboardingStatus(setup);
         if (preferenceGeneration !== null && preferenceGeneration !== (status.generation ?? 'none')) throw new Error('Preference generation changed');
         if (!disposed && canSave() && isPreferences(value)) {
+          acceptCapabilities(preferenceCapabilities);
           const reset = resetGeneration.current !== status.generation;
           if (reset) {
+            beginResetStartup('accepted');
             resetGeneration.current = status.generation;
             revision.current++;
             acknowledgedRevision.current = revision.current;
@@ -488,7 +536,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       window.removeEventListener(preferenceChangeEvent, changed);
       if (remoteRefresh.current === refresh) remoteRefresh.current = null;
     };
-  }, [serverReady, sessionAbortSignal, canSave, replacePreferences]);
+  }, [serverReady, sessionAbortSignal, canSave, replacePreferences, acceptCapabilities]);
 
   useEffect(() => {
     if (isLoggedIn) return;
@@ -547,7 +595,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
             keepalive: true,
             signal: requestSignal(),
             headers: { 'Content-Type': 'application/json', 'X-Orbis-Reset-Generation': generation ?? 'none' },
-            body: JSON.stringify(currentPreferences.current),
+            body: JSON.stringify(preferencePayload(currentPreferences.current, capabilityRef.current)),
           });
           if (!isCurrentSession()) return;
           if (generation !== resetGeneration.current) return;
@@ -598,7 +646,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         credentials: 'include',
         signal: requestSignal(),
         headers: { 'Content-Type': 'application/json', 'X-Orbis-Reset-Generation': generation ?? 'none' },
-        body: JSON.stringify(next),
+        body: JSON.stringify(preferencePayload(next, capabilityRef.current)),
       });
       if (!isCurrentSession()) throw new Error('Your session changed. Reload your settings before saving.');
       if (generation !== resetGeneration.current) throw new Error('Orbis was reset. Reload your settings before saving.');
@@ -666,7 +714,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         credentials: 'include',
         signal: requestSignal(),
         headers: { 'Content-Type': 'application/json', 'X-Orbis-Reset-Generation': generation ?? 'none' },
-        body: JSON.stringify(next),
+        body: JSON.stringify(preferencePayload(next, capabilityRef.current)),
       });
       if (!isCurrentSession()) throw new Error('Your session changed. Reload your settings before saving.');
       if (generation !== resetGeneration.current) throw new Error('Orbis was reset. Reload setup before saving.');
@@ -714,6 +762,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         refreshWallpaper: () => setWallpaperRevision((value) => value + 1),
         updateWindow,
         reset,
+        workspaceCapabilities: capabilities,
         syncState,
         requiresOnboarding,
         onboardingOrigin,

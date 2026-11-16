@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { PinnedDirectory, STAGE_PREFIX, ResetPreferenceError, ResetPreferenceStore } from './reset-preference-store';
 
 const journal = () => randomUUID();
@@ -30,6 +30,7 @@ beforeEach(async () => {
   await fs.mkdir(state, { mode: 0o700 });
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
   await fs.rm(root, { recursive: true, force: true });
 });
 
@@ -58,6 +59,43 @@ it('erases only the journal targets and stages inside the same private directory
   expect(await stages(path.join(state, 'wallpapers'))).toEqual([]);
   // Same-directory staging never needs the dedicated authority path, and never creates it.
   expect(await exists(path.join(root, 'orbis-reset'))).toBe(false);
+});
+
+it.each(['preflight', 'begin', 'commit'])('stops before mutation when its continuing check fails at %s', async (phase) => {
+  const target = await file('state/desktop/7.json');
+  let ready = phase !== 'preflight';
+  const verify = async () => {
+    if (!ready) throw new Error('synthetic authority changed');
+  };
+  const selected = store();
+  if (phase === 'preflight') {
+    await expect(selected.preflight(journal(), [target], verify)).rejects.toThrow('synthetic authority changed');
+  } else {
+    const plan = await selected.preflight(journal(), [target], verify);
+    try {
+      if (phase === 'commit') await selected.begin(plan);
+      ready = false;
+      await expect(phase === 'begin' ? selected.begin(plan) : selected.commit(plan)).rejects.toThrow('synthetic authority changed');
+    } finally {
+      await plan.close();
+    }
+  }
+  expect(await fs.readFile(target, 'utf8')).toBe('old preference');
+  expect(await stages(path.dirname(target))).toHaveLength(phase === 'commit' ? 1 : 0);
+});
+
+it('does not lose the continuing check through a copied or closed preference plan', async () => {
+  const target = await file('state/desktop/7.json');
+  const selected = store();
+  const plan = await selected.preflight(journal(), [target], async () => undefined);
+  try {
+    await expect(selected.begin({ ...plan })).rejects.toMatchObject({ code: 'stage-invalid', detail: { reason: 'plan' } });
+  } finally {
+    await plan.close();
+  }
+  await expect(selected.begin(plan)).rejects.toMatchObject({ code: 'stage-invalid', detail: { reason: 'plan' } });
+  expect(await fs.readFile(target, 'utf8')).toBe('old preference');
+  expect(await stages(path.dirname(target))).toEqual([]);
 });
 
 it('erases a root-level preference through its own same-directory stage', async () => {
@@ -284,6 +322,79 @@ it('detects a target swapped between preflight and the move', async () => {
     await plan.close();
   }
   expect(await fs.readFile(target, 'utf8')).toBe('swapped');
+});
+
+it('keeps the selected inode pinned until plan cleanup', async () => {
+  const target = await file('state/desktop/7.json');
+  const opened: fs.FileHandle[] = [];
+  const open = fs.open;
+  vi.spyOn(fs, 'open').mockImplementation(async (name, flags, mode) => {
+    const handle = await open(name, flags, mode);
+    if (String(name).endsWith('/7.json')) opened.push(handle);
+    return handle;
+  });
+  const selected = store();
+  const plan = await selected.preflight(journal(), [target]);
+  try {
+    expect(opened).toHaveLength(1);
+    const handle = opened[0];
+    if (!handle) throw new Error('Missing selected target descriptor');
+    const original = await handle.stat();
+    await fs.unlink(target);
+    await fs.writeFile(target, 'replacement must survive', { mode: 0o600 });
+    expect((await handle.stat()).nlink).toBe(0);
+    expect((await fs.lstat(target)).ino).not.toBe(original.ino);
+    await selected.begin(plan);
+    expect(await code(selected.commit(plan))).toBe('identity-changed');
+    expect(await fs.readFile(target, 'utf8')).toBe('replacement must survive');
+  } finally {
+    await plan.close();
+  }
+  expect(opened.every((handle) => handle.fd === -1)).toBe(true);
+});
+
+it('closes acquired target descriptors when another preflight target is unsafe', async () => {
+  const target = await file('state/desktop/7.json');
+  const unsafe = path.join(path.dirname(target), '8.json');
+  await fs.symlink(target, unsafe);
+  const opened: fs.FileHandle[] = [];
+  const open = fs.open;
+  vi.spyOn(fs, 'open').mockImplementation(async (name, flags, mode) => {
+    const handle = await open(name, flags, mode);
+    if (String(name).endsWith('/7.json')) opened.push(handle);
+    return handle;
+  });
+  expect(await code(store().preflight(journal(), [target, unsafe]))).toBe('unsafe');
+  expect(opened).toHaveLength(1);
+  expect(opened.every((handle) => handle.fd === -1)).toBe(true);
+  expect(await fs.readFile(target, 'utf8')).toBe('old preference');
+  expect(await stages(path.dirname(target))).toEqual([]);
+});
+
+it('rejects a replacement even when its exposed numeric identity collides', async () => {
+  const target = await file('state/desktop/7.json');
+  const selected = store();
+  const plan = await selected.preflight(journal(), [target]);
+  try {
+    const group = plan.groups[0];
+    const expected = group?.binding.targets[0];
+    if (!group || !expected) throw new Error('Missing target fixture');
+    await fs.rename(target, `${target}.held`);
+    await fs.writeFile(target, 'replacement must survive', { mode: 0o600 });
+    const lstat = group.pin.lstat.bind(group.pin);
+    group.pin.lstat = async (name) => {
+      const actual = await lstat(name);
+      return name === expected.name
+        ? Object.assign(Object.create(actual), { dev: expected.dev, ino: expected.ino, birthtimeMs: expected.birthtimeMs })
+        : actual;
+    };
+    await selected.begin(plan);
+    expect(await code(selected.commit(plan))).toBe('identity-changed');
+    expect(await fs.readFile(target, 'utf8')).toBe('replacement must survive');
+    expect(await fs.readFile(`${target}.held`, 'utf8')).toBe('old preference');
+  } finally {
+    await plan.close();
+  }
 });
 
 it('rejects a new file generation even when the filesystem reuses its inode number', async () => {

@@ -2,15 +2,16 @@ import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { resolveWallpaperKey } from '@/desktop/wallpaper-presets';
 import { DesktopWallpaper } from '@/desktop/wallpaper';
-import { DepthTravel } from '@/components/recovery-progress/depth-travel';
-import { IconMoon, IconSun } from '@tabler/icons-react';
-import { Button } from '@/components/ui/Button';
-import { useLayoutEffect, useRef, type PropsWithChildren, type ReactNode } from 'react';
+import { InterstellarBackdrop } from '@/components/startup/interstellar-backdrop';
+import { RefractiveScene } from '@/components/startup/refractive-scene';
+import { useReducedTransparency } from '@/desktop/motion-preferences';
+import { useLayoutEffect, useRef, useSyncExternalStore, type PropsWithChildren, type ReactNode } from 'react';
 import { prefersReducedMotion } from '@/desktop/motion-setting';
+import { hasActiveSessionMorph, noSessionMorph, subscribeSessionMorph } from '@/components/startup/session-morph';
 import './layout.css';
 
 export function authLayoutScene(setup: boolean, scene?: ReactNode) {
-  return scene ?? (setup ? <DepthTravel mode="ambient" variant="onboarding" className="orbis-setup-space" /> : <DesktopWallpaper />);
+  return scene ?? (setup ? <InterstellarBackdrop className="orbis-setup-space" /> : <DesktopWallpaper />);
 }
 
 function revealAuthFocus(target: EventTarget) {
@@ -40,10 +41,12 @@ export const AuthLayout = ({
   progress?: ReactNode;
 }>) => {
   const container = useRef<HTMLDivElement>(null);
+  const morphing = useSyncExternalStore(subscribeSessionMorph, hasActiveSessionMorph, noSessionMorph);
+  const wasMorphing = useRef(morphing);
   useLayoutEffect(() => {
     let animation: Animation | undefined;
     const enter = () => {
-      if (prefersReducedMotion()) return;
+      if (prefersReducedMotion() || document.documentElement.dataset.orbisSessionMorph || typeof container.current?.animate !== 'function') return;
       animation = container.current?.animate(
         [
           { opacity: 0, transform: 'translateY(14px)' },
@@ -51,6 +54,7 @@ export const AuthLayout = ({
         ],
         { duration: 460, easing: 'cubic-bezier(.2, .7, .2, 1)' },
       );
+      if (animation) animation.id = 'orbis-auth-enter';
     };
     if (document.querySelector('.orbis-startup-overlay')) window.addEventListener('orbis-startup-reveal', enter, { once: true });
     else enter();
@@ -59,8 +63,25 @@ export const AuthLayout = ({
       animation?.cancel();
     };
   }, []);
+  useLayoutEffect(() => {
+    window.dispatchEvent(new Event('orbis-auth-card-ready'));
+  }, []);
+  useLayoutEffect(() => {
+    if (wasMorphing.current && !morphing && !setup)
+      container.current
+        ?.querySelector<HTMLInputElement>('input[autocomplete="username"], input:not([type="hidden"])')
+        ?.focus({ preventScroll: true });
+    wasMorphing.current = morphing;
+  }, [morphing, setup]);
 
-  const { preferences, resolvedMode, update } = useDesktopPreferences();
+  const { preferences, resolvedMode } = useDesktopPreferences();
+  const reducedTransparency = useReducedTransparency();
+  const glass =
+    setup &&
+    !preferences.appearance.lowEffects &&
+    preferences.appearance.glassBlur !== 0 &&
+    !(resolvedMode === 'dark' && preferences.appearance.oledDark) &&
+    (preferences.appearance.transparency === 'glass' || (preferences.appearance.transparency === 'system' && !reducedTransparency));
   return (
     <div
       className={`page page-center desktop-auth orbis-theme${setup ? ' desktop-auth-setup' : ''}`}
@@ -68,22 +89,10 @@ export const AuthLayout = ({
       data-desktop-mode={resolvedMode}
       data-desktop-wallpaper={resolveWallpaperKey(preferences)}
       data-setup-saving={(setup && busy) || undefined}
+      inert={!setup && morphing}
       onFocusCapture={(event) => revealAuthFocus(event.target)}
     >
       {authLayoutScene(setup, scene)}
-      {setup ? null : (
-        <div className="desktop-auth-toolbar">
-          <Button
-            size="icon"
-            variant="outline"
-            disabled={busy}
-            aria-label={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
-            onClick={() => update({ mode: resolvedMode === 'dark' ? 'light' : 'dark' })}
-          >
-            {resolvedMode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
-          </Button>
-        </div>
-      )}
       <div ref={container} className="container container-tight desktop-auth-container" inert={setup && busy}>
         {setup ? (
           <>
@@ -97,10 +106,11 @@ export const AuthLayout = ({
           </>
         ) : null}
         <div className="card card-md">
+          {glass && !setup ? <RefractiveScene /> : null}
           {setup ? null : (
             <header className="desktop-auth-identity">
               <div className="desktop-auth-brand">
-                <OrbisLogo size={42} plain />
+                <OrbisLogo size={42} plain animated />
                 <span className="desktop-auth-product">Orbis</span>
               </div>
               <p className="desktop-auth-server">{preferences.serverName}</p>

@@ -1,0 +1,447 @@
+.workspace-widget-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+  flex: 1;
+}
+.workspace-widget-content > section {
+  flex: 1;
+  margin: 0;
+}
+.workspace[data-editing] .workspace-grid .workspace-widget {
+  position: relative;
+  animation: none;
+  scroll-margin-block: 120px 36px;
+  border-radius: 20px;
+  outline: 1px dashed var(--desktop-line);
+}
+.workspace[data-editing] .workspace-app {
+  animation: none;
+}
+.workspace[data-editing] .workspace-app-entry {
+  position: relative;
+}
+.workspace[data-editing] .workspace-widget-content .workspace-section-heading > a,
+.workspace[data-editing] .workspace-home-app-actions {
+  visibility: hidden;
+}
+.workspace-widget-editbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 2px 8px;
+  background: var(--desktop-surface);
+  border-radius: 18px 18px 0 0;
+  border-bottom: 1px solid var(--desktop-line);
+}
+.workspace-drag-grip,
+.workspace-widget-hide,
+.workspace-app-unpin,
+.workspace-resize-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  font: inherit;
+  cursor: pointer;
+}
+.workspace-drag-grip {
+  touch-action: none;
+  cursor: grab;
+  font-size: 0.8125rem;
+  background: transparent;
+}
+.workspace-drag-grip svg {
+  flex: none;
+}
+.workspace-drag-grip span {
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: break-word;
+}
+.workspace-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: color-mix(in srgb, var(--desktop-surface) 92%, transparent);
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px 0 18px 0;
+}
+.workspace-widget:has(.workspace-resize-handle) .workspace-widget-content {
+  padding-bottom: 24px;
+}
+.workspace-drag-grip:focus-visible,
+.workspace-widget-hide:focus-visible,
+.workspace-app-unpin:focus-visible,
+.workspace-resize-handle:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: -3px;
+}
+.workspace-app-grip {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  justify-content: start;
+  align-items: start;
+  background: transparent;
+}
+.workspace-app-unpin {
+  position: absolute;
+  right: 3px;
+  top: 3px;
+  z-index: 3;
+}
+.workspace [data-sorting] {
+  z-index: 30;
+  background: var(--desktop-surface);
+  box-shadow: 0 14px 35px #0003;
+  cursor: grabbing;
+}
+.workspace .workspace-editor-compact {
+  padding: 12px 16px;
+  margin-bottom: 18px;
+  animation: none;
+}
+.workspace-editor-controls,
+.workspace-editor-options {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+.workspace-editor-controls {
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.workspace-editor-controls p {
+  flex: 1 1 22rem;
+  margin: 0;
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+}
+.workspace-editor-options .orbis-switch {
+  margin: 0;
+}
+.workspace-editor-options > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.workspace-editor-compact .workspace-editor-sync {
+  margin: 8px 0 0;
+}
+.workspace-editor-compact details {
+  position: relative;
+}
+.workspace-editor-compact summary {
+  min-height: 44px;
+  align-content: center;
+  padding: 8px 12px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+.workspace-editor-compact summary:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 2px;
+}
+.workspace-app-chooser-content,
+.workspace-widget-chooser > div {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 45;
+  width: min(26rem, calc(100vw - 64px));
+  max-height: min(26rem, 65dvh);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 16px;
+  background: var(--desktop-window-surface, var(--desktop-surface));
+  box-shadow: 0 16px 44px #0003;
+  backdrop-filter: var(--orbis-glass-filter, blur(20px));
+}
+.workspace-widget-chooser > div {
+  display: grid;
+  gap: 14px;
+}
+.workspace-app-chooser-content label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.875rem;
+}
+.workspace-app-chooser-content input {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 10px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  font: inherit;
+}
+.workspace-app-chooser-content .workspace-pin-list {
+  grid-template-columns: 1fr;
+}
+.workspace-app-chooser-content .workspace-pin-list button {
+  grid-template-columns: 28px minmax(0, 1fr) 16px;
+  align-items: center;
+}
+.workspace[data-app-view="icons"] .workspace-app-list {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 5.25rem), 1fr));
+  gap: 16px 12px;
+}
+.workspace[data-app-view="icons"] .workspace-app {
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+  padding: 12px 6px;
+  min-height: 78px;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.workspace[data-app-view="icons"] .workspace-app-copy {
+  position: absolute;
+  top: calc(100% - 5px);
+  left: 50%;
+  z-index: 10;
+  width: max-content;
+  max-width: min(15rem, 70vw);
+  padding: 6px 10px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 9px;
+  background: var(--desktop-window-surface, var(--desktop-surface));
+  color: var(--desktop-ink);
+  text-align: center;
+  translate: -50% 0;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.workspace[data-app-view="icons"] .workspace-app:is(:hover, :focus-visible) .workspace-app-copy {
+  visibility: visible;
+  opacity: 1;
+}
+.workspace[data-app-view="icons"] .workspace-app-entry:has(.workspace-app:is(:hover, :focus-visible)) {
+  z-index: 12;
+}
+.workspace[data-app-view="icons"] .workspace-app-title {
+  justify-content: center;
+}
+.workspace[data-app-view="icons"] .workspace-app-title strong {
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: break-word;
+  font-size: 0.8125rem;
+}
+.workspace[data-app-view="icons"] .workspace-app-copy > :not(.workspace-app-title),
+.workspace[data-app-view="icons"] .workspace-app-manage {
+  display: none;
+}
+.workspace[data-app-view="icons"] .workspace-app:hover,
+.workspace[data-app-view="icons"] .workspace-app:focus-visible {
+  background: color-mix(in srgb, var(--desktop-preset-tint) 12%, var(--desktop-surface));
+}
+@media (max-width: 600px) {
+  .workspace .workspace-grid:is([data-default-columns="true"], [data-default-columns="false"]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .workspace .workspace-grid[data-default-columns] > .workspace-widget {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+  .workspace-editor-compact details {
+    position: static;
+  }
+  .workspace-editor-options {
+    position: relative;
+  }
+  .workspace-app-chooser-content,
+  .workspace-widget-chooser > div {
+    top: 100%;
+    width: 100%;
+  }
+  .workspace .workspace-editor-compact {
+    padding: 12px;
+  }
+}
+
+/* Returning from the editor keeps settled cards still instead of restarting their entrance. */
+.workspace[data-arranged] .workspace-grid > .workspace-widget,
+.workspace[data-arranged] .workspace-app-entry > .workspace-app {
+  animation: none;
+}
+
+.workspace-editor-options > button,
+.workspace-editor-options > .orbis-switch,
+.workspace-editor-options summary {
+  min-height: 44px;
+}
+
+.workspace-widget-editbar {
+  position: absolute;
+  top: var(--workspace-editbar-top, 8px);
+  inset-inline: 0;
+  z-index: 3;
+  background: transparent;
+  border: 0;
+  padding: 0 8px;
+}
+.workspace-widget-editbar .workspace-drag-grip {
+  flex: 1;
+  justify-content: start;
+  padding-inline: 0;
+  min-width: 0;
+  background: transparent;
+}
+.workspace-widget-editbar .workspace-drag-grip svg {
+  position: absolute;
+  top: 50%;
+  left: var(--workspace-grip-left, 3px);
+  width: var(--workspace-grip-size, 12px);
+  translate: 0 -50%;
+}
+.workspace-widget-editbar .workspace-drag-grip span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  overflow: hidden;
+}
+.workspace-editor-menu {
+  position: static;
+  flex: 0 0 44px;
+}
+.workspace-editor-menu > summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  height: 100%;
+  width: 44px;
+  padding: 6px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  font-weight: 650;
+  list-style: none;
+  cursor: pointer;
+}
+.workspace-editor-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.workspace-editor-menu > summary:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 2px;
+}
+.workspace-editor-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: min(32rem, 100%);
+  max-height: min(60svh, 28rem);
+  overflow: auto;
+  border: 1px solid var(--desktop-line);
+  border-radius: 18px;
+  background: var(--desktop-surface);
+}
+.workspace-editor-popover .workspace-editor-compact {
+  margin: 0;
+}
+
+.workspace .workspace-heading {
+  position: relative;
+}
+.workspace-edit-controls {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.workspace-edit-controls .workspace-edit-toggle {
+  flex: none;
+  justify-content: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  box-shadow: none;
+}
+body:has(.orbis-theme) .workspace-edit-controls .workspace-edit-toggle:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 2px;
+}
+.workspace-reset-layout {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+.workspace-reset-layout:is(:hover, :focus-visible) {
+  border-color: var(--desktop-accent);
+}
+.workspace-reset-layout:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 2px;
+}
+.workspace [data-sortable-over] {
+  outline: 2px solid var(--desktop-focus);
+  outline-offset: 3px;
+}
+.workspace-auxiliary > .workspace-widget > .workspace-widget-content > section {
+  max-height: var(--workspace-auxiliary-max-height, none);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--desktop-line) transparent;
+  scroll-padding-block: 12px;
+}
+@media (max-width: 650px) {
+  .workspace .workspace-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .workspace-edit-controls {
+    min-width: 0;
+  }
+  .workspace-reset-layout {
+    font-size: 0.75rem;
+    padding-inline: 8px;
+  }
+}
+.workspace-editor-popover .workspace-editor-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.workspace-editor-popover .workspace-editor-options details {
+  width: 100%;
+}
+.workspace-editor-popover .workspace-widget-chooser > div,
+.workspace-editor-popover .workspace-app-chooser-content {
+  position: static;
+  width: 100%;
+  max-width: 100%;
+  box-shadow: none;
+}

@@ -137,6 +137,24 @@
 .recovery-progress-bar[data-visible="false"] > span {
   animation-play-state: paused;
 }
+.recovery-progress-bar[data-variant="scan"] {
+  height: 24px;
+  border-radius: 0;
+  background: transparent;
+}
+.recovery-progress-bar[data-variant="scan"]::before {
+  content: "";
+  position: absolute;
+  inset: calc(50% - 0.5px) 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, currentColor 18%, transparent), transparent);
+}
+.recovery-progress-bar[data-variant="scan"] > span {
+  background:
+    radial-gradient(ellipse 5px 3px at 58% 50%, currentColor, transparent),
+    radial-gradient(ellipse 28px 8px at 58% 50%, color-mix(in srgb, currentColor 40%, transparent), transparent),
+    linear-gradient(transparent 47%, color-mix(in srgb, currentColor 65%, transparent) 50%, transparent 53%);
+}
 .recovery-progress-bar[data-motion="false"] > span,
 :root[data-orbis-effects="low"] .recovery-progress-bar > span {
   animation: none;

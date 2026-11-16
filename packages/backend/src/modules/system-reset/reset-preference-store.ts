@@ -214,11 +214,20 @@ export type PreferenceGroup = {
   binding: Binding;
 };
 
+const pinnedTargets = new WeakMap<PreferenceGroup, Map<string, fs.FileHandle>>();
+
 export type ResetPreferencePlan = {
   journal: string;
   groups: PreferenceGroup[];
   close: () => Promise<void>;
 };
+
+type PreferenceCheck = () => Promise<void>;
+const planChecks = new WeakMap<ResetPreferencePlan, PreferenceCheck | undefined>();
+async function checkPreferencePlan(plan: ResetPreferencePlan) {
+  if (!planChecks.has(plan)) throw new ResetPreferenceError('stage-invalid', { reason: 'plan' });
+  await planChecks.get(plan)?.();
+}
 
 export type ResetPreferenceStoreOptions = {
   dataDir: string;
@@ -257,6 +266,20 @@ export class ResetPreferenceStore {
     this.readMounts = options.readMounts;
   }
 
+  private async assertPinnedTarget(group: PreferenceGroup, directory: PinnedDirectory, name: string) {
+    const handle = pinnedTargets.get(group)?.get(name);
+    if (!handle) return;
+    const [held, current] = await Promise.all([handle.stat({ bigint: true }), fs.lstat(directory.child(name), { bigint: true })]);
+    if (
+      held.dev !== current.dev ||
+      held.ino !== current.ino ||
+      held.birthtimeNs !== current.birthtimeNs ||
+      held.isFile() !== current.isFile() ||
+      held.isDirectory() !== current.isDirectory()
+    )
+      throw new ResetPreferenceError('identity-changed', { name });
+  }
+
   private async directory(target: string) {
     const parent = path.dirname(target);
     const name = path.basename(target);
@@ -287,7 +310,8 @@ export class ResetPreferenceStore {
    * Read-only secure preflight. Opens and pins each parent directory, rejects old staging from another journal,
    * and records the identity of every target. No directory or file is created here.
    */
-  async preflight(journal: string, targets: readonly string[]): Promise<ResetPreferencePlan> {
+  async preflight(journal: string, targets: readonly string[], check?: PreferenceCheck): Promise<ResetPreferencePlan> {
+    await check?.();
     if (typeof journal !== 'string' || !UUID.test(journal)) throw new ResetPreferenceError('unsafe', { reason: 'journal' });
     const unique = [...new Set(targets)];
     if (unique.length !== targets.length || unique.length === 0 || unique.length > MAX_TARGETS)
@@ -300,6 +324,7 @@ export class ResetPreferenceStore {
       grouped.set(parent, list);
     }
     const groups: PreferenceGroup[] = [];
+    const targetPins: fs.FileHandle[] = [];
     try {
       for (const parent of [...grouped.keys()].sort()) {
         const list = (grouped.get(parent) ?? []).sort((a, b) => a.index - b.index);
@@ -315,6 +340,7 @@ export class ResetPreferenceStore {
           ...this.pinOptions,
           ...(sharedStateMount ? { sharedStateMount: SHARED_STATE_MOUNT } : {}),
         });
+        const selected = new Map<string, fs.FileHandle>();
         try {
           const stageName = `${STAGE_PREFIX}${journal.toLowerCase()}`;
           const stage = path.join(parent, stageName);
@@ -350,7 +376,7 @@ export class ResetPreferenceStore {
           let binding: Binding;
           if (saved) binding = saved;
           else {
-            const observed = await Promise.all(
+            const observations = await Promise.allSettled(
               list.map(async ({ index, name }) => {
                 const maxFileBytes = resetPreferenceFileLimit(this.dataDir, path.join(parent, name));
                 const stat = await pin.lstat(name).catch((error: unknown) => {
@@ -365,6 +391,34 @@ export class ResetPreferenceStore {
                 if (stat.isDirectory()) await this.inspect(pin.child(name));
                 if (!Number.isFinite(stat.birthtimeMs) || stat.birthtimeMs <= 0)
                   throw new ResetPreferenceError('unsafe', { reason: 'generation-unavailable' });
+                const handle = await fs
+                  .open(
+                    pin.child(name),
+                    fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK | (stat.isDirectory() ? fs.constants.O_DIRECTORY : 0),
+                  )
+                  .catch((error: NodeJS.ErrnoException) => {
+                    throw new ResetPreferenceError('unsafe', { reason: 'target-open', code: error.code ?? 'unknown' });
+                  });
+                try {
+                  const held = await handle.stat();
+                  if (
+                    held.dev !== stat.dev ||
+                    held.ino !== stat.ino ||
+                    held.birthtimeMs !== stat.birthtimeMs ||
+                    held.isDirectory() !== stat.isDirectory() ||
+                    held.isFile() !== stat.isFile() ||
+                    held.nlink === 0 ||
+                    (this.uid !== undefined && held.uid !== this.uid) ||
+                    (held.isFile() && (held.nlink !== 1 || held.size > maxFileBytes))
+                  )
+                    throw new ResetPreferenceError('identity-changed', { name });
+                  // Keep the selected inode allocated until plan cleanup, including after an unlink.
+                  targetPins.push(handle);
+                  selected.set(name, handle);
+                } catch (error) {
+                  await handle.close();
+                  throw error;
+                }
                 return {
                   index,
                   name,
@@ -375,6 +429,10 @@ export class ResetPreferenceStore {
                 };
               }),
             );
+            const observed = observations.map((entry) => {
+              if (entry.status === 'rejected') throw entry.reason;
+              return entry.value;
+            });
             binding = {
               version: 2,
               journal: journal.toLowerCase(),
@@ -383,28 +441,41 @@ export class ResetPreferenceStore {
               targets: observed,
             };
           }
-          groups.push({ parent, pin, stage, resumed: Boolean(saved), binding });
+          const group = { parent, pin, stage, resumed: Boolean(saved), binding };
+          pinnedTargets.set(group, selected);
+          groups.push(group);
         } catch (error) {
           await pin.close();
           throw error;
         }
       }
+      await check?.();
     } catch (error) {
-      await Promise.all(groups.map((group) => group.pin.close()));
+      await Promise.all([...groups.map((group) => group.pin.close()), ...targetPins.map((handle) => handle.close())]);
+      for (const group of groups) pinnedTargets.delete(group);
       throw error;
     }
-    return {
+    const plan: ResetPreferencePlan = {
       journal: journal.toLowerCase(),
       groups,
       close: async () => {
-        await Promise.all(groups.flatMap((group) => [group.pin.close(), group.stagePin?.close() ?? Promise.resolve()]));
+        await Promise.all([
+          ...targetPins.map((handle) => handle.close()),
+          ...groups.flatMap((group) => [group.pin.close(), group.stagePin?.close() ?? Promise.resolve()]),
+        ]);
+        for (const group of groups) pinnedTargets.delete(group);
+        planChecks.delete(plan);
       },
     };
+    planChecks.set(plan, check);
+    return plan;
   }
 
   /** Creates (or adopts) the journal-bound staging directory. Call after the journal itself is durable. */
   async begin(plan: ResetPreferencePlan) {
+    await checkPreferencePlan(plan);
     for (const group of plan.groups) {
+      await checkPreferencePlan(plan);
       if (!group.stagePin) {
         // Prove the path still names the pinned directory before creating anything inside it.
         await group.pin.assertCurrent();
@@ -413,6 +484,7 @@ export class ResetPreferenceStore {
         await fs.mkdir(anchored, { mode: 0o700 }).catch((error: unknown) => {
           if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw new ResetPreferenceError('unsafe', { reason: 'stage' });
         });
+        await checkPreferencePlan(plan);
         const stagePin = await PinnedDirectory.open(anchored, { ...this.pinOptions, private: true, anchored: true });
         group.stage = anchored;
         if (stagePin.identity.dev !== group.pin.identity.dev) {
@@ -420,6 +492,7 @@ export class ResetPreferenceStore {
           throw new ResetPreferenceError('cross-device');
         }
         try {
+          await checkPreferencePlan(plan);
           if (group.resumed) {
             const saved = await this.readBinding(stagePin);
             if (
@@ -436,6 +509,7 @@ export class ResetPreferenceStore {
             group.binding = { ...group.binding, stage: { dev: stagePin.identity.dev, ino: stagePin.identity.ino } };
             await this.writeBinding(stagePin, group.binding);
           }
+          await checkPreferencePlan(plan);
         } catch (error) {
           await stagePin.close();
           throw error;
@@ -443,16 +517,20 @@ export class ResetPreferenceStore {
         group.stagePin = stagePin;
       }
     }
+    await checkPreferencePlan(plan);
   }
 
   /** Moves every target into its same-directory stage, proves identity, then deletes the staged copies. */
   async commit(plan: ResetPreferencePlan) {
+    await checkPreferencePlan(plan);
     for (const group of plan.groups) {
+      await checkPreferencePlan(plan);
       const stagePin = group.stagePin;
       if (!stagePin) throw new ResetPreferenceError('stage-invalid');
       await group.pin.assertCurrent();
       await stagePin.assertCurrent();
       for (const target of group.binding.targets) {
+        await checkPreferencePlan(plan);
         const staged = await stagePin.lstat(target.name).catch((error: unknown) => {
           if (missing(error)) return null;
           throw error;
@@ -465,6 +543,7 @@ export class ResetPreferenceStore {
           if (target.type === 'absent' || live) throw new ResetPreferenceError('stage-conflict', { reason: 'recreated' });
           if (staged.isSymbolicLink() || staged.dev !== target.dev || staged.ino !== target.ino || staged.birthtimeMs !== target.birthtimeMs)
             throw new ResetPreferenceError('identity-changed', { name: target.name });
+          await this.assertPinnedTarget(group, stagePin, target.name);
           continue;
         }
         if (!live) continue;
@@ -482,18 +561,25 @@ export class ResetPreferenceStore {
           target.dev = live.dev;
           target.ino = live.ino;
           target.birthtimeMs = live.birthtimeMs;
+          await checkPreferencePlan(plan);
           await this.writeBinding(stagePin, group.binding);
+          await checkPreferencePlan(plan);
         } else if (target.type !== kind || target.dev !== live.dev || target.ino !== live.ino || target.birthtimeMs !== live.birthtimeMs) {
           throw new ResetPreferenceError('identity-changed', { name: target.name });
         }
+        await this.assertPinnedTarget(group, group.pin, target.name);
+        await checkPreferencePlan(plan);
         await group.pin.renameInto(stagePin, target.name, target.name);
+        await checkPreferencePlan(plan);
         const moved = await stagePin.lstat(target.name);
         if (moved.isSymbolicLink() || moved.dev !== target.dev || moved.ino !== target.ino || moved.birthtimeMs !== target.birthtimeMs)
           throw new ResetPreferenceError('identity-changed', { name: target.name });
+        await this.assertPinnedTarget(group, stagePin, target.name);
       }
       await group.pin.assertCurrent();
       await stagePin.assertCurrent();
       for (const target of group.binding.targets) {
+        await checkPreferencePlan(plan);
         if (await exists(group.pin.child(target.name))) throw new ResetPreferenceError('stage-conflict', { reason: 'recreated' });
         const staged = await stagePin.lstat(target.name).catch((error: unknown) => {
           if (missing(error)) return null;
@@ -502,29 +588,37 @@ export class ResetPreferenceStore {
         if (!staged) continue;
         if (staged.isSymbolicLink() || staged.dev !== target.dev || staged.ino !== target.ino || staged.birthtimeMs !== target.birthtimeMs)
           throw new ResetPreferenceError('identity-changed', { name: target.name });
+        await this.assertPinnedTarget(group, stagePin, target.name);
         await this.inspect(stagePin.child(target.name), resetPreferenceFileLimit(this.dataDir, path.join(group.parent, target.name)));
+        await checkPreferencePlan(plan);
         await fs.rm(stagePin.child(target.name), { recursive: true, force: false }).catch(() => {
           throw new ResetPreferenceError('unsafe', { reason: 'staged' });
         });
+        await checkPreferencePlan(plan);
       }
       await stagePin.sync();
+      await checkPreferencePlan(plan);
       await fs.unlink(stagePin.child('binding.json')).catch(() => {
         throw new ResetPreferenceError('stage-invalid', { reason: 'binding' });
       });
+      await checkPreferencePlan(plan);
       await stagePin.sync();
       if ((await stagePin.list()).length !== 0) throw new ResetPreferenceError('stage-invalid');
       await stagePin.assertCurrent();
+      await checkPreferencePlan(plan);
       await fs.rmdir(group.stage).catch(() => {
         throw new ResetPreferenceError('stage-invalid', { reason: 'residue' });
       });
+      await checkPreferencePlan(plan);
       await group.pin.sync();
       await stagePin.close();
       group.stagePin = undefined;
     }
+    await checkPreferencePlan(plan);
   }
 
-  async erase(journal: string, targets: readonly string[]) {
-    const plan = await this.preflight(journal, targets);
+  async erase(journal: string, targets: readonly string[], check?: PreferenceCheck) {
+    const plan = await this.preflight(journal, targets, check);
     try {
       await this.begin(plan);
       await this.commit(plan);

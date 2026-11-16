@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { resetJournalSchema, type ResetJournal } from './reset-contract';
+import { assertResetJournalReplacement, resetJournalSchema, type ResetJournal } from './reset-contract';
 
 /**
  * Dedicated reset authority storage.
  *
- * Reset intent is the proof that a destructive operation must be resumed, so it may not live on a writable
+ * Reset intent keeps an unfinished operation held for recovery review, so it may not live on a writable
  * legacy directory that another process can rename or hide. This module only accepts an authority directory
  * that the kernel reports as its own mount (`/proc/self/mountinfo` exact path match), is private (0700, owned
  * by this process) and canonical. It never creates the directory: an absent or non-mounted path is reported to
@@ -34,6 +34,7 @@ const EPHEMERAL_FILE_SYSTEMS = new Set([
 ]);
 
 export type ResetMount = { path: string; source: string; fsType: string };
+type ResetMountRecord = ResetMount & { id: string; device: string; root: string; readOnly: boolean; identity: string };
 
 export type ResetAuthorityErrorCode =
   | 'mounts-unavailable'
@@ -63,7 +64,7 @@ const unescapeMountField = (value: string) => value.replace(/\\([0-7]{3})/g, (_,
  * Bounded parser for `/proc/self/mountinfo`. Mount points are decoded exactly like the kernel escapes them,
  * and malformed input fails closed instead of producing a usable-looking mount list.
  */
-export function parseResetMounts(text: string): ResetMount[] {
+function parseMountRecords(text: string): ResetMountRecord[] {
   if (text.length === 0 || text.length > MAX_MOUNTINFO_BYTES) throw new ResetAuthorityError('mounts-unreadable');
   const lines = text.split('\n').filter((line) => line !== '');
   if (lines.length === 0 || lines.length > MAX_MOUNTS) throw new ResetAuthorityError('mounts-unreadable');
@@ -71,19 +72,40 @@ export function parseResetMounts(text: string): ResetMount[] {
     const fields = line.split(' ');
     const separator = fields.indexOf('-', 6);
     const mount = fields[4];
+    const id = fields[0] ?? '';
+    const device = fields[2] ?? '';
+    const root = fields[3] ?? '';
     if (
-      !/^\d+$/.test(fields[0] ?? '') ||
-      !/^\d+:\d+$/.test(fields[2] ?? '') ||
+      !/^\d+$/.test(id) ||
+      !/^\d+$/.test(fields[1] ?? '') ||
+      !/^\d+:\d+$/.test(device) ||
+      !(root?.startsWith('/') || (fields[separator + 1] === 'nsfs' && /^(?:net|mnt|pid|ipc|uts|user|cgroup|time):\[\d+\]$/.test(root ?? ''))) ||
       !mount?.startsWith('/') ||
       separator === -1 ||
-      separator + 3 > fields.length
+      separator + 4 !== fields.length ||
+      fields.some((field) => !field)
     )
       throw new ResetAuthorityError('mounts-unreadable');
     const fsType = fields[separator + 1];
     const source = fields[separator + 2];
     if (!fsType || !source) throw new ResetAuthorityError('mounts-unreadable');
-    return { path: unescapeMountField(mount), source: unescapeMountField(source), fsType: unescapeMountField(fsType) };
+    const options = [fields[5], fields[separator + 3]].map((value) => value?.split(',') ?? []);
+    if (options.some((values) => values.includes('ro') === values.includes('rw'))) throw new ResetAuthorityError('mounts-unreadable');
+    return {
+      path: unescapeMountField(mount),
+      source: unescapeMountField(source),
+      fsType: unescapeMountField(fsType),
+      id,
+      device,
+      root: unescapeMountField(root),
+      readOnly: options.some((values) => values.includes('ro')),
+      identity: line,
+    };
   });
+}
+
+export function parseResetMounts(text: string): ResetMount[] {
+  return parseMountRecords(text).map(({ path, source, fsType }) => ({ path, source, fsType }));
 }
 
 const readKernelMounts = async () => {
@@ -102,7 +124,11 @@ const readKernelMounts = async () => {
       chunks.push(buffer.subarray(0, bytesRead));
     }
     if (total === 0) throw new ResetAuthorityError('mounts-unreadable');
-    return Buffer.concat(chunks).toString('utf8');
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks));
+    } catch {
+      throw new ResetAuthorityError('mounts-unreadable');
+    }
   } finally {
     await handle.close();
   }
@@ -124,28 +150,85 @@ export type ResetAuthorityOptions = {
 };
 
 const uidOf = (options: { uid?: number | undefined }) => options.uid ?? process.getuid?.();
-const authorities = new WeakMap<DedicatedResetAuthority, ResetAuthorityOptions>();
+const rootIdentity = (stat: Awaited<ReturnType<typeof fs.stat>>) => [stat.dev, stat.ino, stat.mode, stat.uid, stat.gid].join(':');
+const fileIdentity = (stat: Awaited<ReturnType<typeof fs.stat>>) => [rootIdentity(stat), stat.nlink, stat.size, stat.mtimeMs, stat.ctimeMs].join(':');
+const authorities = new WeakMap<DedicatedResetAuthority, { options: ResetAuthorityOptions; mount: ResetMountRecord; root: string }>();
 
-export async function lookupResetMount(options: ResetAuthorityOptions, directory: string) {
+async function mountRecords(options: ResetAuthorityOptions) {
   const text = await (options.readMounts ?? readKernelMounts)();
   if (text === null) throw new ResetAuthorityError('mounts-unavailable');
-  const matches = parseResetMounts(text).filter((candidate) => candidate.path === directory);
-  // Stacked mounts do not have a reliable visible ordering in mountinfo.
+  return parseMountRecords(text);
+}
+
+function selectMount(mounts: ResetMountRecord[], directory: string) {
+  const matches = mounts.filter((candidate) => candidate.path === directory);
   if (matches.length > 1) throw new ResetAuthorityError('authority-unsafe', { reason: 'stacked-mount' });
   const mount = matches[0];
   if (mount && EPHEMERAL_FILE_SYSTEMS.has(mount.fsType)) throw new ResetAuthorityError('ephemeral-mount', { fsType: mount.fsType });
   return mount;
 }
 
-async function verifiedAuthority(authority: DedicatedResetAuthority) {
-  const options = authorities.get(authority);
-  if (!options) throw new ResetAuthorityError('authority-unsafe', { reason: 'unverified' });
+const within = (target: string, parent: string) => target === parent || target.startsWith(parent === '/' ? '/' : `${parent}/`);
+
+function dedicatedMount(mounts: ResetMountRecord[], directory: string) {
+  const mount = selectMount(mounts, directory);
+  if (!mount) return undefined;
+  if (mount.readOnly) throw new ResetAuthorityError('authority-unsafe', { reason: 'readonly-mount' });
+  for (const other of mounts) {
+    if (other === mount) continue;
+    if (within(other.path, directory)) throw new ResetAuthorityError('authority-unsafe', { reason: 'nested-mount' });
+    if (!other.readOnly && other.device === mount.device && (within(mount.root, other.root) || within(other.root, mount.root)))
+      throw new ResetAuthorityError('authority-unsafe', { reason: 'writable-alias' });
+  }
+  return mount;
+}
+
+export async function lookupResetMount(options: ResetAuthorityOptions, directory: string) {
+  const mount = selectMount(await mountRecords(options), directory);
+  return mount && { path: mount.path, source: mount.source, fsType: mount.fsType };
+}
+
+async function withVerifiedAuthority<T>(
+  authority: DedicatedResetAuthority,
+  work: (value: { directory: string; uid: number | undefined; check: () => Promise<void>; sync: () => Promise<void> }) => Promise<T>,
+) {
+  const admitted = authorities.get(authority);
+  if (!admitted) throw new ResetAuthorityError('authority-unsafe', { reason: 'unverified' });
+  const { options } = admitted;
   const directory = dedicatedResetDirectory(options.dataDir, options.name);
-  if (!(await lookupResetMount(options, directory))) throw new ResetAuthorityError('not-mounted');
   const uid = uidOf(options);
-  await assertPrivateMountRoot(directory, uid);
-  await assertNoStrandedLegacyJournal(options.dataDir, uid);
-  return { directory, uid };
+  const checkMount = async () => {
+    const current = dedicatedMount(await mountRecords(options), directory);
+    if (!current) throw new ResetAuthorityError('not-mounted');
+    if (current.identity !== admitted.mount.identity || rootIdentity(await assertPrivateMountRoot(directory, uid)) !== admitted.root)
+      throw new ResetAuthorityError('authority-unsafe', { reason: 'mount-changed' });
+  };
+  await checkMount();
+  const handle = await fs.open(directory, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+  try {
+    const reference = process.platform === 'linux' ? `/proc/self/fd/${handle.fd}` : directory;
+    const check = async () => {
+      await checkMount();
+      if (rootIdentity(await handle.stat()) !== admitted.root) throw new ResetAuthorityError('authority-unsafe', { reason: 'root-changed' });
+      if (process.platform === 'linux' && !options.readMounts) {
+        const info = await fs.readFile(`/proc/self/fdinfo/${handle.fd}`, 'utf8');
+        const ids = [...info.matchAll(/^mnt_id:\s+(\d+)$/gm)];
+        if (info.length > 4096 || ids.length !== 1 || ids[0]?.[1] !== admitted.mount.id)
+          throw new ResetAuthorityError('authority-unsafe', { reason: 'descriptor-mount' });
+      }
+      await assertNoStrandedLegacyJournal(options.dataDir, uid);
+    };
+    await check();
+    const value = await work({ directory: reference, uid, check, sync: () => handle.sync() });
+    await check();
+    return value;
+  } finally {
+    await handle.close();
+  }
+}
+
+export async function verifyResetAuthority(authority: DedicatedResetAuthority) {
+  await withVerifiedAuthority(authority, async () => undefined);
 }
 
 const exists = async (target: string) => {
@@ -166,12 +249,13 @@ async function assertPrivateMountRoot(directory: string, uid: number | undefined
   // A mounted journal root is stricter than the legacy authority directory: owner-only access, no group/world bits.
   if ((stat.mode & 0o077) !== 0) throw new ResetAuthorityError('authority-unsafe', { reason: 'permissions' });
   if (uid !== undefined && stat.uid !== uid) throw new ResetAuthorityError('authority-unsafe', { reason: 'owner' });
+  return stat;
 }
 
 async function readJournalFile(directory: string, uid: number | undefined): Promise<ResetJournal | null> {
   let handle: fs.FileHandle;
   try {
-    handle = await fs.open(path.join(directory, 'active.json'), fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    handle = await fs.open(path.join(directory, 'active.json'), fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   } catch (error) {
     if (missing(error)) return null;
     throw new ResetAuthorityError('journal-unsafe', { reason: 'open' });
@@ -183,6 +267,12 @@ async function readJournalFile(directory: string, uid: number | undefined): Prom
     const buffer = Buffer.alloc(JOURNAL_LIMIT + 1);
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
     if (bytesRead > JOURNAL_LIMIT) throw new ResetAuthorityError('journal-unsafe', { reason: 'size' });
+    if (
+      bytesRead !== stat.size ||
+      fileIdentity(await handle.stat()) !== fileIdentity(stat) ||
+      fileIdentity(await fs.lstat(path.join(directory, 'active.json'))) !== fileIdentity(stat)
+    )
+      throw new ResetAuthorityError('journal-unsafe', { reason: 'changed' });
     const text = buffer.subarray(0, bytesRead).toString('utf8');
     try {
       return resetJournalSchema.assert(JSON.parse(text));
@@ -198,7 +288,7 @@ async function readLockFile(directory: string, uid: number | undefined) {
   const target = path.join(directory, 'operation.lock');
   let handle: fs.FileHandle;
   try {
-    handle = await fs.open(target, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    handle = await fs.open(target, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   } catch (error) {
     if (missing(error)) return null;
     throw new ResetAuthorityError('journal-unsafe', { reason: 'lock' });
@@ -227,15 +317,19 @@ export type ResetJournalState = 'absent' | 'complete' | 'recovery' | 'pending';
 export async function resolveResetAuthority(options: ResetAuthorityOptions): Promise<ResetAuthority> {
   const uid = uidOf(options);
   const directory = dedicatedResetDirectory(options.dataDir, options.name);
-  const mount = await lookupResetMount(options, directory);
+  const mount = dedicatedMount(await mountRecords(options), directory);
   if (!mount) {
     if (await exists(directory)) throw new ResetAuthorityError('not-mounted');
     return { mode: 'legacy', directory: legacyResetDirectory(options.dataDir) };
   }
-  await assertPrivateMountRoot(directory, uid);
+  const root = rootIdentity(await assertPrivateMountRoot(directory, uid));
   await assertNoStrandedLegacyJournal(options.dataDir, uid);
-  const authority = Object.freeze({ mode: 'dedicated' as const, directory, mount: Object.freeze(mount) });
-  authorities.set(authority, { ...options });
+  const authority = Object.freeze({
+    mode: 'dedicated' as const,
+    directory,
+    mount: Object.freeze({ path: mount.path, source: mount.source, fsType: mount.fsType }),
+  });
+  authorities.set(authority, { options: { ...options }, mount, root });
   return authority;
 }
 
@@ -271,8 +365,11 @@ export async function assertNoStrandedLegacyJournal(dataDir: string, uid: number
 
 /** Reads the dedicated journal. `null` only means no journal file exists, never "the directory is missing". */
 export async function readAuthorityJournal(authority: DedicatedResetAuthority) {
-  const { directory, uid } = await verifiedAuthority(authority);
-  return readJournalFile(directory, uid);
+  return withVerifiedAuthority(authority, async ({ directory, uid }) => {
+    const journal = await readJournalFile(directory, uid);
+    if (!journal && (await readLockFile(directory, uid))) throw new ResetAuthorityError('journal-unsafe', { reason: 'orphan-lock' });
+    return journal;
+  });
 }
 
 /**
@@ -280,68 +377,103 @@ export async function readAuthorityJournal(authority: DedicatedResetAuthority) {
  * grants replay permission, and it must keep the recovery hold until its original receipt is proven.
  */
 export async function authorityJournalState(authority: DedicatedResetAuthority): Promise<{ journal: ResetJournal | null; state: ResetJournalState }> {
-  const { directory, uid } = await verifiedAuthority(authority);
-  const journal = await readJournalFile(directory, uid);
-  if (!journal) return { journal: null, state: 'absent' };
-  if (journal.phase !== 'complete') return { journal, state: 'pending' };
-  const lock = await readLockFile(directory, uid);
-  if (!lock) return { journal, state: 'complete' };
-  return { journal: { ...journal, phase: 'recovery' }, state: 'recovery' };
+  return withVerifiedAuthority(authority, async ({ directory, uid }) => {
+    const journal = await readJournalFile(directory, uid);
+    if (!journal) {
+      if (await readLockFile(directory, uid)) throw new ResetAuthorityError('journal-unsafe', { reason: 'orphan-lock' });
+      return { journal: null, state: 'absent' };
+    }
+    if (journal.phase !== 'complete') return { journal, state: 'pending' };
+    const lock = await readLockFile(directory, uid);
+    if (!lock) return { journal, state: 'complete' };
+    return { journal: { ...journal, phase: 'recovery' }, state: 'recovery' };
+  });
 }
 
 /** Writes the journal inside the already-verified authority mount. It never creates that mount. */
 export async function saveAuthorityJournal(authority: DedicatedResetAuthority, value: ResetJournal) {
-  resetJournalSchema.assert(value);
-  const { directory } = await verifiedAuthority(authority);
-  const temporary = path.join(directory, `.journal-${randomUUID()}`);
-  const handle = await fs.open(temporary, 'wx', 0o600);
-  try {
-    await handle.writeFile(`${JSON.stringify(value)}\n`);
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  try {
-    await fs.rename(temporary, path.join(directory, 'active.json'));
-    await syncDirectory(directory);
-  } finally {
-    await fs.rm(temporary, { force: true });
-  }
+  const captured = resetJournalSchema.assert(structuredClone(value));
+  return withVerifiedAuthority(authority, async ({ directory, uid, check, sync }) => {
+    assertResetJournalReplacement(await readJournalFile(directory, uid), captured);
+    const temporary = path.join(directory, `.journal-${randomUUID()}`);
+    const handle = await fs.open(temporary, 'wx', 0o600);
+    const identity = await handle.stat();
+    try {
+      await handle.writeFile(`${JSON.stringify(captured)}\n`);
+      await handle.sync();
+      await check();
+      const current = await fs.lstat(temporary);
+      const pinned = await handle.stat();
+      if (
+        !current.isFile() ||
+        current.dev !== identity.dev ||
+        current.ino !== identity.ino ||
+        pinned.nlink !== 1 ||
+        rootIdentity(current) !== rootIdentity(pinned)
+      )
+        throw new ResetAuthorityError('journal-unsafe', { reason: 'staging-changed' });
+      await fs.rename(temporary, path.join(directory, 'active.json'));
+      await sync();
+    } finally {
+      try {
+        const current = await fs.lstat(temporary).catch((error: unknown) => {
+          if (missing(error)) return null;
+          throw error;
+        });
+        if (current?.dev === identity.dev && current.ino === identity.ino) await fs.unlink(temporary);
+      } finally {
+        await handle.close();
+      }
+    }
+  });
 }
 
 /** Exclusive lease with the same interrupted-process semantics as the legacy journal store. */
 export async function acquireAuthorityLease(authority: DedicatedResetAuthority) {
-  const { directory } = await verifiedAuthority(authority);
-  const file = path.join(directory, 'operation.lock');
-  const handle = await fs.open(file, 'wx', 0o600).catch((error: unknown) => {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new ResetAuthorityError('journal-unsafe', { reason: 'locked' });
-    throw error;
-  });
-  const identity = await handle.stat();
+  let opened: fs.FileHandle | undefined;
   try {
-    await handle.writeFile(`${JSON.stringify({ version: 1, pid: process.pid, nonce: randomUUID() })}\n`);
-    await handle.sync();
-    await syncDirectory(directory);
+    return await withVerifiedAuthority(authority, async ({ directory, sync }) => {
+      const file = path.join(directory, 'operation.lock');
+      const handle = await fs.open(file, 'wx', 0o600).catch((error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new ResetAuthorityError('journal-unsafe', { reason: 'locked' });
+        throw error;
+      });
+      opened = handle;
+      await handle.writeFile(`${JSON.stringify({ version: 1, pid: process.pid, nonce: randomUUID() })}\n`);
+      await handle.sync();
+      await sync();
+      const identity = await handle.stat();
+      let released = false;
+      return async () => {
+        if (released) return;
+        released = true;
+        try {
+          await withVerifiedAuthority(authority, async ({ directory, check, sync }) => {
+            const file = path.join(directory, 'operation.lock');
+            const current = await fs.lstat(file);
+            const pinned = await handle.stat();
+            if (
+              !current.isFile() ||
+              current.isSymbolicLink() ||
+              fileIdentity(current) !== fileIdentity(identity) ||
+              fileIdentity(pinned) !== fileIdentity(identity) ||
+              pinned.nlink !== 1 ||
+              current.nlink !== 1
+            )
+              throw new ResetAuthorityError('journal-unsafe', { reason: 'lock-changed' });
+            await check();
+            await fs.unlink(file);
+            await sync();
+          });
+        } finally {
+          await handle.close();
+        }
+      };
+    });
   } catch (error) {
-    await handle.close();
+    await opened?.close();
     throw error;
   }
-  let released = false;
-  return async () => {
-    if (released) return;
-    released = true;
-    try {
-      // Keep the original inode open for the lease lifetime so unlink/recreate cannot reuse its number.
-      const current = await fs.lstat(file);
-      const pinned = await handle.stat();
-      if (!current.isFile() || current.isSymbolicLink() || current.dev !== identity.dev || current.ino !== identity.ino || pinned.nlink !== 1)
-        throw new ResetAuthorityError('journal-unsafe', { reason: 'lock-changed' });
-      await fs.unlink(file);
-      await syncDirectory(directory);
-    } finally {
-      await handle.close();
-    }
-  };
 }
 
 export async function syncDirectory(directory: string) {

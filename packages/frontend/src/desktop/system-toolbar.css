@@ -1,0 +1,98 @@
+.desktop-toolbar-action {
+  display: contents;
+}
+.desktop-system-actions[data-toolbar-editing] .desktop-toolbar-action {
+  display: flex;
+  position: relative;
+  align-items: center;
+  min-width: 0;
+  border-radius: 13px;
+  outline: 1px dashed var(--desktop-line);
+}
+.desktop-toolbar-grip {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  min-height: 44px;
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: grab;
+  touch-action: none;
+}
+.desktop-toolbar-grip:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: -3px;
+  border-radius: 8px;
+}
+.desktop-toolbar-action[data-sorting] {
+  z-index: 40;
+  background: var(--desktop-surface);
+  box-shadow: 0 8px 25px #0003;
+}
+.desktop-toolbar-action[data-sortable-over] {
+  outline: 2px solid var(--desktop-focus);
+  outline-offset: 3px;
+}
+.desktop-toolbar-action:has(> :last-child:empty) {
+  display: none;
+}
+@media (max-width: 600px) {
+  .desktop-system-actions[data-toolbar-editing] .desktop-toolbar-action {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .desktop-toolbar-grip {
+    width: 100%;
+    min-height: 44px;
+  }
+  .desktop-system-actions[data-toolbar-editing] [data-action="connection"] {
+    grid-column: span 3;
+  }
+}
+
+.desktop-system-actions[data-toolbar-editing] .desktop-toolbar-action[data-action="battery"]:not(:has(.desktop-battery-trigger))::after {
+  content: "Battery";
+  min-height: 44px;
+  align-content: center;
+  padding-inline: 6px;
+  font-size: 0.6875rem;
+  color: var(--desktop-muted);
+}
+
+.desktop-system-actions[data-toolbar-editing] .desktop-toolbar-action > :not(.desktop-toolbar-grip) {
+  min-height: 44px;
+}
+
+.desktop-toolbar-content {
+  display: contents;
+}
+.desktop-system-actions[data-toolbar-editing] .desktop-toolbar-grip {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  translate: 0 -50%;
+  z-index: 1;
+  width: 100%;
+  min-height: 44px;
+  border-radius: inherit;
+}
+.desktop-system-actions[data-toolbar-editing] .desktop-toolbar-grip svg {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  width: 8px;
+  height: 8px;
+}
+.desktop-system-actions[data-toolbar-editing] .desktop-toolbar-action {
+  flex-wrap: nowrap;
+}
+.desktop-toolbar-content > [role="status"] {
+  display: flex;
+  align-items: center;
+}
+
+.desktop-system-actions[data-toolbar-editing] .desktop-toolbar-action[data-action="battery"] {
+  display: flex;
+}

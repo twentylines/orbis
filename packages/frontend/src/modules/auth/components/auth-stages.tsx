@@ -31,7 +31,7 @@ export function AuthStages({ stage, children }: { stage: AuthStage; children: Re
       targetHeight = to;
       for (const animation of element.getAnimations()) animation.cancel();
       element.style.height = `${to}px`;
-      if (motion && Math.abs(from - to) > 0.5) {
+      if (motion && !document.documentElement.dataset.orbisSessionMorph && Math.abs(from - to) > 0.5) {
         const animation = element.animate([{ height: `${from}px` }, { height: `${to}px` }], {
           duration: 340,
           easing: 'cubic-bezier(.22, .8, .24, 1)',

@@ -29,7 +29,7 @@ let packs: ThemePacksService;
 let themes: ThemeSettingsService;
 const actor = { userId: 7, sessionBinding: 'a'.repeat(64), securityBinding: 'b'.repeat(64) };
 const auth = { operatorActionContext: vi.fn(), verifySensitiveAction: vi.fn() };
-const machine = { withPortablePoint: vi.fn() };
+const machine = { withPortablePointForExport: vi.fn(), withComponentsPortablePointForExport: vi.fn(), reconcileResetOwnership: vi.fn() };
 const request = {} as Request;
 const passphrase = 'portable fixture passphrase';
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
@@ -90,8 +90,9 @@ it('exports real settings, Home pins, wallpaper and theme overrides without visi
   await fs.writeFile(path.join(root, 'app-data', 'media'), 'media is not a settings backup');
   const progress: SettingsBackupSourceProgress[] = [];
   const result = await source.write({ ...options(), progress: (value) => progress.push(value) });
+  expect(auth.verifySensitiveAction).toHaveBeenCalledOnce();
   expect(result.verifiedContents.map((part) => part.kind)).toEqual(['settings', 'dashboard', 'wallpapers', 'themes']);
-  expect(machine.withPortablePoint).not.toHaveBeenCalled();
+  expect(machine.withPortablePointForExport).not.toHaveBeenCalled();
   expect(progress.at(-1)).toEqual({ stage: 'complete', completedBytes: result.bytes, totalBytes: result.bytes });
   const bytes = await fs.readFile(options().destination);
   expect(bytes.includes(Buffer.from('Saved private dashboard'))).toBe(false);
@@ -171,7 +172,7 @@ it('does not overwrite a saved archive and releases its locks when a selected ca
   await fs.writeFile(options().destination, 'saved recovery archive', { mode: 0o600 });
   await expect(source.write(options())).rejects.toThrow();
   expect(await fs.readFile(options().destination, 'utf8')).toBe('saved recovery archive');
-  machine.withPortablePoint.mockRejectedValue(new Error('Capture cannot be verified'));
+  machine.withPortablePointForExport.mockRejectedValue(new Error('Capture cannot be verified'));
   await expect(
     source.write({
       ...options(),
@@ -186,6 +187,6 @@ it('does not overwrite a saved archive and releases its locks when a selected ca
       },
     }),
   ).rejects.toThrow();
-  expect(machine.withPortablePoint).toHaveBeenCalledOnce();
+  expect(machine.withPortablePointForExport).toHaveBeenCalledOnce();
   expect((await fs.readdir(root)).sort()).toEqual(['saved.orbis-settings']);
 });

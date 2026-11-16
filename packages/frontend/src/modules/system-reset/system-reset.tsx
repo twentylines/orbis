@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
-import { RecoveryScene } from '@/components/recovery-progress/recovery-scene';
+import { StartupSurface } from '@/components/startup/startup-surface';
+import { beginResetStartup } from '@/components/startup/reset-startup';
 import { markResetAccepted, readOperationStatus } from '@/components/recovery-progress/operation-status';
 import { browserPasskeyReason, cancelPasskeyCeremony, passkeyErrorMessage, passkeyListOptions } from '@/modules/auth/passkeys/passkey-api';
 import { resetPasskeyOptions, resetProofMethod, submitReset, validResetConfirmation, type ResetAccounts, type AcceptedReset } from './reset-api';
@@ -132,6 +133,7 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
       }
       rememberResetCompletion(receipt);
       markResetAccepted();
+      beginResetStartup('accepted');
       setAccepted(true);
     } catch (failure) {
       if (!controller.signal.aborted) {
@@ -147,13 +149,16 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
   };
   if (accepted)
     return (
-      <RecoveryScene
-        title="Resetting Orbis"
-        status={reconnecting ? 'Reconnecting' : 'Resetting preferences'}
-        detail={reconnecting ? 'Waiting for confirmed server status.' : undefined}
-        active
-        variant="onboarding"
-        footer="Installed applications and their data are kept."
+      <StartupSurface
+        overlay
+        initial
+        setupSpace
+        attention={reconnecting}
+        label="Resetting preferences"
+        status={{
+          title: reconnecting ? 'Reconnecting' : 'Getting ready',
+          message: 'Waiting for the server to respond. Your applications and data are kept.',
+        }}
       />
     );
   return (

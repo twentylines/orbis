@@ -2,6 +2,15 @@ import { expect, test } from 'bun:test';
 import { PreferenceSaveQueue, PreferenceSession } from './preference-save-queue';
 
 const scenarios = [
+  'workspace-sort-keyboard',
+  'workspace-sort-reparent-focus',
+  'workspace-sort-swap',
+  'workspace-sort-pointer',
+  'workspace-sort-fast-pointer',
+  'workspace-sort-edge',
+  'workspace-capability-downgrade',
+  'workspace-old-backend',
+  'workspace-capable-backend',
   'provider-composition',
   'hmr-context-identity',
   'batched-edit-commit',
@@ -28,8 +37,14 @@ for (const scenario of scenarios) {
     const child = Bun.spawn(
       [
         process.execPath,
-        new URL(scenario === 'user-session-lifetime' ? './user-session-lifetime.fixture.tsx' : './preferences-save.fixture.tsx', import.meta.url)
-          .pathname,
+        new URL(
+          scenario.startsWith('workspace-sort-')
+            ? './workspace-sort.fixture.tsx'
+            : scenario === 'user-session-lifetime'
+              ? './user-session-lifetime.fixture.tsx'
+              : './preferences-save.fixture.tsx',
+          import.meta.url,
+        ).pathname,
         scenario,
       ],
       {

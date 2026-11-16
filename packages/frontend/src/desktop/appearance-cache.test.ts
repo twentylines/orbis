@@ -25,6 +25,14 @@ function firstPaint(raw: string | null, { dark = false, blockedStorage = false, 
 }
 
 describe('appearance before hydration', () => {
+  test('new preferences follow the operating system before hydration and explicit choices stay selected', () => {
+    expect(appearanceFromStored(null).mode).toBe('system');
+    expect(firstPaint(null, { dark: true }).desktopMode).toBe('dark');
+    expect(firstPaint(null, { dark: false }).desktopMode).toBe('light');
+    expect(firstPaint(JSON.stringify({ mode: 'light' }), { dark: true }).desktopMode).toBe('light');
+    expect(firstPaint(JSON.stringify({ mode: 'dark' }), { dark: false }).desktopMode).toBe('dark');
+  });
+
   test.each(['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'] as const)('retains the saved %s palette while loading', (preset) => {
     const saved = { preset, mode: 'dark', wallpaper: 'canopy' } as const;
     expect(appearanceFromStored(saved)).toEqual({ ...saved, wallpaperMode: 'theme', wallpaperPreset: null });

@@ -1,3 +1,23 @@
+export function waitForStartupWallpapers(surfaces: HTMLElement[], ready: () => void, timeoutMs = 21000) {
+  if (!surfaces.length) {
+    ready();
+    return () => undefined;
+  }
+  let remaining = surfaces.length;
+  const cancel = surfaces.map((surface) =>
+    waitForStartupWallpaper(
+      surface,
+      () => {
+        if (--remaining === 0) ready();
+      },
+      timeoutMs,
+    ),
+  );
+  return () => {
+    for (const stop of cancel) stop();
+  };
+}
+
 export function waitForStartupWallpaper(surface: HTMLElement, ready: () => void, timeoutMs = 1500) {
   let cancelled = false;
   let decoding: HTMLImageElement | null = null;

@@ -1,5 +1,7 @@
 import importlib.util
 import json
+import io
+from email.message import Message
 import os
 import socket
 import subprocess
@@ -32,6 +34,65 @@ def manifest(tag: str, digest_character: str) -> dict[str, str]:
 
 CURRENT = manifest("v0.1.0-beta.6", "b")
 TARGET = manifest("v0.1.0-beta.7", "c")
+
+
+class CaptureRetirementObservationRoutesTests(unittest.TestCase):
+    point = '12345678-1234-4234-8234-123456789abc'
+
+    def handler(self, path, body=None):
+        handler = object.__new__(SERVICE.Handler)
+        handler.path = path
+        handler.server = mock.Mock()
+        handler.connection = mock.Mock()
+        handler.send_json = mock.Mock()
+        encoded = json.dumps(body).encode()
+        handler.rfile = io.BytesIO(encoded)
+        handler.headers = Message()
+        handler.headers['Content-Type'] = 'application/json'
+        handler.headers['Content-Length'] = str(len(encoded))
+        return handler
+
+    def test_capability_is_read_only_and_requires_the_trusted_root_peer(self):
+        path = '/v1/core-captures/restart-retirement-capability'
+        for trusted in (False, True):
+            with self.subTest(trusted=trusted), mock.patch.object(SERVICE, 'trusted_capture_peer', return_value=trusted), \
+                    mock.patch.object(SERVICE, 'core_capture_admission') as admission:
+                handler = self.handler(path)
+                handler.do_GET()
+                self.assertEqual(handler.send_json.call_args.args[0], 200 if trusted else 403)
+                if trusted:
+                    capability = handler.send_json.call_args.args[1]
+                    self.assertEqual(capability['operations'], ['restart-retirement'])
+                    self.assertFalse(capability['sourceWrites'])
+                    self.assertFalse(capability['lifecycleAuthority'])
+                admission.assert_not_called()
+
+    def test_observation_only_accepts_one_bound_reservation_and_never_dispatches_capture(self):
+        path = '/v1/core-captures/' + self.point + '/restart-retirement'
+        reader = mock.Mock()
+        reader.observe.return_value = {'version': 1, 'state': 'not-retired'}
+        with mock.patch.object(SERVICE, 'trusted_capture_peer', return_value=True), \
+                mock.patch.object(SERVICE, 'core_capture_restart_retirement', return_value=reader), \
+                mock.patch.object(SERVICE, 'core_capture_admission') as admission:
+            handler = self.handler(path, {'pointReservationSha256': 'a' * 64})
+            handler.do_POST()
+            reader.observe.assert_called_once_with(self.point, 'a' * 64)
+            handler.send_json.assert_called_once_with(200, reader.observe.return_value)
+            admission.assert_not_called()
+            reader.apply.assert_not_called()
+
+    def test_untrusted_extra_fields_and_duplicate_headers_are_rejected_before_observation(self):
+        path = '/v1/core-captures/' + self.point + '/restart-retirement'
+        for fault in ('peer', 'fields', 'digest', 'duplicate-header'):
+            with self.subTest(fault=fault), mock.patch.object(SERVICE, 'trusted_capture_peer', return_value=fault != 'peer'), \
+                    mock.patch.object(SERVICE, 'core_capture_restart_retirement') as reader:
+                body = {'pointReservationSha256': 'invalid' if fault == 'digest' else 'a' * 64}
+                if fault == 'fields':body['apply'] = True
+                handler = self.handler(path, body)
+                if fault == 'duplicate-header':handler.headers['Content-Type'] = 'application/json'
+                handler.do_POST()
+                self.assertEqual(handler.send_json.call_args.args[0], 403 if fault == 'peer' else 409)
+                reader.assert_not_called()
 
 
 class DiscoveryRoutesTests(unittest.TestCase):
@@ -232,6 +293,24 @@ class HostServiceTests(unittest.TestCase):
         self.healthy = mock.patch.object(self.service, "require_healthy_core")
         self.healthy.start()
         self.addCleanup(self.healthy.stop)
+
+    def test_administrative_observer_preserves_the_running_daemons_job(self):
+        for phase in ("running", "recovering"):
+            with self.subTest(phase=phase):
+                SERVICE.write_private(self.service.job_file, {"state": phase, "message": "original operation"})
+                before = self.service.job_file.read_bytes()
+                identity = self.service.job_file.stat()
+                observer = SERVICE.HostService(self.root, "test-daemon", self.snapshots, self.state, recover_interrupted_job=False)
+                self.assertEqual(observer.job_file.read_bytes(), before)
+                self.assertEqual(observer.job_file.stat().st_ino, identity.st_ino)
+                self.assertEqual(observer.job_file.stat().st_mtime_ns, identity.st_mtime_ns)
+                with self.assertRaises(ValueError):
+                    observer.require_idle_core()
+
+    def test_daemon_restart_still_records_an_interrupted_job_by_default(self):
+        SERVICE.write_private(self.service.job_file, {"state": "running", "message": "original operation"})
+        restarted = SERVICE.HostService(self.root, "test-daemon", self.snapshots, self.state)
+        self.assertEqual(SERVICE.read_private(restarted.job_file)["state"], "interrupted")
 
     def test_cold_restore_status_initializes_while_update_admission_holds_its_lock(self):
         manager = mock.Mock()

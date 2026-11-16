@@ -631,9 +631,15 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   z-index: -1;
   border-radius: inherit;
   background: var(--desktop-surface);
-  backdrop-filter: var(--desktop-glass-filter);
-  -webkit-backdrop-filter: var(--desktop-glass-filter);
   pointer-events: none;
+}
+:root:not([data-orbis-transparency="solid"]):not([data-orbis-effects="low"]) .desktop-auth-setup .card {
+  background: color-mix(in srgb, var(--desktop-surface) var(--setup-glass-tint, 38%), transparent);
+  backdrop-filter: blur(14px) saturate(1.18);
+  -webkit-backdrop-filter: blur(14px) saturate(1.18);
+}
+:root:not([data-orbis-transparency="solid"]):not([data-orbis-effects="low"]) .desktop-auth-setup .card::before {
+  background: transparent;
 }
 .desktop-auth.desktop-auth-setup .desktop-auth-container {
   transition:
@@ -678,8 +684,6 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   scrollbar-gutter: stable;
   padding-block: 8px;
   scroll-padding-block: 12px;
-  perspective: 1000px;
-  perspective-origin: 50% 40%;
 }
 .orbis-setup-step[data-present="false"] {
   position: absolute;
@@ -730,4 +734,16 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
     max-height: none;
     overflow: visible;
   }
+}
+
+.desktop-auth-setup[data-desktop-mode="light"] {
+  --setup-glass-tint: 86%;
+}
+.desktop-auth-setup .card {
+  color: var(--desktop-ink);
+}
+
+.desktop-auth-setup .card-body {
+  position: relative;
+  z-index: 1;
 }

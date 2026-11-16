@@ -56,6 +56,11 @@ describe('desktop preferences', () => {
     expect((await request(app.getHttpServer()).post('/desktop-preferences/onboarding')).status).toBe(401);
   });
 
+  it('new and reset preferences follow System without changing an explicit user mode', async () => {
+    expect(DEFAULT_DESKTOP_PREFERENCES.mode).toBe('system');
+    expect((await app.get(DesktopPreferencesService).read(9876)).mode).toBe('system');
+  });
+
   it('announces onboarding completion to both connected clients of its account', async () => {
     const service = app.get(DesktopPreferencesService);
     const first: unknown[] = [];
@@ -109,6 +114,26 @@ describe('desktop preferences', () => {
       await fs.rm(path.join(directory, 'state', 'orbis-reset'), { recursive: true, force: true });
       await fs.rm(path.join(directory, 'state', 'onboarding', '7.json'), { force: true });
     }
+  });
+
+  it('advertises durable layout support and retains toolbar, icon view and widget sizes across service reload', async () => {
+    const before = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer other').expect(200);
+    expect(before.headers['x-orbis-preference-capabilities']).toBe('workspace-layout-v1 toolbar-order-v1');
+    const value = {
+      ...DEFAULT_DESKTOP_PREFERENCES,
+      toolbarOrder: ['search', 'mode', 'tasks', 'battery', 'logout', 'connection'],
+      workspace: {
+        ...DEFAULT_DESKTOP_PREFERENCES.workspace,
+        layout: { version: 1, appView: 'icons', widgets: { activity: { columns: 3, height: 480 } } },
+      },
+    };
+    await request(app.getHttpServer()).put('/desktop-preferences').set('Authorization', 'Bearer other').send(value).expect(200);
+    const reloaded = new DesktopPreferencesService(app.get(ConfigurationService));
+    expect(await reloaded.read(8)).toMatchObject(value);
+    expect((await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer other').expect(200)).body).toMatchObject(
+      value,
+    );
+    await reloaded.write(8, DEFAULT_DESKTOP_PREFERENCES);
   });
 
   it('defaults old account preferences to 12-hour display and persists each account clock format independently', async () => {

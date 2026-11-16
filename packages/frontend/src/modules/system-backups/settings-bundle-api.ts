@@ -13,6 +13,14 @@ const idPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0
 const listSchema = type({ version: '1', jobs: settingsBackupJobSchema.array().atMostLength(32) }).onDeepUndeclaredKey('reject');
 const restoreSchema = type({ job: settingsBackupRestoreJobSchema.or('null') }).onDeepUndeclaredKey('reject');
 const limit = 256 * 1024;
+export class SettingsBundleApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 function path(value: string) {
   if (value === '' || value === '/imports' || value === '/restores') return root + value;
   const match = value.match(/^\/(?:([^/]+)\/(?:remove|download-info)|imports\/([^/]+)\/(?:file|review|restore|remove)|restores\/([^/]+)\/rollback)$/);
@@ -65,7 +73,8 @@ export async function settingsBundleRequest(url: string, method = 'GET', body?: 
         // Only known account and backup errors are safe to display.
       }
     }
-    throw new Error(
+    throw new SettingsBundleApiError(
+      response.status,
       guidance ??
         (response.status === 401
           ? 'Sign in again to continue.'

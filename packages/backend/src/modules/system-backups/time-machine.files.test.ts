@@ -1101,7 +1101,7 @@ it('keeps review and fresh-auth routes behind the session guard, operator check 
   }
   const review = vi.spyOn(machine, 'restoreReview').mockResolvedValue({ version: 1, review: null });
   await expect(controller.review(session, pointId, {})).resolves.toEqual({ version: 1, review: null });
-  expect(review).toHaveBeenCalledWith(pointId, 1);
+  expect(review).toHaveBeenCalledWith(pointId, 1, session);
   expect(() => controller.review(session, pointId, { archiveSha256: 'a'.repeat(64) })).toThrow();
   const options = vi.spyOn(machine, 'restoreAuthOptions');
   const verify = vi.spyOn(machine, 'restoreAuthVerify');

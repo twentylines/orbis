@@ -3,6 +3,7 @@ body:has(.orbis-theme) .orbis-dialog-content.recovery-scene {
   --desktop-ink: #edf0f3;
   --desktop-accent: #b7c2cf;
   --recovery-light: #c2d0dc;
+  --orbis-logo-accent: var(--recovery-light);
   --desktop-line: rgb(237 240 243 / 14%);
   --desktop-surface: #111923;
   --desktop-preset-tint: #657282;
@@ -17,7 +18,7 @@ body:has(.orbis-theme) .orbis-dialog-content.recovery-scene {
   -webkit-backdrop-filter: none;
   color: var(--desktop-ink);
 }
-.recovery-scene-space {
+.recovery-scene .loading-galaxy-space {
   position: absolute;
   inset: 0;
   z-index: -2;
@@ -102,7 +103,7 @@ body:has(.orbis-theme) .orbis-dialog-content.recovery-scene {
   }
 }
 @media (forced-colors: active) {
-  .recovery-scene-space {
+  .recovery-scene .loading-galaxy-space {
     display: none;
   }
   .orbis-dialog-content.recovery-scene,
@@ -149,6 +150,16 @@ body:has(.orbis-theme) .orbis-dialog-content.recovery-scene {
 }
 .recovery-scene-content > .recovery-progress-bar {
   width: min(100%, 360px);
+}
+.recovery-scene-progress {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  width: min(100%, 360px);
+  font-variant-numeric: tabular-nums;
+}
+.recovery-scene .orbis-startup-beacon {
+  animation: none;
 }
 .recovery-scene[data-variant="update"] {
   --recovery-light: #c8dccb;
@@ -316,4 +327,22 @@ body:has(.orbis-theme) .orbis-dialog-content.recovery-scene:where([data-shared-b
 .recovery-scene-content > .update-download-progress {
   width: min(100%, 360px);
   text-align: start;
+}
+.update-download-progress:has(.orbis-startup-mark) {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+.update-download-progress:has(.orbis-startup-mark) .recovery-progress-heading {
+  justify-content: center;
+}
+
+/* Keep the space scene and its text on one dark palette, including light-mode desktops. */
+.recovery-scene::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 62%, rgb(3 5 8 / 78%), transparent 68%);
 }

@@ -29,6 +29,9 @@ test('indeterminate glint is omitted from measured progress and receives a pause
   expect(indeterminate).toContain('data-known="false"');
   expect(indeterminate).toContain('data-motion="true"');
   expect(indeterminate).toContain('<span aria-hidden="true"></span>');
+  const scanning = renderToStaticMarkup(<RecoveryProgressBar label="Waiting for server" variant="scan" />);
+  expect(scanning).toContain('data-variant="scan"');
+  expect(scanning).not.toContain('value=');
 
   const measured = renderToStaticMarkup(<RecoveryProgressBar label="Checking restore" percentage={42} />);
   expect(measured).toContain('data-known="true"');
@@ -98,6 +101,7 @@ test('update downloads show measured sizes, unknown totals and cached files with
   const render = (input: unknown) => renderToStaticMarkup(<UpdateDownloadProgress value={input} />);
   expect(render(value)).toContain('512 B of 1 KiB');
   expect(render(value)).toContain('value="50"');
+  expect(render(value)).not.toContain('orbis-startup-mark');
   const unknown = render({ ...value, totalKnown: false, totalBytes: null });
   expect(unknown).toContain('512 B downloaded');
   expect(unknown).not.toContain('value=');

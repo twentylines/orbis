@@ -17,6 +17,7 @@ import {
   type TimeMachineList,
   type TimeMachinePoint,
   type TimeMachineMetadata,
+  type TimeMachinePreferences,
 } from '@runtipi/common/schemas/time-machine';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
@@ -25,7 +26,22 @@ import { AccountSecurityService } from '../auth/account-security.service';
 import { AppsRepository } from '../apps/apps.repository';
 import { QueueFactory } from '../queue/queue.factory';
 import { HostCoreCaptureReservedStartClient } from '../host-updates/host-core-capture-reserved-start-client';
+import { HostSelectedCaptureClient, SelectedCaptureConflict } from '../host-updates/host-selected-capture-client';
+import { TimeMachineComponentsStore } from './time-machine-components-store';
+import { TimeMachineCustody, captureCustodyKey } from './time-machine-custody';
+import { assertResetSafetyExportCoverage } from './reset-safety-plan';
+import { resetCaptureInventory, resetCaptureInventoryEntry } from './reset-safety-capture-inventory';
+import { withResetCaptureRecoveryFiles as snapshotCaptureRecoveryFiles, type ResetCaptureRecoveryFiles } from './reset-capture-recovery-files';
+import {
+  inspectResetCaptureRecoveryManifest,
+  resetCaptureRecoveryManifest,
+  validateResetCaptureRecoveryManifest,
+  type ResetCaptureRecoveryManifest,
+} from './reset-capture-recovery-manifest';
+import { canonicalPublicationJson } from '../host-updates/host-controller-publication';
+import type { ResetJournal } from '../system-reset/reset-contract';
 import { coreCapturePointReservationSha256 } from './time-machine-core-reservation';
+import { HostCoreCaptureRestartRetirementClient } from '../host-updates/host-core-capture-restart-retirement-client';
 import {
   authorizeCoreCaptureOperator,
   CoreCaptureProducer,
@@ -41,10 +57,21 @@ import { historicalHomePreview, captureBreakdown } from './time-machine-preview'
 import { timeMachineCapabilities, timeMachineConflict, timeMachineIssue, timeMachineRestoreBlockers } from './time-machine-policy';
 import { restoreStartupRole } from './backup-restore-startup';
 import { snapshotWallpaper } from './time-machine-assets';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { Request } from 'express';
 import { backupMaintenanceActive } from '@/common/backup-maintenance';
+import {
+  assertResetExportAccess,
+  assertResetInventoryAccess,
+  assertSettingsExportAccess,
+  settingsExportBorrowsMaintenance,
+  type ResetExportPlan,
+  type SettingsExportAccess,
+  type ResetInventoryAccess,
+  type ResetInventoryBinding,
+} from './settings-export-authorization';
+import { assertBackupMaintenanceLease, type BackupMaintenanceLease } from '@/common/backup-maintenance-lease';
 import { installationMode } from '@/common/installation-mode';
 import { DockerService } from '../docker/docker.service';
 import { DesktopPreferencesService } from '../desktop-preferences/desktop-preferences.service';
@@ -78,6 +105,8 @@ type LocalReview = {
 export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
   private readonly dataDirectory: string;
   private store: TimeMachineStore;
+  private components: TimeMachineComponentsStore;
+  private readonly custody: TimeMachineCustody;
   private readonly restoreDirectory: string;
   private ready?: Promise<void>;
   private unavailable = false;
@@ -87,9 +116,13 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
   private openingAssets = 0;
   private exporting?: { abort: AbortController; done: Promise<void> };
   private removing = false;
+  private resetPreferencesSnapshot = false;
+  private retirementWork?: Promise<void>;
+  private readonly retirementShutdown = new AbortController();
   private readonly captureSecurity: AccountSecurityService;
   private active?: {
     id: string;
+    coreId?: string;
     ownerId: number;
     abort: AbortController;
     done: Promise<void>;
@@ -121,6 +154,14 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     this.dataDirectory = config.get('directories').dataDir;
     this.captureSecurity = security ?? new AccountSecurityService(config);
     this.store = new TimeMachineStore(config.get('directories').dataDir);
+    this.components = new TimeMachineComponentsStore(this.dataDirectory);
+    this.custody = new TimeMachineCustody(
+      this.dataDirectory,
+      () => this.store,
+      () => this.components,
+      auth,
+      () => this.closing,
+    );
     this.restoreDirectory = path.join(config.get('directories').dataDir, 'backups', 'restores');
   }
   onModuleInit() {
@@ -130,6 +171,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
   }
   async onModuleDestroy() {
     this.closing = true;
+    this.retirementShutdown.abort();
     const active = this.active;
     const review = this.reviewing;
     const exporting = this.exporting;
@@ -140,7 +182,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     await active?.setup;
     if (active && !active.started) {
       if (active.id)
-        await this.store.fail(await this.store.load(active.id), 'capture-interrupted').catch(() => {
+        await this.store.fail(await this.store.load(active.coreId ?? active.id), 'capture-interrupted').catch(() => {
           this.unavailable = true;
         });
       if (this.active === active) this.active = undefined;
@@ -149,6 +191,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     await active?.done;
     await review?.done;
     await exporting?.done;
+    await this.retirementWork?.catch(() => undefined);
   }
   private initialize() {
     this.ready ??= this.load();
@@ -156,6 +199,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
   }
   private async load() {
     try {
+      await this.reconcileRetiredCorePreparations();
       const points = await this.store.list();
       for (const point of points)
         if (point.status === 'capturing') await this.store.update({ ...point, status: 'interrupted', issue: 'capture-interrupted' });
@@ -166,25 +210,248 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn('Time Machine storage needs review. Capture is disabled.');
     }
   }
+  private reconcileRetiredCorePreparations(): Promise<void> {
+    const socket = process.env.ORBIS_HOST_SOCKET;
+    if (
+      !socket ||
+      process.platform !== 'linux' ||
+      this.closing ||
+      this.active ||
+      this.reviewing ||
+      this.exporting ||
+      this.removing ||
+      coreCaptureRecoveryRequired() ||
+      restoreStartupRole() !== 'ordinary' ||
+      installationMode().phase !== 'normal'
+    )
+      return Promise.resolve();
+    this.retirementWork ??= (async () => {
+      const reader = new HostCoreCaptureRestartRetirementClient(socket);
+      const signal = AbortSignal.any([this.retirementShutdown.signal, AbortSignal.timeout(15_000)]);
+      for (const point of await this.store.list()) {
+        if (point.version !== 3 || !['capturing', 'interrupted'].includes(point.status)) continue;
+        let receipt: Awaited<ReturnType<typeof reader.observe>>;
+        try {
+          receipt = await reader.observe(point.id, coreCapturePointReservationSha256(point), signal);
+        } catch {
+          continue;
+        }
+        if (receipt && !this.closing && !this.active && !this.reviewing && !this.exporting && !this.removing)
+          await this.store.retireUnadmittedCorePoint(point.id, receipt);
+      }
+    })().finally(() => {
+      this.retirementWork = undefined;
+    });
+    return this.retirementWork;
+  }
   private available() {
     if (this.closing || this.unavailable) throw timeMachineConflict('storage-unavailable');
   }
-  capabilities() {
-    return timeMachineCapabilities();
+  async capabilities() {
+    const capabilities = timeMachineCapabilities();
+    const socket = process.env.ORBIS_HOST_SOCKET;
+    capabilities.manualCapture = false;
+    if (!socket || process.platform !== 'linux' || this.closing || !this.coreQueue || !this.coreDatabase || !this.coreApps) return capabilities;
+    try {
+      await new HostCoreCaptureReservedStartClient(socket).requireCapability(
+        AbortSignal.any([this.retirementShutdown.signal, AbortSignal.timeout(2500)]),
+      );
+      capabilities.manualCapture = true;
+    } catch {
+      // Capability observation must not reserve a point or drain the source.
+    }
+    return capabilities;
   }
   storage() {
-    return readTimeMachineStorage(this.dataDirectory, () => this.store.list());
+    return readTimeMachineStorage(this.dataDirectory, async () => [...(await this.store.list()), ...(await this.components.list())]);
   }
   async preferences() {
     await this.initialize();
     this.available();
     return this.store.preferences();
   }
+  /** Authenticated pre-plan observation; the later archive fence must still recheck the full inventory. */
+  async resetCaptureInventory(options: ResetInventoryBinding & { access: ResetInventoryAccess }) {
+    const access = options.access;
+    const binding = { resetId: options.resetId, accounts: options.accounts, lease: options.lease, signal: options.signal };
+    const guard = async () => {
+      if (this.closing) throw timeMachineConflict('operation-busy');
+      await assertResetInventoryAccess(access, binding);
+      if (this.closing) throw timeMachineConflict('operation-busy');
+    };
+    await guard();
+    if (this.resetPreferencesSnapshot || this.active || this.reviewing || this.exporting || this.removing)
+      throw timeMachineConflict('operation-busy');
+    this.resetPreferencesSnapshot = true;
+    try {
+      await this.initialize();
+      this.available();
+      const read = async () => {
+        await guard();
+        const [core, components] = await Promise.all([this.store.list(), this.components.list()]);
+        await guard();
+        const owners = await this.custody.owners(core, components);
+        const selected = (kind: 'core' | 'components', point: StoredTimeMachinePoint | (typeof components)[number]) => {
+          const owner = owners.get(captureCustodyKey(kind, point.id));
+          if (owner === undefined) throw timeMachineConflict('point-integrity-failed');
+          return resetCaptureInventoryEntry(kind, point, owner);
+        };
+        await guard();
+        return resetCaptureInventory(binding.resetId, binding.accounts, [
+          ...core.map((point) => selected('core', point)),
+          ...components.map((point) => selected('components', point)),
+        ]);
+      };
+      const before = await read();
+      if ((await read()).sha256 !== before.sha256) throw timeMachineConflict('revision-conflict');
+      await guard();
+      return before;
+    } finally {
+      this.resetPreferencesSnapshot = false;
+    }
+  }
+  withResetCaptureRecoveryFiles<T>(
+    options: ResetInventoryBinding & { access: ResetInventoryAccess; directory: string; passphrase: string },
+    work: (snapshot: ResetCaptureRecoveryFiles) => Promise<T>,
+  ) {
+    const captured = { ...options };
+    return snapshotCaptureRecoveryFiles(
+      { ...captured, dataDir: this.dataDirectory, inventory: () => this.resetCaptureInventory(captured) },
+      async (snapshot) => {
+        await inspectResetCaptureRecoveryManifest({
+          manifest: resetCaptureRecoveryManifest(snapshot),
+          expected: {
+            resetId: snapshot.resetId,
+            accounts: snapshot.accounts,
+            filesSha256: snapshot.filesSha256,
+            inventorySha256: snapshot.inventory.sha256,
+          },
+          directory: captured.directory,
+          passphrase: captured.passphrase,
+          signal: captured.signal,
+        });
+        await assertResetInventoryAccess(captured.access, captured);
+        return work(snapshot);
+      },
+    );
+  }
+  /** Temporary read fence only; archive publication and erase admission need their own continuing fence. */
+  async withResetPreferencesSnapshot<T>(
+    options: { plan: ResetExportPlan; access: SettingsExportAccess; lease: BackupMaintenanceLease; signal: AbortSignal },
+    work: (preferences: TimeMachinePreferences) => Promise<T>,
+  ): Promise<T> {
+    return this.readResetPreferencesSnapshot(options, work);
+  }
+  async withResetCapturePreferencesSnapshot<T>(
+    options: Parameters<TimeMachineService['withResetPreferencesSnapshot']>[0] & { inventoryAccess: ResetInventoryAccess; captures: unknown },
+    work: (preferences: TimeMachinePreferences) => Promise<T>,
+  ): Promise<T> {
+    const captures = validateResetCaptureRecoveryManifest(options.captures);
+    if (
+      captures.resetId !== options.plan.resetId ||
+      captures.accounts !== options.plan.accounts ||
+      options.plan.exports.some((item) => item.selection.timeMachine.length !== 0)
+    )
+      throw timeMachineConflict('point-integrity-failed');
+    return this.readResetPreferencesSnapshot(options, work, { access: options.inventoryAccess, captures });
+  }
+  private async readResetPreferencesSnapshot<T>(
+    options: Parameters<TimeMachineService['withResetPreferencesSnapshot']>[0],
+    work: (preferences: TimeMachinePreferences) => Promise<T>,
+    raw?: { access: ResetInventoryAccess; captures: ResetCaptureRecoveryManifest },
+  ): Promise<T> {
+    const plan = structuredClone(options.plan);
+    const guard = async () => {
+      if (this.closing) throw timeMachineConflict('operation-busy');
+      options.signal.throwIfAborted();
+      assertBackupMaintenanceLease(options.lease);
+      await assertResetExportAccess(options.access, plan);
+      if (raw)
+        await assertResetInventoryAccess(raw.access, {
+          resetId: plan.resetId,
+          accounts: plan.accounts,
+          lease: options.lease,
+          signal: options.signal,
+        });
+      options.signal.throwIfAborted();
+      assertBackupMaintenanceLease(options.lease);
+      if (this.closing) throw timeMachineConflict('operation-busy');
+    };
+    await guard();
+    if (this.resetPreferencesSnapshot || this.active || this.reviewing || this.exporting || this.removing)
+      throw timeMachineConflict('operation-busy');
+    this.resetPreferencesSnapshot = true;
+    try {
+      await this.initialize();
+      this.available();
+      const captureInventory = async () => {
+        await guard();
+        const [core, components] = await Promise.all([this.store.list(), this.components.list()]);
+        await guard();
+        const owners = await this.custody.owners(core, components);
+        if (raw) {
+          assertResetSafetyExportCoverage(plan, { users: plan.users, captures: [] });
+          const current = (kind: 'core' | 'components', point: StoredTimeMachinePoint | (typeof components)[number]) => {
+            const owner = owners.get(captureCustodyKey(kind, point.id));
+            if (owner === undefined) throw timeMachineConflict('point-integrity-failed');
+            return resetCaptureInventoryEntry(kind, point, owner);
+          };
+          const inventory = resetCaptureInventory(plan.resetId, plan.accounts, [
+            ...core.map((point) => current('core', point)),
+            ...components.map((point) => current('components', point)),
+          ]);
+          if (inventory.sha256 !== raw.captures.inventory.sha256) throw timeMachineConflict('revision-conflict');
+          await guard();
+          return inventory.sha256;
+        }
+        const selected = (kind: 'core' | 'components', point: StoredTimeMachinePoint | (typeof components)[number]) => {
+          const ownerId = owners.get(captureCustodyKey(kind, point.id));
+          if (ownerId === undefined || ownerId === null) throw timeMachineConflict('point-integrity-failed');
+          return { id: point.id, ownerId };
+        };
+        assertResetSafetyExportCoverage(plan, {
+          users: plan.users,
+          captures: [...core.map((point) => selected('core', point)), ...components.map((point) => selected('components', point))],
+        });
+        await guard();
+        return createHash('sha256')
+          .update('orbis-reset-capture-inventory-v1\n')
+          .update(
+            canonicalPublicationJson({
+              core: core.sort((a, b) => a.id.localeCompare(b.id)),
+              components: components.sort((a, b) => a.id.localeCompare(b.id)),
+              owners: [...owners].sort(([a], [b]) => a.localeCompare(b)),
+            }),
+          )
+          .digest('hex');
+      };
+      const result = await this.store.withPreferencesSnapshot(async (preferences) => {
+        await guard();
+        const captures = await captureInventory();
+        const freeze = <V>(value: V): V => {
+          if (value && typeof value === 'object') {
+            for (const child of Object.values(value)) freeze(child);
+            Object.freeze(value);
+          }
+          return value;
+        };
+        const value = await work(freeze(structuredClone(preferences)));
+        if ((await captureInventory()) !== captures) throw timeMachineConflict('revision-conflict');
+        await guard();
+        return value;
+      });
+      await guard();
+      return result;
+    } finally {
+      this.resetPreferencesSnapshot = false;
+    }
+  }
   async updatePreferences(input: unknown) {
     await this.initialize();
     this.available();
     if (!timeMachinePreferencesUpdateSchema.allows(input)) throw timeMachineConflict('invalid-request');
-    if (this.active || this.reviewing || this.exporting || this.removing) throw timeMachineConflict('operation-busy');
+    if (this.resetPreferencesSnapshot || this.active || this.reviewing || this.exporting || this.removing)
+      throw timeMachineConflict('operation-busy');
     return this.store.updatePreferences(input);
   }
   private async publicPoint(point: StoredTimeMachinePoint): Promise<TimeMachinePoint> {
@@ -212,15 +479,40 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
       metadata,
     };
   }
-  async list(ownerId: number): Promise<TimeMachineList> {
+  async prepareResetOwnership(journal: ResetJournal, currentUsers: number[]) {
+    await this.initialize();
+    this.available();
+    if (this.active || this.reviewing || this.exporting || this.removing) throw timeMachineConflict('operation-busy');
+    await this.custody.prepare(journal, currentUsers);
+  }
+  async completeResetOwnership(journal: ResetJournal, verifyReceipt: () => Promise<boolean>) {
+    await this.custody.complete(journal, verifyReceipt);
+  }
+  async reconcileResetOwnership(ownerId: number, request: Request) {
+    await this.initialize();
+    this.available();
+    await this.custody.reconcile(ownerId, request);
+  }
+  async list(ownerId: number, request?: Request): Promise<TimeMachineList> {
     await this.initialize();
     if (this.unavailable) return { version: 1, available: false, points: [], activeCaptureId: null };
     try {
-      const points = (await this.store.list()).filter((point) => point.ownerId === ownerId);
+      await this.reconcileRetiredCorePreparations();
+      await this.custody.reconcile(ownerId, request);
+      await this.refreshComponents();
+      const allComponents = await this.components.list();
+      const allPoints = await this.store.list();
+      const owners = await this.custody.owners(allPoints, allComponents);
+      const components = allComponents.filter((point) => owners.get(captureCustodyKey('components', point.id)) === ownerId);
+      const componentCoreIds = new Set(components.map((point) => point.corePointId));
+      const points = allPoints.filter((point) => owners.get(captureCustodyKey('core', point.id)) === ownerId && !componentCoreIds.has(point.id));
       return {
         version: 1,
         available: true,
-        points: await Promise.all(points.map((point) => this.publicPoint(point))),
+        points: [
+          ...(await Promise.all(points.map((point) => this.publicPoint(point)))),
+          ...(await Promise.all(components.map((point) => this.components.public(point)))),
+        ].sort((a, b) => b.createdAt - a.createdAt),
         activeCaptureId: this.active?.id || null,
       };
     } catch {
@@ -232,6 +524,14 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     this.available();
     const active = this.active;
     if (!active?.id || active.ownerId !== ownerId) return { version: 1 as const, point: null };
+    if (active.coreId) {
+      await this.refreshComponents();
+      const point = await this.components.load(active.id);
+      return {
+        version: 1 as const,
+        point: { ...(await this.components.public(point)), ...(active.progress ? { stage: active.progress.stage } : {}) },
+      };
+    }
     const point = await this.store.load(active.id);
     if (point.ownerId !== ownerId) return { version: 1 as const, point: null };
     return { version: 1 as const, point: await this.publicPoint(point) };
@@ -239,16 +539,35 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
   private async owned(id: string, ownerId: number) {
     try {
       const point = await this.store.load(id);
-      if (point.ownerId !== ownerId) throw timeMachineConflict('point-not-found');
+      await this.custody.assertOwner('core', point, ownerId);
       return point;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw timeMachineConflict('point-not-found');
       throw error;
     }
   }
-  async inspect(id: string, ownerId: number) {
+  async coreInspectionBindingPoint(id: string, ownerId: number, request?: Request) {
     await this.initialize();
     this.available();
+    await this.custody.reconcile(ownerId, request);
+    const point = await this.owned(id, ownerId);
+    if (point.version !== 3 || point.kind !== 'orbis-core' || point.status !== 'sealed' || !point.archiveSha256)
+      throw timeMachineConflict('point-not-found');
+    const metadata = await this.store.metadata(point);
+    if (metadata.version !== 3 || metadata.kind !== 'orbis-core' || !timeMachineHashSchema.allows(metadata.manifestSha256))
+      throw timeMachineConflict('point-integrity-failed');
+    return { pointId: point.id, ownerId, archiveSha256: point.archiveSha256, manifestSha256: metadata.manifestSha256 };
+  }
+  async inspect(id: string, ownerId: number, request?: Request) {
+    await this.initialize();
+    this.available();
+    await this.custody.reconcile(ownerId, request);
+    const components = await this.components.find(id);
+    if (components) {
+      await this.custody.assertOwner('components', components, ownerId);
+      await this.refreshComponents();
+      return this.components.public(await this.components.load(id));
+    }
     try {
       return await this.publicPoint(await this.owned(id, ownerId));
     } catch (error) {
@@ -296,6 +615,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     if (!timeMachineCaptureSchema.allows(request)) {
       throw timeMachineConflict('invalid-request');
     }
+    if (request.selection) throw timeMachineConflict('invalid-request');
     if ((await this.captureSecurity.read(ownerId)).requireCaptureAuthentication) {
       const proof = backupCredentials(credentials);
       await this.auth.verifySensitiveAction(ownerId, proof.password, proof.totpCode);
@@ -307,6 +627,48 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     return this.prepareCoreCapture(ownerId, credentials, input, request);
   }
 
+  async captureReview(ownerId: number, request: Request, input: unknown) {
+    await this.initialize();
+    this.available();
+    const actor = await this.auth.operatorActionContext(request);
+    if (
+      actor.userId !== ownerId ||
+      !input ||
+      typeof input !== 'object' ||
+      Array.isArray(input) ||
+      Object.keys(input).join(',') !== 'appUrns' ||
+      !('appUrns' in input) ||
+      !Array.isArray(input.appUrns) ||
+      input.appUrns.length < 1 ||
+      input.appUrns.length > 512 ||
+      input.appUrns.some((urn) => typeof urn !== 'string' || !/^[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+$/.test(urn))
+    )
+      throw timeMachineConflict('invalid-request');
+    const socket = process.env.ORBIS_HOST_SOCKET;
+    if (!socket || process.platform !== 'linux') throw timeMachineConflict('host-capture-support-required');
+    if (this.active || this.reviewing || this.exporting || this.removing || backupMaintenanceActive()) throw timeMachineConflict('operation-busy');
+    try {
+      return await new HostSelectedCaptureClient(socket).review(input.appUrns as string[], AbortSignal.timeout(120_000));
+    } catch (error) {
+      if (error instanceof SelectedCaptureConflict) throw timeMachineConflict('capture-selection-conflict');
+      throw timeMachineConflict('host-capture-support-required');
+    }
+  }
+
+  private async refreshComponents() {
+    const socket = process.env.ORBIS_HOST_SOCKET;
+    if (!socket || process.platform !== 'linux') return;
+    for (const point of await this.components.list()) {
+      if (point.status === 'sealed' || point.status === 'failed') continue;
+      const core = await this.store.load(point.corePointId);
+      if ((core.status === 'failed' || core.status === 'interrupted') && point.status === 'capturing') await this.components.interrupted(point);
+      if (core.version !== 3 || core.status !== 'sealed') continue;
+      const metadata = await this.store.metadata(core);
+      if (metadata.version !== 3) throw timeMachineConflict('point-integrity-failed');
+      await this.components.seal(point, core, metadata, this.store, new HostSelectedCaptureClient(socket), AbortSignal.timeout(30 * 60_000));
+    }
+  }
+
   private async prepareCoreCapture(
     ownerId: number,
     credentials: unknown,
@@ -316,6 +678,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
   ) {
     await this.initialize();
     this.available();
+    await this.reconcileRetiredCorePreparations();
     if (!timeMachineCaptureSchema.allows(input)) throw timeMachineConflict('invalid-request');
     const socket = process.env.ORBIS_HOST_SOCKET;
     const queue = this.coreQueue;
@@ -350,6 +713,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
       if (!preferences.enabled) throw timeMachineConflict('invalid-request');
       if ((await this.store.list()).some((point) => point.status === 'interrupted' || point.status === 'capturing'))
         throw timeMachineConflict('capture-recovery-required');
+      if ((await this.components.list()).some((point) => point.status !== 'sealed')) throw timeMachineConflict('capture-recovery-required');
       await this.docker.requireNoPendingAppImageUpdates();
       const grant = await authorizeCoreCaptureOperator({
         auth: this.auth,
@@ -394,6 +758,16 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
       const point = await producer.reserve(active.abort.signal);
       createdPointId = point.id;
       active.id = point.id;
+      let componentsPoint: Awaited<ReturnType<TimeMachineComponentsStore['create']>> | undefined;
+      if (input.selection) {
+        const id = randomUUID();
+        const selected = new HostSelectedCaptureClient(socket);
+        await selected.requireCapability(active.abort.signal);
+        const bound = await selected.bind(id, point.id, coreCapturePointReservationSha256(point), input.selection, active.abort.signal);
+        componentsPoint = await this.components.create(ownerId, id, point.id, bound.planSha256, input.selection);
+        active.id = id;
+        active.coreId = point.id;
+      }
       active.start = async () => {
         try {
           await producer.start(active.abort.signal);
@@ -405,7 +779,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
         await onboarding.complete();
         await this.store.readyOnboardingAttempt(point.id, ownerId);
       }
-      return await this.publicPoint(point);
+      return componentsPoint ? this.components.public(componentsPoint) : await this.publicPoint(point);
     } catch (error) {
       active.abort.abort();
       if (error instanceof CoreCaptureReservationError) this.unavailable = true;
@@ -420,6 +794,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
       if (this.active === active) this.active = undefined;
       settle();
       if (error instanceof CoreCaptureCapabilityError) throw timeMachineConflict('host-capture-support-required');
+      if (error instanceof SelectedCaptureConflict) throw timeMachineConflict('capture-selection-conflict');
       if (error && typeof error === 'object' && 'getResponse' in error) throw error;
       throw timeMachineConflict('capture-failed');
     } finally {
@@ -564,18 +939,21 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     return active.done;
   }
   async cancelCapture(id: string, ownerId: number) {
-    await this.owned(id, ownerId);
+    const components = await this.components.find(id);
+    if (components) {
+      if (components.ownerId !== ownerId) throw timeMachineConflict('point-not-found');
+    } else await this.owned(id, ownerId);
     const active = this.active;
     if (!active || active.id !== id || active.ownerId !== ownerId) throw timeMachineConflict('operation-busy');
     active.abort.abort();
     await active.setup;
     if (!active.started) {
-      await this.store.fail(await this.store.load(id), 'capture-interrupted');
+      await this.store.fail(await this.store.load(active.coreId ?? id), 'capture-interrupted');
       if (this.active === active) this.active = undefined;
       active.settle();
     }
     await active.done;
-    return this.publicPoint(await this.store.load(id));
+    return components ? this.components.public(await this.components.load(id)) : this.publicPoint(await this.store.load(id));
   }
   private async runCapture(
     active: NonNullable<TimeMachineService['active']>,
@@ -725,27 +1103,36 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     await this.initialize();
     this.available();
     await authorizeBackupActionSession(this.auth, this.captureSecurity, request, ownerId, credentials, 'backup', actor);
+    await this.custody.reconcile(ownerId, request);
     return this.removeOwned(id, ownerId);
   }
   private async removeOwned(id: string, ownerId: number) {
     if (this.active || this.reviewing || this.exporting || this.removing) throw timeMachineConflict('operation-busy');
     this.removing = true;
     try {
-      await this.owned(id, ownerId);
+      const components = await this.components.find(id);
+      if (components) {
+        await this.custody.assertOwner('components', components, ownerId);
+        return await this.components.remove(components);
+      }
+      if ((await this.components.list()).some((point) => point.corePointId === id)) throw timeMachineConflict('operation-busy');
+      const point = await this.owned(id, ownerId);
       const review = this.reviews.get(id);
       if (review?.importId)
         await this.imports.remove(review.importId, ownerId).catch((error) => {
           if (!(error instanceof NotFoundException)) throw error;
         });
       this.reviews.delete(id);
-      return await this.store.remove(id, ownerId);
+      return await this.store.remove(id, point.ownerId);
     } finally {
       this.removing = false;
     }
   }
-  async restoreReview(id: string, ownerId: number) {
+  async restoreReview(id: string, ownerId: number, request?: Request) {
     await this.initialize();
     this.available();
+    if (request) await this.custody.reconcile(ownerId, request);
+    if (await this.components.find(id)) throw timeMachineConflict('activation-not-integrated');
     if (this.active || this.reviewing || this.exporting || this.removing || backupMaintenanceActive() || installationMode().phase !== 'normal')
       throw restoreConflict('operation-busy');
     const point = await this.owned(id, ownerId);
@@ -1120,8 +1507,53 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     const current = await this.auth.operatorActionContext(request);
     if (actor.userId !== current.userId || actor.sessionBinding !== current.sessionBinding || actor.securityBinding !== current.securityBinding)
       throw restoreConflict('authorization-invalid');
+    await this.custody.reconcile(ownerId, request);
+    return this.readPortablePoint(id, ownerId, signal, consume);
+  }
+  async withPortablePointForExport<T>(
+    id: string,
+    ownerId: number,
+    access: SettingsExportAccess,
+    exportId: string,
+    signal: AbortSignal,
+    consume: (value: {
+      point: StoredTimeMachinePoint;
+      metadata: TimeMachineMetadata;
+      source: Readable;
+      pointKey: string;
+      signal: AbortSignal;
+    }) => Promise<T>,
+  ): Promise<T> {
+    const validate = () => assertSettingsExportAccess(access, { exportId, ownerId, pointId: id });
+    await validate();
+    signal.throwIfAborted();
+    await this.initialize();
+    await validate();
+    return this.readPortablePoint(id, ownerId, signal, consume, validate, settingsExportBorrowsMaintenance(access));
+  }
+  private async readPortablePoint<T>(
+    id: string,
+    ownerId: number,
+    signal: AbortSignal,
+    consume: (value: {
+      point: StoredTimeMachinePoint;
+      metadata: TimeMachineMetadata;
+      source: Readable;
+      pointKey: string;
+      signal: AbortSignal;
+    }) => Promise<T>,
+    validate: () => Promise<void> = async () => undefined,
+    borrowsMaintenance = false,
+  ): Promise<T> {
     this.available();
-    if (this.active || this.reviewing || this.exporting || this.removing || backupMaintenanceActive() || installationMode().phase !== 'normal')
+    if (
+      this.active ||
+      this.reviewing ||
+      this.exporting ||
+      this.removing ||
+      (backupMaintenanceActive() && !borrowsMaintenance) ||
+      installationMode().phase !== 'normal'
+    )
       throw timeMachineConflict('operation-busy');
     let finish: () => void = () => undefined;
     const done = new Promise<void>((resolve) => {
@@ -1133,25 +1565,144 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     const combined = AbortSignal.any([signal, abort.signal]);
     try {
       combined.throwIfAborted();
+      await validate();
       const point = await this.owned(id, ownerId);
+      await validate();
+      combined.throwIfAborted();
       if (point.status !== 'sealed' || ![2, 3].includes(point.version)) throw timeMachineConflict('point-integrity-failed');
       const metadata = await this.store.metadata(point);
+      await validate();
+      combined.throwIfAborted();
       if (metadata.version !== point.version || !metadata.coverage.dockerImages) throw timeMachineConflict('point-integrity-failed');
-      if (point.version === 3) await this.store.readCoreDraft(point, combined);
-      return await this.store.withArchive(point, combined, (source, pointKey) => consume({ point, metadata, source, pointKey, signal: combined }));
+      if (point.version === 3) {
+        await this.store.readCoreDraft(point, combined);
+        await validate();
+        combined.throwIfAborted();
+      }
+      const result = await this.store.withArchive(point, combined, async (source, pointKey) => {
+        await validate();
+        combined.throwIfAborted();
+        const value = await consume({ point, metadata, source, pointKey, signal: combined });
+        await validate();
+        combined.throwIfAborted();
+        return value;
+      });
+      await validate();
+      combined.throwIfAborted();
+      return result;
     } finally {
       if (this.exporting === operation) this.exporting = undefined;
       finish();
     }
   }
-  async appIcons(id: string, ownerId: number, identity: string) {
+  async withComponentsPortablePoint<T>(
+    id: string,
+    ownerId: number,
+    request: Request,
+    credentials: Credentials,
+    signal: AbortSignal,
+    consume: (
+      value: Awaited<ReturnType<TimeMachineComponentsStore['entries']>> & {
+        point: Awaited<ReturnType<TimeMachineComponentsStore['load']>>;
+        signal: AbortSignal;
+      },
+    ) => Promise<T>,
+  ): Promise<T | null> {
+    await this.initialize();
+    this.available();
+    const point = await this.components.find(id);
+    if (!point) return null;
+    await this.custody.reconcile(ownerId, request);
+    await this.custody.assertOwner('components', point, ownerId);
+    const actor = await this.auth.operatorActionContext(request);
+    if (actor.userId !== ownerId) throw restoreConflict('authorization-invalid');
+    await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
+    const after = await this.auth.operatorActionContext(request);
+    if (actor.userId !== after.userId || actor.sessionBinding !== after.sessionBinding || actor.securityBinding !== after.securityBinding)
+      throw restoreConflict('authorization-invalid');
+    return this.readComponentsPortablePoint(point, signal, consume);
+  }
+  async withComponentsPortablePointForExport<T>(
+    id: string,
+    ownerId: number,
+    access: SettingsExportAccess,
+    exportId: string,
+    signal: AbortSignal,
+    consume: (
+      value: Awaited<ReturnType<TimeMachineComponentsStore['entries']>> & {
+        point: Awaited<ReturnType<TimeMachineComponentsStore['load']>>;
+        signal: AbortSignal;
+      },
+    ) => Promise<T>,
+  ): Promise<T | null> {
+    const validate = () => assertSettingsExportAccess(access, { exportId, ownerId, pointId: id });
+    await validate();
+    signal.throwIfAborted();
+    await this.initialize();
+    await validate();
+    this.available();
+    const point = await this.components.find(id);
+    await validate();
+    signal.throwIfAborted();
+    if (!point) return null;
+    await this.custody.assertOwner('components', point, ownerId);
+    return this.readComponentsPortablePoint(point, signal, consume, validate, settingsExportBorrowsMaintenance(access));
+  }
+  private async readComponentsPortablePoint<T>(
+    point: Awaited<ReturnType<TimeMachineComponentsStore['load']>>,
+    signal: AbortSignal,
+    consume: (
+      value: Awaited<ReturnType<TimeMachineComponentsStore['entries']>> & {
+        point: Awaited<ReturnType<TimeMachineComponentsStore['load']>>;
+        signal: AbortSignal;
+      },
+    ) => Promise<T>,
+    validate: () => Promise<void> = async () => undefined,
+    borrowsMaintenance = false,
+  ): Promise<T> {
+    if (
+      this.active ||
+      this.reviewing ||
+      this.exporting ||
+      this.removing ||
+      (backupMaintenanceActive() && !borrowsMaintenance) ||
+      installationMode().phase !== 'normal'
+    )
+      throw timeMachineConflict('operation-busy');
+    let finish: () => void = () => undefined;
+    const done = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const abort = new AbortController();
+    const operation = { abort, done };
+    this.exporting = operation;
+    const combined = AbortSignal.any([signal, abort.signal]);
+    try {
+      await validate();
+      combined.throwIfAborted();
+      const value = await this.components.entries(point, combined);
+      await validate();
+      combined.throwIfAborted();
+      const result = await consume({ ...value, point, signal: combined });
+      await validate();
+      combined.throwIfAborted();
+      return result;
+    } finally {
+      if (this.exporting === operation) this.exporting = undefined;
+      finish();
+    }
+  }
+  async appIcons(id: string, ownerId: number, identity: string, request?: Request) {
     await this.initialize();
     this.available();
     if (!timeMachineHashSchema.allows(identity)) throw timeMachineConflict('point-not-found');
+    await this.custody.reconcile(ownerId, request);
     if (this.openingAssets >= 2) throw timeMachineConflict('operation-busy');
     this.openingAssets++;
     try {
-      const point = await this.owned(id, ownerId);
+      const components = await this.components.find(id);
+      if (components) await this.custody.assertOwner('components', components, ownerId);
+      const point = await this.owned(components?.corePointId ?? id, ownerId);
       const metadata = await this.store.metadata(point);
       const asset = metadata.preview.available ? metadata.preview.appIcons : undefined;
       if (!asset || asset.identity !== identity) throw timeMachineConflict('point-not-found');
@@ -1163,14 +1714,17 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
       this.openingAssets--;
     }
   }
-  async wallpaper(id: string, ownerId: number, identity: string) {
+  async wallpaper(id: string, ownerId: number, identity: string, request?: Request) {
     await this.initialize();
     this.available();
     if (!timeMachineHashSchema.allows(identity)) throw timeMachineConflict('point-not-found');
+    await this.custody.reconcile(ownerId, request);
     if (this.openingAssets >= 2) throw timeMachineConflict('operation-busy');
     this.openingAssets++;
     try {
-      const point = await this.owned(id, ownerId);
+      const components = await this.components.find(id);
+      if (components) await this.custody.assertOwner('components', components, ownerId);
+      const point = await this.owned(components?.corePointId ?? id, ownerId);
       const metadata = await this.store.metadata(point);
       const preview = metadata.preview;
       if (!preview.available || !preview.wallpaperAsset.available || preview.wallpaperAsset.identity !== identity)

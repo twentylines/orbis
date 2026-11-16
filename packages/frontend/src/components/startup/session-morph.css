@@ -1,0 +1,99 @@
+.orbis-startup.orbis-startup-session {
+  background: transparent;
+}
+.orbis-startup.orbis-startup-session:not([data-revealing]) {
+  animation: none;
+}
+.orbis-startup.orbis-startup-session > .desktop-wallpaper-layer {
+  visibility: visible;
+}
+.orbis-startup-session > .desktop-wallpaper-layer > img {
+  transition: none;
+}
+.orbis-startup-session > .desktop-wallpaper-layer .desktop-wallpaper-shade {
+  background: var(--orbis-session-shade);
+}
+.orbis-startup-session > .desktop-wallpaper-layer .desktop-wallpaper-dim {
+  background: var(--orbis-session-dim);
+}
+.orbis-startup.orbis-startup-session .orbis-startup-content {
+  position: static;
+  inset: auto;
+  width: 100%;
+  height: 0;
+  z-index: auto;
+  animation: none;
+}
+.orbis-startup-session .orbis-startup-copy {
+  position: fixed;
+  top: var(--orbis-session-status-top, calc(50% + 116px));
+  left: var(--orbis-session-center-x, 50%);
+  width: min(90vw, 32rem);
+  transform: translateX(-50%);
+}
+.orbis-startup-session:not([data-morph-ready]) .orbis-startup-copy {
+  opacity: 0;
+}
+.orbis-startup.orbis-startup-redesigned:is([data-session-state="signing-in"], [data-session-state="logging-out"]) {
+  --orbis-session-ink: #ffffff;
+}
+.orbis-startup.orbis-startup-redesigned:is([data-session-state="signing-in"], [data-session-state="logging-out"])[data-desktop-mode="light"] {
+  --orbis-session-ink: #000000;
+}
+.orbis-startup.orbis-startup-redesigned:is([data-session-state="signing-in"], [data-session-state="logging-out"]) .orbis-startup-copy {
+  color: var(--orbis-session-ink);
+}
+.orbis-startup.orbis-startup-redesigned:is([data-session-state="signing-in"], [data-session-state="logging-out"])
+  :is(.orbis-startup-title, .orbis-startup-detail) {
+  color: inherit;
+  text-shadow: none;
+}
+.orbis-startup-session .orbis-session-galaxy {
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  background: var(--orbis-loading-surface, var(--desktop-surface));
+}
+.orbis-startup-session[data-expanding-auth="true"] .orbis-startup-copy {
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+.orbis-startup.orbis-startup-session[data-revealing="true"] .orbis-startup-content {
+  animation: none;
+}
+@media (max-height: 360px) {
+  .orbis-startup-session .orbis-startup-copy {
+    top: calc(50% + 76px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbis-startup-session .orbis-startup-copy {
+    transition: none;
+  }
+}
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"]) .orbis-startup-session .orbis-startup-copy {
+  transition: none;
+}
+
+.orbis-startup-session .orbis-startup-mark {
+  transition: none;
+}
+
+:root[data-orbis-session-morph="contracting"] .orbis-startup.orbis-login-surface {
+  background: transparent;
+}
+:root[data-orbis-session-morph="contracting"] .orbis-login-surface > .desktop-wallpaper-layer {
+  visibility: hidden;
+}
+:root[data-orbis-session-morph="contracting"] .orbis-login-surface .orbis-startup-copy {
+  opacity: 0;
+}
+
+:root[data-orbis-session-morph="contracting"] .desktop-auth-toolbar {
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+@media (forced-colors: active) {
+  .orbis-startup.orbis-startup-redesigned:is([data-session-state="signing-in"], [data-session-state="logging-out"]) .orbis-startup-copy {
+    color: CanvasText;
+  }
+}

@@ -10,6 +10,7 @@ const doc = {
   activeElement: null,
   body: { nodeName: 'BODY' },
   defaultView: {} as object,
+  querySelector: () => null,
   documentElement: { dataset: {} },
 };
 const win = {
@@ -24,17 +25,21 @@ const win = {
 };
 doc.defaultView = win;
 Object.assign(globalThis, { window: win, document: doc, IS_REACT_ACT_ENVIRONMENT: true });
+const storage = new Map([['orbis-session-exit', String(Date.now())]]);
+Object.assign(globalThis, {
+  sessionStorage: { getItem: (key: string) => storage.get(key) ?? null, removeItem: (key: string) => storage.delete(key) },
+});
 let mounts = 0;
 let unmounts = 0;
-let current: { setupSpace?: boolean; label?: string; setupHandoff?: boolean; completing?: boolean } | null = null;
-const handoffs: Array<{ setupSpace?: boolean; setupHandoff?: boolean; completing?: boolean }> = [];
+let current: { setupSpace?: boolean; label?: string; landing?: boolean; completing?: boolean } | null = null;
+const handoffs: Array<{ setupSpace?: boolean; landing?: boolean; completing?: boolean }> = [];
 mock.module('@/desktop/motion-setting', () => ({ prefersReducedMotion: () => true }));
 mock.module('@/modules/theme-packs/use-theme-apply-startup', () => ({
   useThemeApplyStartup: () => ({ active: false, pending: false, complete: () => undefined }),
 }));
 mock.module('./operation-startup', () => ({ useOperationStartup: () => ({ operation: null, complete: () => undefined }) }));
 mock.module('./startup-surface', () => ({
-  StartupSurface: (props: { setupSpace?: boolean; label?: string; setupHandoff?: boolean; completing?: boolean }) => {
+  StartupSurface: (props: { setupSpace?: boolean; label?: string; landing?: boolean; completing?: boolean }) => {
     useLayoutEffect(() => {
       mounts++;
       return () => {
@@ -43,7 +48,7 @@ mock.module('./startup-surface', () => ({
     }, []);
     useLayoutEffect(() => {
       current = props;
-      if (props.setupHandoff) handoffs.push(props);
+      if (props.landing) handoffs.push(props);
       return () => {
         current = null;
       };
@@ -84,6 +89,7 @@ try {
     ),
   );
   for (let i = 0; i < 5; i++) await flush(() => undefined);
+  expect(storage.has('orbis-session-exit')).toBe(false);
   const before = mounts;
   await flush(() => session.begin('preparing-orbis', true, 'Saving preferences'));
   expect(current).toMatchObject({ setupSpace: true, label: 'Saving preferences' });
@@ -104,7 +110,7 @@ try {
   for (let i = 0; i < 5; i++) await flush(() => undefined);
   expect(finished).toBe(true);
   expect(handoffs.length).toBeGreaterThan(0);
-  expect(handoffs.every((item) => item.setupSpace === false && item.completing === false)).toBe(true);
+  expect(handoffs.every((item) => item.setupSpace === true)).toBe(true);
   expect(mounts).toBe(before + 1);
   expect(current).toBeNull();
   process.stdout.write(JSON.stringify({ singleMountedCover: true, spaceThroughout: true, compositor: false }));

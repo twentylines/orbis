@@ -83,10 +83,11 @@ export async function waitForRestoreStartup(options: {
         }
       }
     }
+    let rootStatusPending = false;
     if (!journal && self && maintenance === 'checking') {
       const latest = await BackupRestoreJournal.latest(store);
-      if (!latest) throw terminalFailure();
-      if (latest.state.phase === 'completed' && latest.state.decision === 'commit') {
+      rootStatusPending = !latest;
+      if (latest?.state.phase === 'completed' && latest.state.decision === 'commit') {
         const transaction = await RetainedRootTransaction.read(latest.directory);
         const signal = options.signal ?? AbortSignal.timeout(30_000);
         const proof = await transaction.terminalProof(signal);
@@ -131,7 +132,7 @@ export async function waitForRestoreStartup(options: {
       setRestoreRecoveryRequired(true);
       retainedBootstrap = true;
     }
-    if (!retired && (!journal || restoreStartupAllowed(journal.state, options.controller, options.installation)))
+    if (!rootStatusPending && !retired && (!journal || restoreStartupAllowed(journal.state, options.controller, options.installation)))
       return journal?.state.phase === 'verifying' && journal.state.verifierController?.startsWith(options.controller)
         ? 'verify'
         : journal?.state.phase === 'committing' && journal.state.candidateController.startsWith(options.controller)

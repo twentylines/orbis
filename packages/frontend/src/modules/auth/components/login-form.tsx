@@ -22,7 +22,6 @@ interface IProps {
   active?: boolean;
   onSubmit: (values: FormValues) => void;
   loading: boolean;
-  showProgress?: boolean;
   loginType: string;
   onPasskey: () => void;
   warmPasskey: () => void;
@@ -35,7 +34,6 @@ interface IProps {
 export const LoginForm: React.FC<IProps> = ({
   active = true,
   loading,
-  showProgress = false,
   onSubmit,
   loginType,
   onPasskey,
@@ -98,7 +96,7 @@ export const LoginForm: React.FC<IProps> = ({
         />
         <div className="form-footer desktop-login-actions">
           <Button disabled={isDisabled || loading} aria-busy={loading || undefined} type="submit" intent="primary" className="w-100">
-            {showProgress ? 'Signing in…' : t('AUTH_LOGIN_SUBMIT')}
+            {t('AUTH_LOGIN_SUBMIT')}
           </Button>
           <div className="desktop-login-passkey">
             <PasskeySignIn

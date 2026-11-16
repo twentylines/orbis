@@ -238,6 +238,10 @@ class CoreCaptureService:
                     self.require_sentinel_recovery_capability(observed['controller'])
                 self.require_namespace_access(observed['controller'], point)
                 reservation = self.controller_reservation(observed['controller'], point)
+                selected_binding = self.state / 'selected-captures' / point / 'binding.json'
+                if selected_binding.exists() or selected_binding.is_symlink():
+                    selected = W.SELECTED.SelectedCapture(self.service, self.capture, H)
+                    selected.prepared(reader, point, W.digest(P.canonical(reservation)))
                 record = self.bound_preparation(point, observed, reservation)
                 if directory.exists() or directory.is_symlink():
                     existing, _ = self.read(directory, 'preparation.json')
@@ -296,6 +300,10 @@ class CoreCaptureService:
                     self.require_sentinel_recovery_capability(observed['controller'])
                 self.require_namespace_access(observed['controller'], point)
                 reservation = self.controller_reservation(observed['controller'], point)
+                selected_binding = self.state / 'selected-captures' / point / 'binding.json'
+                if selected_binding.exists() or selected_binding.is_symlink():
+                    W.SELECTED.SelectedCapture(self.service, self.capture, H).prepared(
+                        reader, point, W.digest(P.canonical(reservation)))
                 if publication == 'sentinel.v1':
                     self.sentinel.preflight_publication()
                 self.capture.child(directory)

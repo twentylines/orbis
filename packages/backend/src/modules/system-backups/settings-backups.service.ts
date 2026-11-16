@@ -6,9 +6,13 @@ import type { Request } from 'express';
 import type { ReadStream } from 'node:fs';
 import { settingsBackupJobSchema, settingsBackupSelectionSchema, type SettingsBackupJob } from '@runtipi/common/schemas/settings-backup';
 import { ConfigurationService } from '@/core/config/configuration.service';
+import { enterBackupMutation } from '@/common/backup-maintenance';
 import { AuthService } from '../auth/auth.service';
+import type { ResetJournal } from '../system-reset/reset-contract';
 import { privateBackupDirectory } from './backup-files';
+import { ResetBackupCustody } from './reset-backup-custody';
 import { SettingsBackupSourceService } from './settings-backup-source.service';
+import { authorizeSettingsPasswordExport, type SettingsExportTicket } from './settings-export-authorization';
 
 type Credentials = { password: string; totpCode?: string };
 type Stored = SettingsBackupJob & { ownerId: number };
@@ -27,6 +31,7 @@ export class SettingsBackupsService {
   private active?: { id: string; abort: AbortController; done: Promise<void> };
   private reserved: string | null = null;
   private closing = false;
+  private custodyWork: Promise<unknown> = Promise.resolve();
   constructor(
     private readonly config: ConfigurationService,
     private readonly auth: AuthService,
@@ -35,6 +40,9 @@ export class SettingsBackupsService {
 
   private root() {
     return path.join(this.config.get('directories').dataDir, 'backups', 'settings-bundles');
+  }
+  private custody() {
+    return new ResetBackupCustody(path.join(this.config.get('directories').dataDir, 'backups', 'reset-custody'));
   }
   private directory(id: string) {
     if (!uuid.test(id)) throw new NotFoundException('Backup not found.');
@@ -51,18 +59,8 @@ export class SettingsBackupsService {
   private async load() {
     await privateBackupDirectory(this.root());
     for (const id of await fs.readdir(this.root())) {
-      const directory = this.directory(id);
-      await privateBackupDirectory(directory);
-      const file = await fs.open(path.join(directory, 'job.json'), fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
-      let job: Stored;
-      try {
-        const stat = await file.stat();
-        if (!stat.isFile() || stat.nlink !== 1 || stat.mode & 0o077 || stat.uid !== process.getuid?.() || stat.size > 65_536) throw fail();
-        job = storedSchema.assert(JSON.parse(await file.readFile('utf8'))) as Stored;
-        if (job.id !== id || !Number.isSafeInteger(job.ownerId) || !matches(stat, await file.stat())) throw fail();
-      } finally {
-        await file.close();
-      }
+      const job = await this.readStored(id);
+      if (!job) throw fail();
       if (job.status === 'running' || job.status === 'queued') {
         job.status = 'interrupted';
         await this.save(job);
@@ -71,7 +69,93 @@ export class SettingsBackupsService {
       if (this.jobs.size > 32) throw fail();
     }
   }
-  private async save(job: Stored) {
+  private async readStored(id: string): Promise<Stored | undefined> {
+    const directory = this.directory(id);
+    try {
+      await fs.lstat(directory);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+      throw error;
+    }
+    await privateBackupDirectory(directory);
+    const filename = path.join(directory, 'job.json');
+    const file = await fs.open(filename, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+    try {
+      const stat = await file.stat();
+      if (!stat.isFile() || stat.nlink !== 1 || stat.mode & 0o077 || stat.uid !== process.getuid?.() || stat.size > 65_536) throw fail();
+      const job = storedSchema.assert(JSON.parse(await file.readFile('utf8'))) as Stored;
+      if (job.id !== id || !Number.isSafeInteger(job.ownerId) || !matches(stat, await file.stat()) || !matches(stat, await fs.lstat(filename)))
+        throw fail();
+      return job;
+    } finally {
+      await file.close();
+    }
+  }
+  async prepareResetOwnership(journal: ResetJournal) {
+    if (journal.accounts !== 'remove') return;
+    if (this.closing || this.active || this.reserved) throw fail();
+    await this.initialize();
+    if (this.closing || this.active || this.reserved || [...this.jobs.values()].some((job) => ['queued', 'running'].includes(job.status)))
+      throw fail();
+    await this.custodyWork;
+    const quarantine = await this.custody().quarantined();
+    const jobs: Stored[] = [];
+    for (const job of this.jobs.values()) {
+      if (quarantine.has(job.id)) continue;
+      const current = await this.readStored(job.id);
+      if (current) jobs.push(current);
+    }
+    await this.custody().prepare(journal, jobs);
+  }
+  async completeResetOwnership(journal: ResetJournal, verifyReceipt: () => Promise<boolean>) {
+    await this.custody().complete(journal, verifyReceipt);
+  }
+  async reconcileResetOwnership(ownerId: number, request: Request) {
+    await this.initialize();
+    await this.claimResetOwnership(ownerId, request);
+  }
+  private async claimResetOwnership(ownerId: number, request?: Request, onlyId?: string) {
+    if (!request) return;
+    const claim = this.custodyWork.then(async () => {
+      const pending = await this.custody().pending();
+      if (
+        !pending.some(({ manifest }) => !manifest.users.includes(ownerId) && (onlyId === undefined || manifest.jobs.some((job) => job.id === onlyId)))
+      )
+        return;
+      const release = enterBackupMutation();
+      if (!release || this.closing) {
+        release?.();
+        throw fail();
+      }
+      try {
+        const before = await this.sessionContext(request, ownerId);
+        const validate = async () => {
+          if (this.closing) throw fail();
+          await this.verifySession(request, ownerId, before);
+        };
+        await this.custody().claim(
+          ownerId,
+          validate,
+          async (id) => {
+            const job = await this.readStored(id);
+            if (job) this.jobs.set(id, job);
+            else this.jobs.delete(id);
+            return job;
+          },
+          async (job) => {
+            await this.save(job, validate);
+            this.jobs.set(job.id, job);
+          },
+          onlyId,
+        );
+      } finally {
+        release();
+      }
+    });
+    this.custodyWork = claim.catch(() => undefined);
+    await claim;
+  }
+  private async save(job: Stored, validate?: () => Promise<void>) {
     const value = storedSchema.assert(structuredClone(job));
     const directory = this.directory(value.id);
     await privateBackupDirectory(directory);
@@ -88,6 +172,7 @@ export class SettingsBackupsService {
       await privateBackupDirectory(directory);
       const current = await fs.lstat(directory);
       if (current.dev !== before.dev || current.ino !== before.ino) throw fail();
+      await validate?.();
       await fs.rename(temporary, path.join(directory, 'job.json'));
       const parent = await fs.open(directory, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
       try {
@@ -109,29 +194,42 @@ export class SettingsBackupsService {
     if (before.userId !== after.userId || before.securityBinding !== after.securityBinding || before.sessionBinding !== after.sessionBinding)
       throw fail();
   }
-  private async owned(id: string, ownerId: number) {
+  private async owned(id: string, ownerId: number, request?: Request) {
     this.directory(id);
     await this.initialize();
+    await this.claimResetOwnership(ownerId, request, id);
     const job = this.jobs.get(id);
-    if (!job || job.ownerId !== ownerId) throw new NotFoundException('Backup not found.');
+    if (!job || job.ownerId !== ownerId || (await this.custody().quarantined()).has(id)) throw new NotFoundException('Backup not found.');
     return job;
   }
-  async list(ownerId: number) {
+  async list(ownerId: number, request?: Request) {
     await this.initialize();
-    return { version: 1 as const, jobs: [...this.jobs.values()].filter((job) => job.ownerId === ownerId).map((job) => this.public(job)) };
+    await this.claimResetOwnership(ownerId, request);
+    const quarantine = await this.custody().quarantined();
+    return {
+      version: 1 as const,
+      jobs: [...this.jobs.values()].filter((job) => job.ownerId === ownerId && !quarantine.has(job.id)).map((job) => this.public(job)),
+    };
   }
 
   async create(ownerId: number, request: Request, credentials: Credentials, selection: unknown, passphrase?: string) {
     const contents = settingsBackupSelectionSchema.assert(structuredClone(selection));
-    await this.verify(request, ownerId, credentials);
+    if (contents.timeMachine.length) await this.source.reconcileCaptureOwnership(ownerId, request);
+    const exportId = randomUUID();
+    const proof = { password: credentials.password, ...(credentials.totpCode === undefined ? {} : { totpCode: credentials.totpCode }) };
+    const authorization = await authorizeSettingsPasswordExport(this.auth, request, proof, { exportId, ownerId, selection: contents });
     const encryptionKey = passphrase === undefined ? credentials.password : passphrase;
     if (typeof encryptionKey !== 'string' || encryptionKey.length < 8 || !encryptionKey.trim() || encryptionKey.length > 1024)
       throw new ConflictException('Choose a separate backup passphrase of at least 8 characters.');
     await this.initialize();
-    if (this.closing || this.active || this.reserved || this.jobs.size >= 32) throw fail();
+    const release = enterBackupMutation();
+    if (!release || this.closing || this.active || this.reserved || this.jobs.size >= 32) {
+      release?.();
+      throw fail();
+    }
     const job: Stored = {
       version: 1,
-      id: randomUUID(),
+      id: exportId,
       ownerId,
       createdAt: Date.now(),
       status: 'queued',
@@ -150,13 +248,15 @@ export class SettingsBackupsService {
     } catch (error) {
       this.reserved = null;
       throw error;
+    } finally {
+      release();
     }
     return {
       job: this.public(job),
-      start: () => this.run(job, request, credentials, encryptionKey),
+      start: () => this.run(job, authorization, encryptionKey),
     };
   }
-  private run(job: Stored, request: Request, credentials: Credentials, passphrase: string) {
+  private run(job: Stored, authorization: SettingsExportTicket, passphrase: string) {
     if (this.closing || this.active || this.reserved !== job.id || this.jobs.get(job.id) !== job) return;
     this.reserved = null;
     const abort = new AbortController();
@@ -168,26 +268,28 @@ export class SettingsBackupsService {
         job.status = 'running';
         await this.save(job);
         let lastSave = 0;
-        const result = await this.source.write({
-          ownerId: job.ownerId,
-          request,
-          credentials,
-          selection: job.selection,
-          passphrase,
-          directory: this.directory(job.id),
-          destination: path.join(this.directory(job.id), 'archive.orbis-settings'),
-          signal: AbortSignal.any([abort.signal, AbortSignal.timeout(60 * 60_000)]),
-          progress: (value) => {
-            const changedStage = job.stage !== value.stage;
-            Object.assign(job, value);
-            if (changedStage || Date.now() - lastSave >= 500) {
-              lastSave = Date.now();
-              const snapshot = structuredClone(job);
-              writes = writes.then(() => this.save(snapshot));
-              void writes.catch(() => abort.abort());
-            }
+        const result = await this.source.writeAuthorized(
+          {
+            exportId: job.id,
+            ownerId: job.ownerId,
+            selection: job.selection,
+            passphrase,
+            directory: this.directory(job.id),
+            destination: path.join(this.directory(job.id), 'archive.orbis-settings'),
+            signal: AbortSignal.any([abort.signal, AbortSignal.timeout(60 * 60_000)]),
+            progress: (value) => {
+              const changedStage = job.stage !== value.stage;
+              Object.assign(job, value);
+              if (changedStage || Date.now() - lastSave >= 500) {
+                lastSave = Date.now();
+                const snapshot = structuredClone(job);
+                writes = writes.then(() => this.save(snapshot));
+                void writes.catch(() => abort.abort());
+              }
+            },
           },
-        });
+          authorization,
+        );
         await writes;
         const ready: Stored = {
           ...job,
@@ -220,14 +322,14 @@ export class SettingsBackupsService {
     const after = await this.sessionContext(request, ownerId);
     if (before.securityBinding !== after.securityBinding || before.sessionBinding !== after.sessionBinding) throw fail();
   }
-  private async ready(id: string, ownerId: number) {
-    const job = await this.owned(id, ownerId);
+  private async ready(id: string, ownerId: number, request?: Request) {
+    const job = await this.owned(id, ownerId, request);
     if (job.status !== 'ready' || !job.sha256 || this.closing) throw fail();
     return job;
   }
   async downloadInfo(id: string, ownerId: number, request: Request) {
     const before = await this.sessionContext(request, ownerId);
-    const job = await this.ready(id, ownerId);
+    const job = await this.ready(id, ownerId, request);
     await this.verifySession(request, ownerId, before);
     if ((await this.ready(id, ownerId)) !== job) throw fail();
     return {
@@ -240,14 +342,14 @@ export class SettingsBackupsService {
   }
   async downloadSession(id: string, ownerId: number, request: Request) {
     const before = await this.sessionContext(request, ownerId);
-    const job = await this.ready(id, ownerId);
+    const job = await this.ready(id, ownerId, request);
     return this.openDownload(id, job, async () => {
       await this.verifySession(request, ownerId, before);
       if ((await this.ready(id, ownerId)) !== job) throw fail();
     });
   }
   async download(id: string, ownerId: number, request: Request, credentials: Credentials) {
-    const job = await this.owned(id, ownerId);
+    const job = await this.owned(id, ownerId, request);
     await this.verify(request, ownerId, credentials);
     if (job.status !== 'ready' || !job.sha256 || this.closing) throw fail();
     return this.openDownload(id, job);
@@ -285,7 +387,7 @@ export class SettingsBackupsService {
     }
   }
   async remove(id: string, ownerId: number, request: Request, credentials: Credentials) {
-    await this.owned(id, ownerId);
+    await this.owned(id, ownerId, request);
     await this.verify(request, ownerId, credentials);
     if (this.downloads.get(id)?.size || this.admissions.has(id))
       throw new ConflictException('Wait for this backup download to finish before removing it.');

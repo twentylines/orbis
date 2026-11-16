@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { HostTelemetry, HostNetwork } from '@runtipi/common/schemas';
+import type { HostTelemetry, HostNetwork, HostBattery } from '@runtipi/common/schemas';
 import { readHostSocket } from './host-socket';
 
 const unavailable = (reason = 'Host readings are unavailable. Check the Orbis host service.'): HostTelemetry => ({ available: false, reason });
@@ -41,6 +41,45 @@ const list = (value: unknown): unknown[] => {
   return value;
 };
 
+export function parseHostBattery(data: unknown): HostBattery | null {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const value = data as Record<string, unknown>;
+  if (
+    typeof value.percent !== 'number' ||
+    !Number.isInteger(value.percent) ||
+    value.percent < 0 ||
+    value.percent > 100 ||
+    (value.charging !== null && typeof value.charging !== 'boolean')
+  )
+    return null;
+  const battery: HostBattery = { percent: value.percent, charging: value.charging as boolean | null };
+  if (['charging', 'discharging', 'full', 'idle', 'unknown'].includes(value.state as string)) battery.state = value.state as HostBattery['state'];
+  for (const key of ['healthPercent', 'powerWatts', 'energyNowWh', 'energyFullWh', 'energyDesignWh', 'timeRemainingSeconds', 'cycleCount'] as const) {
+    if (!(key in value)) continue;
+    const n = value[key];
+    const max = key === 'healthPercent' ? 100 : key === 'timeRemainingSeconds' ? 2_592_000 : 1_000_000;
+    battery[key] =
+      typeof n === 'number' &&
+      Number.isFinite(n) &&
+      n >= 0 &&
+      n <= max &&
+      (!['cycleCount', 'timeRemainingSeconds'].includes(key) || Number.isInteger(n))
+        ? n
+        : null;
+  }
+  if (typeof value.batteryCount === 'number' && Number.isInteger(value.batteryCount) && value.batteryCount >= 1 && value.batteryCount <= 32)
+    battery.batteryCount = value.batteryCount;
+  for (const key of ['manufacturer', 'model'] as const) {
+    if (!(key in value)) continue;
+    try {
+      battery[key] = text(value[key]);
+    } catch {
+      battery[key] = null;
+    }
+  }
+  return battery;
+}
+
 export function parseHostTelemetry(value: unknown, now = Date.now()): HostTelemetry {
   const data = record(value);
   if (data.available === false) return unavailable(data.reason === 'Collecting host readings.' ? data.reason : undefined);
@@ -52,10 +91,13 @@ export function parseHostTelemetry(value: unknown, now = Date.now()): HostTeleme
   const missing = data.unavailable;
   if (!Array.isArray(missing) || missing.length > 3 || !missing.every((v) => ['filesystems', 'network', 'disks'].includes(v)))
     throw new Error('Invalid host availability');
+  const battery = parseHostBattery(data.battery);
+
   return {
     available: true,
     sampledAt,
     stale: data.stale || now - timestamp > 30_000,
+    battery,
     filesystems: list(data.filesystems).map((value) => {
       const row = record(value);
       const sizeBytes = integer(row.sizeBytes);
@@ -113,7 +155,7 @@ export class HostTelemetryService {
       this.pending = this.fetch()
         .catch(() => unavailable())
         .then((result) => {
-          this.cached = { expiresAt: result.available ? startedAt + 9000 : Date.now() + 2000, result };
+          this.cached = { expiresAt: result.available && !result.stale ? startedAt + 9000 : Date.now() + 2000, result };
           return result;
         })
         .finally(() => {

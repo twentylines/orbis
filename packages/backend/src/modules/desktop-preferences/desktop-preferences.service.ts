@@ -15,7 +15,7 @@ export type DesktopPreferences = typeof desktopPreferencesSchema.infer;
 export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences & { workspace: NonNullable<DesktopPreferences['workspace']> } = {
   serverName: 'Server',
   preset: 'frost',
-  mode: 'light',
+  mode: 'system',
   density: 'comfortable',
   wallpaper: 'sandstone',
   wallpaperMode: 'theme',
@@ -144,7 +144,7 @@ export class DesktopPreferencesService {
             ...DEFAULT_DESKTOP_PREFERENCES,
             ...result,
             wallpaperMode: result.wallpaperMode ?? (result.wallpaperPreset || result.appearance?.wallpaperImage ? 'custom' : 'theme'),
-            mode: result.mode ?? (result.preset === 'graphite' ? 'dark' : 'light'),
+            mode: result.mode ?? (result.preset === 'graphite' ? 'dark' : 'system'),
             workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, ...result.workspace },
             appearance: normaliseDesktopAppearance(result.appearance),
           };
@@ -193,7 +193,7 @@ export class DesktopPreferencesService {
         ...DEFAULT_DESKTOP_PREFERENCES,
         ...value,
         wallpaperMode: value.wallpaperMode ?? (value.wallpaperPreset || value.appearance?.wallpaperImage ? 'custom' : 'theme'),
-        mode: value.mode ?? (value.preset === 'graphite' ? 'dark' : 'light'),
+        mode: value.mode ?? (value.preset === 'graphite' ? 'dark' : 'system'),
         workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, ...value.workspace },
         appearance: normaliseDesktopAppearance(value.appearance),
       };
@@ -234,7 +234,7 @@ export class DesktopPreferencesService {
       ...DEFAULT_DESKTOP_PREFERENCES,
       ...preferences,
       wallpaperMode: preferences.wallpaperMode ?? (preferences.wallpaperPreset || preferences.appearance?.wallpaperImage ? 'custom' : 'theme'),
-      mode: preferences.mode ?? (preferences.preset === 'graphite' ? 'dark' : 'light'),
+      mode: preferences.mode ?? (preferences.preset === 'graphite' ? 'dark' : 'system'),
       workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, ...preferences.workspace },
       appearance: normaliseDesktopAppearance(preferences.appearance),
     };

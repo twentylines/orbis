@@ -4,8 +4,9 @@ import { timeMachineLimits } from '@runtipi/common/schemas/time-machine';
 import { timeMachineStorageSchema } from '@runtipi/common/schemas/time-machine-storage';
 import { timeMachineConflict } from './time-machine-policy';
 import type { StoredTimeMachinePoint } from './time-machine-store';
+import type { StoredComponentsPoint } from './time-machine-components-store';
 
-export async function readTimeMachineStorage(dataDirectory: string, points: () => Promise<StoredTimeMachinePoint[]>) {
+export async function readTimeMachineStorage(dataDirectory: string, points: () => Promise<(StoredTimeMachinePoint | StoredComponentsPoint)[]>) {
   try {
     const filesystem = async () => {
       for (const directory of [path.join(dataDirectory, 'backups', 'time-machine'), path.join(dataDirectory, 'backups'), dataDirectory]) {
@@ -22,7 +23,11 @@ export async function readTimeMachineStorage(dataDirectory: string, points: () =
     if (bsize <= 0n || blocks <= 0n || bfree < 0n || bfree > blocks || bavail < 0n || bavail > bfree) throw new Error('Invalid filesystem status');
     const values = [blocks * bsize, (blocks - bfree) * bsize, bavail * bsize];
     const retained = saved.reduce(
-      (total, point) => total + BigInt(point.archiveBytes) + BigInt(point.assetBytes ?? 0) + BigInt(point.version === 2 ? point.runtimeBytes : 0),
+      (total, point) =>
+        total +
+        BigInt(point.archiveBytes) +
+        BigInt('assetBytes' in point ? (point.assetBytes ?? 0) : 0) +
+        BigInt(point.version === 2 ? point.runtimeBytes : 0),
       0n,
     );
     if ([...values, retained].some((value) => value > BigInt(Number.MAX_SAFE_INTEGER))) throw new Error('Filesystem status exceeds safe range');

@@ -68,6 +68,65 @@ export class CapsulesController {
       disposition: `attachment; filename="orbis-capture-${id}.orbis-tm"`,
     });
   }
+  @Post('imports/:id/core-enrollment/:action')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  async coreEnrollment(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+    @Param('id') id: string,
+    @Param('action') action: string,
+    @Body() body: unknown,
+  ) {
+    response.setHeader('Cache-Control', 'no-store');
+    if (!['prepare', 'approve', 'status', 'reconcile'].includes(action) || !body || typeof body !== 'object' || Array.isArray(body))
+      throw new BadRequestException('Choose a portable core enrollment action.');
+    const value = body as Record<string, unknown>;
+    const keys = ['password', 'totpCode', ...(action === 'prepare' ? ['passphrase'] : action === 'approve' ? ['reviewSha256', 'approvalNonce'] : [])];
+    if (Object.keys(value).some((key) => !keys.includes(key))) throw new BadRequestException('The enrollment request has unsupported fields.');
+    const credentials = backupCredentials({ password: value.password, ...(value.totpCode !== undefined ? { totpCode: value.totpCode } : {}) });
+    const input =
+      action === 'prepare'
+        ? { passphrase: value.passphrase as string }
+        : action === 'approve'
+          ? { reviewSha256: value.reviewSha256 as string, approvalNonce: value.approvalNonce as string }
+          : undefined;
+    return this.capsules.coreEnrollment(
+      id,
+      backupOperator(request),
+      request,
+      credentials,
+      action as 'prepare' | 'approve' | 'status' | 'reconcile',
+      input,
+    );
+  }
+  @Post('imports/:id/core-inspection/:action')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  async coreInspection(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+    @Param('id') id: string,
+    @Param('action') action: string,
+    @Body() body: unknown,
+  ) {
+    response.setHeader('Cache-Control', 'no-store');
+    if (!['prepare', 'approve', 'status'].includes(action) || !body || typeof body !== 'object' || Array.isArray(body))
+      throw new BadRequestException('Choose a core inspection action.');
+    const value = body as Record<string, unknown>;
+    const keys = ['password', 'totpCode', ...(action === 'approve' ? ['reviewSha256', 'approvalNonce', 'executionConsent'] : [])];
+    if (Object.keys(value).some((key) => !keys.includes(key))) throw new BadRequestException('The inspection request has unsupported fields.');
+    return this.capsules.coreInspection(
+      id,
+      backupOperator(request),
+      request,
+      backupCredentials({ password: value.password, ...(value.totpCode !== undefined ? { totpCode: value.totpCode } : {}) }),
+      action as 'prepare' | 'approve' | 'status',
+      action === 'approve'
+        ? { reviewSha256: value.reviewSha256 as string, approvalNonce: value.approvalNonce as string, executionConsent: value.executionConsent }
+        : undefined,
+    );
+  }
   @Post(':id/remove') @HttpCode(200) remove(@Req() request: Request, @Param('id') id: string, @Body() body: unknown) {
     return this.capsules.remove(id, backupOperator(request), request, backupCredentials(body));
   }

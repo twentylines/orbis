@@ -21,7 +21,7 @@ const StartupOnboardingBridge = () => {
   const { requiresOnboarding, syncState } = useDesktopPreferences();
   const { setFirstSetup } = useStartupSession();
   useLayoutEffect(() => {
-    setFirstSetup(syncState !== 'loading' && requiresOnboarding);
+    setFirstSetup(syncState === 'saved' && requiresOnboarding);
     return () => setFirstSetup(false);
   }, [requiresOnboarding, setFirstSetup, syncState]);
   return null;

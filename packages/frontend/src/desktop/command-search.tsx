@@ -21,9 +21,13 @@ import {
 import { useNavigate } from 'react-router';
 import { desktopSearchSections } from './navigation';
 import { commandSearchEvent } from './command-search-event';
+import { useAppLauncher } from './app-launcher';
+import { appDestinations } from './app-destinations';
+import { primaryAppAddress } from './app-opening';
+import { activateSearchResult, defaultSearchResult, type SearchAction } from './command-search-actions';
 import './command-search.css';
 
-type SearchResult = { id: string; path: string; label: string; detail: string; icon: ReactNode };
+type SearchResult = SearchAction & { id: string; label: string; detail: string; icon: ReactNode };
 const searchScopes = [
   ['all', 'All'],
   ['apps', 'Apps'],
@@ -56,6 +60,7 @@ const reducedMotion = () => prefersReducedMotion();
 
 export function CommandSearch() {
   const { user, userSettings } = useAppContext();
+  const openApp = useAppLauncher();
   const settingsAccess = {
     operator: user.operator === true,
     advanced: userSettings.advancedSettings === true,
@@ -79,6 +84,7 @@ export function CommandSearch() {
   const motions = useRef<Animation[]>([]);
   const pendingPath = useRef<string | null>(null);
   const closingRef = useRef(false);
+  const expandedPose = useRef<Keyframe | null>(null);
   const bindPanel = useCallback((element: HTMLDivElement | null) => {
     panel.current = element;
     setPanelElement(element);
@@ -122,8 +128,36 @@ export function CommandSearch() {
     );
     const next = readBar();
     if (next) setBar(next);
+    if (closingRef.current && header.current && expandedPose.current) {
+      const element = header.current;
+      const style = getComputedStyle(element);
+      const pose = Object.fromEntries(
+        ['left', 'top', 'width', 'height', 'borderRadius', 'backgroundColor', 'borderColor', 'paddingInline', 'columnGap'].map((key) => [
+          key,
+          style[key as keyof CSSStyleDeclaration],
+        ]),
+      ) as Keyframe;
+      const results = dropdown.current && getComputedStyle(dropdown.current);
+      const resultPose = results ? { opacity: results.opacity, transform: results.transform } : null;
+      const veilOpacity = backdrop.current ? getComputedStyle(backdrop.current).opacity : '0';
+      closingRef.current = false;
+      pendingPath.current = null;
+      cancelMotions();
+      setClosing(false);
+      if (!reducedMotion()) {
+        const timing = { duration: 460, easing: 'cubic-bezier(.32, 0, .18, 1)' };
+        const enter = element.animate([pose, expandedPose.current], timing);
+        enter.id = 'orbis-search-bar-open';
+        motions.current = [enter];
+        if (dropdown.current && resultPose) motions.current.push(dropdown.current.animate([resultPose, { opacity: 1, transform: 'none' }], timing));
+        if (backdrop.current) motions.current.push(backdrop.current.animate([{ opacity: veilOpacity }, { opacity: 1 }], timing));
+        const started = document.timeline.currentTime;
+        if (started !== null) for (const motion of motions.current) motion.startTime = started;
+      }
+      input.current?.focus({ preventScroll: true });
+    }
     setOpen(true);
-  }, [readBar]);
+  }, [readBar, cancelMotions]);
   const finishClose = useCallback(() => {
     if (!closingRef.current) return;
     closingRef.current = false;
@@ -194,7 +228,12 @@ export function CommandSearch() {
       if (backdrop.current) motions.current.push(backdrop.current.animate([{ opacity: backdropFrom }, { opacity: 0 }], options));
       const started = document.timeline.currentTime;
       if (started !== null) for (const motion of motions.current) motion.startTime = started;
-      void exit.finished.then(finishClose, () => undefined);
+      void exit.finished.then(
+        () => {
+          if (motions.current.includes(exit)) finishClose();
+        },
+        () => undefined,
+      );
     },
     [cancelMotions, finishClose],
   );
@@ -212,6 +251,17 @@ export function CommandSearch() {
       const targetStyle = getComputedStyle(element);
       const targetPadding = targetStyle.paddingInline;
       const targetGap = targetStyle.columnGap;
+      expandedPose.current = {
+        left: '0px',
+        top: '0px',
+        width: `${bounds.width}px`,
+        height: `${bounds.height}px`,
+        borderRadius: '18px',
+        backgroundColor: 'transparent',
+        borderColor: 'transparent',
+        paddingInline: targetPadding,
+        columnGap: targetGap,
+      };
       const enter = element.animate(
         [
           {
@@ -285,8 +335,8 @@ export function CommandSearch() {
     const shortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
-        if (open) close();
-        else openSearch();
+        if (closingRef.current || !open) openSearch();
+        else close();
       }
     };
     window.addEventListener('keydown', shortcut);
@@ -324,13 +374,17 @@ export function CommandSearch() {
     .filter(({ info }) => info.available && match(info.name, `${info.short_desc} ${info.urn}`) > 0)
     .sort((a, b) => match(b.info.name, b.info.short_desc) - match(a.info.name, a.info.short_desc))
     .slice(0, query || scope === 'apps' ? 24 : 6)
-    .map(({ info }) => ({
-      id: info.urn,
-      path: appPath(info.urn),
-      label: info.name,
-      detail: info.short_desc,
-      icon: <AppLogo urn={info.urn} size={32} alt="" />,
-    }));
+    .map(({ info, app, metadata }) => {
+      const launchUrl = primaryAppAddress(appDestinations({ info, app, metadata }, userSettings, window.location.hostname), window.location.origin);
+      return {
+        id: info.urn,
+        path: appPath(info.urn),
+        label: info.name,
+        detail: info.short_desc,
+        icon: <AppLogo urn={info.urn} size={32} alt="" />,
+        launch: launchUrl ? { urn: info.urn, name: info.name, categories: info.categories, launchUrl, manageUrl: appPath(info.urn) } : undefined,
+      };
+    });
   const storeResults: SearchResult[] =
     query && debounced === query
       ? (catalogue.data?.data ?? [])
@@ -362,7 +416,8 @@ export function CommandSearch() {
     { name: 'Installed apps', items: scope === 'all' || scope === 'apps' ? installedResults : [] },
     { name: 'App Store', items: scope === 'all' || scope === 'store' ? storeResults : [] },
   ];
-  const firstResult = groups.flatMap((group) => group.items)[0];
+  const firstResult = defaultSearchResult(groups.flatMap((group) => group.items));
+  const activateResult = (result: SearchResult) => activateSearchResult(result, openApp, close);
   const searchingStore = scope === 'all' || scope === 'store';
   const loadingStore = searchingStore && query.length > 0 && (debounced !== query || catalogue.isPending);
 
@@ -454,9 +509,9 @@ export function CommandSearch() {
                     aria-label="Search Orbis"
                     aria-controls="desktop-search-results"
                     onKeyDown={(event) => {
-                      if (event.key === 'Enter' && firstResult) {
+                      if (event.key === 'Enter' && !event.nativeEvent.isComposing && firstResult) {
                         event.preventDefault();
-                        close(firstResult.path);
+                        activateResult(firstResult);
                       }
                       if (event.key === 'ArrowDown') {
                         event.preventDefault();
@@ -514,7 +569,7 @@ export function CommandSearch() {
                               key={result.id}
                               aria-label={`${result.label}${result.detail ? `, ${result.detail}` : ''}`}
                               onKeyDown={handleResultKeyDown}
-                              onClick={() => close(result.path)}
+                              onClick={() => activateResult(result)}
                             >
                               <span className="desktop-search-result-icon">{result.icon}</span>
                               <span className="desktop-search-result-text">

@@ -11,9 +11,27 @@
   min-height: 44px;
   margin-bottom: 24px;
 }
-.desktop-updates-toolbar > .desktop-update-link {
-  min-height: 44px;
-  margin: 0;
+.desktop-updates-settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  margin-inline-start: auto;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--desktop-muted);
+  text-decoration: none;
+  cursor: pointer;
+}
+.desktop-updates-settings:hover {
+  color: var(--desktop-ink);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 10%, var(--desktop-surface));
+}
+.desktop-updates-settings:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 1px;
 }
 .desktop-updates-tabs {
   display: inline-grid;

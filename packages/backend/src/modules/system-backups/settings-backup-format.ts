@@ -2,7 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
-import { readTarArchive } from '../../core/archive/tar-metadata';
+import { Readable } from 'node:stream';
+import { readTarStream, type TarReaderOptions } from '../../core/archive/tar-metadata';
 import { backupMetadataBytes } from './backup-crypto';
 import { archiveBackup } from './backup-files';
 import { fullBackupLimits } from './backup-limits';
@@ -104,7 +105,7 @@ const validateManifest = (v: unknown, index: Index): Manifest => {
 };
 const seal = (s: fs.Stats) => `${s.dev}:${s.ino}:${s.size}:${s.mtimeMs}:${s.ctimeMs}:${s.mode}:${s.nlink}:${s.uid}`;
 const openPrivate = async (file: string) => {
-  const handle = await fsp.open(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  const handle = await fsp.open(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   try {
     const s = await handle.stat();
     if (!s.isFile() || s.nlink !== 1 || (s.mode & 0o077) !== 0 || (process.getuid && s.uid !== process.getuid())) throw invalid();
@@ -122,7 +123,7 @@ const capacity = async (directory: string, required: number) => {
 const measureSealed = async (file: string, signal: AbortSignal, limit: number) => {
   const { handle, stat } = await openPrivate(file);
   try {
-    if (!bytes(stat.size, limit)) throw invalid();
+    if (!Number.isSafeInteger(stat.size) || stat.size < 0 || stat.size > limit) throw invalid();
     const hash = createHash('sha256');
     const buffer = Buffer.alloc(256 * 1024);
     let at = 0;
@@ -198,6 +199,49 @@ const cleanup = async (dir: string, expected: fs.Stats) => {
 const outside = (dir: string, file: string) => {
   const rel = path.relative(path.resolve(dir), path.resolve(file));
   if (!rel || (!rel.startsWith(`..${path.sep}`) && rel !== '..')) throw invalid();
+};
+async function readSealedTar(source: string, signal: AbortSignal, limit: number, options: TarReaderOptions) {
+  const { handle, stat } = await openPrivate(source);
+  try {
+    if (!bytes(stat.size, limit)) throw invalid();
+    const digest = createHash('sha256');
+    let count = 0;
+    const stream = Readable.from(
+      (async function* () {
+        const buffer = Buffer.alloc(256 * 1024);
+        try {
+          while (count < stat.size) {
+            signal.throwIfAborted();
+            const read = await handle.read(buffer, 0, Math.min(buffer.length, stat.size - count), count);
+            if (!read.bytesRead) throw invalid();
+            const data = buffer.subarray(0, read.bytesRead);
+            count += read.bytesRead;
+            digest.update(data);
+            yield Buffer.from(data);
+          }
+        } finally {
+          buffer.fill(0);
+        }
+      })(),
+      { objectMode: false, highWaterMark: 256 * 1024 },
+    );
+    await readTarStream(stream, false, signal, options);
+    if (count !== stat.size || seal(await handle.stat()) !== seal(stat) || seal(await fsp.lstat(source)) !== seal(stat)) throw invalid();
+    return { bytes: count, sha256: digest.digest('hex') };
+  } finally {
+    await handle.close();
+  }
+}
+export const sealedBundleFiles = {
+  open: openPrivate,
+  seal,
+  capacity,
+  measure: measureSealed,
+  copy: copySealed,
+  fresh,
+  cleanup,
+  outside,
+  readTar: readSealedTar,
 };
 export async function exportSettingsBundle(options: {
   destination: string;
@@ -276,9 +320,6 @@ export async function importSettingsBundle(options: {
   signal.throwIfAborted();
   const owned = await fresh(directory);
   try {
-    const sealedSource = path.join(directory, 'source.tar');
-    const copied = await copySealed(source, sealedSource, signal, MAX_TOTAL + 4 * MIB);
-    await capacity(directory, copied.bytes);
     const seen = new Set<string>();
     const contents = new Map<string, { bytes: number; sha256: string; file: string }>();
     let out: fs.promises.FileHandle | undefined;
@@ -287,8 +328,9 @@ export async function importSettingsBundle(options: {
     let size = 0;
     let done = 0;
     let declared = 0;
+    let copied: { bytes: number; sha256: string };
     try {
-      await readTarArchive(sealedSource, false, signal, {
+      copied = await readSealedTar(source, signal, MAX_TOTAL + 4 * MIB, {
         strict: true,
         maxEntries: 132,
         maxExpandedBytes: MAX_TOTAL + 4 * MIB,
@@ -318,6 +360,7 @@ export async function importSettingsBundle(options: {
           current = name;
           size = entry.size;
           h = createHash('sha256');
+          await capacity(directory, size);
           const target = path.join(directory, `entry-${seen.size}`);
           out = await fsp.open(target, 'wx', 0o600);
           contents.set(name, { bytes: size, sha256: '', file: target });
@@ -347,7 +390,6 @@ export async function importSettingsBundle(options: {
     } finally {
       await out?.close();
     }
-    await fsp.unlink(sealedSource);
     const indexFile = contents.get('bundle.json');
     const manifestFile = contents.get('manifest.orbis');
     if (!indexFile || !manifestFile) throw invalid();

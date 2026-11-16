@@ -1,0 +1,301 @@
+.desktop-battery-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  box-sizing: border-box;
+  min-width: 64px;
+  min-height: 40px;
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 11px;
+  color: var(--desktop-chrome-ink);
+  background: rgba(255, 255, 255, 0.09);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+.desktop-battery-trigger:hover,
+.desktop-battery-trigger[data-state="open"] {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.31);
+}
+.desktop-battery-trigger:focus-visible {
+  outline: 2px solid var(--desktop-chrome-ink);
+  outline-offset: 3px;
+}
+.desktop-battery-trigger:active {
+  background: rgba(255, 255, 255, 0.24);
+}
+.desktop-battery {
+  --battery-fill: #f5f7f5;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding-right: 4px;
+  font-size: 15px;
+}
+.desktop-battery::after {
+  position: absolute;
+  right: 0;
+  content: "";
+  width: 2px;
+  height: 0.62em;
+  border-radius: 0 2px 2px 0;
+  background: #c3ccc6;
+}
+.desktop-battery-body {
+  position: relative;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 2.75em;
+  height: 1.55em;
+  border-radius: 0.43em;
+  overflow: hidden;
+  background: #aebbb4;
+}
+.desktop-battery-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--battery-level);
+  background: var(--battery-fill);
+}
+.desktop-battery[data-state="charging"] {
+  --battery-fill: #54d66b;
+  padding-right: 0.55em;
+}
+.desktop-battery[data-state="charging"]::after {
+  display: none;
+}
+.desktop-battery[data-state="low"] {
+  --battery-fill: #ffd34e;
+}
+.desktop-battery[data-state="critical"] {
+  --battery-fill: #ff665e;
+}
+.desktop-battery-number {
+  position: relative;
+  z-index: 1;
+  color: #111b16;
+  font-size: 1.14em;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.045em;
+  font-variant-numeric: tabular-nums;
+}
+.desktop-battery-charging {
+  position: absolute;
+  z-index: 2;
+  right: -0.12em;
+  width: 1.05em;
+  height: 1.3em;
+  color: #f5f7f5;
+}
+.desktop-battery[data-variant="panel"][data-state="normal"] {
+  --battery-fill: var(--desktop-ink);
+}
+.desktop-battery-panel-number {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  clip-path: inset(0 calc(100% - var(--battery-level)) 0 0);
+}
+.desktop-battery[data-variant="panel"][data-state="normal"] .desktop-battery-panel-number {
+  color: var(--desktop-menu-surface, var(--desktop-surface));
+}
+.desktop-battery[data-variant="panel"] .desktop-battery-charging {
+  color: var(--desktop-ink);
+}
+.orbis-dropdown-menu.desktop-battery-panel {
+  position: fixed;
+  z-index: 1100;
+  box-sizing: border-box;
+  width: 340px;
+  min-width: 0;
+  max-width: calc(100vw - 32px);
+  padding: 20px;
+  overflow-y: auto;
+  color: var(--desktop-ink, var(--tblr-body-color));
+  background: var(--desktop-menu-surface, var(--tblr-bg-surface));
+  border-color: var(--desktop-line, var(--tblr-border-color));
+  border-radius: 18px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  transform-origin: center top;
+}
+.desktop-battery-panel:focus-visible {
+  outline: 2px solid var(--desktop-accent, currentColor);
+  outline-offset: 3px;
+}
+.desktop-battery-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.desktop-battery-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  column-gap: 22px;
+  row-gap: 14px;
+  margin-bottom: 22px;
+}
+.desktop-battery-hero {
+  display: inline-flex;
+  flex: none;
+}
+.desktop-battery-hero .desktop-battery {
+  font-size: 34px;
+}
+.desktop-battery-hero .desktop-battery::after {
+  width: 3px;
+}
+.desktop-battery-heading > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.desktop-battery-heading strong {
+  font-size: 1.15em;
+  font-weight: 600;
+}
+.desktop-battery-heading small {
+  font-size: 0.95em;
+  color: var(--desktop-menu-muted, var(--desktop-muted));
+}
+.desktop-battery-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8em), 1fr));
+  gap: 18px;
+  margin: 0 0 20px;
+  padding: 16px 0;
+  border-top: 1px solid var(--desktop-line, var(--tblr-border-color));
+  border-bottom: 1px solid var(--desktop-line, var(--tblr-border-color));
+}
+.desktop-battery-metrics > div,
+.desktop-battery-metrics dt,
+.desktop-battery-metrics dd {
+  min-width: 0;
+}
+.desktop-battery-metrics dt,
+.desktop-battery-health-heading > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 400;
+}
+.desktop-battery-metrics svg,
+.desktop-battery-health-heading svg {
+  flex: none;
+  opacity: 0.78;
+}
+.desktop-battery-metrics dd {
+  margin: 7px 0 0;
+  font-size: 1.5em;
+  line-height: 1.3;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.desktop-battery-metrics dd small {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.65em;
+  font-weight: 400;
+  color: var(--desktop-menu-muted, var(--desktop-muted));
+}
+.desktop-battery-metrics dd[data-unavailable="true"] {
+  font-size: 1em;
+  line-height: 1.95;
+}
+.desktop-battery-health-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 16px;
+  row-gap: 4px;
+}
+.desktop-battery-health-heading strong {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.desktop-battery-health-track {
+  height: 6px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.desktop-battery-health-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--desktop-accent, currentColor);
+}
+.desktop-battery-details {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+}
+.desktop-battery-details > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  column-gap: 16px;
+  row-gap: 3px;
+}
+.desktop-battery-details dt {
+  min-width: 0;
+  font-weight: 400;
+}
+.desktop-battery-details dd {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0 0 0 auto;
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.desktop-battery-device {
+  margin: 18px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--desktop-line, var(--tblr-border-color));
+  overflow-wrap: anywhere;
+  color: var(--desktop-menu-muted, var(--desktop-muted));
+}
+@media (max-width: 600px) {
+  .desktop-battery-trigger {
+    min-width: 60px;
+    min-height: 36px;
+    padding: 5px 7px;
+  }
+}
+@media (max-width: 360px) {
+  .orbis-dropdown-menu.desktop-battery-panel {
+    padding: 18px;
+  }
+  .desktop-battery-heading {
+    column-gap: 18px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-battery-trigger {
+    transition: none;
+  }
+}
+html[data-orbis-motion="reduced"] :is(.desktop-battery-trigger, .desktop-battery-panel) {
+  transition: none;
+  animation: none;
+}

@@ -38,6 +38,7 @@ import { hasSeenTimeMachineNotice, markTimeMachineNoticeSeen } from './time-mach
 import './time-machine-settings-notice.css';
 import { TimeMachineCaptureProgress } from './capture-progress';
 import { TimeMachineStorageStatus } from './time-machine-storage-status';
+import { CaptureStorageChoices, type CaptureChoices } from './capture-storage-choices';
 import { CapturedContents } from './captured-contents';
 import { TimeMachineCapsules } from '@/modules/time-machine-capsules/capsules-panel';
 import { accountSecurityKey, readAccountSecurity } from '@/desktop/account-security-api';
@@ -48,13 +49,23 @@ type Review = Awaited<ReturnType<typeof reviewTimeMachinePoint>>;
 export function TimeMachineSetupView({ pending, onEnable }: { pending: boolean; onEnable: () => void }) {
   return (
     <section className="tm-disabled-setup" aria-labelledby="tm-disabled-setup-heading">
+      <IconHistory className="tm-disabled-setup-icon" size={64} stroke={1.4} aria-hidden="true" />
       <div className="tm-disabled-setup-copy">
-        <h4 id="tm-disabled-setup-heading">What a Time Machine point includes</h4>
-        <p>Time Machine saves manual restore points containing:</p>
+        <h4 id="tm-disabled-setup-heading">Time Machine</h4>
+        <p>Save a point containing your server configuration and selected app data.</p>
         <ul className="tm-disabled-capture-list">
-          <li>The server database</li>
-          <li>Orbis configuration</li>
-          <li>Managed app data</li>
+          <li>
+            <strong>The server database</strong>
+            <span>Keep the server state recorded in each capture.</span>
+          </li>
+          <li>
+            <strong>Orbis configuration</strong>
+            <span>Include the settings saved on this server.</span>
+          </li>
+          <li>
+            <strong>Managed app data</strong>
+            <span>Choose which supported storage mounts to capture.</span>
+          </li>
         </ul>
         <p>Operating system snapshots are not included.</p>
       </div>
@@ -208,6 +219,7 @@ function TimeMachineSettingsSession({
   const [selection, setSelection] = useState<string | null>(null);
   const [enabledDraft, setEnabledDraft] = useState<boolean | null>(null);
   const [captureLabel, setCaptureLabel] = useState('');
+  const [captureContent, setCaptureContent] = useState<CaptureChoices>({ ready: true });
   const [activationPending, setActivationPending] = useState(false);
   const [action, setAction] = useState<{ kind: 'capture' | 'remove' | 'inspect' | 'authorize'; point?: TimeMachinePoint } | null>(null);
   const captureProofRequired = capturePolicy.data?.requireCaptureAuthentication === true;
@@ -282,7 +294,10 @@ function TimeMachineSettingsSession({
     form.current?.reset();
     setActionError('');
     setReview(null);
-    if (kind === 'capture') setCaptureLabel('');
+    if (kind === 'capture') {
+      setCaptureLabel('');
+      setCaptureContent({ ready: true });
+    }
     setAction({ kind, point: kind === 'capture' ? undefined : point });
   };
   const closeAction = () => {
@@ -413,6 +428,7 @@ function TimeMachineSettingsSession({
     if (
       !action ||
       busy ||
+      (action.kind === 'capture' && !captureContent.ready) ||
       (['capture', 'remove'].includes(action.kind) && (!capturePolicy.data || capturePolicy.isError || capturePolicy.isFetching))
     )
       return;
@@ -430,7 +446,7 @@ function TimeMachineSettingsSession({
     const accepted =
       action.kind === 'capture'
         ? await machine.perform(
-            (signal) => captureTimeMachine(label, captureProofRequired ? credentials : {}, signal),
+            (signal) => captureTimeMachine(label, captureProofRequired ? credentials : {}, signal, captureContent.selection),
             'Capture accepted. Its progress is reported by the server.',
           )
         : action.point &&
@@ -479,22 +495,14 @@ function TimeMachineSettingsSession({
             <InlineFeedback>Time Machine storage is unavailable. No point can be captured or removed.</InlineFeedback>
           )}
           {settingsMode === 'setup' ? (
-            <>
-              <TimeMachineSetupView pending={busy || activationPending} onEnable={() => void activate()} />
-              <div className="tm-settings-actions">
-                <Button variant="outline" onClick={() => openTimelineAt(null, setSelection, setGallery)} disabled={!snapshot.list.available}>
-                  <IconHistory size={20} aria-hidden="true" />
-                  Enter Time Machine
-                </Button>
-              </div>
-            </>
+            <TimeMachineSetupView pending={busy || activationPending} onEnable={() => void activate()} />
           ) : (
             <>
               <div className="tm-enabled-preference">
                 <Switch label="Enable Time Machine" checked={enabled} disabled={busy} onCheckedChange={setEnabledDraft} />
                 <p>
-                  Captures save Orbis settings, its database and the version needed for recovery. App data and operating system files are not
-                  included.{' '}
+                  Captures save Orbis settings, its database and captured version. Docker app data is optional and selected by storage mount.
+                  Operating system files are excluded.{' '}
                   {snapshot.capabilities.restore.supported
                     ? 'Each restore requires verification and fresh authorization.'
                     : 'Open a point to inspect this server’s current restore blockers.'}
@@ -590,7 +598,7 @@ function TimeMachineSettingsSession({
           </DialogHeader>
           <DialogDescription>
             {action?.kind === 'capture'
-              ? 'Orbis pauses briefly while its data is saved. App data is not included. Keep this server running until capture finishes.'
+              ? 'Choose the content to save. Orbis and selected apps pause during capture. Keep this server running until it finishes.'
               : action?.kind === 'remove'
                 ? 'The encrypted point and its saved preview will be permanently removed. Other points and the running server stay unchanged.'
                 : action?.kind === 'authorize'
@@ -715,15 +723,18 @@ function TimeMachineSettingsSession({
           ) : (
             <form ref={form} className="tm-dialog-body" onSubmit={(event) => void submit(event)}>
               {action?.kind === 'capture' ? (
-                <Input
-                  name="label"
-                  label="Capture name"
-                  placeholder="Before updating Jellyfin"
-                  maxLength={240}
-                  disabled={busy}
-                  value={captureLabel}
-                  onChange={(event) => setCaptureLabel(event.currentTarget.value)}
-                />
+                <>
+                  <Input
+                    name="label"
+                    label="Capture name"
+                    placeholder="Before updating Jellyfin"
+                    maxLength={240}
+                    disabled={busy}
+                    value={captureLabel}
+                    onChange={(event) => setCaptureLabel(event.currentTarget.value)}
+                  />
+                  <CaptureStorageChoices ownerId={user.id} disabled={busy} onChange={setCaptureContent} />
+                </>
               ) : action?.point ? (
                 <strong>{pointDate(action.point)}</strong>
               ) : null}
@@ -786,6 +797,7 @@ function TimeMachineSettingsSession({
                   disabled={
                     busy ||
                     !machine.canMutate ||
+                    (action?.kind === 'capture' && !captureContent.ready) ||
                     (['capture', 'remove'].includes(action?.kind ?? '') && (!capturePolicy.data || capturePolicy.isError || capturePolicy.isFetching))
                   }
                 >

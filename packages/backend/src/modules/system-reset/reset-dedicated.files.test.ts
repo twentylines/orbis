@@ -16,12 +16,12 @@ import { ResetState, type ResetJournal, type ResetStateOptions } from './reset-s
 import { ResetService } from './reset.service';
 
 const status = vi.hoisted(() => vi.fn());
-vi.mock('@/common/restoration-status', () => ({ readOperationStatus: status, notifyClientStatusChanged: vi.fn() }));
+vi.mock('@/common/restoration-status', () => ({ readOperationStatus: status, notifyClientStatusChanged: vi.fn(), notifyResetStarted: vi.fn() }));
 
 const actor = { userId: 7, sessionBinding: 'a'.repeat(64), securityBinding: 'b'.repeat(64) };
 const request = {} as Request;
 const body = (accounts = 'keep') => ({ accounts, confirmation: 'RESET ORBIS', method: 'password', password: 'fixture-pass' });
-const journal = (overrides: Partial<ResetJournal> = {}): ResetJournal => ({
+const journal = (overrides: Partial<Extract<ResetJournal, { version: 1 }>> = {}): ResetJournal => ({
   version: 1,
   id: randomUUID(),
   controller: os.hostname(),
@@ -31,7 +31,8 @@ const journal = (overrides: Partial<ResetJournal> = {}): ResetJournal => ({
   createdAt: Date.now(),
   ...overrides,
 });
-const mountLine = (mount: string, fsType = 'ext4', source = '/dev/sda1') => `36 35 98:0 / ${mount} rw,relatime - ${fsType} ${source} rw`;
+const mountLine = (mount: string, fsType = 'ext4', source = '/dev/sda1') =>
+  `${mount === authority ? 37 : 36} 35 98:0 ${mount === authority ? '/protected-reset' : '/application-data'} ${mount} rw,relatime - ${fsType} ${source} rw`;
 const mountTable = (...lines: string[]) => `${lines.join('\n')}\n`;
 const stages = async (directory: string) => (await fs.readdir(directory)).filter((name) => name.startsWith(STAGE_PREFIX));
 
@@ -112,8 +113,19 @@ function build(instance: ResetState) {
     cluster as never,
     sync as never,
     automatic as never,
-    { preferences: vi.fn().mockResolvedValue({ revision: 1 }), updatePreferences: vi.fn().mockResolvedValue({}) } as never,
+    {
+      preferences: vi.fn().mockResolvedValue({ revision: 1 }),
+      updatePreferences: vi.fn().mockResolvedValue({}),
+      reconcileResetOwnership: vi.fn().mockResolvedValue(undefined),
+      prepareResetOwnership: vi.fn().mockResolvedValue(undefined),
+      completeResetOwnership: vi.fn().mockResolvedValue(undefined),
+    } as never,
     { settings: vi.fn().mockResolvedValue({ revision: 1 }), updateSettings: vi.fn().mockResolvedValue({}) } as never,
+    {
+      reconcileResetOwnership: vi.fn().mockResolvedValue(undefined),
+      prepareResetOwnership: vi.fn().mockResolvedValue(undefined),
+      completeResetOwnership: vi.fn().mockResolvedValue(undefined),
+    } as never,
     instance,
   );
 }
@@ -123,6 +135,55 @@ async function complete(instance: ResetState) {
     expect(backupMaintenanceActive()).toBe(false);
   });
 }
+
+it.each(['mount', 'root'])('does not rebind a leased reset store after its authority %s is replaced', async (replacement) => {
+  const instance = await dedicated();
+  const release = await instance.acquireLease();
+  const original = replacement === 'root' ? `${authority}-preserved` : authority;
+  const lock = await fs.readFile(path.join(authority, 'operation.lock'));
+  if (replacement === 'mount') mounts = mounts.replace('37 35 98:0', '38 35 98:0');
+  else {
+    await fs.rename(authority, original);
+    await fs.mkdir(authority, { mode: 0o700 });
+  }
+  await expect(instance.save(journal())).rejects.toMatchObject({ code: 'authority-unsafe' });
+  await expect(instance.read()).rejects.toMatchObject({ code: 'authority-unsafe' });
+  await expect(release()).rejects.toMatchObject({ code: 'authority-unsafe' });
+  expect(await fs.readFile(path.join(original, 'operation.lock'))).toEqual(lock);
+  expect(await fs.readdir(authority)).toEqual(replacement === 'root' ? [] : ['operation.lock']);
+});
+
+it('does not switch a legacy reset store to a newly mounted authority', async () => {
+  const instance = store();
+  expect(await instance.read()).toBeNull();
+  await fs.mkdir(authority, { mode: 0o700 });
+  mounts = mountTable(mountLine(root), mountLine(authority));
+  await expect(instance.save(journal())).rejects.toMatchObject({ code: 'authority-unsafe' });
+  expect(await fs.readdir(authority)).toEqual([]);
+  await expect(fs.lstat(legacy)).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it('keeps a missing admitted authority from becoming an idle legacy store', async () => {
+  const instance = await dedicated();
+  expect(await instance.read()).toBeNull();
+  await fs.rename(authority, `${authority}-preserved`);
+  mounts = mountTable(mountLine(root));
+  await expect(instance.read()).rejects.toMatchObject({ code: 'not-mounted' });
+  await expect(instance.save(journal())).rejects.toMatchObject({ code: 'not-mounted' });
+  await expect(fs.lstat(legacy)).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it('can retry initial admission after mount information becomes available', async () => {
+  let available = false;
+  const instance = store({ readMounts: async () => (available ? mounts : null) });
+  await expect(instance.read()).rejects.toMatchObject({ code: 'mounts-unavailable' });
+  await fs.mkdir(authority, { mode: 0o700 });
+  mounts = mountTable(mountLine(root), mountLine(authority));
+  available = true;
+  const value = journal();
+  await instance.save(value);
+  expect(await instance.read()).toEqual(value);
+});
 
 beforeEach(async () => {
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-reset-dedicated-')));

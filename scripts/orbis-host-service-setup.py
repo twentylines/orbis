@@ -66,12 +66,16 @@ SCRIPTS = (
     "orbis-host-sentinel-reader.py",
     "orbis-sentinel-install.py",
     "orbis-host-core-capture-worker.py",
+    "orbis-host-selected-capture.py",
+    "orbis-host-selected-capture-io.py",
     "orbis-host-core-capture-lease.py",
     "orbis-host-core-capture-reservation.py",
     "orbis-host-core-capture-reserved.py",
     "orbis-host-core-capture-supervisor.py",
     "orbis-host-core-capture-completion.py",
     "orbis-host-core-capture-retirement.py",
+    "orbis-host-core-capture-restart-retirement.py",
+    "orbis-host-core-capture-failed-recovery.py",
     "orbis-host-core-capture-namespace.py",
     "orbis-host-core-capture-abort.py",
     "orbis-host-core-capture-empty-abort.py",
@@ -89,6 +93,32 @@ SCRIPTS = (
     "orbis-proxy-adoption.py",
     "orbis-host-portable-policy.py",
     "orbis-host-portable-enrollment.py",
+    "orbis-host-core-portable-enrollment.py",
+    "orbis-host-core-portable-driver.py",
+    "orbis-host-core-checkpoint-review.py",
+    "orbis-host-core-checkpoint-materialize.py",
+    "orbis-host-core-restore-inspection.py",
+    "orbis-host-core-pg-profiles.py",
+    "orbis-host-core-inspection-profile.py",
+    "orbis-host-core-inspection-executor.py",
+    "orbis-host-core-inspection-installation.py",
+    "orbis-host-core-local-inspection-service.py",
+    "orbis-host-core-bootstrap-inspection-service.py",
+    "orbis-host-core-local-inspection.py",
+    "orbis-host-core-local-source.py",
+    "orbis-host-core-source-configuration.py",
+    "orbis-host-core-clean-target-profile.py",
+    "orbis-host-core-clean-target-bootstrap.py",
+    "orbis-host-core-preparation-policy.py",
+    "orbis-host-core-preparation-service.py",
+    "orbis-host-core-runtime-install.py",
+    "orbis-host-core-runtime-service.py",
+    "orbis-host-core-reconciliation-service.py",
+    "orbis-host-core-restoration-review.py",
+    "orbis-host-core-restoration.py",
+    "orbis-host-core-live-restoration.py",
+    "orbis-host-core-live-import.py",
+    "orbis-host-core-clean-target-reconcile.py",
     "orbis-install-compat.py",
     "orbis-controller-identity.py",
     "orbis-release-check.py",
@@ -383,7 +413,10 @@ def install_locked(root: Path, context: str, source: Path, *, resume: bool = Fal
     # Interrupted copies remain available for an exact-source resume and diagnosis.
     _stage_service_files(root, context, source, resume=resume)
     _start_service()
-    return _verify_service(root, context, ready)
+    verified = _verify_service(root, context, ready)
+    runtime = load_script("orbis-host-core-runtime-install.py", "orbis_core_runtime_setup")
+    runtime.install_current_locked(root, context, HOST, lambda: SERVICE.installed_manifest(root, context))
+    return verified
 
 
 def main() -> int:

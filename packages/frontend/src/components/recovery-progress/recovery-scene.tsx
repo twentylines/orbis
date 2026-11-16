@@ -3,21 +3,27 @@ import { DialogOpenContext } from '@/components/ui/Dialog/Dialog';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/Dialog';
 import { useReducedMotion, useReducedTransparency } from '@/desktop/motion-preferences';
 import { useWindowVisible } from '@/desktop/window-visibility';
-import { RecoveryProgressBar } from './recovery-progress';
+import { StartupMark } from '@/components/startup/startup-mark';
 import { DepthTravel } from './depth-travel';
+import { RecoveryProgressBar } from './recovery-progress';
+import { formationProgress } from '@/components/startup/dot-formation';
 import './recovery-scene.css';
 
 function RecoverySpace({
   active,
   departing,
   variant,
+  sharedBackdrop,
 }: {
   active: boolean;
   departing: boolean;
   variant: 'restore' | 'update' | 'downgrade' | 'onboarding';
+  sharedBackdrop: boolean;
 }) {
   const open = useContext(DialogOpenContext);
-  return <DepthTravel active={active} departing={departing} distance={open ? 1 : 0} variant={variant} className="recovery-scene-space" />;
+  return sharedBackdrop ? null : (
+    <DepthTravel active={active} departing={departing} distance={open ? 1 : 0} variant={variant} className="loading-galaxy-space" />
+  );
 }
 
 export function RecoveryScene({
@@ -52,6 +58,7 @@ export function RecoveryScene({
   const visible = useWindowVisible();
   const solid = useReducedTransparency();
   const reduced = useReducedMotion();
+  const percentage = formationProgress(progress);
   return (
     <Dialog open={open} onOpenChange={() => undefined}>
       <DialogContent
@@ -63,6 +70,7 @@ export function RecoveryScene({
         data-visible={visible}
         data-reduced={Boolean(reduced)}
         data-variant={variant}
+        data-indicator={indicator}
         data-departing={departing || undefined}
         data-footer={Boolean(footer) || undefined}
         closeDisabled
@@ -70,20 +78,20 @@ export function RecoveryScene({
         onEscapeKeyDown={(event) => event.preventDefault()}
         onInteractOutside={(event) => event.preventDefault()}
       >
-        {sharedBackdrop ? null : <RecoverySpace active={visible && (active || departing)} departing={departing} variant={variant} />}
+        <RecoverySpace active={visible && (active || departing)} departing={departing} variant={variant} sharedBackdrop={sharedBackdrop} />
         <div className="recovery-scene-content">
+          {progressContent ? null : <StartupMark label={status ?? title} />}
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className="visually-hidden">Recovery status</DialogDescription>
           {status ? <output aria-live="polite">{status}</output> : null}
           {detail ? <p>{detail}</p> : null}
-          {progressContent ??
-            (indicator === 'restart' && progress === undefined ? (
-              <div className="recovery-restart-glint" role="progressbar" aria-label={status ?? title}>
-                <i />
-              </div>
-            ) : (
-              <RecoveryProgressBar label={`${status ?? title} progress`} percentage={progress} />
-            ))}
+          {!progressContent && (active || progress !== undefined) ? (
+            <div className="recovery-scene-progress">
+              <RecoveryProgressBar label={status ?? title} percentage={percentage} variant={percentage === undefined ? 'scan' : 'bar'} />
+              {percentage !== undefined ? <span aria-hidden="true">{Math.floor(percentage)}%</span> : null}
+            </div>
+          ) : null}
+          {progressContent}
           {actions ? <div className="recovery-scene-actions">{actions}</div> : null}
         </div>
         {footer ? <p className="recovery-scene-footer">{footer}</p> : null}

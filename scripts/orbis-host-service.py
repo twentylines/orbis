@@ -432,9 +432,13 @@ def installed_manifest(root: Path, context: str) -> dict[str, str]:
 
 
 class HostService:
-    def __init__(self, root: Path, context: str, snapshots: Path, state_dir: Path):
+    def __init__(self, root: Path, context: str, snapshots: Path, state_dir: Path, *, recover_interrupted_job: bool = True):
+        if type(recover_interrupted_job) is not bool:
+            raise ValueError("host recovery mode must be explicit")
         self.HOST = HOST
         self.retained_restore_manager = None
+        self.retained_restore_manager_type = None
+        self.retained_restore_runtime_type = None
         self.core_overlay_manager = None
         self.root = root.resolve(strict=True)
         self.context = context
@@ -454,6 +458,26 @@ class HostService:
         self.prepared_capture = None
         self.lock = threading.Lock()
         self.restore_manager_lock = threading.Lock()
+        self.bootstrap_inspection_factory_lock = threading.Lock()
+        self.bootstrap_inspection_service = None
+        self.clean_target_preparation_factory_lock = threading.Lock()
+        self.clean_target_preparation_service = None
+        self.core_runtime_enrollment_factory_lock = threading.Lock()
+        self.core_runtime_enrollment_service = None
+        self.core_reconciliation_factory_lock = threading.Lock()
+        self.core_reconciliation_service = None
+        self.core_reconciliation_module = None
+        self.core_restoration_review_factory_lock = threading.Lock()
+        self.core_restoration_review_service = None
+        self.core_restoration_review_module = None
+        self.core_logical_stage_factory_lock = threading.Lock()
+        self.core_logical_stage_service = None
+        self.core_live_restoration_factory_lock = threading.Lock()
+        self.core_live_restoration_service = None
+        self.core_live_restoration_module = None
+        self.core_live_import_factory_lock = threading.Lock()
+        self.core_live_import_service = None
+        self.core_live_import_module = None
         self.busy = False
         self.job_file = self.state_dir / "job.json"
         self.package_job_file = self.state_dir / "package-job.json"
@@ -462,7 +486,7 @@ class HostService:
         self.drives = DRIVES.DriveHealth(self.state_dir)
         self.discovery = DISCOVERY.Discovery(policy_path=self.state_dir / "discovery-policy.json")
         previous = read_private(self.job_file)
-        if previous and previous.get("state") in {"running", "recovering"}:
+        if recover_interrupted_job and previous and previous.get("state") in {"running", "recovering"}:
             previous["state"] = "interrupted"
             write_private(self.job_file, previous)
 
@@ -475,6 +499,8 @@ class HostService:
                     module.HOST = HOST
                     module.CAPTURE = CAPTURE_AUTHORITY
                     self.retained_restore_manager = module.RestoreManager(self)
+                    self.retained_restore_manager_type = module.RestoreManager
+                    self.retained_restore_runtime_type = type(self.retained_restore_manager.runtime)
         return self.retained_restore_manager
 
     def core_overlays(self):
@@ -524,12 +550,126 @@ class HostService:
         module = self.portable_modules()
         return module.PortableEnrollment(self, getattr(self, "portable_capsule_driver", None))
 
+    def core_portable_enrollments(self):
+        module = load_script("orbis-host-core-portable-enrollment.py", "orbis_core_portable_enrollment_for_service")
+        return module.CorePortableEnrollment(self)
+
+    def core_clean_target_reconciliations(self):
+        with self.core_reconciliation_factory_lock:
+            if self.core_reconciliation_service is None:
+                module = load_script("orbis-host-core-reconciliation-service.py", "orbis_core_reconciliation_for_service")
+                self.core_reconciliation_service = module.CleanTargetReconciliationService(self)
+                self.core_reconciliation_module = module
+            return self.core_reconciliation_service
+
+    def core_restoration_reviews(self):
+        with self.core_restoration_review_factory_lock:
+            if self.core_restoration_review_service is None:
+                self.core_clean_target_reconciliations()
+                module = load_script("orbis-host-core-restoration-review.py", "orbis_core_restoration_review_for_service")
+                self.core_restoration_review_service = module.CoreRestorationReview(self)
+                self.core_restoration_review_module = module
+            return self.core_restoration_review_service
+
+    def core_logical_stages(self):
+        # Private Root integration only; no activation route delegates this stage.
+        with self.core_logical_stage_factory_lock:
+            if self.core_logical_stage_service is None:
+                self.core_restoration_reviews()
+                module = load_script("orbis-host-core-restoration.py", "orbis_core_logical_stage_for_service")
+                self.core_logical_stage_service = module.CoreDerivedLogicalStage(self)
+            return self.core_logical_stage_service
+
+    def core_runtime_enrollments(self):
+        with self.core_runtime_enrollment_factory_lock:
+            if self.core_runtime_enrollment_service is None:
+                module = load_script("orbis-host-core-runtime-service.py", "orbis_core_runtime_for_service")
+                self.core_runtime_enrollment_service = module.CoreRuntimeEnrollmentService(self)
+            return self.core_runtime_enrollment_service
+
+    def core_live_restorations(self):
+        with self.core_live_restoration_factory_lock:
+            if self.core_live_restoration_service is None:
+                self.core_restoration_reviews()
+                module = load_script('orbis-host-core-live-restoration.py', 'orbis_core_live_restoration_for_service')
+                self.core_live_restoration_service = module.CoreLiveRestorationService(self)
+                self.core_live_restoration_module = module
+            return self.core_live_restoration_service
+
+    def core_live_imports(self):
+        with self.core_live_import_factory_lock:
+            if self.core_live_import_service is None:
+                self.core_live_restorations()
+                module = load_script('orbis-host-core-live-import.py', 'orbis_core_live_import_for_service')
+                self.core_live_import_service = module.CoreLiveDerivedLogicalStage(self)
+                self.core_live_import_module = module
+            return self.core_live_import_service
+
+    def restore_selector_schema(self):
+        path = HOST.restore_selector_path(self.root)
+        if not path.exists() and not path.is_symlink():
+            return None
+        with HOST.AUTHORITY.protected_directory(path.parent, private=False) as directory:
+            with HOST.AUTHORITY.protected_file(directory, path.name, 4096) as body:
+                value = CONTROLLER_IDENTITY.metadata(body, byte_limit=4096)
+        if (not CONTROLLER_IDENTITY.exact(value, {'schema', 'id', 'root', 'context'})
+                or value['root'] != str(self.root) or value['context'] != self.context
+                or not isinstance(value['id'], str) or re.fullmatch(r'[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}', value['id']) is None
+                or value['schema'] not in {'orbis.retained-restore-transaction.v1', 'orbis.core-live-restoration-job.v1'}):
+            raise ValueError('Restore ownership needs recovery.')
+        return value['schema']
+
+    def restore_maintenance(self):
+        try:
+            schema = self.restore_selector_schema()
+            live = self.state_dir / 'core-live-restorations'
+            if live.is_symlink() or live.exists() and not live.is_dir():
+                return {'state': 'checking'}
+            if schema == 'orbis.core-live-restoration-job.v1' or schema is None and (live.exists() or live.is_symlink()):
+                return self.core_live_restorations().maintenance()
+            return self.retained_restores().maintenance()
+        except (OSError, ValueError, RuntimeError, TypeError, KeyError):
+            return {'state': 'checking'}
+
+    def core_restore_inspections(self):
+        module = load_script("orbis-host-core-restore-inspection.py", "orbis_core_restore_inspection_for_service")
+        return module.CoreRestoreInspection(self)
+
+    def core_local_restore_inspections(self, action, request):
+        module = load_script("orbis-host-core-local-inspection-service.py", "orbis_core_local_inspection_for_service")
+        return module.manager_for(self, action, request)
+
+    def core_bootstrap_source_inspections(self):
+        with self.bootstrap_inspection_factory_lock:
+            if self.bootstrap_inspection_service is None:
+                module = load_script("orbis-host-core-bootstrap-inspection-service.py", "orbis_core_bootstrap_inspection_for_service")
+                self.bootstrap_inspection_service = module.BootstrapSourceInspectionService(self)
+            return self.bootstrap_inspection_service
+
+    def core_clean_target_preparations(self):
+        with self.clean_target_preparation_factory_lock:
+            if self.clean_target_preparation_service is None:
+                module = load_script("orbis-host-core-preparation-service.py", "orbis_core_preparation_for_service")
+                self.clean_target_preparation_service = module.CleanTargetPreparationService(self)
+            return self.clean_target_preparation_service
+
     def proxy_host_identity(self):
         module = load_script("orbis-proxy-identity.py", "orbis_proxy_identity_for_service")
         module.HOST, module.A, module.P = HOST, HOST.AUTHORITY, CONTROLLER_IDENTITY
         return {"version": 1, "descriptor": module.observe_current(self.root, self.context)}
 
     def resume_pending_retained_restore(self):
+        try:
+            schema = self.restore_selector_schema()
+        except (OSError, ValueError, RuntimeError, TypeError, KeyError):
+            return
+        live = self.state_dir / 'core-live-restorations'
+        if schema == 'orbis.core-live-restoration-job.v1' or schema is None and (live.exists() or live.is_symlink()):
+            try:
+                self.core_live_restorations().resume_pending()
+            except (OSError, ValueError, RuntimeError, TypeError, KeyError):
+                pass
+            return
         marker = HOST.restore_selector_path(self.root)
         if not marker.exists() and not marker.is_symlink():
             return
@@ -2290,6 +2430,20 @@ def core_capture_completion(service):
         return completion
 
 
+def core_capture_restart_retirement(service):
+    cached = getattr(service, '_core_capture_restart_retirement', None)
+    if cached is not None:
+        return cached
+    admission, manager = core_capture_admission(service)
+    with service.lock:
+        cached = getattr(service, '_core_capture_restart_retirement', None)
+        if cached is None:
+            module = load_script('orbis-host-core-capture-restart-retirement.py', 'orbis_native_capture_restart_retirement')
+            cached = module.CoreCaptureRestartRetirement(manager, admission.W)
+            service._core_capture_restart_retirement = cached
+        return cached
+
+
 def core_capture_sentinel_reader(service):
     cached = getattr(service, '_core_capture_sentinel_reader', None)
     if cached is not None:
@@ -2332,6 +2486,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_json(403, {'error': 'Sentinel status is unavailable.'})
                 return
             self.send_json(200, sentinel_component_status())
+            return
+        if self.path == '/v1/core-captures/restart-retirement-capability':
+            if not trusted_capture_peer(self.connection):
+                self.send_json(403, {'error': 'Capture recovery observation is unavailable.'})
+                return
+            module = load_script('orbis-host-core-capture-restart-retirement.py', 'orbis_native_capture_restart_capability')
+            self.send_json(200, module.READER_CAPABILITY)
             return
         if self.path == '/v1/sentinel-observer/capability':
             if not trusted_capture_peer(self.connection):
@@ -2438,7 +2599,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_json(403, {"error": "retained restore peer is unavailable"})
                 return
             try:
-                result = self.server.service.retained_restores().maintenance()
+                result = self.server.service.restore_maintenance()
             except (OSError, ValueError, RuntimeError, TypeError):
                 result = {"state": "checking"}
             self.send_json(200, result)
@@ -2517,6 +2678,84 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json(503, {"error": "package changelog is unavailable"})
 
     def do_POST(self) -> None:
+        if self.path.startswith('/v1/selected-captures/'):
+            self.close_connection = True
+            started = False
+            try:
+                self.connection.settimeout(30)
+                if not trusted_capture_peer(self.connection):
+                    self.send_json(403, {'error': 'Selected capture is unavailable.'})
+                    return
+                match = re.fullmatch(r'/v1/selected-captures/(review|capability|([a-f0-9-]{36})/(bind|receipt|artifact|status))', self.path)
+                length = self.headers.get('Content-Length', '')
+                if (not match or self.headers.get('Transfer-Encoding') is not None
+                        or self.headers.get('Content-Encoding') is not None
+                        or len(self.headers.get_all('Content-Length', [])) != 1
+                        or len(self.headers.get_all('Content-Type', [])) != 1
+                        or self.headers.get('Content-Type') != 'application/json'
+                        or not length.isascii() or not length.isdecimal() or not 1 <= int(length) <= BODY_LIMIT):
+                    raise ValueError('Invalid selected capture request')
+                request = CONTROLLER_IDENTITY.metadata(self.rfile.read(int(length)), byte_limit=BODY_LIMIT)
+                module, manager = core_capture_admission(self.server.service)
+                selected = module.W.SELECTED.SelectedCapture(self.server.service, manager.capture, module.H)
+                operation = match[3] or match[1]
+                if operation == 'capability':
+                    if request != {}:
+                        raise ValueError('Invalid selected capability request')
+                    self.send_json(200, module.W.SELECTED.CAPABILITY)
+                elif operation in {'review', 'bind'}:
+                    with self.server.service.lock:
+                        self.server.service.require_idle_core()
+                        with module.H.host_lock(self.server.service.root) as descriptor:
+                            reader = module.C.TX.APPS.Docker(self.server.service.context)
+                            reader.lock_fd = descriptor
+                            if operation == 'review':
+                                if not isinstance(request, dict) or set(request) != {'appUrns'}:
+                                    raise ValueError('Invalid selected storage review request')
+                                result = selected.review(reader, request['appUrns'])
+                            else:
+                                result = selected.bind(reader, match[2], request)
+                    self.send_json(200, result)
+                elif operation == 'status':
+                    if request != {}:
+                        raise ValueError('Invalid selected status request')
+                    self.send_json(200, selected.status(match[2]))
+                elif operation == 'receipt':
+                    if request != {}:
+                        raise ValueError('Invalid selected receipt request')
+                    receipt = selected.receipt(match[2])
+                    self.send_json(200, {'version': 1, 'receiptSha256': module.W.SELECTED.digest(receipt), 'receipt': receipt})
+                else:
+                    if not isinstance(request, dict) or set(request) != {'receiptSha256'}:
+                        raise ValueError('Invalid selected artifact request')
+                    descriptor, receipt = selected.artifact(match[2], request['receiptSha256'])
+                    try:
+                        before = os.fstat(descriptor)
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/octet-stream')
+                        self.send_header('Content-Length', str(before.st_size))
+                        self.send_header('Cache-Control', 'no-store')
+                        self.end_headers()
+                        started = True
+                        digest, received = hashlib.sha256(), 0
+                        while True:
+                            body = os.read(descriptor, 65536)
+                            if not body:
+                                break
+                            received += len(body)
+                            if received > before.st_size:
+                                raise ValueError('Selected artifact changed')
+                            digest.update(body)
+                            self.wfile.write(body)
+                        if (received != before.st_size or digest.hexdigest() != receipt['artifact']['sha256']
+                                or capture_stat(before) != capture_stat(os.fstat(descriptor))):
+                            raise ValueError('Selected artifact changed')
+                    finally:
+                        os.close(descriptor)
+            except (ValueError, OSError, RuntimeError):
+                if not started:
+                    self.send_json(409, {'error': 'Selected app storage needs review or recovery. No omitted app was stopped.'})
+            return
         if self.path.startswith('/v1/core-captures/'):
             self.close_connection = True
             started = False
@@ -2526,7 +2765,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     started = True
                     self.send_json(403, {'error': 'Capture transfer is unavailable.'})
                     return
-                match = re.fullmatch(r'/v1/core-captures/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})/(status|checkpoint|completion|continuation|prepare|prepare-sentinel|prepare-reserved|prepare-reserved-sentinel|admit|preparation|reconcile-preparation|sentinel-publication|sentinel-file|abort-intent(?:/status)?|abort-(?:prepare|status|finish)|abort-empty-(?:prepare|status|finish)|abort-(?:unused|setup|refused)-(?:settle|status))', self.path)
+                match = re.fullmatch(r'/v1/core-captures/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})/(status|checkpoint|completion|continuation|prepare|prepare-sentinel|prepare-reserved|prepare-reserved-sentinel|admit|preparation|reconcile-preparation|restart-retirement|sentinel-publication|sentinel-file|abort-intent(?:/status)?|abort-(?:prepare|status|finish)|abort-empty-(?:prepare|status|finish)|abort-(?:unused|setup|refused)-(?:settle|status))', self.path)
                 length = self.headers.get('Content-Length', '')
                 if (not match or self.headers.get('Transfer-Encoding') is not None
                         or self.headers.get('Content-Encoding') is not None
@@ -2555,6 +2794,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         kind = parts[1] if len(parts) == 3 else 'complete'
                         handler = core_capture_abort(self.server.service, kind)
                         result = getattr(handler, parts[-1])(match[1], request)
+                    started = True
+                    self.send_json(200, result)
+                elif match[2] == 'restart-retirement':
+                    if (not isinstance(request, dict) or set(request) != {'pointReservationSha256'}
+                            or type(request['pointReservationSha256']) is not str
+                            or not re.fullmatch(r'[a-f0-9]{64}', request['pointReservationSha256'])):
+                        raise ValueError('Invalid capture retirement observation')
+                    result = core_capture_restart_retirement(self.server.service).observe(match[1], request['pointReservationSha256'])
                     started = True
                     self.send_json(200, result)
                 elif match[2] in {'preparation', 'reconcile-preparation'}:
@@ -2655,6 +2902,196 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.wfile.flush()
             except (OSError, ValueError, RuntimeError, TypeError, KeyError, subprocess.SubprocessError):
                 self.send_json(409, {'error': 'App storage capture needs recovery. Existing app data has not been changed.'})
+            return
+        if self.path.startswith('/v1/core-live-restoration/'):
+            self.close_connection = True
+            if not trusted_capture_peer(self.connection):
+                self.send_json(403, {'error': 'Restore access is unavailable.'})
+                return
+            try:
+                self.connection.settimeout(15)
+                action = self.path.removeprefix('/v1/core-live-restoration/')
+                length = self.headers.get('Content-Length', '')
+                if (action not in {'admit', 'begin', 'status', 'wait', 'abort'} or self.headers.get('Transfer-Encoding') is not None
+                        or self.headers.get('Content-Encoding') is not None or self.headers.get('Content-Type') != 'application/json'
+                        or not length.isascii() or not length.isdecimal() or not 1 <= int(length) <= 16384
+                        or len(self.headers.get_all('Content-Length', [])) != 1 or len(self.headers.get_all('Content-Type', [])) != 1):
+                    raise ValueError('Restore request is invalid.')
+                body = self.rfile.read(int(length))
+                if len(body) != int(length):
+                    raise ValueError('Restore request is truncated.')
+                request = CONTROLLER_IDENTITY.metadata(body, byte_limit=16384)
+                self.connection.settimeout(330)
+                result = getattr(self.server.service.core_live_restorations(), action)(request, privileged_peer=True)
+                self.send_json(200, result)
+            except (OSError, ValueError, RuntimeError, TypeError, KeyError, subprocess.SubprocessError):
+                self.send_json(409, {'error': 'Restore needs attention. Recovery information has been kept.'})
+            return
+        if self.path.startswith('/v1/core-restoration-review/'):
+            self.close_connection = True
+            try:
+                self.connection.settimeout(15)
+                if not trusted_capture_peer(self.connection):
+                    raise ValueError('restoration review peer is unavailable')
+                action = self.path.removeprefix('/v1/core-restoration-review/')
+                length = self.headers.get('Content-Length', '')
+                if (action not in {'review', 'status'} or self.headers.get('Transfer-Encoding') is not None
+                        or self.headers.get('Content-Encoding') is not None
+                        or self.headers.get('Content-Type') != 'application/json'
+                        or not length.isascii() or not length.isdecimal() or not 1 <= int(length) <= 16384
+                        or len(self.headers.get_all('Content-Length', [])) != 1
+                        or len(self.headers.get_all('Content-Type', [])) != 1):
+                    raise ValueError('restoration review request is invalid')
+                body = self.rfile.read(int(length))
+                if len(body) != int(length):
+                    raise ValueError('restoration review request was truncated')
+                request = CONTROLLER_IDENTITY.metadata(body, byte_limit=16384)
+                self.connection.settimeout(330)
+                result = getattr(self.server.service.core_restoration_reviews(), action)(request, privileged_peer=True)
+                self.send_json(200, result)
+            except (OSError, ValueError, RuntimeError, TypeError, KeyError, subprocess.SubprocessError):
+                self.send_json(409, {'error': 'Restoration review needs protected review. Your saved data is unchanged.'})
+            return
+        if self.path.startswith('/v1/core-clean-target-reconciliation/'):
+            self.close_connection = True
+            try:
+                self.connection.settimeout(15)
+                if not trusted_capture_peer(self.connection):
+                    raise ValueError('reconciliation peer is unavailable')
+                action = self.path.removeprefix('/v1/core-clean-target-reconciliation/')
+                length = self.headers.get('Content-Length', '')
+                if (action not in {'prepare', 'status', 'wait'} or self.headers.get('Transfer-Encoding') is not None
+                        or self.headers.get('Content-Encoding') is not None
+                        or self.headers.get('Content-Type') != 'application/json'
+                        or not length.isascii() or not length.isdecimal() or not 1 <= int(length) <= 16384
+                        or len(self.headers.get_all('Content-Length', [])) != 1
+                        or len(self.headers.get_all('Content-Type', [])) != 1):
+                    raise ValueError('reconciliation request is invalid')
+                body = self.rfile.read(int(length))
+                if len(body) != int(length):
+                    raise ValueError('reconciliation request was truncated')
+                request = CONTROLLER_IDENTITY.metadata(body, byte_limit=16384)
+                if action == 'wait':
+                    self.connection.settimeout(1900)
+                coordinator = self.server.service.core_clean_target_reconciliations()
+                result = getattr(coordinator, action)(request, privileged_peer=True)
+                self.send_json(202 if action == 'prepare' else 200, result)
+            except (OSError, ValueError, RuntimeError, TypeError, KeyError, subprocess.SubprocessError):
+                self.send_json(409, {'error': 'Reconciliation needs protected review. Your saved data is unchanged.'})
+            return
+        if self.path.startswith('/v1/core-restore-runtime/'):
+            self.close_connection = True
+            try:
+                self.connection.settimeout(15)
+                if not trusted_capture_peer(self.connection):
+                    raise ValueError('runtime enrollment peer is unavailable')
+                action = self.path.removeprefix('/v1/core-restore-runtime/')
+                length = self.headers.get('Content-Length', '')
+                if (action not in {'prepare', 'status', 'wait'} or self.headers.get('Transfer-Encoding') is not None
+                        or self.headers.get('Content-Encoding') is not None
+                        or self.headers.get('Content-Type') != 'application/json'
+                        or not length.isascii() or not length.isdecimal() or not 1 <= int(length) <= 16384
+                        or len(self.headers.get_all('Content-Length', [])) != 1
+                        or len(self.headers.get_all('Content-Type', [])) != 1):
+                    raise ValueError('runtime enrollment request is invalid')
+                body = self.rfile.read(int(length))
+                if len(body) != int(length):
+                    raise ValueError('runtime enrollment request was truncated')
+                request = CONTROLLER_IDENTITY.metadata(body, byte_limit=16384)
+                if action == 'wait':
+                    self.connection.settimeout(1900)
+                coordinator = self.server.service.core_runtime_enrollments()
+                result = getattr(coordinator, action)(request, privileged_peer=True)
+                self.send_json(202 if action == 'prepare' else 200, result)
+            except (OSError, ValueError, RuntimeError, TypeError, KeyError, subprocess.SubprocessError):
+                self.send_json(409, {'error': 'Restore support needs review. Your saved data is unchanged.'})
+            return
+        if self.path.startswith('/v1/core-clean-target-preparation/'):
+            self.close_connection = True
+            try:
+                self.connection.settimeout(15)
+                if not trusted_capture_peer(self.connection):
+                    raise ValueError('preparation peer is unavailable')
+                action = self.path.removeprefix('/v1/core-clean-target-preparation/')
+                length = self.headers.get('Content-Length', '')
+                if (action not in {'prepare', 'status', 'wait'} or self.headers.get('Transfer-Encoding') is not None
+                        or self.headers.get('Content-Type') != 'application/json'
+                        or not length.isascii() or not length.isdecimal() or not 1 <= int(length) <= 16384):
+                    raise ValueError('preparation request is invalid')
+                body = self.rfile.read(int(length))
+                if len(body) != int(length):
+                    raise ValueError('preparation request was truncated')
+                request = CONTROLLER_IDENTITY.metadata(body, byte_limit=16384)
+                if action == 'wait':
+                    self.connection.settimeout(1900)
+                coordinator = self.server.service.core_clean_target_preparations()
+                result = getattr(coordinator, action)(request, privileged_peer=True)
+                self.send_json(202 if action == 'prepare' else 200, result)
+            except (OSError, ValueError, RuntimeError, TypeError, KeyError, subprocess.SubprocessError):
+                self.send_json(409, {'error': 'Restore preparation could not finish. Your saved data is unchanged.'})
+            return
+        if self.path.startswith('/v1/core-bootstrap-source-inspection/'):
+            self.close_connection = True
+            try:
+                self.connection.settimeout(15)
+                if not trusted_capture_peer(self.connection):
+                    raise ValueError('bootstrap inspection peer is unavailable')
+                action = self.path.removeprefix('/v1/core-bootstrap-source-inspection/')
+                length = self.headers.get('Content-Length', '')
+                if (action not in {'prepare', 'approve', 'status'} or self.headers.get('Transfer-Encoding') is not None
+                        or self.headers.get('Content-Type') != 'application/json'
+                        or not length.isascii() or not length.isdecimal() or not 1 <= int(length) <= 16384):
+                    raise ValueError('bootstrap inspection request is invalid')
+                body = self.rfile.read(int(length))
+                if len(body) != int(length):
+                    raise ValueError('bootstrap inspection request was truncated')
+                request = CONTROLLER_IDENTITY.metadata(body, byte_limit=16384)
+                self.connection.settimeout(1900)
+                service = self.server.service
+                coordinator = service.core_bootstrap_source_inspections()
+                result = getattr(coordinator, action)(request, privileged_peer=True)
+                self.send_json(200, result)
+            except (OSError, ValueError, RuntimeError, TypeError, KeyError, subprocess.SubprocessError):
+                self.send_json(409, {'error': 'The capture check could not finish. Your saved captures are unchanged.'})
+            return
+        if (self.path.startswith('/v1/core-portable-enrollment/') or self.path.startswith('/v1/core-restore-inspection/')
+                or self.path.startswith('/v1/core-local-restore-inspection/')):
+            self.close_connection = True
+            try:
+                self.connection.settimeout(15)
+                if not trusted_capture_peer(self.connection):
+                    raise ValueError('core portable peer is unavailable')
+                local_inspection = self.path.startswith('/v1/core-local-restore-inspection/')
+                inspection = local_inspection or self.path.startswith('/v1/core-restore-inspection/')
+                prefix = ('/v1/core-local-restore-inspection/' if local_inspection else
+                          '/v1/core-restore-inspection/' if inspection else '/v1/core-portable-enrollment/')
+                action = self.path.removeprefix(prefix)
+                length = self.headers.get('Content-Length', '')
+                if (action not in ({'prepare', 'approve', 'status'} if inspection else {'prepare', 'approve', 'status', 'reconcile'})
+                        or self.headers.get('Transfer-Encoding') is not None
+                        or self.headers.get('Content-Type') != 'application/json'
+                        or not length.isascii() or not length.isdecimal() or not 1 <= int(length) <= 16384):
+                    raise ValueError('core portable request is invalid')
+                body = self.rfile.read(int(length))
+                if len(body) != int(length):
+                    raise ValueError('core portable request was truncated')
+                request = CONTROLLER_IDENTITY.metadata(body, byte_limit=16384)
+                self.connection.settimeout(1900)
+                service = self.server.service
+                with service.lock, HOST.host_lock(service.root):
+                    manager = (service.core_local_restore_inspections(action, request) if local_inspection else
+                               service.core_restore_inspections() if inspection else service.core_portable_enrollments())
+                    if action == 'prepare':
+                        result = manager.prepare(request, privileged_peer=True)
+                    elif action == 'approve':
+                        result = manager.approve(request, privileged_peer=True)
+                    elif inspection:
+                        result = manager.status(request, privileged_peer=True)
+                    else:
+                        result = manager.status(request, privileged_peer=True, reconcile=action == 'reconcile')
+                self.send_json(200, result)
+            except (OSError, ValueError, RuntimeError, TypeError, KeyError, subprocess.SubprocessError):
+                self.send_json(409, {'error': 'Core import needs authenticated destination approval or protected reconciliation. Existing points were preserved.'})
             return
         if self.path.startswith("/v1/portable-capture/") or self.path in {"/v1/portable-restore/prepare", "/v1/portable-restore/approve"}:
             try:

@@ -153,6 +153,153 @@ async function transformBackup(options: BackupCryptoOptions, decrypt: boolean) {
 export const encryptBackup = (options: BackupCryptoOptions) => transformBackup(options, false);
 export const decryptBackup = (options: BackupCryptoOptions) => transformBackup(options, true);
 
+/** Authenticates a ciphertext and hashes its plaintext without writing or returning plaintext. */
+type CipherInspectionOptions = { source: string; passphrase: string; plaintextBytes: number; signal: AbortSignal };
+export const inspectBackupCiphertext = (options: CipherInspectionOptions) => inspectCiphertext(options);
+
+async function inspectCiphertext(options: CipherInspectionOptions, aggregate?: ReturnType<typeof createHash>) {
+  const { source, passphrase, plaintextBytes, signal } = options;
+  if (typeof passphrase !== 'string' || passphrase.length < 8 || !passphrase.trim() || passphrase.length > 1024)
+    throw new BackupArchiveError('passphrase');
+  if (!Number.isSafeInteger(plaintextBytes) || plaintextBytes < 0 || plaintextBytes > backupGcmPlaintextLimit)
+    throw new BackupArchiveError('invalid-archive');
+  let input: FileHandle | undefined;
+  let key: Buffer | undefined;
+  const encrypted = Buffer.alloc(256 * 1024);
+  const identity = (s: Awaited<ReturnType<FileHandle['stat']>>) =>
+    [s.dev, s.ino, s.mode, s.uid, s.gid, s.nlink, s.size, s.mtimeMs, s.ctimeMs].join(':');
+  try {
+    signal.throwIfAborted();
+    const parent = path.dirname(source);
+    if (!path.isAbsolute(source) || path.resolve(source) !== source || (await fs.realpath(parent)) !== parent)
+      throw new BackupArchiveError('invalid-archive');
+    const directory = await fs.lstat(parent);
+    if (!directory.isDirectory() || directory.mode & 0o077 || directory.uid !== process.getuid?.()) throw new BackupArchiveError('invalid-archive');
+    input = await fs.open(source, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const before = await input.stat();
+    if (
+      !before.isFile() ||
+      before.nlink !== 1 ||
+      before.uid !== process.getuid?.() ||
+      before.mode & 0o077 ||
+      before.size !== plaintextBytes + backupCipherOverhead
+    )
+      throw new BackupArchiveError('invalid-archive');
+    const header = Buffer.alloc(headerSize);
+    const tag = Buffer.alloc(tagSize);
+    if (
+      (await input.read(header, 0, headerSize, 0)).bytesRead !== headerSize ||
+      !header.subarray(0, magic.length).equals(magic) ||
+      (await input.read(tag, 0, tagSize, before.size - tagSize)).bytesRead !== tagSize
+    )
+      throw new BackupArchiveError('invalid-archive');
+    key = await deriveKey(passphrase, header.subarray(magic.length, magic.length + saltSize));
+    const cipher = createDecipheriv('aes-256-gcm', key, header.subarray(magic.length + saltSize));
+    cipher.setAAD(header);
+    cipher.setAuthTag(tag);
+    const hash = createHash('sha256');
+    let position = 0;
+    while (position < plaintextBytes) {
+      signal.throwIfAborted();
+      const { bytesRead } = await input.read(encrypted, 0, Math.min(encrypted.length, plaintextBytes - position), headerSize + position);
+      if (!bytesRead) throw new BackupArchiveError('invalid-archive');
+      const plaintext = cipher.update(encrypted.subarray(0, bytesRead));
+      try {
+        hash.update(plaintext);
+        aggregate?.update(plaintext);
+      } finally {
+        plaintext.fill(0);
+      }
+      position += bytesRead;
+    }
+    const last = cipher.final();
+    try {
+      hash.update(last);
+      aggregate?.update(last);
+    } finally {
+      last.fill(0);
+    }
+    signal.throwIfAborted();
+    if (
+      identity(before) !== identity(await input.stat()) ||
+      identity(before) !== identity(await fs.lstat(source)) ||
+      [directory.dev, directory.ino, directory.uid, directory.mode].join(':') !==
+        ((s) => [s.dev, s.ino, s.uid, s.mode].join(':'))(await fs.lstat(parent)) ||
+      (await fs.realpath(parent)) !== parent
+    )
+      throw new BackupArchiveError('invalid-archive');
+    return Object.freeze({ plaintextBytes: position, plaintextSha256: hash.digest('hex') });
+  } catch {
+    throw new BackupArchiveError(signal.aborted ? 'cancelled' : 'invalid-archive');
+  } finally {
+    key?.fill(0);
+    encrypted.fill(0);
+    await input?.close();
+  }
+}
+
+/** Authenticates an ordered sequence, including its combined plaintext digest, without exposing plaintext. */
+export function createBackupCiphertextSequenceInspector(options: { passphrase: string; signal: AbortSignal }) {
+  const { passphrase, signal } = options;
+  const aggregate = createHash('sha256');
+  const verified: Awaited<ReturnType<typeof inspectCiphertext>>[] = [];
+  const sources = new Set<string>();
+  let total = 0;
+  let pending = false;
+  let closed = false;
+  return {
+    async add(chunk: Pick<CipherInspectionOptions, 'source' | 'plaintextBytes'>) {
+      if (closed || pending) {
+        closed = true;
+        throw new BackupArchiveError('invalid-archive');
+      }
+      pending = true;
+      try {
+        const { source, plaintextBytes } = chunk;
+        const next = total + plaintextBytes;
+        if (sources.has(source) || sources.size >= 128 || !Number.isSafeInteger(next) || next < 0 || next > 128 * 1024 ** 3)
+          throw new BackupArchiveError('invalid-archive');
+        const result = await inspectCiphertext({ passphrase, signal, source, plaintextBytes }, aggregate);
+        if (closed) throw new BackupArchiveError('invalid-archive');
+        sources.add(source);
+        total = next;
+        verified.push(result);
+        return result;
+      } catch (error) {
+        closed = true;
+        throw error;
+      } finally {
+        pending = false;
+      }
+    },
+    finish() {
+      if (closed || pending || !verified.length) {
+        closed = true;
+        throw new BackupArchiveError('invalid-archive');
+      }
+      closed = true;
+      signal.throwIfAborted();
+      return Object.freeze({ plaintextBytes: total, plaintextSha256: aggregate.digest('hex'), chunks: Object.freeze(verified) });
+    },
+  };
+}
+
+export async function inspectBackupCiphertextSequence(options: {
+  chunks: readonly Pick<CipherInspectionOptions, 'source' | 'plaintextBytes'>[];
+  passphrase: string;
+  signal: AbortSignal;
+}) {
+  if (!Array.isArray(options.chunks) || options.chunks.length < 1 || options.chunks.length > 128) throw new BackupArchiveError('invalid-archive');
+  const chunks = options.chunks.map(({ source, plaintextBytes }) => ({ source, plaintextBytes }));
+  const { passphrase, signal } = options;
+  const total = chunks.reduce((sum, chunk) => sum + chunk.plaintextBytes, 0);
+  if (!Number.isSafeInteger(total) || total < 0 || total > 128 * 1024 ** 3 || new Set(chunks.map((chunk) => chunk.source)).size !== chunks.length)
+    throw new BackupArchiveError('invalid-archive');
+  const inspector = createBackupCiphertextSequenceInspector({ passphrase, signal });
+  for (const chunk of chunks) await inspector.add(chunk);
+  return inspector.finish();
+}
+
 export async function encryptBackupStream(options: {
   source: Readable;
   plaintextBytes: number;
@@ -204,10 +351,14 @@ export async function encryptBackupStream(options: {
     for await (const chunk of source) {
       signal.throwIfAborted();
       const bytes = Buffer.from(chunk);
-      completed += bytes.length;
-      if (completed > plaintextBytes || completed > backupGcmPlaintextLimit) throw new Error('Backup stream exceeded its size');
-      await writeCipher(cipher.update(bytes));
-      options.onProgress?.(completed, plaintextBytes);
+      try {
+        completed += bytes.length;
+        if (completed > plaintextBytes || completed > backupGcmPlaintextLimit) throw new Error('Backup stream exceeded its size');
+        await writeCipher(cipher.update(bytes));
+        options.onProgress?.(completed, plaintextBytes);
+      } finally {
+        bytes.fill(0);
+      }
     }
     if (completed !== plaintextBytes) throw new Error('Incomplete backup stream');
     await writeCipher(cipher.final());

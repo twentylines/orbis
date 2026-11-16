@@ -18,6 +18,8 @@ const messages: Record<TimeMachineReason, string> = {
   'capture-interrupted': 'Capture was interrupted. Check the linked backup job for app recovery before retrying.',
   'capture-failed': 'Capture did not finish. Review storage, app state and the linked backup job before retrying.',
   'capture-recovery-required': 'The underlying backup needs app recovery before another capture can begin.',
+  'capture-selection-conflict':
+    'Selected app storage changed, overlaps excluded storage or has another writer. Review the storage choices. Omitted apps were not stopped.',
   'experimental-acknowledgement-required': 'Acknowledge experimental capture limitations before making a restore point.',
   'capacity-exceeded': 'Retained restore points reached the storage limit. Remove an older point or free storage before retrying.',
   'storage-unavailable': 'Time Machine storage needs a permissions or integrity review.',

@@ -12,11 +12,13 @@ import {
   operationContinuityStorageName,
 } from '@/components/recovery-progress/operation-continuity';
 import type { AcceptedReset } from './reset-api';
+import { beginResetStartup } from '@/components/startup/reset-startup';
 
 const completionKey = 'orbis-reset-completion-v1';
 type CompletionStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 type CompletionReceipt = { version: 1; id: string; acceptedAt: number; previous: string | null };
 let memoryReceipt: CompletionReceipt | null = null;
+export const hasAcceptedResetReceipt = () => memoryReceipt !== null;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 export function rememberResetCompletion(receipt: AcceptedReset, storage = operationContinuityStorage(), now = Date.now()) {
   if (receipt.state !== 'resetting' || !uuid.test(receipt.id)) return;
@@ -112,6 +114,7 @@ export function openResetOnboarding(authority: OperationSnapshot) {
   const storage = operationContinuityStorage();
   const receipt = storage ? completionReceipt(storage, Date.now()) : null;
   if (storage && receipt && !clearCompletedResetContinuity(authority, receipt.id, storage)) return false;
+  beginResetStartup();
   finishResetOnboarding();
   return true;
 }

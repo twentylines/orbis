@@ -1,11 +1,8 @@
 import { useAppContext } from '@/context/app-context';
 import { useUserContext } from '@/context/user-context';
 import { useDesktopPreferences } from '@/desktop/preferences';
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { useQueries } from '@tanstack/react-query';
-import { automaticUpdateSettingsOptions, systemUpdateScheduleOptions } from '@/desktop/automatic-updates-api';
-import { orbisReleaseChannelsOptions } from '@/desktop/release-channels';
-import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import { Suspense, lazy, useEffect, useRef } from 'react';
+import { useLocation, useNavigate, useNavigation, useSearchParams } from 'react-router';
 import { AppStoresContainer } from '../containers/app-stores-container';
 import { Appearance } from '../containers/appearance';
 import { ClusterSettings } from '../containers/cluster-settings';
@@ -40,6 +37,11 @@ export default function SettingsPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const navigation = useNavigation();
+  const pendingLocation = navigation.location?.pathname === location.pathname ? navigation.location : undefined;
+  const navigating = pendingLocation !== undefined;
+  const viewParams = pendingLocation ? new URLSearchParams(pendingLocation.search) : searchParams;
+  const viewHash = pendingLocation?.hash ?? location.hash;
   const { userSettings, user } = useAppContext();
   const { sessionAbortSignal } = useUserContext();
   const { syncState } = useDesktopPreferences();
@@ -50,46 +52,16 @@ export default function SettingsPage() {
     http: httpsSetupVisible(typeof window === 'undefined' ? '' : window.location.protocol),
   };
   const target = settingsCatalogue.find(
-    (entry) => entry.id === searchParams.get('setting') || (!searchParams.has('setting') && `#${entry.anchor}` === location.hash),
+    (entry) => entry.id === viewParams.get('setting') || (!viewParams.has('setting') && `#${entry.anchor}` === viewHash),
   );
   const allowedTarget = target && settingAvailable(target, access) ? target : undefined;
   const requested =
-    searchParams.get('secure_setup') === '1'
+    viewParams.get('secure_setup') === '1'
       ? access.http
         ? 'https'
         : 'security'
-      : (allowedTarget?.section ?? resolveSettingsSection(searchParams.get('tab')));
+      : (allowedTarget?.section ?? resolveSettingsSection(viewParams.get('tab')));
   const current = requested === 'https' && !access.http ? 'security' : requested;
-  const preparingUpdates = current === 'updates' && visible && user.operator === true;
-  const updatesQueries = useQueries({
-    queries: [automaticUpdateSettingsOptions(), systemUpdateScheduleOptions(), orbisReleaseChannelsOptions()].map((options) => ({
-      ...options,
-      enabled: preparingUpdates,
-    })),
-  });
-  const [updatesModuleReady, setUpdatesModuleReady] = useState(false);
-  const [updatesWaitExpired, setUpdatesWaitExpired] = useState(false);
-  useEffect(() => {
-    if (!preparingUpdates) {
-      setUpdatesWaitExpired(false);
-      return;
-    }
-    let active = true;
-    void loadUserSettings().then(
-      () => {
-        if (active) setUpdatesModuleReady(true);
-      },
-      () => {
-        if (active) setUpdatesModuleReady(true);
-      },
-    );
-    const timer = window.setTimeout(() => setUpdatesWaitExpired(true), 2000);
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-    };
-  }, [preparingUpdates]);
-  const updatesPending = preparingUpdates && !updatesWaitExpired && (!updatesModuleReady || updatesQueries.some((query) => query.isPending));
   useEffect(() => {
     if (searchParams.get('secure_setup') !== '1') return;
     const params = new URLSearchParams(searchParams);
@@ -102,12 +74,12 @@ export default function SettingsPage() {
   const revealGeneration = useRef(location.key);
   revealGeneration.current = location.key;
   const updateLocation = (section: SettingsSection, entry?: SettingEntry) => {
-    void navigate(settingsLocation(location.pathname, location.search, section, entry), { preventScrollReset: true });
+    void navigate(settingsLocation(location.pathname, location.search, section, entry), { preventScrollReset: true, flushSync: true });
   };
 
   useEffect(() => {
     const element = root.current;
-    if (!element || !allowedTarget || !visible || revealGeneration.current !== location.key) return;
+    if (!element || !allowedTarget || !visible || navigating || revealGeneration.current !== location.key) return;
     if (revealSetting(element, allowedTarget, prefersReducedMotion())) return;
     const observer = new MutationObserver(() => {
       if (revealGeneration.current === location.key && revealSetting(element, allowedTarget, prefersReducedMotion())) observer.disconnect();
@@ -118,7 +90,7 @@ export default function SettingsPage() {
       observer.disconnect();
       window.clearTimeout(timeout);
     };
-  }, [allowedTarget, visible, location.key]);
+  }, [allowedTarget, visible, navigating, location.key]);
 
   const loading = (
     <div className="settings-loading">
@@ -138,7 +110,6 @@ export default function SettingsPage() {
         <AppUpdatePolicyProvider>
           <SettingsWorkspace
             current={current}
-            pending={updatesPending}
             access={access}
             onSection={(section) => updateLocation(section)}
             onSetting={(entry) => updateLocation(entry.section, entry)}

@@ -4,10 +4,12 @@
   min-width: 10rem;
   padding: 4px;
   color: var(--tblr-body-color);
-  background: var(--tblr-bg-surface);
+  background: var(--desktop-menu-surface, var(--tblr-bg-surface));
+  backdrop-filter: var(--desktop-chrome-filter, blur(28px) saturate(1.2));
+  -webkit-backdrop-filter: var(--desktop-chrome-filter, blur(28px) saturate(1.2));
   border: 1px solid var(--tblr-border-color);
   border-radius: var(--orbis-control-radius, 12px);
-  box-shadow: 0 12px 32px rgba(8, 24, 18, 0.18);
+  box-shadow: none;
   font-size: 0.875rem;
   max-width: min(360px, calc(100vw - 32px));
   transform-origin: var(--radix-dropdown-menu-content-transform-origin, center top);

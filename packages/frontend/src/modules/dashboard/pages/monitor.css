@@ -90,6 +90,7 @@
 }
 .desktop-monitor {
   min-width: 0;
+  container: monitor / inline-size;
 }
 .monitor-page-heading {
   display: flex;
@@ -597,51 +598,74 @@
   background: color-mix(in srgb, var(--desktop-preset-tint) 10%, var(--desktop-surface));
 }
 .monitor-sections {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 24px;
   min-width: 0;
-  container: monitor-sections / inline-size;
-  border: 1px solid var(--desktop-line);
-  border-radius: 15px;
-  background: color-mix(in srgb, var(--desktop-preset-tint) 4%, var(--desktop-surface));
+  min-height: min(38rem, 65dvh);
+}
+.monitor-section-navigation,
+.monitor-section-panels {
+  min-width: 0;
+}
+.monitor-section-panels {
+  container-type: inline-size;
+}
+.monitor-summary-value[data-unavailable="true"] {
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.4;
 }
 .monitor-section-compact {
-  display: none;
-  padding: var(--orbis-compact-panel-space, 24px);
-  border-bottom: 1px solid var(--desktop-line);
+  min-width: 0;
 }
 .monitor-section-select,
 .monitor-section-select button {
   width: 100%;
 }
-.monitor-section-select button {
+.desktop .desktop-monitor .monitor-section-select button {
+  min-height: 46px;
+}
+.monitor-section-menu.orbis-select-content .orbis-select-item {
   min-height: 44px;
 }
 .monitor-section-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 10px;
-  border-bottom: 1px solid var(--desktop-line);
-}
-.monitor-section-tab {
-  flex: 1 1 auto;
-  min-height: 44px;
-  padding: 10px 16px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--desktop-status-muted);
-  font: inherit;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.5;
-  cursor: pointer;
+  display: none;
 }
 .monitor-section-tab-track {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+}
+.monitor-section-tab {
   display: flex;
-  flex-wrap: wrap;
-  flex: 1;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
   min-width: 0;
-  gap: inherit;
+  min-height: 56px;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--desktop-muted);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: start;
+  cursor: pointer;
+}
+.monitor-section-tab > svg {
+  flex: none;
+}
+.monitor-section-tab > span {
+  min-width: 0;
+  overflow-wrap: normal;
 }
 .monitor-section-tab:hover {
   background: color-mix(in srgb, var(--desktop-preset-tint) 8%, transparent);
@@ -653,17 +677,25 @@
   background: color-mix(in srgb, var(--desktop-preset-tint) 15%, var(--desktop-surface));
   color: var(--desktop-ink);
 }
-@container monitor-sections (max-width: 36rem) {
+.desktop .desktop-monitor .monitor-section-tab-track > .monitor-section-tab:focus-visible {
+  outline: 2px solid var(--desktop-focus);
+  outline-offset: -4px;
+}
+@container monitor (min-width: 52rem) {
+  .monitor-sections {
+    grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
+    gap: clamp(24px, 3cqi, 44px);
+  }
   .monitor-section-compact {
-    display: block;
+    display: none;
   }
   .monitor-section-tabs {
-    display: none;
+    display: block;
   }
 }
 .monitor-section-panel {
   min-width: 0;
-  padding: var(--orbis-compact-panel-space, 24px);
+  padding: 0;
 }
 .monitor-section-panel:focus-visible {
   outline: none;

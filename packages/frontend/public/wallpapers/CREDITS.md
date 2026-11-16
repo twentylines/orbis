@@ -1,7 +1,7 @@
 # Wallpaper photos
 
 The six preset wallpapers are natural 16:9 crops of the linked photographs.
-Main images are 3840 × 2160 WebP, except Ocean at its native 3529 × 1985 crop. Picker previews are 480 × 270 or 640 × 360 WebP. Each photo is bundled under the listed source license.
+Main images are 3840 × 2160 WebP. Picker previews are 480 × 270 or 640 × 360 WebP. Each photo is bundled under the listed source license.
 
 | Theme | Files | Photographer | Original photograph and license |
 | --- | --- | --- | --- |
@@ -9,7 +9,7 @@ Main images are 3840 × 2160 WebP, except Ocean at its native 3529 × 1985 crop.
 | Graphite | `graphite-v2.webp`, `graphite-v2-preview.webp` | Robert Montgomery | [Black Sand Beach, Iceland](https://commons.wikimedia.org/wiki/File:Black_Sand_Beach,_Iceland_-_Flickr_-_Rmonty119.jpg), [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/) |
 | Forest | `forest-v3.webp`, `forest-v3-preview.webp` | Ali Kazal | [Misty pines in Quebec](https://unsplash.com/photos/green-pine-trees-on-foggy-weather-7b39feeIMO0), [Unsplash License](https://unsplash.com/license) |
 | Stone | `stone-v2.webp`, `stone-v2-preview.webp` | Bob Wick / Bureau of Land Management | [Red Sandstone](https://commons.wikimedia.org/wiki/File:Red_Sandstone_(45446834555).jpg), [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/) |
-| Ocean | `ocean-v3.webp`, `ocean-v3-preview.webp` | Maddox Furlong | [Blue mountains shrouded in mist under cloudy sky](https://unsplash.com/photos/blue-mountains-shrouded-in-mist-under-cloudy-sky-sb9OsqTv7vM), [Unsplash License](https://unsplash.com/license) |
+| Ocean | `ocean-v4.webp`, `ocean-v4-preview.webp` | Monya Prinsloo | [Aerial ocean waves, Cape Town](https://unsplash.com/photos/aerial-view-of-ocean-waves-HZmRQsyvGHA), [Unsplash License](https://unsplash.com/license) |
 | Blush | `blush-v4.webp`, `blush-v4-preview.webp` | Christian Cueni | [Snow-capped mountains reflected in calm lake at dusk](https://unsplash.com/photos/snow-capped-mountains-reflected-in-calm-lake-at-dusk-bq-yfPj9ugM), [Unsplash License](https://unsplash.com/license) |
 
 ### Retained immutable theme-pack images
@@ -22,9 +22,11 @@ identify. They are not used as the six wallpaper preset defaults.
 - `theme-pack-tideline-v1.webp` — Sean Oulashin, [Oahu shoreline](https://unsplash.com/photos/seashore-during-golden-hour-KMn4VEeEPR8), Unsplash License.
 - `theme-pack-woodland-v1.webp` — Ali Kazal, [Misty pines in Quebec](https://unsplash.com/photos/green-pine-trees-on-foggy-weather-7b39feeIMO0), Unsplash License.
 
-The Forest and Ocean v3 photographs and Blush v4 photograph are cropped to a desktop aspect ratio and encoded as WebP without changing their colours. Earlier images remain available for existing saved references.
+The Forest v3, Ocean v4 and Blush v4 photographs are cropped to a desktop aspect ratio and encoded as WebP without changing their colours. Earlier images remain available for existing saved references.
 
 ### Earlier preset photographs
+
+- `ocean-v3.webp`, `ocean-v3-preview.webp` — Maddox Furlong, [Blue mountains shrouded in mist under cloudy sky](https://unsplash.com/photos/blue-mountains-shrouded-in-mist-under-cloudy-sky-sb9OsqTv7vM), [Unsplash License](https://unsplash.com/license).
 
 - `blush-v3.webp`, `blush-v3-preview.webp` — Gantavya Bhatt, [Layered mountain ranges at sunrise with pink sky](https://unsplash.com/photos/layered-mountain-ranges-at-sunrise-with-pink-sky-3yEpYo0WaII), [Unsplash License](https://unsplash.com/license).
 - `forest-v2.webp`, `forest-v2-preview.webp` — Jozef020, [Lush forest reflection on calm green water](https://commons.wikimedia.org/wiki/File:Lush_forest_reflection_on_calm_green_water1.jpg), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).

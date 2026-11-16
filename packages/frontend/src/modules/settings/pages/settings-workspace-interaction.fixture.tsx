@@ -185,8 +185,14 @@ try {
   await flush(render);
   let items = flatten(workspace);
   expect(items.some((item) => item.type === 'output' && item.props.children === 'Loading Updates…')).toBe(true);
+  expect(items.some((item) => item.type === SettingsPanel && item.props.label === 'Store' && item.props.active === false)).toBe(true);
+  expect(items.some((item) => item.type === SettingsPanel && item.props.label === 'Updates' && item.props.active === true)).toBe(true);
+  category = 'store';
+  await flush(render);
+  items = flatten(workspace);
   expect(items.some((item) => item.type === SettingsPanel && item.props.label === 'Store' && item.props.active === true)).toBe(true);
-  expect(items.some((item) => item.type === SettingsPanel && item.props.label === 'Updates')).toBe(false);
+  expect(items.some((item) => item.type === 'output' && item.props.children === 'Loading Updates…')).toBe(false);
+  category = 'updates';
   pending = false;
   await flush(render);
   items = flatten(workspace);
@@ -216,6 +222,41 @@ try {
   const clickClear = clear.props.onClick as () => void;
   await flush(clickClear);
   expect(flatten(getPortal().children).some((element) => element.type === 'ul' && element.props.id)).toBe(false);
+
+  const typeSearch = async (value: string) => {
+    const onChange = input()?.props.onChange as (event: { target: { value: string } }) => void;
+    await flush(() => onChange({ target: { value } }));
+  };
+  const escapeSearch = async (element: ReactElement<Record<string, unknown>> | undefined) => {
+    let prevented = false;
+    let stopped = false;
+    const onKeyDown = element?.props.onKeyDown as (event: { key: string; preventDefault: () => void; stopPropagation: () => void }) => void;
+    await flush(() =>
+      onKeyDown({
+        key: 'Escape',
+        preventDefault: () => {
+          prevented = true;
+        },
+        stopPropagation: () => {
+          stopped = true;
+        },
+      }),
+    );
+    return { prevented, stopped };
+  };
+  await typeSearch('server name');
+  expect(await escapeSearch(input())).toEqual({ prevented: true, stopped: true });
+  expect(input()?.props.value).toBe('');
+  expect(await escapeSearch(input())).toEqual({ prevented: false, stopped: false });
+  await typeSearch('   ');
+  expect(await escapeSearch(input())).toEqual({ prevented: true, stopped: true });
+  expect(input()?.props.value).toBe('');
+  await typeSearch('server name');
+  const focusedResult = flatten(getPortal().children).find(
+    (element) => element.type === 'button' && flatten(element.props.children as ReactNode).some((child) => child.props.children === 'Server name'),
+  );
+  expect(await escapeSearch(focusedResult)).toEqual({ prevented: true, stopped: true });
+  expect(input()?.props.value).toBe('');
 
   const blurInput = input();
   if (typeof blurInput?.props.onChange !== 'function') throw new Error('Settings search input handler missing before blur');

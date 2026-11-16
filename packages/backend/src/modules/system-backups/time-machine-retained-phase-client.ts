@@ -70,7 +70,13 @@ export async function callProtectedRetainedRoot(
   method: 'POST' | 'GET' = 'POST',
   allowNotFound = false,
 ) {
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 15 * 60_000) throw fail();
+  const backgroundWait =
+    method === 'POST' &&
+    (/^\/v1\/core-bootstrap-source-inspection\/(prepare|approve)$/.test(route) ||
+      route === '/v1/core-restore-runtime/wait' ||
+      route === '/v1/core-clean-target-reconciliation/wait' ||
+      route === '/v1/core-clean-target-preparation/wait');
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > (backgroundWait ? 1_900_000 : 15 * 60_000)) throw fail();
   const identity = await controllerCaptureSocketIdentity(socketPath);
   const bytes = method === 'GET' ? Buffer.alloc(0) : Buffer.from(JSON.stringify(body));
   if (bytes.length > 4096) throw fail();

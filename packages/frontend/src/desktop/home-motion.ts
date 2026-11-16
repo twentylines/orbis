@@ -4,7 +4,7 @@ import { dockMotionDuration, sectionMotionEasing } from './section-motion-geomet
 
 const tileSelector = [
   '.workspace-heading',
-  '.workspace-widget:not(.workspace-widget-applications) > section',
+  '.workspace-widget',
   '.workspace-apps > .workspace-section-heading',
   '.workspace-app',
   '.workspace-apps .workspace-message',
@@ -12,8 +12,7 @@ const tileSelector = [
   '.workspace-all-hidden',
   '.cluster-home > *',
 ].join(', ');
-const openingSelector =
-  '.workspace-heading, .workspace-apps, .workspace-widget:not(.workspace-widget-applications) > section, .workspace-all-hidden, .cluster-home > *';
+const openingSelector = '.workspace-heading, .workspace-widget, .workspace-all-hidden, .cluster-home > *';
 
 export function useHomeMotion(key: string, active: boolean, direction: number) {
   const entrance = useRef({ key, direction });
@@ -33,7 +32,10 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
       const view = root.querySelector<HTMLElement>('.desktop-view-home');
       if (!view) return;
       view.dataset.homeEntry = key;
-      const tiles = [...view.querySelectorAll<HTMLElement>(openingSelector)].filter((tile) => !entered.has(tile));
+      const tiles = [...view.querySelectorAll<HTMLElement>(openingSelector)].filter((tile) => {
+        const parent = tile.parentElement?.closest(openingSelector);
+        return !entered.has(tile) && (!parent || !view.contains(parent));
+      });
       if (!tiles.length) return;
       const distance = opening ? Math.min(72, innerWidth * 0.08) : Math.min(40, innerWidth * 0.055) * entryDirection;
       const now = document.timeline.currentTime;

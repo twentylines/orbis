@@ -12,6 +12,31 @@ const region = { left: 40, top: 80, width: 240, height: 100 };
 const base = [0, 0, 0] as const;
 
 describe('wallpaper text contrast', () => {
+  test('session ink follows the visible shade and dim layers rather than the unshaded photograph', () => {
+    const bright = sample(() => [245, 245, 245, 255]);
+    expect(wallpaperTextColour(bright, viewport, region, base, false)).toBe('#000000');
+    expect(wallpaperTextColour({ ...bright, shade: [5, 15, 25, 0.75] }, viewport, region, base, false)).toBe('#ffffff');
+    const dark = sample(() => [15, 25, 35, 255]);
+    const paleTint = { ...dark, shade: [240, 245, 250, 0.85] as const };
+    expect(wallpaperTextColour(paleTint, viewport, region, base, false)).toBe('#000000');
+    expect(wallpaperTextColour({ ...paleTint, dim: 0.7 }, viewport, region, base, false)).toBe('#ffffff');
+  });
+
+  test('plain session ink chooses the stronger colour without relying on a shadow for a mixed bright photograph', () => {
+    const mixed = sample((x) => (x < 2 ? [60, 60, 60, 255] : [245, 245, 245, 255]));
+    const area = { left: 0, top: 0, width: 800, height: 800 };
+    expect(wallpaperTextColour(mixed, viewport, area, base, false)).toBe('#000000');
+    expect(
+      wallpaperTextColour(
+        sample(() => [15, 25, 35, 255]),
+        viewport,
+        area,
+        base,
+        false,
+      ),
+    ).toBe('#ffffff');
+  });
+
   test('uses light text on a dark image and dark text on a bright image regardless of interface mode', () => {
     expect(
       wallpaperTextColour(
@@ -47,6 +72,16 @@ describe('wallpaper text contrast', () => {
   test('uses shadow-supported light ink when a mixed photograph defeats both plain colours', () => {
     const image = sample((x) => (x < 8 ? [0, 0, 0, 255] : [255, 255, 255, 255]));
     expect(wallpaperTextColour(image, viewport, { left: 0, top: 0, width: 800, height: 80 }, base)).toBe('#ffffff');
+  });
+  test('session labels choose the stronger plain colour without relying on a shadow', () => {
+    const image = sample((x) => (x < 8 ? [90, 90, 90, 255] : [255, 255, 255, 255]));
+    const across = { left: 0, top: 0, width: 800, height: 80 };
+    expect(wallpaperTextColour(image, viewport, across, base)).toBe('#ffffff');
+    expect(wallpaperTextColour(image, viewport, across, base, false)).toBe('#000000');
+  });
+  test('plain black preserves contrast over midtone wallpaper where near-black and white both fall below AA', () => {
+    const midtone = sample((x) => (x < 8 ? [120, 120, 120, 255] : [155, 155, 155, 255]));
+    expect(wallpaperTextColour(midtone, viewport, { left: 0, top: 0, width: 800, height: 80 }, base, false)).toBe('#000000');
   });
   test('honours cover cropping and the saved horizontal position', () => {
     const image = sample((x) => (x < 8 ? [0, 0, 0, 255] : [255, 255, 255, 255]));

@@ -84,6 +84,8 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
     'oled-panel',
     'glass-filter',
     'chrome-filter',
+    'menu-surface',
+    'menu-muted',
   ];
   const next = new Map<string, string>();
   const set = (name: string, value: string) => next.set(name, value);
@@ -141,10 +143,21 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   }
   if (opacity !== null) surface[3] = opacity / 100;
   if (chromeOpacity !== null) chrome[3] = chromeOpacity / 100;
+  const defaultChromeOpacity = mode === 'dark' ? 0.72 : 0.84;
+  const defaultChromeChanged = !solid && chromeOpacity === null && chrome[3] > defaultChromeOpacity;
+  if (defaultChromeChanged) chrome[3] = defaultChromeOpacity;
   if (solid) surface[3] = chrome[3] = panel[3] = 1;
   const tintedSurface = [...mix(surface, preset, tint).slice(0, 3), surface[3]] as Rgba;
-  let tintedChrome = [...mix(chrome, preset, tint).slice(0, 3), chrome[3]] as Rgba;
+  const relatedDarkGlass = mode === 'dark' && !solid;
+  let tintedChrome = [...mix(relatedDarkGlass ? surface : chrome, preset, tint).slice(0, 3), chrome[3]] as Rgba;
   const originalChrome = tintedChrome;
+  const menuOpacity = mode === 'dark' ? 0.72 : 0.86;
+  const menuSurface: Rgba = [
+    ...tintedSurface.slice(0, 3),
+    solid ? 1 : Math.max(mode === 'dark' ? 0.72 : 0.8, Math.min(menuOpacity, tintedSurface[3])),
+  ] as Rgba;
+  set('menu-surface', css(menuSurface));
+  set('menu-muted', css(readable(base('muted'), backgrounds(menuSurface), mode === 'dark')));
   const chromeInk = colour(source.getPropertyValue('--desktop-chrome-ink').trim());
   const chromeBackgrounds = (value: Rgba) => backgrounds(value).flatMap((background) => [background, mix(background, white, 0.2)]);
   let chromeAdjusted = false;
@@ -163,7 +176,7 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
     set('surface', css(tintedSurface));
     set('panel-dark', css([...mix(panel, preset, tint).slice(0, 3), panel[3]] as Rgba));
   }
-  if (materialChanged || chromeAdjusted) set('chrome', css(tintedChrome));
+  if (materialChanged || chromeAdjusted || defaultChromeChanged || relatedDarkGlass) set('chrome', css(tintedChrome));
   if (solid || blur === 0) set('glass-filter', 'none');
   else if (blur !== null) set('glass-filter', `blur(${blur}px) saturate(1.2)`);
   const chromeBlur = numeric('chromeBlur', 0, 64);

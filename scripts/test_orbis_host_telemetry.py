@@ -42,6 +42,96 @@ class HostTelemetryTests(unittest.TestCase):
         with mock.patch.object(MODULE.time, "monotonic", return_value=now):
             return self.reader.collect()
 
+    def test_battery_requires_one_present_physical_battery_and_valid_capacity(self):
+        base = self.sys / "class/power_supply/BAT0"
+        self.assertIsNone(self.reader.battery())
+        for key, value in {"type": "Battery", "present": "1", "capacity": "19", "status": "Charging"}.items():
+            self.put(base / key, value)
+        self.assertEqual({key: self.collect(10)["battery"][key] for key in ("percent", "charging")}, {"percent": 19, "charging": True})
+        self.put(base / "status", "Unknown")
+        self.assertEqual({key: self.reader.battery()[key] for key in ("percent", "charging")}, {"percent": 19, "charging": None})
+        self.put(base / "capacity", "101")
+        self.assertIsNone(self.reader.battery())
+        self.put(base / "capacity", "0")
+        self.put(base / "present", "0")
+        self.assertIsNone(self.reader.battery())
+        self.put(base / "present", "1")
+        other = self.sys / "class/power_supply/BAT1"
+        for key, value in {"type": "Battery", "present": "1", "capacity": "80", "status": "Discharging"}.items():
+            self.put(other / key, value)
+        self.assertIsNone(self.reader.battery())
+        for path, now, full in ((base, "100", "200"), (other, "600", "800")):
+            self.put(path / "energy_now", now)
+            self.put(path / "energy_full", full)
+        self.assertEqual({key: self.reader.battery()[key] for key in ("percent", "charging")}, {"percent": 70, "charging": None})
+        self.put(other / "energy_now", "801")
+        self.assertIsNone(self.reader.battery())
+
+    def test_peripheral_batteries_are_not_reported_as_host_power(self):
+        peripheral = self.sys / "class/power_supply/mouse"
+        for key, value in {"type": "Battery", "scope": "Device", "present": "1", "capacity": "95"}.items():
+            self.put(peripheral / key, value)
+        self.assertIsNone(self.reader.battery())
+        host = self.sys / "class/power_supply/BAT0"
+        for key, value in {"type": "Battery", "scope": "System", "present": "1", "capacity": "52", "status": "Discharging"}.items():
+            self.put(host / key, value)
+        self.assertEqual({key: self.reader.battery()[key] for key in ("percent", "charging")}, {"percent": 52, "charging": False})
+
+    def test_battery_energy_health_power_and_remaining_time_use_kernel_units(self):
+        base = self.sys / "class/power_supply/BAT0"
+        for key, value in {"type": "Battery", "present": "1", "capacity": "76", "status": "Discharging",
+                "energy_now": "38000000", "energy_full": "50000000", "energy_full_design": "62500000",
+                "power_now": "10000000", "cycle_count": "173", "manufacturer": "Fixture", "model_name": "Laptop battery"}.items():
+            self.put(base / key, value)
+        sample = self.reader.battery()
+        self.assertEqual(sample, {"percent": 76, "charging": False, "state": "discharging", "healthPercent": 80.0,
+            "powerWatts": 10.0, "energyNowWh": 38.0, "energyFullWh": 50.0, "energyDesignWh": 62.5,
+            "timeRemainingSeconds": 13680, "cycleCount": 173, "manufacturer": "Fixture", "model": "Laptop battery", "batteryCount": 1})
+        self.put(base / "time_to_empty_now", "4200")
+        self.assertEqual(self.reader.battery()["timeRemainingSeconds"], 4200)
+        self.put(base / "status", "Full")
+        self.assertIsNone(self.reader.battery()["timeRemainingSeconds"])
+
+    def test_charge_only_driver_provides_health_and_estimate_without_inventing_energy(self):
+        base = self.sys / "class/power_supply/BAT0"
+        for key, value in {"type": "Battery", "status": "Discharging", "charge_now": "2000000", "charge_full": "4000000",
+                "charge_full_design": "5000000", "current_now": "-1000000", "voltage_now": "12000000"}.items():
+            self.put(base / key, value)
+        sample = self.reader.battery()
+        self.assertEqual(sample["percent"], 50)
+        self.assertEqual(sample["healthPercent"], 80)
+        self.assertEqual(sample["powerWatts"], 12)
+        self.assertEqual(sample["timeRemainingSeconds"], 7200)
+        self.assertIsNone(sample["energyNowWh"])
+        self.assertIsNone(sample["energyFullWh"])
+        self.put(base / "status", "Charging")
+        self.assertEqual(self.reader.battery()["timeRemainingSeconds"], 7200)
+
+    def test_optional_malformed_battery_details_do_not_hide_valid_charge(self):
+        base = self.sys / "class/power_supply/BAT0"
+        for key, value in {"type": "Battery", "capacity": "52", "status": "Unknown", "power_now": "NaN",
+                "energy_full_design": "-1", "cycle_count": "-1", "model_name": "bad\nlabel"}.items():
+            self.put(base / key, value)
+        sample = self.reader.battery()
+        self.assertEqual(sample["percent"], 52)
+        self.assertIsNone(sample["charging"])
+        for field in ("healthPercent", "powerWatts", "timeRemainingSeconds", "cycleCount", "model"):
+            self.assertIsNone(sample[field])
+
+    def test_multiple_batteries_do_not_invent_combined_discharge_or_health(self):
+        for name, status, now in (("BAT0", "Charging", "25000000"), ("BAT1", "Discharging", "15000000")):
+            base = self.sys / "class/power_supply" / name
+            for key, value in {"type": "Battery", "capacity": "50", "status": status, "energy_now": now,
+                    "energy_full": "40000000", "power_now": "10000000"}.items():
+                self.put(base / key, value)
+        sample = self.reader.battery()
+        self.assertEqual(sample["percent"], 50)
+        self.assertEqual(sample["batteryCount"], 2)
+        self.assertEqual(sample["state"], "unknown")
+        self.assertIsNone(sample["charging"])
+        for field in ("powerWatts", "healthPercent", "timeRemainingSeconds", "cycleCount"):
+            self.assertIsNone(sample[field])
+
     def test_host_scope_and_first_sample_do_not_invent_rates(self):
         sample = self.collect(10)
         self.assertTrue(sample["available"])

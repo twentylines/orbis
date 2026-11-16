@@ -6,6 +6,7 @@ import { setRestoreRecoveryRequired } from '@/common/backup-maintenance';
 import { readRootRestorationState } from '@/common/restoration-root-status';
 import { retainedNormalBootstrapCapability, RetainedRootTransaction } from './time-machine-retained-root-client';
 import { readTerminalJson } from './backup-restore-terminal-record';
+import { finalizeTerminalRestoreBeforeStartup } from './backup-restore-terminal-cleanup';
 
 vi.mock('./backup-restore-journal', () => ({
   BackupRestoreJournal: { active: vi.fn(), latest: vi.fn() },
@@ -81,13 +82,83 @@ it('allows a later ordinary startup without consulting an expired lease when roo
   expect(BackupRestoreJournal.latest).toHaveBeenCalledOnce();
   expect(RetainedRootTransaction.read).not.toHaveBeenCalled();
 });
-it('rejects a changed reconciliation receipt', async () => {
+it('rejects a changed reconciliation receipt after waiting for the helper', async () => {
+  vi.mocked(BackupRestoreJournal.latest)
+    .mockResolvedValueOnce(undefined)
+    .mockResolvedValue(journal as never);
   vi.mocked(readTerminalJson).mockResolvedValue({ ...receipt, operationSha256: 'changed' });
   await expect(run()).rejects.toThrow('unsafe restore');
 });
-it('holds startup when root is checking but the terminal journal is missing', async () => {
+it('waits without starting the application until the unavailable helper reports idle', async () => {
   vi.mocked(BackupRestoreJournal.latest).mockResolvedValue(undefined);
-  await expect(run()).rejects.toThrow('unsafe restore');
+  vi.mocked(readRootRestorationState).mockResolvedValueOnce('checking').mockResolvedValue('idle');
+  const onHeld = vi.fn();
+  const initialize = vi.fn();
+  const pending = waitForRestoreStartup({ dataDirectory: '/data', controller: candidate.slice(0, 12), onHeld }).then((role) => {
+    initialize(role);
+    return role;
+  });
+  await vi.waitFor(() => expect(onHeld).toHaveBeenCalledOnce());
+  expect(initialize).not.toHaveBeenCalled();
+  expect(setRestoreRecoveryRequired).not.toHaveBeenCalled();
+  expect(RetainedRootTransaction.read).not.toHaveBeenCalled();
+  expect(readTerminalJson).not.toHaveBeenCalled();
+  expect(finalizeTerminalRestoreBeforeStartup).not.toHaveBeenCalled();
+  expect(await pending).toBe('ordinary');
+  expect(initialize).toHaveBeenCalledExactlyOnceWith('ordinary');
+  expect(BackupRestoreJournal.active).toHaveBeenCalledTimes(2);
+  expect(readRootRestorationState).toHaveBeenCalledTimes(2);
+  expect(onHeld).toHaveBeenCalledOnce();
+});
+
+it.each(['preparing', 'rolling-back'])('keeps holding when helper unavailability is followed by an active %s restore', async (phase) => {
+  vi.mocked(BackupRestoreJournal.latest).mockResolvedValue(undefined);
+  vi.mocked(BackupRestoreJournal.active)
+    .mockResolvedValueOnce(undefined)
+    .mockResolvedValue({ ...journal, state: { ...journal.state, phase, decision: phase === 'rolling-back' ? 'rollback' : null } } as never);
+  vi.mocked(restoreStartupAllowed).mockReturnValue(false);
+  const controller = new AbortController();
+  const onHeld = vi.fn();
+  const initialize = vi.fn();
+  const pending = waitForRestoreStartup({
+    dataDirectory: '/data',
+    controller: candidate.slice(0, 12),
+    signal: controller.signal,
+    onHeld,
+  }).then(initialize);
+  await vi.waitFor(() => expect(restoreStartupAllowed).toHaveBeenCalled(), { timeout: 2000 });
+  expect(initialize).not.toHaveBeenCalled();
+  expect(onHeld).toHaveBeenCalledOnce();
+  expect(readRootRestorationState).toHaveBeenCalledOnce();
+  expect(setRestoreRecoveryRequired).not.toHaveBeenCalled();
+  expect(RetainedRootTransaction.read).not.toHaveBeenCalled();
+  expect(finalizeTerminalRestoreBeforeStartup).not.toHaveBeenCalled();
+  const stopped = expect(pending).rejects.toHaveProperty('name', 'AbortError');
+  controller.abort();
+  await stopped;
+});
+
+it('cancels the helper wait without entering application initialization or terminal recovery', async () => {
+  vi.mocked(BackupRestoreJournal.latest).mockResolvedValue(undefined);
+  const controller = new AbortController();
+  const onHeld = vi.fn();
+  const initialize = vi.fn();
+  const pending = waitForRestoreStartup({
+    dataDirectory: '/data',
+    controller: candidate.slice(0, 12),
+    signal: controller.signal,
+    onHeld,
+  }).then(initialize);
+  await vi.waitFor(() => expect(onHeld).toHaveBeenCalledOnce());
+  const stopped = expect(pending).rejects.toHaveProperty('name', 'AbortError');
+  controller.abort();
+  await stopped;
+  expect(initialize).not.toHaveBeenCalled();
+  expect(setRestoreRecoveryRequired).not.toHaveBeenCalled();
+  expect(RetainedRootTransaction.read).not.toHaveBeenCalled();
+  expect(readTerminalJson).not.toHaveBeenCalled();
+  expect(finalizeTerminalRestoreBeforeStartup).not.toHaveBeenCalled();
+  expect(BackupRestoreJournal.active).toHaveBeenCalledOnce();
 });
 
 it('holds the first candidate before any ordinary startup when protected capability requires it', async () => {

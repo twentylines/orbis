@@ -14,7 +14,7 @@ export function useSignInBoot() {
     active.current = true;
     return () => {
       active.current = false;
-      exit.current?.cancel();
+      if (!shown.current) exit.current?.cancel();
       if (shown.current) void session.finish();
     };
   }, [session]);

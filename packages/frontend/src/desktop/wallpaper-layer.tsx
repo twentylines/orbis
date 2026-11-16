@@ -7,6 +7,7 @@ import { publicThemePackWallpaper, subscribeThemePackAppearance, themePackAppear
 import './wallpaper.css';
 import { setWallpaperTextSample } from './wallpaper-text';
 import type { WallpaperPixels } from './wallpaper-contrast';
+import { WallpaperTransition } from './wallpaper-transition';
 
 const contrastPixels = new WeakMap<HTMLImageElement, WallpaperPixels>();
 
@@ -34,35 +35,51 @@ function WallpaperImages({
   onError?: () => void;
   onReady: (image: HTMLImageElement) => void;
 }) {
-  const [frames, setFrames] = useState([{ source, ready: false }]);
-  useEffect(() => {
-    setFrames((previous) =>
-      previous.some((frame) => frame.source === source)
-        ? previous.filter((frame) => frame.source === source)
-        : [...previous.filter((frame) => frame.ready).slice(-1), { source, ready: false }],
+  const callbacks = useRef({ onReady, onError });
+  callbacks.current = { onReady, onError };
+  const render = useRef<(frames: ReturnType<WallpaperTransition['snapshot']>) => void>(() => undefined);
+  const transition = useRef<WallpaperTransition | null>(null);
+  if (!transition.current)
+    transition.current = new WallpaperTransition(
+      source,
+      imageStyle,
+      (frames) => render.current(frames),
+      (image) => callbacks.current.onReady(image),
+      () => callbacks.current.onError?.(),
     );
-  }, [source]);
+  const model = transition.current;
+  const [frames, setFrames] = useState(() => model.snapshot());
+  render.current = setFrames;
+  const decoding = useRef(new WeakSet<HTMLImageElement>());
+  const loaded = (id: number, image: HTMLImageElement) => {
+    if (!model.needsDecode(id) || decoding.current.has(image)) return;
+    decoding.current.add(image);
+    const ready = () => {
+      if (image.complete && image.naturalWidth > 0) model.loaded(id);
+      else model.error(id);
+    };
+    if (typeof image.decode === 'function') void image.decode().then(ready, ready);
+    else ready();
+  };
+  useLayoutEffect(() => {
+    model.activate();
+    return () => model.deactivate();
+  }, [model]);
+  useLayoutEffect(() => model.request(source, imageStyle, reduced), [model, source, imageStyle, reduced]);
   return frames.map((frame) => (
     <img
-      key={frame.source}
+      key={frame.id}
+      ref={(image) => {
+        model.attach(frame.id, image);
+        if (image?.complete && image.naturalWidth > 0) queueMicrotask(() => loaded(frame.id, image));
+      }}
       src={frame.source}
       alt=""
       decoding="async"
-      style={{ ...imageStyle, opacity: frame.ready ? 1 : 0, transitionDuration: reduced ? '0s' : undefined }}
-      onLoad={(event) => {
-        if (frame.source === source) onReady(event.currentTarget);
-        // Cached images need an initial computed opacity before the fade starts.
-        if (!reduced) getComputedStyle(event.currentTarget).opacity;
-        setFrames((previous) => {
-          const ready = previous.map((item) => (item.source === frame.source ? { ...item, ready: true } : item));
-          return reduced ? ready.filter((item) => item.source === source) : ready;
-        });
-      }}
-      onError={frame.source === source ? onError : undefined}
-      onTransitionEnd={(event) => {
-        if (event.propertyName === 'opacity' && frame.source === source && frame.ready)
-          setFrames((previous) => previous.filter((item) => item.source === source));
-      }}
+      data-wallpaper-displayed={frame.displayed || undefined}
+      style={{ ...frame.style, opacity: frame.opacity }}
+      onLoad={(event) => loaded(frame.id, event.currentTarget)}
+      onError={() => model.error(frame.id)}
     />
   ));
 }
@@ -179,7 +196,8 @@ export function WallpaperLayer({
     [source, value.wallpaperFit, value.wallpaperX, value.wallpaperY, value.wallpaperDim],
   );
   useEffect(() => {
-    for (const image of layer.current?.querySelectorAll('img') ?? []) if (image.complete) publishContrast(image);
+    for (const image of layer.current?.querySelectorAll<HTMLImageElement>('img[data-wallpaper-displayed="true"]') ?? [])
+      if (image.complete) publishContrast(image);
   }, [publishContrast]);
   useEffect(() => {
     const desktop = layer.current?.parentElement?.classList.contains('desktop');
@@ -210,9 +228,11 @@ export function WallpaperLayer({
     <div
       ref={layer}
       className="desktop-wallpaper-layer"
+      data-wallpaper-managed="true"
       aria-hidden="true"
       data-custom={Boolean(hash)}
       data-protect={protectedText}
+      data-wallpaper-reduced={Boolean(systemReducedMotion) || value.motion === 'reduced' || value.lowEffects || undefined}
       data-wallpaper-state={hash ? (source ? 'ready' : custom.failed ? 'unavailable' : 'loading') : 'ready'}
       style={{ '--wallpaper-dim': value.wallpaperDim / 100 } as CSSProperties}
     >

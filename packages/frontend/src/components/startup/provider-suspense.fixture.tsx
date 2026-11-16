@@ -11,6 +11,7 @@ const doc = {
   activeElement: null,
   body: { nodeName: 'BODY' },
   defaultView: null as object | null,
+  querySelector: () => null,
   documentElement: {
     dataset: {},
     style: {

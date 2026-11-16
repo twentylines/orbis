@@ -169,10 +169,108 @@ class HostTelemetry:
                 failed += 1
         return result, max(0, len(rows) - LIMIT), failed
 
+    def battery_counter(self, base, name, *, signed=False):
+        raw = self.small(base / name)
+        if raw is None or re.fullmatch(r"-?[0-9]{1,16}" if signed else r"[0-9]{1,16}", raw) is None:
+            return None
+        value = int(raw)
+        return abs(value) if abs(value) <= MAX_SAFE_INTEGER else None
+
+    def battery(self):
+        try:
+            with os.scandir(self.sys / "class/power_supply") as entries:
+                names = []
+                for entry in entries:
+                    if len(names) >= LIMIT or not name_valid(entry.name):
+                        return None
+                    names.append(entry.name)
+            batteries = []
+            for name in names:
+                base = self.sys / "class/power_supply" / name
+                kind = self.small(base / "type")
+                if kind is None:
+                    return None
+                if kind != "Battery" or self.small(base / "scope") == "Device":
+                    continue
+                present = self.small(base / "present")
+                if present == "0":
+                    continue
+                if present not in {None, "1"}:
+                    return None
+                raw_capacity = self.small(base / "capacity")
+                capacity = self.battery_counter(base, "capacity")
+                energy_now, energy_full, energy_design = (self.battery_counter(base, key) for key in
+                    ("energy_now", "energy_full", "energy_full_design"))
+                charge_now, charge_full, charge_design = (self.battery_counter(base, key) for key in
+                    ("charge_now", "charge_full", "charge_full_design"))
+                if raw_capacity is None:
+                    now, full = (energy_now, energy_full) if energy_full else (charge_now, charge_full)
+                    capacity = (now * 100 + full // 2) // full if now is not None and full and now <= full else None
+                if capacity is None or capacity > 100:
+                    return None
+                status = self.small(base / "status")
+                state = {"Charging": "charging", "Discharging": "discharging", "Full": "full", "Not charging": "idle"}.get(status, "unknown")
+                charging = True if state == "charging" else False if state != "unknown" else None
+                power = self.battery_counter(base, "power_now", signed=True)
+                current = self.battery_counter(base, "current_now", signed=True)
+                voltage = self.battery_counter(base, "voltage_now")
+                watts = power / 1_000_000 if power is not None else current * voltage / 1_000_000_000_000 if current is not None and voltage else None
+                if watts is not None and watts > 1_000_000:
+                    watts = None
+                if energy_now is not None and energy_full is not None and energy_now > energy_full:
+                    energy_now = None
+                health = energy_full * 100 / energy_design if energy_full is not None and energy_design else charge_full * 100 / charge_design if charge_full is not None and charge_design else None
+                remaining = None
+                if state in {"charging", "discharging"}:
+                    remaining = self.battery_counter(base, "time_to_full_now" if charging else "time_to_empty_now")
+                    if not remaining:
+                        amount = energy_full - energy_now if charging and energy_full is not None and energy_now is not None else energy_now if not charging else None
+                        if amount is not None and watts and watts > 0:
+                            remaining = round(amount / 1_000_000 / watts * 3600)
+                        elif current and charge_now is not None and (not charging or charge_full is not None and charge_full >= charge_now):
+                            remaining = round((charge_full - charge_now if charging else charge_now) / current * 3600)
+                    if remaining is not None and not 0 <= remaining <= 2_592_000:
+                        remaining = None
+                labels = {}
+                for key, attribute in (("manufacturer", "manufacturer"), ("model", "model_name")):
+                    value = self.small(base / attribute)
+                    labels[key] = value if value and not re.search(r"[\x00-\x1f\x7f]", value) else None
+                batteries.append({"percent": capacity, "charging": charging, "state": state,
+                    "healthPercent": round(min(100, health), 1) if health is not None else None,
+                    "powerWatts": round(watts, 3) if watts is not None else None,
+                    "energyNowWh": energy_now / 1_000_000 if energy_now is not None else None,
+                    "energyFullWh": energy_full / 1_000_000 if energy_full is not None else None,
+                    "energyDesignWh": energy_design / 1_000_000 if energy_design is not None else None,
+                    "timeRemainingSeconds": remaining, "cycleCount": self.battery_counter(base, "cycle_count"), **labels})
+            if len(batteries) == 1:
+                return {**batteries[0], "batteryCount": 1}
+            if not batteries or any(row["energyNowWh"] is None or not row["energyFullWh"] or row["energyNowWh"] > row["energyFullWh"] for row in batteries):
+                return None
+            now, full = (sum(row[key] for row in batteries) for key in ("energyNowWh", "energyFullWh"))
+            if full > MAX_SAFE_INTEGER / 1_000_000:
+                return None
+            flags, states = {row["charging"] for row in batteries}, {row["state"] for row in batteries}
+            state = states.pop() if len(states) == 1 else "unknown"
+            power = sum(row["powerWatts"] for row in batteries) if state != "unknown" and all(row["powerWatts"] is not None for row in batteries) else None
+            design = sum(row["energyDesignWh"] for row in batteries) if all(row["energyDesignWh"] is not None for row in batteries) else None
+            remaining = None
+            if state == "discharging" and power:
+                remaining = round(now / power * 3600)
+            elif state == "charging" and all(row["timeRemainingSeconds"] is not None for row in batteries):
+                remaining = max(row["timeRemainingSeconds"] for row in batteries)
+            if remaining is not None and remaining > 2_592_000:
+                remaining = None
+            return {"percent": min(100, int(now * 100 / full + 0.5)), "charging": flags.pop() if len(flags) == 1 else None,
+                "state": state, "healthPercent": round(min(100, full * 100 / design), 1) if design else None,
+                "powerWatts": power, "energyNowWh": now, "energyFullWh": full, "energyDesignWh": design,
+                "timeRemainingSeconds": remaining, "cycleCount": None, "manufacturer": None, "model": None, "batteryCount": len(batteries)}
+        except (OSError, ValueError, OverflowError):
+            return None
+
     def collect(self):
         now = time.monotonic()
         sampled_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        result = {"available": True, "sampledAt": sampled_at, "filesystems": [], "network": [], "disks": [], "omitted": {}, "unavailable": []}
+        result = {"available": True, "sampledAt": sampled_at, "battery": self.battery(), "filesystems": [], "network": [], "disks": [], "omitted": {}, "unavailable": []}
         for section in ("network", "disks", "filesystems"):
             try:
                 values = self.filesystems() if section == "filesystems" else getattr(self, section)(now)

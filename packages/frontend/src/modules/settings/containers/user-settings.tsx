@@ -5,12 +5,18 @@ import type { TranslatableError } from '@/types/error.types';
 import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
+import { lazy } from 'react';
 import { type SettingsFormValues, UserSettingsForm } from '../components/user-settings-form/user-settings-form';
 import { UpdateSchedules } from './automatic-updates-settings';
 import { ReleaseChannelSettings } from './release-channel-settings';
-import { SettingsBundleSettings } from '@/modules/system-backups/settings-bundle-settings';
-import { SystemBackupsSettings } from '@/modules/system-backups/system-backups-settings';
-import { HostTransferPanel } from '@/modules/host-transfer/host-transfer-panel';
+
+const SettingsBundleSettings = lazy(() =>
+  import('@/modules/system-backups/settings-bundle-settings').then((module) => ({ default: module.SettingsBundleSettings })),
+);
+const SystemBackupsSettings = lazy(() =>
+  import('@/modules/system-backups/system-backups-settings').then((module) => ({ default: module.SystemBackupsSettings })),
+);
+const HostTransferPanel = lazy(() => import('@/modules/host-transfer/host-transfer-panel').then((module) => ({ default: module.HostTransferPanel })));
 
 type Props = {
   initialValues?: SettingsFormValues;

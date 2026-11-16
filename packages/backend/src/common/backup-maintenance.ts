@@ -24,7 +24,26 @@ let acquiring = false;
 let recoveryRequired = process.env.NODE_ENV === 'production';
 let restoreRecoveryRequired = false;
 let resetRecoveryRequired = process.env.NODE_ENV === 'production';
+export const resetRecoveryHeld = () => resetRecoveryRequired;
+let resetActive = false;
+export const resetOperationActive = () => resetActive;
+export const setResetOperationActive = (active: boolean) => {
+  resetActive = active;
+};
 let settingsRestoreRecoveryRequired = false;
+let corePreparationRecoveryRequired = false;
+export const backupRecoveryOutsideResetActive = () =>
+  recoveryRequired ||
+  restoreRecoveryRequired ||
+  settingsRestoreRecoveryRequired ||
+  corePreparationRecoveryRequired ||
+  captureRecoveryRequired ||
+  captureInitializing;
+export const corePreparationRecoveryHeld = () => corePreparationRecoveryRequired;
+export const setCorePreparationRecoveryRequired = (required: boolean) => {
+  corePreparationRecoveryRequired = required;
+  if (!backupMaintenanceActive()) for (const notify of available) notify();
+};
 let captureRecoveryRequired = false;
 let captureInitializing = false;
 let initializedCaptureApproval: CoreCaptureCompletionDetails | undefined;
@@ -46,6 +65,7 @@ export const backupMaintenanceActive = () =>
   restoreRecoveryRequired ||
   resetRecoveryRequired ||
   settingsRestoreRecoveryRequired ||
+  corePreparationRecoveryRequired ||
   captureRecoveryRequired ||
   captureInitializing;
 export const backupMaintenanceOutsideResetActive = () =>
@@ -54,6 +74,7 @@ export const backupMaintenanceOutsideResetActive = () =>
   recoveryRequired ||
   restoreRecoveryRequired ||
   settingsRestoreRecoveryRequired ||
+  corePreparationRecoveryRequired ||
   captureRecoveryRequired ||
   captureInitializing;
 export const setSettingsRestoreRecoveryRequired = (required: boolean) => {
@@ -90,7 +111,8 @@ export async function initializeCoreCaptureRecovery<T>(
 ): Promise<T> {
   try {
     return await useVerifiedCoreCompletion(token, async (details) => {
-      if (!captureRecoveryRequired || !held || active !== 0 || captureInitializing) throw new Error('Core capture initialization is not available.');
+      if (!captureRecoveryRequired || !held || active !== 0 || captureInitializing || corePreparationRecoveryRequired)
+        throw new Error('Core capture initialization is not available.');
       captureInitializing = true;
       captureRecoveryRequired = false;
       initializedCaptureApproval = details;
@@ -118,7 +140,8 @@ export async function settleCoreCaptureRecovery(token: VerifiedCoreCompletion, c
       recoveryRequired ||
       restoreRecoveryRequired ||
       resetRecoveryRequired ||
-      settingsRestoreRecoveryRequired
+      settingsRestoreRecoveryRequired ||
+      corePreparationRecoveryRequired
     )
       throw new Error('Core capture continuation is not available.');
   };
@@ -148,7 +171,8 @@ export async function settleCoreCaptureAbortRecovery(
       recoveryRequired ||
       restoreRecoveryRequired ||
       resetRecoveryRequired ||
-      settingsRestoreRecoveryRequired
+      settingsRestoreRecoveryRequired ||
+      corePreparationRecoveryRequired
     )
       throw new Error('Core capture cancellation is not ready to settle.');
   };
@@ -178,7 +202,8 @@ export async function settleCoreCaptureEmptyAbortRecovery(
       recoveryRequired ||
       restoreRecoveryRequired ||
       resetRecoveryRequired ||
-      settingsRestoreRecoveryRequired
+      settingsRestoreRecoveryRequired ||
+      corePreparationRecoveryRequired
     )
       throw new Error('Early capture cancellation is not ready to settle.');
   };
@@ -229,18 +254,7 @@ export function enterBackupMutation(): (() => void) | null {
 // A queued continuation must finish before its already-admitted parent can drain.
 export function borrowBackupMutation(parent: () => void): (() => void) | null {
   const scope = mutationScopes.get(parent);
-  if (
-    !scope ||
-    scope.released ||
-    held ||
-    recoveryRequired ||
-    restoreRecoveryRequired ||
-    resetRecoveryRequired ||
-    settingsRestoreRecoveryRequired ||
-    captureRecoveryRequired ||
-    captureInitializing
-  )
-    return null;
+  if (!scope || scope.released || held || backupRecoveryOutsideResetActive() || resetRecoveryHeld()) return null;
   return holdBackupMutation();
 }
 
@@ -323,7 +337,7 @@ export function backupMaintenanceMiddleware(request: Request, response: Response
   // Event streams stay open for the browser session and do not mutate snapshot data.
   if (request.method === 'GET' && /^\/api\/sse\/(?:app|app-logs|runtipi-logs)\/?$/.test(pathname)) return next();
   if (
-    (recoveryRequired || restoreRecoveryRequired || resetRecoveryRequired || settingsRestoreRecoveryRequired) &&
+    (recoveryRequired || restoreRecoveryRequired || resetRecoveryRequired || settingsRestoreRecoveryRequired || corePreparationRecoveryRequired) &&
     !held &&
     (['GET', 'HEAD'].includes(request.method) || /^\/api\/auth\/(?:login|logout|verify-totp|passkeys\/login\/(?:options|verify))\/?$/.test(pathname))
   )

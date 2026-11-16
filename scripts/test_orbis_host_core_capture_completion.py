@@ -3,6 +3,8 @@ import copy
 import os
 import sys
 import threading
+import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest import mock
@@ -321,7 +323,9 @@ class ObservedReadinessTests(unittest.TestCase):
             'definitionSha256': W.CORE.TX.APPS.digest(self.controller['definition'])}}
         self.source = {'configuration': 'captured source'}
         self.hold = b'original source hold'
-        self.admission = SimpleNamespace(request={'sourceSha256': W.CORE.TX.APPS.digest(self.source)})
+        state = Path(self.enterContext(tempfile.TemporaryDirectory(prefix='orbis-completion-observed-')))
+        self.admission = SimpleNamespace(state=state, point='11111111-1111-4111-8111-111111111111',
+            request={'sourceSha256': W.CORE.TX.APPS.digest(self.source)})
         self.capture = SimpleNamespace(verify=mock.Mock(), source=lambda: self.source,
                                      observation=lambda *_: copy.deepcopy(self.controller))
         self.manager = SimpleNamespace(capture=self.capture, controller_marker=lambda _: self.hold)

@@ -75,7 +75,9 @@ test('keeps active counts while canonical acknowledgements are still unknown', (
   expect(markup).toContain('1 active operation, checking saved task alerts');
   expect(markup).toContain('data-attention-state="loading"');
   expect(markup).toContain('aria-busy="true"');
-  expect(markup.match(/<a /g)?.length).toBe(1);
+  expect(markup).toContain('<button');
+  expect(markup).toContain('aria-expanded="false"');
+  expect(markup).not.toContain('<a ');
   client.clear();
 });
 test('does not show an unread badge while the task centre is being viewed', () => {

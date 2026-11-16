@@ -25,6 +25,7 @@ class OrbisHostServiceSetupTests(unittest.TestCase):
         files, unit = SETUP.source_files(Path(__file__).parent)
         self.assertIn("orbis-host-discovery.py", [item.name for item in files])
         self.assertIn("orbis-host-core-capture-progress.py", [item.name for item in files])
+        self.assertIn("orbis-host-core-capture-restart-retirement.py", [item.name for item in files])
         self.assertEqual(unit.name, "orbis-host.service")
         self.assertIn("Environment=PYTHONDONTWRITEBYTECODE=1", unit.read_text().splitlines())
 
@@ -76,6 +77,25 @@ class OrbisHostServiceSetupTests(unittest.TestCase):
             SETUP.install_locked(Path("/srv/orbis"), "default", Path("/source"), resume=True)
         check.assert_called_once_with(Path("/srv/orbis"), "default", Path("/source"), allow_existing=True)
         stage.assert_not_called()
+
+    def test_release_runtime_enrollment_follows_healthy_service_verification(self):
+        events = []
+        ready = {'root': '/srv/orbis', 'dockerContext': 'default'}
+        runtime = mock.Mock()
+        runtime.install_current_locked.side_effect = lambda *args: events.append('runtime')
+        with mock.patch.object(SETUP, 'preflight', return_value=ready), \
+                mock.patch.object(SETUP, '_stage_service_files', side_effect=lambda *args, **values: events.append('stage')), \
+                mock.patch.object(SETUP, '_start_service', side_effect=lambda: events.append('start')), \
+                mock.patch.object(SETUP, '_verify_service', side_effect=lambda *args: events.append('healthy') or ready), \
+                mock.patch.object(SETUP, 'load_script', return_value=runtime) as loader:
+            self.assertEqual(SETUP.install_locked(Path('/srv/orbis'), 'default', Path('/source')), ready)
+        self.assertEqual(events, ['stage', 'start', 'healthy', 'runtime'])
+        loader.assert_called_once_with('orbis-host-core-runtime-install.py', 'orbis_core_runtime_setup')
+        arguments = runtime.install_current_locked.call_args.args
+        self.assertEqual(arguments[:3], (Path('/srv/orbis'), 'default', SETUP.HOST))
+        with mock.patch.object(SETUP.SERVICE, 'installed_manifest', return_value=ready) as current:
+            self.assertEqual(arguments[3](), ready)
+        current.assert_called_once_with(Path('/srv/orbis'), 'default')
 
     def test_peer_credentials_reject_another_pid_or_nonroot_listener(self):
         connection = mock.Mock()

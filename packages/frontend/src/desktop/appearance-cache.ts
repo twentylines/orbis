@@ -61,7 +61,7 @@ export function appearanceFromStored(value: unknown, options = appearanceOptions
       ? (stored.mode as CachedAppearance['mode'])
       : preset === 'graphite'
         ? 'dark'
-        : 'light',
+        : 'system',
     wallpaper,
     wallpaperMode:
       stored.wallpaperMode === 'theme' || stored.wallpaperMode === 'custom'
@@ -94,7 +94,7 @@ export const appearanceBootstrap = `(()=>{
     if(value&&typeof value==='object'&&!Array.isArray(value))stored=value;
   } catch {}
   const preset=options.presets.includes(stored.preset)?stored.preset:'frost';
-  const requested=options.modes.includes(stored.mode)?stored.mode:preset==='graphite'?'dark':'light';
+  const requested=options.modes.includes(stored.mode)?stored.mode:preset==='graphite'?'dark':'system';
   let systemDark=false;
   if(requested==='system') {
     try { systemDark=matchMedia('(prefers-color-scheme: dark)').matches; } catch {}

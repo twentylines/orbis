@@ -26,6 +26,7 @@ export async function openSettingsBackupReview(options: {
   directory: string;
   passphrase: string;
   signal: AbortSignal;
+  expectedBundleId?: string;
   progress?: (completedBytes: number) => void;
   inspect?: Partial<Record<OtherKind, (part: SettingsBundlePart, signal: AbortSignal) => Promise<SettingsBundleInspection>>>;
 }) {
@@ -61,6 +62,7 @@ export async function openSettingsBackupReview(options: {
     return { inspection, payload: null };
   };
   try {
+    if (options.expectedBundleId !== undefined && opened.manifest.id !== options.expectedBundleId) throw fail();
     const contents = [];
     const available: SettingsBackupSelection = { version: 1, settings: false, dashboard: false, wallpapers: false, themes: false, timeMachine: [] };
     for (const part of opened.parts) {

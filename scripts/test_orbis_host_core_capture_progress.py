@@ -241,6 +241,17 @@ class ProtectedObservationTests(unittest.TestCase):
         self.assertIsNone(self.progress.read(self.directory / 'missing', 'proof.json', optional=True))
         self.assertFalse((self.directory / 'missing').exists())
 
+    def test_large_selected_inventory_remains_observable_with_the_admitted_record_bound(self):
+        inventory = {'apps': [{'id': str(index), 'description': 'x' * (18 * 1024)} for index in range(512)]}
+        target = self.write('binding.json', inventory)
+        self.assertGreater(target.stat().st_size, 8 * 1024 * 1024)
+        self.assertLess(target.stat().st_size, 16 * 1024 * 1024)
+        self.assertEqual(self.progress.read(self.directory, 'binding.json')[0], inventory)
+        self.progress.unchanged()
+        self.write('binding.json', {'apps': [{'id': str(index), 'description': 'x' * (33 * 1024)} for index in range(512)]})
+        with self.assertRaises(ValueError):
+            module.CaptureProgress(self.progress.service, self.progress.reader).read(self.directory, 'binding.json')
+
     def test_absence_or_same_bytes_cannot_hide_inode_replacement(self):
         self.progress.read(self.directory, 'proof.json', optional=True)
         self.write()

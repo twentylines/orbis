@@ -29,12 +29,29 @@ export type HostDisk = {
   inFlight: number | null;
 };
 
+export type HostBattery = {
+  percent: number;
+  charging: boolean | null;
+  state?: 'charging' | 'discharging' | 'full' | 'idle' | 'unknown';
+  healthPercent?: number | null;
+  powerWatts?: number | null;
+  energyNowWh?: number | null;
+  energyFullWh?: number | null;
+  energyDesignWh?: number | null;
+  timeRemainingSeconds?: number | null;
+  cycleCount?: number | null;
+  manufacturer?: string | null;
+  model?: string | null;
+  batteryCount?: number;
+};
+
 export type HostTelemetry =
   | { available: false; reason: string }
   | {
       available: true;
       sampledAt: string;
       stale: boolean;
+      battery?: HostBattery | null;
       filesystems: HostFilesystem[];
       network: HostNetwork[];
       disks: HostDisk[];

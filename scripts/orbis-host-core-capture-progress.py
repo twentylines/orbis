@@ -13,8 +13,7 @@ class CaptureProgress:
 
     def read(self, directory, name, *, optional=False):
         key = (Path(directory), name)
-        maximum = (16 * 1024 * 1024 if name in {'job.json', 'checkpoint.json'}
-                   else 8 * 1024 * 1024 if name == 'binding.json' else 65536)
+        maximum = 16 * 1024 * 1024 if name in {'job.json', 'checkpoint.json', 'binding.json'} else 65536
         try:
             with self.W.A.protected_directory(directory) as parent:
                 with self.W.A.protected_file(parent, name, maximum) as body:

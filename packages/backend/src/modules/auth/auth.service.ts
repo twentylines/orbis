@@ -22,6 +22,10 @@ import { sensitiveAccountBinding } from './sensitive-action-context';
 const TOTP_SESSION_EXPIRATION = 60 * 5;
 const MAX_TOTP_ATTEMPTS = 5;
 
+export type OperatorActionRequest = Pick<Request, 'authMethod' | 'cookies'> & {
+  user?: Pick<NonNullable<Request['user']>, 'id' | 'operator'>;
+};
+
 @Injectable()
 export class AuthService {
   private operatorResetInProgress = false;
@@ -423,7 +427,7 @@ export class AuthService {
     return user;
   };
 
-  public async operatorActionContext(request: Request) {
+  public async operatorActionContext(request: OperatorActionRequest) {
     this.assertSecurityChangeAllowed();
     const session = request.cookies?.[SESSION_COOKIE_NAME];
     if (request.authMethod !== 'session' || request.user?.operator !== true || typeof session !== 'string' || session.length > 256)

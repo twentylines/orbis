@@ -7,7 +7,6 @@ import type { HostTemperature } from '@runtipi/common/schemas/host-sensors';
 import { IconActivity, IconArrowDown, IconArrowUp, IconCpu, IconDatabase, IconDeviceDesktopAnalytics, IconNetwork } from '@tabler/icons-react';
 import { useMetricHistory } from '@/desktop/metric-history';
 import { MetricChart } from '@/components/metric-chart/metric-chart';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { telemetryOptions } from '@/desktop/telemetry';
 import { formatUptime } from '@/desktop/uptime';
 import './monitor.css';
@@ -25,32 +24,7 @@ import { sensorOptions, useObserveSystemHealth } from '../components/use-system-
 import { MonitorDisclosure, MonitorUsage } from '../components/monitor-usage';
 import { DriveHealthView } from '../components/drive-health';
 
-const monitorSections = [
-  ['usage', 'Usage'],
-  ['performance', 'Performance'],
-  ['devices', 'Devices'],
-  ['drives', 'Drive health'],
-  ['sensors', 'Sensors'],
-] as const;
-type MonitorSection = (typeof monitorSections)[number][0];
-const sectionForHash = (hash: string): MonitorSection | null => {
-  if (hash === '#drive-health-title') return 'drives';
-  if (['#telemetry-cpu-title', '#telemetry-memory-title'].includes(hash)) return 'performance';
-  if (
-    [
-      '#host-storage-title',
-      '#host-network-title',
-      '#host-disk-activity-title',
-      '#device-history',
-      '#telemetry-disks-title',
-      '#telemetry-network-title',
-    ].includes(hash)
-  )
-    return 'devices';
-  if (['#sensors', '#host-temperatures-title', '#host-fans-title', '#host-gpus-title'].includes(hash)) return 'sensors';
-  if (['#containers', '#processes'].includes(hash)) return 'usage';
-  return null;
-};
+import { MonitorWorkspace, monitorSections, monitorSection, sectionForHash } from './monitor-navigation';
 
 const bytes = (value: number | null) => {
   if (value === null || !Number.isFinite(value) || value < 0) return 'Unavailable';
@@ -98,8 +72,7 @@ function ServerMonitor() {
   const location = useLocation();
   const navigate = useNavigate();
   const requestedSection = searchParams.get('section');
-  const section =
-    sectionForHash(location.hash) ?? (monitorSections.some(([value]) => value === requestedSection) ? (requestedSection as MonitorSection) : 'usage');
+  const section = monitorSection(requestedSection, location.hash);
   useEffect(() => {
     const linkedSection = sectionForHash(location.hash);
     if (!linkedSection || requestedSection === linkedSection) return;
@@ -111,7 +84,7 @@ function ServerMonitor() {
     );
   }, [location.hash, location.pathname, location.state, navigate, requestedSection, searchParams]);
   const changeSection = (value: string) => {
-    if (!monitorSections.some(([section]) => section === value)) return;
+    if (!monitorSections.some((section) => section.value === value)) return;
     const next = new URLSearchParams(searchParams);
     next.set('section', value);
     navigate({ pathname: location.pathname, search: next.toString(), hash: '' }, { replace: true, preventScrollReset: true });
@@ -162,178 +135,167 @@ function ServerMonitor() {
 
   return (
     <div className="desktop-monitor">
-      <header className="monitor-page-heading">
-        <div>
-          <h2>System overview</h2>
-          <p title={serverName}>{serverName}</p>
-        </div>
-        <div
-          className="desktop-monitor-live-status"
-          title="CPU and memory update every second. Other hardware readings keep their own sampling rate."
-        >
-          <span className={telemetry.isError ? 'desktop-live-dot desktop-live-dot-stale' : 'desktop-live-dot'} aria-hidden="true" />
-          <span>{telemetry.isError ? 'Readings delayed' : telemetry.isPending ? 'Connecting' : 'Live · every second'}</span>
-        </div>
-      </header>
-      {telemetry.isError ? (
-        <div className="workspace-message" role="alert">
-          The server did not return a telemetry sample. Last values may be stale.{' '}
-          <button type="button" onClick={() => telemetry.refetch()}>
-            Retry
-          </button>
-        </div>
-      ) : null}
-      {telemetry.isPending ? <p>Loading system status…</p> : null}
-      <section className="desktop-host-overview" aria-label="Current system readings">
-        <div className="desktop-host-overview-copy" key={selectedId}>
-          <dl className="monitor-summary-grid">
-            <div className="monitor-summary-stat" data-high={highUsage(sample?.cpu.totalPercent)}>
-              <dt>
-                <IconCpu size={18} aria-hidden="true" />
-                CPU
-              </dt>
-              <dd className="monitor-summary-value">{percent(sample?.cpu.totalPercent ?? null)}</dd>
-              <dd className="monitor-summary-detail">{sample?.cpu.scope === 'runtime' ? 'Core container load' : 'Total utilisation'}</dd>
-              <dd className="workspace-meter" aria-hidden="true">
-                <span style={{ width: width(sample?.cpu.totalPercent ?? null) }} />
-              </dd>
+      <MonitorWorkspace section={section} onSection={changeSection}>
+        <Tabs.Content className="monitor-section-panel monitor-overview-panel" value="overview">
+          <header className="monitor-page-heading">
+            <div>
+              <h2>Overview</h2>
+              <p title={serverName}>{serverName}</p>
             </div>
-            <div className="monitor-summary-stat" data-high={highUsage(memoryPercent)}>
-              <dt>
-                <IconDeviceDesktopAnalytics size={18} aria-hidden="true" />
-                Memory
-              </dt>
-              <dd className="monitor-summary-value">{percent(memoryPercent)}</dd>
-              {memoryPercent !== null ? (
-                <dd className="monitor-summary-detail">
-                  {bytes(usedMemory)} / {bytes(sample?.memory.totalBytes ?? null)}
-                </dd>
+            <div
+              className="desktop-monitor-live-status"
+              title="CPU and memory update every second. Other hardware readings keep their own sampling rate."
+            >
+              <span className={telemetry.isError ? 'desktop-live-dot desktop-live-dot-stale' : 'desktop-live-dot'} aria-hidden="true" />
+              <span>{telemetry.isError ? 'Readings delayed' : telemetry.isPending ? 'Connecting' : 'Live · every second'}</span>
+            </div>
+          </header>
+          {telemetry.isError ? (
+            <div className="workspace-message" role="alert">
+              The server did not return a telemetry sample. Last values may be stale.{' '}
+              <button type="button" onClick={() => telemetry.refetch()}>
+                Retry
+              </button>
+            </div>
+          ) : null}
+          {telemetry.isPending ? <p>Loading system status…</p> : null}
+          <section className="desktop-host-overview" aria-label="Current system readings">
+            <div className="desktop-host-overview-copy" key={selectedId}>
+              <dl className="monitor-summary-grid">
+                <div className="monitor-summary-stat" data-high={highUsage(sample?.cpu.totalPercent)}>
+                  <dt>
+                    <IconCpu size={18} aria-hidden="true" />
+                    CPU
+                  </dt>
+                  <dd className="monitor-summary-value" data-unavailable={sample?.cpu.totalPercent == null}>
+                    {percent(sample?.cpu.totalPercent ?? null)}
+                  </dd>
+                  <dd className="monitor-summary-detail">{sample?.cpu.scope === 'runtime' ? 'Core container load' : 'Total utilisation'}</dd>
+                  <dd className="workspace-meter" aria-hidden="true">
+                    <span style={{ width: width(sample?.cpu.totalPercent ?? null) }} />
+                  </dd>
+                </div>
+                <div className="monitor-summary-stat" data-high={highUsage(memoryPercent)}>
+                  <dt>
+                    <IconDeviceDesktopAnalytics size={18} aria-hidden="true" />
+                    Memory
+                  </dt>
+                  <dd className="monitor-summary-value" data-unavailable={memoryPercent === null}>
+                    {percent(memoryPercent)}
+                  </dd>
+                  {memoryPercent !== null ? (
+                    <dd className="monitor-summary-detail">
+                      {bytes(usedMemory)} / {bytes(sample?.memory.totalBytes ?? null)}
+                    </dd>
+                  ) : null}
+                  <dd className="workspace-meter" aria-hidden="true">
+                    <span style={{ width: width(memoryPercent) }} />
+                  </dd>
+                </div>
+                <div className="monitor-summary-stat" data-high={highUsage(storagePercent)}>
+                  <dt>
+                    <IconDatabase size={18} aria-hidden="true" />
+                    {hostDisk ? 'Storage' : 'Core storage'}
+                  </dt>
+                  <dd className="monitor-summary-value" data-unavailable={storagePercent === null}>
+                    {percent(storagePercent)}
+                  </dd>
+                  {storagePercent !== null ? (
+                    <dd className="monitor-summary-detail">
+                      {bytes(disk?.usedBytes ?? null)} / {bytes(disk?.sizeBytes ?? null)}
+                    </dd>
+                  ) : null}
+                  <dd className="workspace-meter" aria-hidden="true">
+                    <span style={{ width: width(storagePercent) }} />
+                  </dd>
+                </div>
+                <div className="monitor-summary-stat monitor-summary-network">
+                  <dt>
+                    <IconNetwork size={18} aria-hidden="true" />
+                    {network?.label ?? 'Network'}
+                  </dt>
+                  <dd className="monitor-summary-rate">
+                    <IconArrowDown size={16} aria-hidden="true" />
+                    <span className="visually-hidden">Download </span>
+                    {rate(network?.rxBytesPerSecond)}
+                  </dd>
+                  <dd className="monitor-summary-rate">
+                    <IconArrowUp size={16} aria-hidden="true" />
+                    <span className="visually-hidden">Upload </span>
+                    {rate(network?.txBytesPerSecond)}
+                  </dd>
+                  <dd className="monitor-summary-interface" title={network?.interface}>
+                    {network?.interface ?? 'No interface reading'}
+                  </dd>
+                </div>
+              </dl>
+              <dl className="monitor-system-facts">
+                <div>
+                  <dt>Uptime</dt>
+                  <dd>{formatUptime(sample?.cpu.uptimeSeconds)}</dd>
+                </div>
+                <div>
+                  <dt>CPU clock</dt>
+                  <dd>
+                    {typeof sample?.cpu.reportedClockGHz === 'number' && Number.isFinite(sample.cpu.reportedClockGHz)
+                      ? `${sample.cpu.reportedClockGHz.toFixed(2)} GHz`
+                      : 'Unavailable'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Logical CPUs</dt>
+                  <dd>{sample?.cpu.perCorePercent.length || 'Unavailable'}</dd>
+                </div>
+              </dl>
+            </div>
+            <div className="monitor-rack-panel">
+              <span className="monitor-rack-label">
+                <IconActivity size={15} aria-hidden="true" />
+                Server selector
+              </span>
+              <ServerRack
+                cpu={sample?.cpu.totalPercent ?? null}
+                memory={memoryPercent}
+                online={telemetry.isPending ? undefined : !telemetry.isError}
+              />
+            </div>
+          </section>
+          <div className="monitor-temperature-strip">
+            <dl>
+              <div>
+                <dt>CPU temperature</dt>
+                <TemperatureReading sensor={cpuSensor} stale={delayedTemperature} />
+              </div>
+              {gpuTemperature ? (
+                <div>
+                  <dt>GPU temperature</dt>
+                  <TemperatureReading sensor={gpuTemperature} stale={delayedTemperature} />
+                </div>
               ) : null}
-              <dd className="workspace-meter" aria-hidden="true">
-                <span style={{ width: width(memoryPercent) }} />
-              </dd>
-            </div>
-            <div className="monitor-summary-stat" data-high={highUsage(storagePercent)}>
-              <dt>
-                <IconDatabase size={18} aria-hidden="true" />
-                {hostDisk ? 'Storage' : 'Core storage'}
-              </dt>
-              <dd className="monitor-summary-value">{percent(storagePercent)}</dd>
-              {storagePercent !== null ? (
-                <dd className="monitor-summary-detail">
-                  {bytes(disk?.usedBytes ?? null)} / {bytes(disk?.sizeBytes ?? null)}
-                </dd>
+              {storageTemperature ? (
+                <div>
+                  <dt>Warmest drive</dt>
+                  <TemperatureReading sensor={storageTemperature} stale={delayedTemperature} />
+                </div>
               ) : null}
-              <dd className="workspace-meter" aria-hidden="true">
-                <span style={{ width: width(storagePercent) }} />
-              </dd>
-            </div>
-            <div className="monitor-summary-stat monitor-summary-network">
-              <dt>
-                <IconNetwork size={18} aria-hidden="true" />
-                {network?.label ?? 'Network'}
-              </dt>
-              <dd className="monitor-summary-rate">
-                <IconArrowDown size={16} aria-hidden="true" />
-                <span className="visually-hidden">Download </span>
-                {rate(network?.rxBytesPerSecond)}
-              </dd>
-              <dd className="monitor-summary-rate">
-                <IconArrowUp size={16} aria-hidden="true" />
-                <span className="visually-hidden">Upload </span>
-                {rate(network?.txBytesPerSecond)}
-              </dd>
-              <dd className="monitor-summary-interface" title={network?.interface}>
-                {network?.interface ?? 'No interface reading'}
-              </dd>
-            </div>
-          </dl>
-          <dl className="monitor-system-facts">
-            <div>
-              <dt>Uptime</dt>
-              <dd>{formatUptime(sample?.cpu.uptimeSeconds)}</dd>
-            </div>
-            <div>
-              <dt>CPU clock</dt>
-              <dd>
-                {typeof sample?.cpu.reportedClockGHz === 'number' && Number.isFinite(sample.cpu.reportedClockGHz)
-                  ? `${sample.cpu.reportedClockGHz.toFixed(2)} GHz`
-                  : 'Unavailable'}
-              </dd>
-            </div>
-            <div>
-              <dt>Logical CPUs</dt>
-              <dd>{sample?.cpu.perCorePercent.length || 'Unavailable'}</dd>
-            </div>
-          </dl>
-        </div>
-        <div className="monitor-rack-panel">
-          <span className="monitor-rack-label">
-            <IconActivity size={15} aria-hidden="true" />
-            Server selector
-          </span>
-          <ServerRack cpu={sample?.cpu.totalPercent ?? null} memory={memoryPercent} online={telemetry.isPending ? undefined : !telemetry.isError} />
-        </div>
-      </section>
-      <div className="monitor-temperature-strip">
-        <dl>
-          <div>
-            <dt>CPU temperature</dt>
-            <TemperatureReading sensor={cpuSensor} stale={delayedTemperature} />
+            </dl>
+            <p className="monitor-temperature-description">
+              {sensors.isPending
+                ? 'Reading hardware sensors…'
+                : sensors.isError || (sensors.data?.available && sensors.data.stale)
+                  ? `Last reading${sensors.data?.available ? ` at ${new Date(sensors.data.sampledAt).toLocaleTimeString()}` : ''}. Refreshing hardware sensors…`
+                  : sensors.data?.available === false
+                    ? sensors.data.reason
+                    : cpuSensor
+                      ? `${/package id|tctl|tdie/i.test(cpuSensor.label) ? 'CPU package' : cpuSensor.label}${cpuSensor.criticalCelsius !== null ? ` · Critical at ${cpuSensor.criticalCelsius.toFixed(0)} °C` : ''}`
+                      : 'No CPU temperature sensor is reported by this host.'}
+            </p>
+            {delayedTemperature && cpuSensor ? <span className="monitor-temperature-age">Readings delayed</span> : null}
+            <button type="button" className="monitor-detail-action" onClick={() => changeSection('sensors')}>
+              Hardware details
+            </button>
           </div>
-          {gpuTemperature ? (
-            <div>
-              <dt>GPU temperature</dt>
-              <TemperatureReading sensor={gpuTemperature} stale={delayedTemperature} />
-            </div>
-          ) : null}
-          {storageTemperature ? (
-            <div>
-              <dt>Warmest drive</dt>
-              <TemperatureReading sensor={storageTemperature} stale={delayedTemperature} />
-            </div>
-          ) : null}
-        </dl>
-        <p className="monitor-temperature-description">
-          {sensors.isPending
-            ? 'Reading hardware sensors…'
-            : sensors.isError || (sensors.data?.available && sensors.data.stale)
-              ? `Last reading${sensors.data?.available ? ` at ${new Date(sensors.data.sampledAt).toLocaleTimeString()}` : ''}. Refreshing hardware sensors…`
-              : sensors.data?.available === false
-                ? sensors.data.reason
-                : cpuSensor
-                  ? `${/package id|tctl|tdie/i.test(cpuSensor.label) ? 'CPU package' : cpuSensor.label}${cpuSensor.criticalCelsius !== null ? ` · Critical at ${cpuSensor.criticalCelsius.toFixed(0)} °C` : ''}`
-                  : 'No CPU temperature sensor is reported by this host.'}
-        </p>
-        {delayedTemperature && cpuSensor ? <span className="monitor-temperature-age">Readings delayed</span> : null}
-        <button type="button" className="monitor-detail-action" onClick={() => changeSection('sensors')}>
-          Hardware details
-        </button>
-      </div>
-      <Tabs.Root className="monitor-sections" value={section} onValueChange={changeSection}>
-        <div className="monitor-section-compact">
-          <Select value={section} onValueChange={changeSection}>
-            <SelectTrigger fitContent className="monitor-section-select" aria-label="Monitor section" value={section}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {monitorSections.map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <Tabs.List className="monitor-section-tabs" aria-label="Monitor sections">
-          <SelectionGroup className="monitor-section-tab-track">
-            {monitorSections.map(([value, label]) => (
-              <Tabs.Trigger className="monitor-section-tab" key={value} value={value}>
-                {label}
-              </Tabs.Trigger>
-            ))}
-          </SelectionGroup>
-        </Tabs.List>
+        </Tabs.Content>
         <Tabs.Content className="monitor-section-panel" value="usage">
           <MonitorUsage key={telemetryPath} />
         </Tabs.Content>
@@ -567,7 +529,7 @@ function ServerMonitor() {
         <Tabs.Content className="monitor-section-panel" value="sensors">
           <HostSensorsView />
         </Tabs.Content>
-      </Tabs.Root>
+      </MonitorWorkspace>
     </div>
   );
 }

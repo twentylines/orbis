@@ -1,8 +1,9 @@
 import { useRestoreRequests } from '@/modules/host-transfer/receiver-request-context';
 import { AnimatePresence, motion } from 'framer-motion';
+import * as Dialog from '@radix-ui/react-dialog';
 import { IconActivity, IconAlertTriangle } from '@tabler/icons-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, useLocation } from 'react-router';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useLocation } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useReducedMotion } from './motion-preferences';
 import { taskIsActive, useTasks } from './tasks';
@@ -22,6 +23,11 @@ import { useUserContext } from '@/context/user-context';
 import toast from 'react-hot-toast';
 import { orbisReleaseChannelsOptions } from './release-channels';
 import { useTimeMachineActivity } from '@/modules/time-machine/use-time-machine-activity';
+import { DesktopTaskPanel, taskPanelPosition } from './desktop-task-panel';
+import { useTaskCentreRecords } from './task-centre-records';
+import { useSystemTaskActivity } from './use-system-task-activity';
+import '../components/ui/dropdown.css';
+import './desktop-task-panel.css';
 
 function TaskBadge({ alert, reducedMotion, children }: { alert: boolean; reducedMotion: boolean; children: ReactNode }) {
   return (
@@ -40,6 +46,28 @@ function TaskBadge({ alert, reducedMotion, children }: { alert: boolean; reduced
 }
 
 export function DesktopTaskLink() {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: 16, top: 72 });
+  useLayoutEffect(() => {
+    if (!open) return;
+    const measure = () => {
+      if (!trigger.current || !panel.current) return;
+      setPosition(taskPanelPosition(trigger.current.getBoundingClientRect(), panel.current.offsetWidth, window.innerWidth));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (panel.current) observer.observe(panel.current);
+    if (trigger.current) observer.observe(trigger.current);
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
+  }, [open]);
   const tasks = useTasks();
   const capture = useTimeMachineActivity();
   const { user } = useAppContext();
@@ -65,7 +93,10 @@ export function DesktopTaskLink() {
   }, [user.id]);
   const [acknowledged, setAcknowledged] = useState({ scope, keys: local });
   const pending = useRef(new Set<string>());
-  const pendingRequests = useRestoreRequests()?.pendingCount ?? 0;
+  const restoreRequests = useRestoreRequests();
+  const pendingRequests = restoreRequests?.pendingCount ?? 0;
+  const centre = useTaskCentreRecords(tasks.data?.tasks ?? [], user.id, open);
+  const systemActivity = useSystemTaskActivity(open);
   const location = useLocation();
   const reducedMotion = Boolean(useReducedMotion());
   // Observe the header's existing update queries without starting another request or polling loop.
@@ -125,8 +156,8 @@ export function DesktopTaskLink() {
       });
   }, [keys, scope, local, sessionAbortSignal, user.id, queryClient, acknowledgementQueryKey, saved.data]);
   useEffect(() => {
-    if (location.pathname === '/tasks' && signature && saved.data) acknowledge();
-  }, [location.pathname, signature, acknowledge, saved.data]);
+    if ((location.pathname === '/tasks' || open) && signature && saved.data) acknowledge();
+  }, [location.pathname, open, signature, acknowledge, saved.data]);
   useEffect(() => {
     if (!tasks.isSuccess || !tasks.isFetchedAfterMount || sessionAbortSignal.aborted) return;
     setAcknowledged((previous) => {
@@ -152,30 +183,75 @@ export function DesktopTaskLink() {
   const activeTasks = (tasks.data?.tasks.filter(taskIsActive).length ?? 0) + (capture.activity ? 1 : 0);
   const count = activeTasks + pendingRequests || alerts;
   return (
-    <Link
-      to="/tasks"
-      className="desktop-task-trigger"
-      onClick={() => {
-        if (saved.isError) void saved.refetch();
-        acknowledge();
+    <Dialog.Root
+      open={open}
+      modal={false}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) {
+          if (saved.isError) void saved.refetch();
+          acknowledge();
+        }
       }}
-      data-attention-state={attentionState}
-      aria-busy={attentionState === 'loading' || undefined}
-      aria-label={`Open task centre, ${activeTasks} active operation${activeTasks === 1 ? '' : 's'}${pendingRequests ? `, ${pendingRequests} pending restore request${pendingRequests === 1 ? '' : 's'}` : ''}${alerts ? `, ${alerts} new alert${alerts === 1 ? '' : 's'}` : ''}${attentionStatus ? `, ${attentionStatus}` : ''}`}
-      title={attentionStatus ? `Task centre · ${attentionStatus}` : alerts ? 'Task centre · new alerts' : 'Task centre'}
     >
-      {saved.isError ? (
-        <IconAlertTriangle size={20} style={{ color: 'var(--desktop-warning)' }} aria-hidden="true" />
-      ) : (
-        <IconActivity size={20} aria-hidden="true" />
-      )}
-      <AnimatePresence initial={false}>
-        {count > 0 ? (
-          <TaskBadge key="activity" alert={alerts > 0} reducedMotion={reducedMotion}>
-            {count}
-          </TaskBadge>
-        ) : null}
-      </AnimatePresence>
-    </Link>
+      <Dialog.Trigger asChild>
+        <button
+          ref={trigger}
+          type="button"
+          className="desktop-task-trigger"
+          data-attention-state={attentionState}
+          aria-busy={attentionState === 'loading' || undefined}
+          aria-label={`Open task centre, ${activeTasks} active operation${activeTasks === 1 ? '' : 's'}${pendingRequests ? `, ${pendingRequests} pending restore request${pendingRequests === 1 ? '' : 's'}` : ''}${alerts ? `, ${alerts} new alert${alerts === 1 ? '' : 's'}` : ''}${attentionStatus ? `, ${attentionStatus}` : ''}`}
+          title={attentionStatus ? `Task centre · ${attentionStatus}` : alerts ? 'Task centre · new alerts' : 'Task centre'}
+        >
+          {saved.isError ? (
+            <IconAlertTriangle size={20} style={{ color: 'var(--desktop-warning)' }} aria-hidden="true" />
+          ) : (
+            <IconActivity size={20} aria-hidden="true" />
+          )}
+          <AnimatePresence initial={false}>
+            {count > 0 ? (
+              <TaskBadge key="activity" alert={alerts > 0} reducedMotion={reducedMotion}>
+                {count}
+              </TaskBadge>
+            ) : null}
+          </AnimatePresence>
+        </button>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Content
+          ref={panel}
+          className="orbis-dropdown-menu desktop-task-panel"
+          style={{ ...position, maxHeight: `calc(100dvh - ${position.top}px - 16px)` }}
+          aria-describedby={undefined}
+        >
+          <Dialog.Title className="desktop-task-panel-title">Task centre</Dialog.Title>
+          {saved.isError ? (
+            <div className="desktop-task-panel-notice">
+              <p>Saved task alerts are unavailable.</p>
+              <button type="button" onClick={() => void saved.refetch()}>
+                Retry saved alerts
+              </button>
+            </div>
+          ) : null}
+          <DesktopTaskPanel
+            tasks={centre.records}
+            names={centre.names}
+            dismissSetupFailure={centre.dismiss}
+            restoreRequests={restoreRequests}
+            systemActivity={systemActivity}
+            loading={tasks.isPending}
+            failed={tasks.isError}
+            storageUnavailable={tasks.data?.storage === 'unavailable'}
+            capture={capture.activity ? capture.data?.point : null}
+            captureFailed={user.operator === true && capture.isError}
+            pendingRequests={pendingRequests}
+            criticalUpdate={Boolean(criticalKey)}
+            retry={() => void tasks.refetch()}
+            close={() => setOpen(false)}
+          />
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

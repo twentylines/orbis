@@ -23,7 +23,10 @@ const exact = (value: unknown, keys: string[]): value is Record<string, unknown>
 export type CoreCapsuleReview = {
   summary: Readonly<{ pointId: string; createdAt: number; sourceOwnerId: number; metadata: TimeMachineCoreMetadata; restoreSupported: false }>;
   recheck: (signal: AbortSignal) => Promise<void>;
+  manifest: Extract<CapsuleManifest, { schema: 'orbis.time-machine-capsule-private.v2' }>;
+  copyTo: (directory: string, signal: AbortSignal) => Promise<void>;
 };
+export type CoreCapsulePayload = Readonly<{ directory: string; manifest: CorePayloadManifest }>;
 async function json(directory: string, manifest: CapsuleManifest, name: 'metadata.orbis' | 'capture-draft.orbis', signal: AbortSignal) {
   const entry = manifest.entries.find((entry) => entry.name === name);
   if (!entry) throw fail();
@@ -164,6 +167,7 @@ export async function reviewCoreCapsule(options: {
   directory: string;
   manifest: Extract<CapsuleManifest, { schema: 'orbis.time-machine-capsule-private.v2' }>;
   signal: AbortSignal;
+  corePayload?: (payload: CoreCapsulePayload) => Promise<void>;
 }): Promise<CoreCapsuleReview> {
   const { directory, signal } = options;
   const manifest = capsuleManifestSchema.assert(structuredClone(options.manifest));
@@ -319,6 +323,7 @@ export async function reviewCoreCapsule(options: {
         throw fail();
       for await (const _chunk of value.source) signal.throwIfAborted();
     });
+    if (options.corePayload) await options.corePayload(Object.freeze({ directory: stage, manifest: payload }));
   } finally {
     await input?.close();
     await cleanup();
@@ -333,5 +338,11 @@ export async function reviewCoreCapsule(options: {
       restoreSupported: false,
     }),
     recheck,
+    manifest,
+    copyTo: async (destination, signal) => {
+      await recheck(signal);
+      for (const [index, entry] of manifest.entries.entries()) await inspectCapsuleEntry(directory, entry, signal, seals[index], destination);
+      await recheck(signal);
+    },
   };
 }

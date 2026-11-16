@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { createGunzip } from 'node:zlib';
+import type { Readable } from 'node:stream';
 
 export type TarAttributes = { uid: number; gid: number; mode: number; mtime: number };
 export type ArchiveEntry = { path: string; type: string; linkTarget?: string; attributes?: TarAttributes };
@@ -94,7 +95,21 @@ const paxFields = (data: Buffer, strict = false, attributes = false) => {
 };
 
 export async function readTarArchive(file: string, gzip: boolean, signal?: AbortSignal, options: TarReaderOptions = {}): Promise<ArchiveEntry[]> {
-  const source = fs.createReadStream(file, { signal });
+  return readTarInput(fs.createReadStream(file, { signal }), gzip, signal, options, file);
+}
+
+export async function readTarStream(source: Readable, gzip: false, signal?: AbortSignal, options: TarReaderOptions = {}): Promise<ArchiveEntry[]> {
+  if (gzip !== false) throw invalid();
+  return readTarInput(source, false, signal, options);
+}
+
+async function readTarInput(
+  source: Readable,
+  gzip: boolean,
+  signal?: AbortSignal,
+  options: TarReaderOptions = {},
+  file?: string,
+): Promise<ArchiveEntry[]> {
   const gunzip = gzip ? createGunzip() : undefined;
   const stream = gunzip ? source.pipe(gunzip) : source;
   const fail = (error: Error) => stream.destroy(error);
@@ -219,6 +234,7 @@ export async function readTarArchive(file: string, gzip: boolean, signal?: Abort
     }
     if (!ended || remaining || extension || (options.strict && header.length)) throw invalid();
     if (options.strict && gunzip) {
+      if (!file) throw invalid();
       const stat = await fs.promises.stat(file);
       const consumed = gunzip.bytesWritten;
       if (!Number.isSafeInteger(consumed) || consumed > stat.size || stat.size - consumed > 1024 * 1024) throw invalid();

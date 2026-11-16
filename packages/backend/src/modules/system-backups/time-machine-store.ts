@@ -34,10 +34,16 @@ import { timeMachineConflict } from './time-machine-policy';
 import { capturedWallpaper, type CapturedWallpaper } from './time-machine-assets';
 import type { V6SealAdmission } from './time-machine-v6-seal-admission';
 import type { CoreCatalogPublication } from './time-machine-core-catalog-worker';
-import { withVerifiedCapsuleContents, type VerifiedCapsuleContents, type VerifiedCapsuleBinding } from '../time-machine-capsules/verify';
+import {
+  withVerifiedCapsuleContents,
+  withVerifiedCoreCapsuleContents,
+  type VerifiedCapsuleContents,
+  type VerifiedCapsuleBinding,
+} from '../time-machine-capsules/verify';
 import { inspectCapsuleEntry } from '../time-machine-capsules/verified-source';
 import { withCorePayload, type VerifiedCorePayload } from './time-machine-core-payload';
 import { canonicalPublicationJson } from '../host-updates/host-controller-publication';
+import { useVerifiedCoreCaptureRetirement, type VerifiedCoreCaptureRetirement } from '../host-updates/host-core-capture-restart-retirement-client';
 
 const envelopeSchema = type({
   version: '1',
@@ -258,6 +264,16 @@ export class TimeMachineStore {
       throw error;
     }
   }
+  /** Holds the preference queue until the read-only snapshot consumer settles. */
+  withPreferencesSnapshot<T>(work: (preferences: TimeMachinePreferences) => Promise<T>): Promise<T> {
+    return this.serialize(async () => {
+      const preferences = await this.preferences();
+      const before = JSON.stringify(preferences);
+      const result = await work(preferences);
+      if (JSON.stringify(await this.preferences()) !== before) throw timeMachineConflict('revision-conflict');
+      return result;
+    });
+  }
   updatePreferences(update: TimeMachinePreferencesUpdate) {
     return this.serialize(async () => {
       if (update.beforeUpdate || update.beforeRestart || update.schedule.enabled) throw timeMachineConflict('automatic-capture-unsupported');
@@ -440,6 +456,66 @@ export class TimeMachineStore {
         await this.sync(parent);
         await this.sync(stagingParent);
         return { point, created: true };
+      });
+    });
+  }
+  /** Writes an isolated worker library. Only destination Root may publish this staged generation. */
+  stagePortableCorePoint(ownerId: number, token: VerifiedCapsuleContents, signal: AbortSignal) {
+    return this.serialize(async () => {
+      if (!Number.isSafeInteger(ownerId) || ownerId < 1) throw timeMachineConflict('invalid-request');
+      return withVerifiedCoreCapsuleContents(token, signal, async (verified) => {
+        await this.portableStorageParents();
+        if ((await this.list()).length !== 0) throw timeMachineConflict('point-integrity-failed');
+        const { manifest, summary } = verified;
+        const metadataEntry = manifest.entries.find((entry) => entry.name === 'metadata.orbis');
+        if (!metadataEntry) throw timeMachineConflict('point-integrity-failed');
+        const metadata = timeMachineCoreMetadataSchema.assert(summary.metadata);
+        const point = coreStoredPointSchema.assert({
+          version: 3,
+          kind: 'orbis-core',
+          coreFormat: 'orbis.time-machine-core.v1',
+          id: metadata.id,
+          ownerId,
+          createdAt: metadata.createdAt,
+          status: 'sealed',
+          backupJobId: null,
+          issue: null,
+          envelope: await this.wrap(metadata.id, ownerId, manifest.pointKey),
+          archiveBytes: metadata.archiveBytes,
+          archiveSha256: metadata.archiveSha256,
+          metadataSha256: metadataEntry.sha256,
+          core: metadata.core,
+          assetBytes: manifest.entries
+            .filter((entry) => ['wallpaper.orbis', 'icons.orbis'].includes(entry.name))
+            .reduce((sum, entry) => sum + entry.bytes, 0),
+        });
+        const destination = this.pointDirectory(point.id);
+        await this.directory(path.dirname(destination), true);
+        await fs.mkdir(destination, { mode: 0o700 });
+        await verified.copyTo(destination, signal);
+        // The source draft binds the source envelope. Rebind only the destination
+        // draft; core/metadata/preview ciphertexts remain exact authenticated bytes.
+        const { archiveBytes: _bytes, archiveSha256: _archive, manifestSha256: _manifest, core: _core, ...draft } = metadata;
+        const plaintext = Buffer.from(
+          JSON.stringify({
+            version: 1,
+            binding: { id: point.id, ownerId, createdAt: point.createdAt, envelope: point.envelope },
+            draft,
+          }),
+        );
+        let rebound: Buffer;
+        try {
+          rebound = await backupMetadataBytes(plaintext, manifest.pointKey, false, timeMachineLimits.metadataBytes);
+        } finally {
+          plaintext.fill(0);
+        }
+        await this.atomic(path.join(destination, 'capture-draft.orbis'), rebound, true);
+        await this.atomic(path.join(destination, 'point.json'), JSON.stringify(point), false);
+        await this.readCoreDraft(point, signal);
+        await verified.recheck(signal);
+        await this.sync(destination);
+        await this.sync(path.dirname(destination));
+        return { point, sourceOwnerId: summary.sourceOwnerId };
       });
     });
   }
@@ -1692,6 +1768,61 @@ export class TimeMachineStore {
       throw timeMachineConflict('point-integrity-failed');
     return { data, mime: asset.mime };
   }
+  retireUnadmittedCorePoint(id: string, token: VerifiedCoreCaptureRetirement, dryRun = false) {
+    return this.serialize(() =>
+      useVerifiedCoreCaptureRetirement(token, async (receipt) => {
+        const point = await this.load(id);
+        if (
+          point.version !== 3 ||
+          point.kind !== 'orbis-core' ||
+          receipt.id !== id ||
+          receipt.pointReservationSha256 !== coreCapturePointReservationSha256(point) ||
+          point.archiveBytes !== 0 ||
+          point.archiveSha256 !== null ||
+          point.metadataSha256 !== null ||
+          point.backupJobId !== null ||
+          point.core !== null ||
+          (point.assetBytes ?? 0) !== 0
+        )
+          throw timeMachineConflict('point-integrity-failed');
+        const directory = this.pointDirectory(id);
+        if ((await fs.readdir(directory)).join(',') !== 'point.json') throw timeMachineConflict('capture-recovery-required');
+        const file = path.join(directory, 'point.json');
+        const before = await this.read(file, 32_768);
+        if (canonicalPublicationJson(JSON.parse(before.toString())) !== canonicalPublicationJson(point))
+          throw timeMachineConflict('point-integrity-failed');
+        const beforeSha256 = createHash('sha256').update(before).digest('hex');
+        const auditFile = path.join(this.root(), 'preparation-retirements', `${id}.json`);
+        if (point.status === 'failed') {
+          const audit = JSON.parse((await this.read(auditFile, 8192)).toString());
+          if (canonicalPublicationJson(audit) !== canonicalPublicationJson({ version: 1, ...receipt, afterSha256: beforeSha256 }))
+            throw timeMachineConflict('point-integrity-failed');
+          return { id, changed: false, persisted: true };
+        }
+        if (!['capturing', 'interrupted'].includes(point.status) || receipt.pointRecordSha256 !== beforeSha256)
+          throw timeMachineConflict('point-integrity-failed');
+        const recovered = { ...point, status: 'failed' as const, issue: 'capture-failed' as const };
+        const afterSha256 = createHash('sha256').update(JSON.stringify(recovered)).digest('hex');
+        const audit = { version: 1, ...receipt, afterSha256 };
+        if (dryRun) return { id, changed: true, persisted: false };
+        try {
+          await this.atomic(auditFile, JSON.stringify(audit), false);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+          if (canonicalPublicationJson(JSON.parse((await this.read(auditFile, 8192)).toString())) !== canonicalPublicationJson(audit))
+            throw timeMachineConflict('point-integrity-failed');
+        }
+        const fresh = createHash('sha256')
+          .update(await this.read(file, 32_768))
+          .digest('hex');
+        if (fresh === afterSha256) return { id, changed: false, persisted: true };
+        if (fresh !== beforeSha256 || (await fs.readdir(directory)).join(',') !== 'point.json') throw timeMachineConflict('point-integrity-failed');
+        await this.update(recovered);
+        return { id, changed: true, persisted: true };
+      }),
+    );
+  }
+
   remove(id: string, ownerId: number) {
     return this.serialize(async () => {
       const point = await this.load(id);

@@ -1,5 +1,5 @@
 import { coreCaptureRecoveryRequired } from '@/common/backup-maintenance';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import { BadRequestException, ConflictException, Inject, Injectable, Optional } from '@nestjs/common';
 import type { Request } from 'express';
@@ -19,12 +19,16 @@ import {
   backupMaintenanceActive,
   backupMaintenanceOutsideResetActive,
   setResetRecoveryRequired,
+  setResetOperationActive,
 } from '@/common/backup-maintenance';
-import { notifyClientStatusChanged, readOperationStatus } from '@/common/restoration-status';
+import { notifyClientStatusChanged, notifyResetStarted, readOperationStatus } from '@/common/restoration-status';
 import { defaultTimeMachinePreferences } from '@runtipi/common/schemas/time-machine';
 import { TimeMachineService } from '../system-backups/time-machine.service';
 import { SystemBackupsService } from '../system-backups/system-backups.service';
+import { SettingsBackupsService } from '../system-backups/settings-backups.service';
 import { ResetState, type ResetAccounts, type ResetJournal } from './reset-state';
+import { resetSensitiveActionBinding } from './reset-contract';
+import type { LegacyResetJournal } from './reset-contract';
 
 const invalid = () => new BadRequestException('Confirm resetting Orbis and choose whether to keep accounts.');
 export function resetChoice(value: unknown): ResetAccounts {
@@ -32,9 +36,7 @@ export function resetChoice(value: unknown): ResetAccounts {
   return value;
 }
 export function resetBinding(accounts: ResetAccounts) {
-  return createHash('sha256')
-    .update(`orbis-reset-v1\n${resetChoice(accounts)}\napps-and-data-preserved`)
-    .digest('hex');
+  return resetSensitiveActionBinding(resetChoice(accounts));
 }
 const sameActor = (a: Awaited<ReturnType<AuthService['operatorActionContext']>>, b: Awaited<ReturnType<AuthService['operatorActionContext']>>) =>
   a.userId === b.userId && a.sessionBinding === b.sessionBinding && a.securityBinding === b.securityBinding;
@@ -55,6 +57,7 @@ export class ResetService {
     private readonly automatic: AutomaticUpdatesService,
     private readonly machine: TimeMachineService,
     private readonly backups: SystemBackupsService,
+    private readonly bundles: SettingsBackupsService,
     @Optional() store?: ResetState,
   ) {
     this.store = store ?? new ResetState(config.get('directories').dataDir);
@@ -63,6 +66,11 @@ export class ResetService {
     if (coreCaptureRecoveryRequired()) return;
     try {
       const journal = await this.store.active();
+      if (journal?.version === 2) {
+        setResetRecoveryRequired(true);
+        return;
+      }
+      if (journal?.phase === 'complete') await this.completeBackupOwnership(journal);
       setResetRecoveryRequired(Boolean(journal && journal.phase !== 'complete'));
     } catch {
       setResetRecoveryRequired(true);
@@ -100,7 +108,9 @@ export class ResetService {
       });
     if (!sameActor(before, await this.auth.operatorActionContext(request)))
       throw new ConflictException('Your sign-in changed. Confirm this reset again.');
-    const pending = recovery ? await this.store.read() : null;
+    const stored = await this.store.read();
+    if (stored?.version === 2) throw new ConflictException('This reset archive needs local recovery review.');
+    const pending = recovery ? stored : null;
     const eligible = (state: string) =>
       recovery ? state === 'resetting' && pending?.phase !== 'complete' && pending?.accounts === accounts : state === 'idle';
     if (this.busy || (recovery ? backupMaintenanceOutsideResetActive() : backupMaintenanceActive()) || !eligible((await readOperationStatus()).state))
@@ -109,13 +119,17 @@ export class ResetService {
     let release: (() => void) | undefined;
     let lease: (() => Promise<void>) | undefined;
     try {
+      if (accounts === 'remove') {
+        await this.bundles.reconcileResetOwnership(before.userId, request);
+        await this.machine.reconcileResetOwnership(before.userId, request);
+      }
       release = await acquireBackupMaintenance(AbortSignal.timeout(30_000));
       if (!eligible((await readOperationStatus()).state) || !sameActor(before, await this.auth.operatorActionContext(request)))
         throw new ConflictException('Server state changed. Confirm this reset again.');
       lease = await this.store.acquireLease();
       const users = (await this.db.select({ id: user.id }).from(user)).map((account) => account.id);
       if (!users.includes(before.userId)) throw new ConflictException('Your account changed. Confirm this reset again.');
-      const journal: ResetJournal = pending
+      const journal: LegacyResetJournal = pending
         ? { ...pending, controller: os.hostname(), phase: 'prepared' }
         : { version: 1, id: randomUUID(), controller: os.hostname(), accounts, users, phase: 'prepared', createdAt: Date.now() };
       if (pending && users.some((id) => !pending.users.includes(id)))
@@ -125,11 +139,17 @@ export class ResetService {
       await this.cluster.read();
       await this.machine.preferences();
       await this.backups.settings();
+      if (journal.accounts === 'remove') {
+        await this.bundles.prepareResetOwnership(journal);
+        await this.machine.prepareResetOwnership(journal, users);
+      }
       await this.store.save(journal);
       const unlock = release;
       const unlockLease = lease;
       release = undefined;
       lease = undefined;
+      setResetOperationActive(true);
+      notifyResetStarted();
       let started = false;
       return {
         job: { id: journal.id, state: 'resetting' as const },
@@ -144,6 +164,7 @@ export class ResetService {
             }
             this.busy = false;
             unlock();
+            setResetOperationActive(false);
             notifyClientStatusChanged();
           });
         },
@@ -167,8 +188,17 @@ export class ResetService {
       setResetRecoveryRequired(true);
       return;
     }
+    if (journal?.version === 2) {
+      setResetRecoveryRequired(true);
+      return;
+    }
     if (!journal || journal.phase === 'complete') {
-      setResetRecoveryRequired(false);
+      try {
+        if (journal) await this.completeBackupOwnership(journal);
+        setResetRecoveryRequired(false);
+      } catch {
+        setResetRecoveryRequired(true);
+      }
       return;
     }
     if ((await readOperationStatus()).state !== 'resetting') {
@@ -180,7 +210,9 @@ export class ResetService {
     const [receipt] = await this.db.select().from(orbisResetReceipt).where(eq(orbisResetReceipt.id, journal.id));
     if (receipt) {
       try {
-        await this.store.save({ ...journal, phase: 'complete' });
+        const complete = { ...journal, phase: 'complete' as const };
+        await this.store.save(complete);
+        await this.completeBackupOwnership(complete);
         setResetRecoveryRequired(false);
       } catch {
         setResetRecoveryRequired(true);
@@ -190,7 +222,22 @@ export class ResetService {
       setResetRecoveryRequired(true);
     }
   }
-  private async run(journal: ResetJournal) {
+  private async completeBackupOwnership(journal: ResetJournal) {
+    if (journal.version === 2) throw new Error('This reset archive needs recovery verification before ownership can change.');
+    if (journal.accounts !== 'remove') return;
+    let receipt: Promise<boolean> | undefined;
+    const verifyReceipt = () => {
+      receipt ??= this.db
+        .select()
+        .from(orbisResetReceipt)
+        .where(eq(orbisResetReceipt.id, journal.id))
+        .then((receipts) => receipts.some((row) => row.id === journal.id));
+      return receipt;
+    };
+    await this.bundles.completeResetOwnership(journal, verifyReceipt);
+    await this.machine.completeResetOwnership(journal, verifyReceipt);
+  }
+  private async run(journal: LegacyResetJournal) {
     try {
       // The durable intent is replayable; app rows, app-store rows and deployment configuration never enter this transaction.
       await this.automatic.resetOrbisPreferences();
@@ -232,7 +279,9 @@ export class ResetService {
           .values({ id: journal.id, completedAt: Math.floor(Date.now() / 1000) })
           .onConflictDoNothing();
       });
-      await this.store.save({ ...journal, phase: 'complete' });
+      const complete = { ...journal, phase: 'complete' as const };
+      await this.store.save(complete);
+      await this.completeBackupOwnership(complete);
       setResetRecoveryRequired(false);
     } catch {
       // Keep the operation authoritative after a partial write. An ordinary reload cannot dismiss it.

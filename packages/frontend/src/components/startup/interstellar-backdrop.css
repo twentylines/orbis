@@ -1,0 +1,70 @@
+.orbis-interstellar {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #05080e;
+  pointer-events: none;
+}
+.orbis-interstellar > img,
+.orbis-interstellar-near {
+  position: absolute;
+  left: -8%;
+  top: -8%;
+  display: block;
+  width: 116%;
+  height: 116%;
+  max-width: none;
+  will-change: transform;
+}
+.orbis-interstellar > img {
+  animation: orbis-interstellar-clouds 28s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+  animation-delay: var(--orbis-interstellar-delay, 0ms);
+  object-fit: cover;
+  object-position: center;
+}
+.orbis-interstellar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--desktop-base-accent, #5e7098) 26%, transparent);
+  mix-blend-mode: color;
+  opacity: 0.65;
+  transition: background-color 440ms ease;
+}
+@media (forced-colors: active) {
+  .orbis-interstellar {
+    display: none;
+  }
+}
+
+.orbis-interstellar-near {
+  fill: #dce8f7;
+  animation: orbis-interstellar-stars 44s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+  animation-delay: var(--orbis-interstellar-delay, 0ms);
+}
+@keyframes orbis-interstellar-clouds {
+  from {
+    transform: translate3d(-1%, 0.6%, 0) scale(1.02);
+  }
+  to {
+    transform: translate3d(1%, -0.6%, 0) scale(1.1);
+  }
+}
+@keyframes orbis-interstellar-stars {
+  from {
+    transform: translate3d(0.8%, -0.4%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-1.2%, 0.8%, 0) scale(1.18);
+  }
+}
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"]) .orbis-interstellar > :is(img, svg) {
+  animation: none;
+  will-change: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbis-interstellar > :is(img, svg) {
+    animation: none;
+    will-change: auto;
+  }
+}

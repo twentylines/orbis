@@ -1,15 +1,15 @@
 import { expect, test } from 'bun:test';
 import { isValidElement } from 'react';
-import { DepthTravel } from '@/components/recovery-progress/depth-travel';
+import { InterstellarBackdrop } from '@/components/startup/interstellar-backdrop';
 import { DesktopWallpaper } from '@/desktop/wallpaper';
 import { authLayoutScene } from './layout';
 
-test('setup auth uses the existing onboarding space while ordinary auth keeps the wallpaper', () => {
+test('setup auth shares the startup image while ordinary auth keeps the selected wallpaper', () => {
   const setup = authLayoutScene(true);
   expect(isValidElement(setup)).toBe(true);
   if (!isValidElement(setup)) throw new Error('Setup background missing');
-  expect(setup.type).toBe(DepthTravel);
-  expect(setup.props).toMatchObject({ mode: 'ambient', variant: 'onboarding', className: 'orbis-setup-space' });
+  expect(setup.type).toBe(InterstellarBackdrop);
+  expect(setup.props).toMatchObject({ className: 'orbis-setup-space' });
 
   const login = authLayoutScene(false);
   expect(isValidElement(login)).toBe(true);

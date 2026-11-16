@@ -2,6 +2,7 @@ import { useHistoricalAppIcons } from './historical-app-icons';
 import { useState, type CSSProperties } from 'react';
 import type { TimeMachinePoint, TimeMachinePreview } from '@runtipi/common/schemas/time-machine';
 import { normaliseDesktopAppearance } from '@runtipi/common/schemas/desktop-appearance';
+import { workspaceWidgetSize } from '@/desktop/workspace-layout';
 import { homeApps, workspaceRows } from '@/desktop/workspace-apps';
 import { themePackAppearance } from '@/modules/theme-packs/theme-pack-runtime';
 import { IconApps, IconClock, IconDeviceDesktopAnalytics, IconAlertCircle } from '@tabler/icons-react';
@@ -22,9 +23,15 @@ export function historicalHomeLayout(preview: SavedPreview) {
       workspace.showAllApps,
     ).map(({ app }) => app),
     visible,
+    versioned: Boolean(workspace.layout),
+    appView: workspace.layout?.appView ?? 'cards',
+    sizes: Object.fromEntries(visible.map((id) => [id, workspaceWidgetSize(workspace.layout, id, workspace.wide)])),
     rows: workspaceRows(visible, workspace.wide),
     defaultColumns:
-      workspace.order.join(',') === 'applications,activity,storage,attention' && workspace.wide.length === 1 && workspace.wide[0] === 'applications',
+      !workspace.layout &&
+      workspace.order.join(',') === 'applications,activity,storage,attention' &&
+      workspace.wide.length === 1 &&
+      workspace.wide[0] === 'applications',
   };
 }
 
@@ -87,7 +94,21 @@ export function HistoricalHomePreview({ point, wallpaper, assetFailed = false, a
   const widgets = (widget: Widget) => {
     const Icon = sectionIcons[widget];
     return (
-      <section className="tm-saved-widget" key={widget} data-saved-section={widget} data-wide={desktop.workspace.wide.includes(widget)}>
+      <section
+        className="tm-saved-widget"
+        key={widget}
+        data-saved-section={widget}
+        data-wide={desktop.workspace.wide.includes(widget)}
+        data-custom-size={Boolean(desktop.workspace.layout?.widgets[widget]) || undefined}
+        style={
+          layout.versioned
+            ? ({
+                '--tm-saved-widget-columns': layout.sizes[widget]?.columns,
+                '--tm-saved-widget-height': desktop.workspace.layout?.widgets[widget] ? `${layout.sizes[widget]?.height}px` : undefined,
+              } as CSSProperties)
+            : undefined
+        }
+      >
         <h4>
           {widget === 'applications' ? null : <Icon size={20} aria-hidden="true" />}
           {sectionNames[widget]}
@@ -99,7 +120,12 @@ export function HistoricalHomePreview({ point, wallpaper, assetFailed = false, a
               aria-label={preview.appIcons ? 'Captured applications' : 'Captured applications; app icons were not captured'}
             >
               {layout.apps.map((app) => (
-                <li className="tm-saved-app" key={app.urn}>
+                <li
+                  className="tm-saved-app"
+                  key={app.urn}
+                  aria-label={`${app.name}, ${app.running ? 'running' : 'stopped'} at capture`}
+                  title={app.name}
+                >
                   <CapturedAppIcon url={icons[app.urn]} name={app.name} />
                   <span className="tm-saved-app-copy">
                     <strong>{app.name}</strong>
@@ -134,6 +160,7 @@ export function HistoricalHomePreview({ point, wallpaper, assetFailed = false, a
       data-captured-mode={desktop.mode}
       data-captured-preset={desktop.preset}
       data-captured-density={desktop.density}
+      data-app-view={layout.appView}
     >
       <div className="tm-saved-stage">
         {displayWallpaper ? (
@@ -151,9 +178,12 @@ export function HistoricalHomePreview({ point, wallpaper, assetFailed = false, a
           <div
             className="tm-saved-grid"
             data-default-columns={layout.defaultColumns}
+            data-versioned-layout={layout.versioned || undefined}
             data-two-columns={layout.defaultColumns && main.length > 0 && activity}
           >
-            {layout.defaultColumns ? (
+            {layout.versioned ? (
+              layout.visible.map(widgets)
+            ) : layout.defaultColumns ? (
               <>
                 {main.length ? (
                   <div className="tm-saved-main">

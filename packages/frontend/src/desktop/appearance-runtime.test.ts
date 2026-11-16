@@ -127,7 +127,13 @@ describe('saved appearance applied before hydration and to live materials', () =
   });
   test('keeps the theme defaults exact and removes stale overrides on reset', () => {
     const result = apply({});
-    expect([...result.properties.keys()].sort()).toEqual(['--orbis-chrome-focus', '--orbis-chrome-muted', '--orbis-control-transition-duration']);
+    expect([...result.properties.keys()].sort()).toEqual([
+      '--orbis-chrome-focus',
+      '--orbis-chrome-muted',
+      '--orbis-control-transition-duration',
+      '--orbis-menu-muted',
+      '--orbis-menu-surface',
+    ]);
     expect(result.dataset).toEqual({
       orbisMotion: 'full',
       orbisTransparency: 'glass',
@@ -145,7 +151,13 @@ describe('saved appearance applied before hydration and to live materials', () =
       glassTint: -1,
       lowEffects: 'yes',
     });
-    expect([...result.properties.keys()].sort()).toEqual(['--orbis-chrome-focus', '--orbis-chrome-muted', '--orbis-control-transition-duration']);
+    expect([...result.properties.keys()].sort()).toEqual([
+      '--orbis-chrome-focus',
+      '--orbis-chrome-muted',
+      '--orbis-control-transition-duration',
+      '--orbis-menu-muted',
+      '--orbis-menu-surface',
+    ]);
   });
   test('applies saved text sizing before stylesheet readiness and clears it at the default', () => {
     for (const textScale of [85, 125, 150]) {
@@ -227,6 +239,38 @@ describe('saved appearance applied before hydration and to live materials', () =
       if (dark) expect(Math.max(...surface)).toBeLessThanOrEqual(30);
       else expect(Math.min(...surface)).toBeGreaterThanOrEqual(250);
     }
+  });
+  test('floating glass remains translucent and readable across every preset and wallpaper extreme', () => {
+    for (const preset of ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush']) {
+      for (const dark of [false, true]) {
+        const tokens = actualPalette(preset, dark);
+        const { properties } = apply({}, { dark, tokens });
+        const menu = rgb(properties.get('--orbis-menu-surface') ?? '');
+        const chrome = rgb(properties.get('--orbis-chrome') ?? tokens['--desktop-base-chrome'] ?? '');
+        expect(menu[3]).toBe(dark ? 0.72 : 0.86);
+        expect(chrome[3]).toBeLessThanOrEqual(dark ? 0.72 : 0.84);
+        if (dark) {
+          const shade = Math.max(...chrome.slice(0, 3)) / Math.max(...menu.slice(0, 3));
+          for (let channel = 0; channel < 3; channel++)
+            expect(Math.abs((chrome[channel] ?? Number.NaN) - (menu[channel] ?? Number.NaN) * shade)).toBeLessThanOrEqual(1.5);
+        }
+        for (const wallpaper of [0, 255]) {
+          const behind = composite(menu, wallpaper);
+          expect(contrast(rgb(tokens['--desktop-ink'] ?? ''), behind)).toBeGreaterThanOrEqual(4.5);
+          expect(contrast(rgb(properties.get('--orbis-menu-muted') ?? ''), behind)).toBeGreaterThanOrEqual(4.5);
+          const selected = composite(chrome, wallpaper).map((channel) => channel * 0.8 + 255 * 0.2);
+          expect(contrast(rgb(tokens['--desktop-chrome-ink'] ?? ''), selected)).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+  });
+  test('explicit solid and accessibility materials remain opaque, while explicit chrome opacity is preserved', () => {
+    for (const options of [{ transparency: 'solid' }, { lowEffects: true }, { oledDark: true }]) {
+      const { properties } = apply(options, { dark: true });
+      expect(rgb(properties.get('--orbis-menu-surface') ?? '')[3]).toBe(1);
+      expect(properties.get('--orbis-chrome-filter')).toBe('none');
+    }
+    expect(rgb(apply({ chromeOpacity: 100 }).properties.get('--orbis-chrome') ?? '')[3]).toBe(1);
   });
   test.each([
     ['#fdf7faf7', [253, 247, 250]],

@@ -1,3 +1,4 @@
+import { toolbarOrderSchema, workspaceLayoutSchema } from '@runtipi/common/schemas/workspace-layout';
 import { type } from 'arktype';
 import { createArkDto } from 'nestjs-arktype';
 import { appLaunchSchema, desktopAppearanceSchema, desktopWindowsSchema } from '@runtipi/common/schemas';
@@ -5,6 +6,7 @@ import { appLaunchSchema, desktopAppearanceSchema, desktopWindowsSchema } from '
 const widgetId = type.enumerated('applications', 'activity', 'storage', 'attention');
 const widgetList = widgetId.array().narrow((items) => items.length <= 4 && new Set(items).size === items.length);
 const workspace = type({
+  'layout?': workspaceLayoutSchema,
   order: widgetList,
   hidden: widgetList,
   wide: widgetList,
@@ -25,6 +27,7 @@ export const desktopPreferencesSchema = type({
   'wallpaperMode?': type.enumerated('theme', 'custom'),
   'wallpaperPreset?': type.enumerated('frost', 'graphite', 'forest', 'stone', 'ocean', 'blush', null),
   'workspace?': workspace,
+  'toolbarOrder?': toolbarOrderSchema,
   'windows?': desktopWindowsSchema,
   'appLaunch?': appLaunchSchema,
   'showStoreRecommendations?': 'boolean',

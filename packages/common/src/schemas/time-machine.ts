@@ -1,3 +1,4 @@
+import { workspaceLayoutSchema, toolbarOrderSchema } from './workspace-layout.js';
 import { historicalIconsAssetSchema } from './time-machine-icons.js';
 import { type } from 'arktype';
 import { desktopAppearanceSchema } from './desktop-appearance.js';
@@ -36,6 +37,7 @@ export const timeMachineReasonSchema = type.enumerated(
   'capture-interrupted',
   'capture-failed',
   'capture-recovery-required',
+  'capture-selection-conflict',
   'experimental-acknowledgement-required',
   'capacity-exceeded',
   'storage-unavailable',
@@ -78,7 +80,51 @@ export const timeMachinePreferencesUpdateSchema = type({
   excludedApps,
 }).onUndeclaredKey('reject');
 export type TimeMachinePreferencesUpdate = typeof timeMachinePreferencesUpdateSchema.infer;
-export const timeMachineCaptureSchema = type({ 'experimentalAcknowledged?': 'true', label: text }).onUndeclaredKey('reject');
+export const timeMachineCaptureAppSelectionSchema = type({
+  urn: appUrn,
+  mountIds: timeMachineHashSchema
+    .array()
+    .atLeastLength(1)
+    .atMostLength(512)
+    .narrow((ids) => new Set(ids).size === ids.length),
+}).onUndeclaredKey('reject');
+export const timeMachineCaptureSelectionSchema = type({
+  version: '1',
+  reviewId: timeMachineIdSchema,
+  reviewSha256: timeMachineHashSchema,
+  apps: timeMachineCaptureAppSelectionSchema.array().atLeastLength(1).atMostLength(timeMachineLimits.apps),
+})
+  .onUndeclaredKey('reject')
+  .narrow(
+    (value) =>
+      new Set(value.apps.map((app) => app.urn)).size === value.apps.length && value.apps.reduce((sum, app) => sum + app.mountIds.length, 0) <= 4096,
+  );
+export type TimeMachineCaptureSelection = typeof timeMachineCaptureSelectionSchema.infer;
+export const timeMachineCaptureSchema = type({
+  'experimentalAcknowledged?': 'true',
+  label: text,
+  'selection?': timeMachineCaptureSelectionSchema,
+}).onUndeclaredKey('reject');
+export const timeMachineCaptureStorageSchema = type({
+  id: timeMachineHashSchema,
+  destination: 'string > 0 & string <= 4096',
+  service: 'string > 0 & string <= 128',
+  source: 'string > 0 & string <= 4096',
+  classification: type.enumerated('app-data', 'external', 'media'),
+  requiresExplicitInclusion: 'true',
+  type: type.enumerated('bind', 'volume'),
+  writable: 'boolean',
+}).onUndeclaredKey('reject');
+export const timeMachineCaptureReviewSchema = type({
+  version: '1',
+  reviewId: timeMachineIdSchema,
+  reviewSha256: timeMachineHashSchema,
+  apps: type({ urn: appUrn, mounts: timeMachineCaptureStorageSchema.array().atMostLength(4096) })
+    .onUndeclaredKey('reject')
+    .array()
+    .atMostLength(timeMachineLimits.apps),
+}).onUndeclaredKey('reject');
+export type TimeMachineCaptureReview = typeof timeMachineCaptureReviewSchema.infer;
 const widgetList = type
   .enumerated('applications', 'activity', 'storage', 'attention')
   .array()
@@ -111,9 +157,15 @@ export const timeMachinePreviewSchema = type({
     wallpaperMode: type.enumerated('theme', 'custom'),
     wallpaperPreset: type.enumerated('frost', 'graphite', 'forest', 'stone', 'ocean', 'blush', null),
     appearance: desktopAppearanceSchema,
-    workspace: type({ order: widgetList, hidden: widgetList, wide: widgetList, showAllApps: 'boolean', pinnedApps: excludedApps }).onUndeclaredKey(
-      'reject',
-    ),
+    'toolbarOrder?': toolbarOrderSchema,
+    workspace: type({
+      order: widgetList,
+      hidden: widgetList,
+      wide: widgetList,
+      showAllApps: 'boolean',
+      pinnedApps: excludedApps,
+      'layout?': workspaceLayoutSchema,
+    }).onUndeclaredKey('reject'),
   }).onUndeclaredKey('reject'),
   theme: themePackManifestSchema.or('null'),
   customWallpaperAvailable: 'boolean',
@@ -220,6 +272,89 @@ export const timeMachineCoreMetadataSchema = timeMachineLegacyMetadataSchema
       metadata.core.manifestSha256 === metadata.manifestSha256,
   );
 export type TimeMachineCoreMetadata = typeof timeMachineCoreMetadataSchema.infer;
+export const timeMachineSelectedComponentSchema = type({
+  schema: "'orbis.selected-app-component.v1'",
+  pointId: timeMachineIdSchema,
+  corePointId: timeMachineIdSchema,
+  planSha256: timeMachineHashSchema,
+  capturedAt: timestamp,
+  selection: timeMachineCaptureAppSelectionSchema.array().atLeastLength(1).atMostLength(timeMachineLimits.apps),
+  images: type({
+    format: "'orbis.selected-image-exports.v1'",
+    ids: type('string')
+      .narrow((id) => /^sha256:[a-f0-9]{64}$/.test(id))
+      .array()
+      .atLeastLength(1)
+      .atMostLength(4096),
+    bytes,
+    sha256: timeMachineHashSchema,
+  }).onUndeclaredKey('reject'),
+  includedStorage: type({
+    id: timeMachineHashSchema,
+    appUrn,
+    service: 'string > 0 & string <= 128',
+    destination: 'string > 0 & string <= 4096',
+    classification: type.enumerated('app-data', 'external', 'media'),
+    type: type.enumerated('bind', 'volume'),
+  })
+    .onUndeclaredKey('reject')
+    .array()
+    .atLeastLength(1)
+    .atMostLength(4096),
+  manifestSha256: timeMachineHashSchema,
+}).onUndeclaredKey('reject');
+export const timeMachineSelectedReceiptSchema = type({
+  schema: "'orbis.selected-capture-receipt.v1'",
+  pointId: timeMachineIdSchema,
+  corePointId: timeMachineIdSchema,
+  planSha256: timeMachineHashSchema,
+  parentAdmissionSha256: timeMachineHashSchema,
+  coreCheckpointSha256: timeMachineHashSchema,
+  artifact: type({ bytes, sha256: timeMachineHashSchema }).onUndeclaredKey('reject'),
+  manifest: timeMachineSelectedComponentSchema,
+  resumedContainerIds: timeMachineHashSchema.array().atMostLength(4096),
+})
+  .onUndeclaredKey('reject')
+  .narrow(
+    (value) =>
+      value.pointId === value.manifest.pointId && value.corePointId === value.manifest.corePointId && value.planSha256 === value.manifest.planSha256,
+  );
+export type TimeMachineSelectedReceipt = typeof timeMachineSelectedReceiptSchema.infer;
+export const timeMachineComponentsMetadataSchema = timeMachineLegacyMetadataSchema
+  .omit('version', 'coverage', 'excludedApps')
+  .merge({
+    version: '4',
+    kind: "'components'",
+    componentFormat: "'orbis.time-machine-components.v1'",
+    coreComponent: timeMachineCoreMetadataSchema,
+    selectedComponent: type({
+      receiptSha256: timeMachineHashSchema,
+      receipt: timeMachineSelectedReceiptSchema,
+      cipherBytes: bytes,
+      cipherSha256: timeMachineHashSchema,
+    }).onUndeclaredKey('reject'),
+    coverage: type({
+      database: 'true',
+      configuration: 'true',
+      appearance: 'true',
+      controllerConfiguration: 'true',
+      controllerVersion: 'true',
+      dockerImages: 'true',
+      appData: 'true',
+      cluster: "'local-only'",
+    }).onUndeclaredKey('reject'),
+    excludedApps,
+  })
+  .onUndeclaredKey('reject')
+  .narrow(
+    (value) =>
+      value.restore.ready === false &&
+      value.id === value.selectedComponent.receipt.pointId &&
+      value.coreComponent.id === value.selectedComponent.receipt.corePointId &&
+      value.coreComponent.core.checkpointSha256 === value.selectedComponent.receipt.coreCheckpointSha256 &&
+      value.archiveBytes === value.coreComponent.archiveBytes + value.selectedComponent.cipherBytes,
+  );
+export type TimeMachineComponentsMetadata = typeof timeMachineComponentsMetadataSchema.infer;
 const retainedMetadata = timeMachineLegacyMetadataSchema
   .omit('version', 'coverage')
   .merge({
@@ -237,7 +372,10 @@ const retainedMetadata = timeMachineLegacyMetadataSchema
     runtime: timeMachineRuntimeSummarySchema,
   })
   .onUndeclaredKey('reject');
-export const timeMachineMetadataSchema = timeMachineLegacyMetadataSchema.or(retainedMetadata).or(timeMachineCoreMetadataSchema);
+export const timeMachineMetadataSchema = timeMachineLegacyMetadataSchema
+  .or(retainedMetadata)
+  .or(timeMachineCoreMetadataSchema)
+  .or(timeMachineComponentsMetadataSchema);
 export type TimeMachineMetadata = typeof timeMachineMetadataSchema.infer;
 export type TimeMachinePoint = {
   id: string;
@@ -249,12 +387,13 @@ export type TimeMachinePoint = {
   issue: TimeMachineIssue | null;
   backupJobId: string | null;
   metadata: TimeMachineMetadata | null;
+  captureBinding?: { version: 1; corePointId: string; componentsPointId: string };
 };
 export type TimeMachineList = { version: 1; available: boolean; points: TimeMachinePoint[]; activeCaptureId: string | null };
 export type TimeMachineCapabilities = {
   version: 1;
   experimental: true;
-  manualCapture: true;
+  manualCapture: boolean;
   experimentalAcknowledgementRequired: false;
   automaticCapture: { scheduled: false; preUpdate: false; preRestart: false };
   osSnapshots: { supported: false; reason: TimeMachineIssue };

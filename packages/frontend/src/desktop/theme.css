@@ -18,6 +18,8 @@
   --desktop-panel-dark: var(--orbis-panel-dark, var(--desktop-base-panel-dark));
   --desktop-glass-filter: var(--orbis-glass-filter, var(--desktop-base-glass-filter));
   --desktop-chrome-filter: var(--orbis-chrome-filter, var(--desktop-glass-filter));
+  --desktop-menu-surface: var(--orbis-menu-surface, var(--desktop-surface));
+  --desktop-menu-muted: var(--orbis-menu-muted, var(--desktop-muted));
   --desktop-wallpaper: url("/wallpapers/stone-v2.webp");
   --desktop-ink: #192c29;
   --desktop-base-muted: #485f59;
@@ -146,17 +148,17 @@ html[data-desktop-wallpaper="canopy"]:has(.orbis-startup) {
 }
 
 html[data-desktop-preset="frost"] {
-  --desktop-preset-tint: #597b73;
-  --desktop-ink: #192c29;
-  --desktop-base-muted: #485f59;
-  --desktop-base-surface: rgba(248, 250, 246, 0.96);
-  --desktop-base-chrome: rgba(17, 38, 36, 0.88);
-  --desktop-base-chrome-rgb: 17, 38, 36;
-  --desktop-base-panel-dark: rgba(14, 35, 34, 0.94);
+  --desktop-preset-tint: #17a58b;
+  --desktop-ink: #123d34;
+  --desktop-base-muted: #365f54;
+  --desktop-base-surface: rgba(240, 250, 246, 0.97);
+  --desktop-base-chrome: rgba(7, 55, 47, 0.92);
+  --desktop-base-chrome-rgb: 7, 55, 47;
+  --desktop-base-panel-dark: rgba(7, 55, 47, 0.97);
   --desktop-line: rgba(29, 65, 55, 0.16);
-  --desktop-base-accent: #365b52;
-  --desktop-base-action: #365b52;
-  --desktop-base-action-rgb: 54, 91, 82;
+  --desktop-base-accent: #076b5c;
+  --desktop-base-action: #087867;
+  --desktop-base-action-rgb: 8, 120, 103;
   --workspace-heading-ink: var(--desktop-ink);
 }
 
@@ -164,10 +166,10 @@ html[data-desktop-preset="graphite"] {
   --desktop-preset-tint: #777a82;
   --desktop-ink: #25262b;
   --desktop-base-muted: #5b5e67;
-  --desktop-base-surface: rgba(255, 255, 255, 0.97);
-  --desktop-base-chrome: rgba(28, 29, 33, 0.9);
-  --desktop-base-chrome-rgb: 28, 29, 33;
-  --desktop-base-panel-dark: rgba(24, 25, 29, 0.95);
+  --desktop-base-surface: rgba(250, 250, 250, 0.97);
+  --desktop-base-chrome: rgba(41, 42, 46, 0.9);
+  --desktop-base-chrome-rgb: 41, 42, 46;
+  --desktop-base-panel-dark: rgba(41, 42, 46, 0.96);
   --desktop-line: rgba(45, 47, 54, 0.16);
   --desktop-base-accent: #4c5159;
   --desktop-base-action: #42474f;
@@ -176,66 +178,73 @@ html[data-desktop-preset="graphite"] {
 }
 
 html[data-desktop-preset="forest"] {
-  --desktop-preset-tint: #608069;
-  --desktop-ink: #142b23;
-  --desktop-base-muted: #455d51;
-  --desktop-base-surface: rgba(244, 248, 239, 0.97);
-  --desktop-base-chrome: rgba(22, 50, 37, 0.9);
-  --desktop-base-chrome-rgb: 22, 50, 37;
-  --desktop-base-panel-dark: rgba(17, 49, 35, 0.95);
+  --desktop-preset-tint: #38a65f;
+  --desktop-ink: #153b29;
+  --desktop-base-muted: #3e6350;
+  --desktop-base-surface: rgba(241, 250, 239, 0.97);
+  --desktop-base-chrome: rgba(10, 59, 34, 0.92);
+  --desktop-base-chrome-rgb: 10, 59, 34;
+  --desktop-base-panel-dark: rgba(10, 59, 34, 0.97);
   --desktop-line: rgba(22, 66, 43, 0.18);
-  --desktop-base-accent: #3a6244;
-  --desktop-base-action: #3a6244;
-  --desktop-base-action-rgb: 58, 98, 68;
+  --desktop-base-accent: #176c3e;
+  --desktop-base-action: #1c7540;
+  --desktop-base-action-rgb: 28, 117, 64;
   --workspace-heading-ink: var(--desktop-ink);
 }
 
 html[data-desktop-preset="stone"] {
-  --desktop-preset-tint: #a68c74;
-  --desktop-ink: #302924;
-  --desktop-base-muted: #645a50;
-  --desktop-base-surface: rgba(250, 245, 237, 0.97);
-  --desktop-base-chrome: rgba(55, 43, 34, 0.9);
-  --desktop-base-chrome-rgb: 55, 43, 34;
-  --desktop-base-panel-dark: rgba(47, 38, 31, 0.95);
+  --desktop-preset-tint: #db942f;
+  --desktop-ink: #432b19;
+  --desktop-base-muted: #705137;
+  --desktop-base-surface: rgba(255, 248, 236, 0.97);
+  --desktop-base-chrome: rgba(71, 34, 12, 0.92);
+  --desktop-base-chrome-rgb: 71, 34, 12;
+  --desktop-base-panel-dark: rgba(71, 34, 12, 0.97);
   --desktop-line: rgba(77, 59, 45, 0.17);
-  --desktop-base-accent: #795338;
-  --desktop-base-action: #795338;
-  --desktop-base-action-rgb: 121, 83, 56;
+  --desktop-base-accent: #965013;
+  --desktop-base-action: #965013;
+  --desktop-base-action-rgb: 150, 80, 19;
   --workspace-heading-ink: var(--desktop-ink);
 }
 
 html[data-desktop-preset="ocean"] {
-  --desktop-preset-tint: #5a8b99;
-  --desktop-ink: #172b32;
-  --desktop-base-muted: #435f68;
-  --desktop-base-surface: rgba(244, 250, 251, 0.97);
-  --desktop-base-chrome: rgba(18, 43, 55, 0.9);
-  --desktop-base-chrome-rgb: 18, 43, 55;
-  --desktop-base-panel-dark: rgba(15, 40, 52, 0.95);
+  --desktop-preset-tint: #2889dd;
+  --desktop-ink: #173955;
+  --desktop-base-muted: #3f607a;
+  --desktop-base-surface: rgba(239, 248, 255, 0.97);
+  --desktop-base-chrome: rgba(8, 40, 77, 0.92);
+  --desktop-base-chrome-rgb: 8, 40, 77;
+  --desktop-base-panel-dark: rgba(8, 40, 77, 0.97);
   --desktop-line: rgba(29, 75, 83, 0.17);
-  --desktop-base-accent: #32647c;
-  --desktop-base-action: #32647c;
-  --desktop-base-action-rgb: 50, 100, 124;
+  --desktop-base-accent: #125cad;
+  --desktop-base-action: #1464bc;
+  --desktop-base-action-rgb: 20, 100, 188;
   --workspace-heading-ink: var(--desktop-ink);
 }
 
 html[data-desktop-preset="blush"] {
-  --desktop-preset-tint: #ae7e8a;
-  --desktop-ink: #35282e;
-  --desktop-base-muted: #69565f;
-  --desktop-base-surface: rgba(253, 247, 250, 0.97);
-  --desktop-base-chrome: rgba(56, 32, 44, 0.9);
-  --desktop-base-chrome-rgb: 56, 32, 44;
-  --desktop-base-panel-dark: rgba(49, 28, 38, 0.95);
+  --desktop-preset-tint: #d64e89;
+  --desktop-ink: #482537;
+  --desktop-base-muted: #7a4d65;
+  --desktop-base-surface: rgba(255, 242, 248, 0.97);
+  --desktop-base-chrome: rgba(67, 18, 49, 0.92);
+  --desktop-base-chrome-rgb: 67, 18, 49;
+  --desktop-base-panel-dark: rgba(67, 18, 49, 0.97);
   --desktop-line: rgba(89, 52, 68, 0.17);
-  --desktop-base-accent: #8a4564;
-  --desktop-base-action: #8a4564;
-  --desktop-base-action-rgb: 138, 69, 100;
+  --desktop-base-accent: #a32962;
+  --desktop-base-action: #ac2b67;
+  --desktop-base-action-rgb: 172, 43, 103;
   --workspace-heading-ink: var(--desktop-ink);
 }
 
 html[data-desktop-mode="dark"] {
+  --desktop-menu-surface: var(--desktop-chrome);
+  --desktop-menu-muted: var(--orbis-chrome-muted, var(--desktop-chrome-ink));
+  --desktop-status-background: linear-gradient(
+    125deg,
+    color-mix(in srgb, var(--desktop-preset-tint) 4%, var(--desktop-surface)),
+    color-mix(in srgb, var(--desktop-preset-tint) 10%, var(--desktop-surface))
+  );
   --desktop-base-positive: #8fd1af;
   --desktop-base-negative: #efa99a;
   --desktop-base-warning: #e8c180;
@@ -254,28 +263,28 @@ html[data-desktop-mode="dark"] {
 }
 
 html[data-desktop-preset="frost"][data-desktop-mode="dark"] {
-  --desktop-preset-tint: #82aa9b;
-  --desktop-ink: #edf2ef;
-  --desktop-base-muted: #b8c9c0;
-  --desktop-base-surface: rgba(23, 35, 32, 0.97);
-  --desktop-base-chrome: rgba(11, 24, 21, 0.92);
-  --desktop-base-chrome-rgb: 11, 24, 21;
-  --desktop-base-panel-dark: rgba(10, 24, 20, 0.96);
+  --desktop-preset-tint: #88aaa0;
+  --desktop-ink: #edf5f1;
+  --desktop-base-muted: #bed0c8;
+  --desktop-base-surface: rgba(16, 23, 21, 0.98);
+  --desktop-base-chrome: rgba(20, 29, 25, 0.94);
+  --desktop-base-chrome-rgb: 20, 29, 25;
+  --desktop-base-panel-dark: rgba(20, 29, 25, 0.98);
   --desktop-line: rgba(216, 235, 224, 0.16);
-  --desktop-base-accent: #b8d5ca;
+  --desktop-base-accent: #adcbbd;
   --desktop-base-action: #3d6d5e;
   --desktop-base-action-rgb: 61, 109, 94;
   --workspace-heading-ink: var(--desktop-ink);
 }
 
 html[data-desktop-preset="graphite"][data-desktop-mode="dark"] {
-  --desktop-preset-tint: #777a82;
+  --desktop-preset-tint: #85878e;
   --desktop-ink: #f1f1f3;
   --desktop-base-muted: #c0c1c8;
-  --desktop-base-surface: rgba(23, 24, 27, 0.97);
-  --desktop-base-chrome: rgba(11, 12, 14, 0.94);
-  --desktop-base-chrome-rgb: 11, 12, 14;
-  --desktop-base-panel-dark: rgba(12, 13, 15, 0.97);
+  --desktop-base-surface: rgba(20, 21, 24, 0.98);
+  --desktop-base-chrome: rgba(23, 24, 27, 0.94);
+  --desktop-base-chrome-rgb: 23, 24, 27;
+  --desktop-base-panel-dark: rgba(23, 24, 27, 0.98);
   --desktop-line: rgba(225, 226, 233, 0.16);
   --desktop-base-accent: #c7c9d0;
   --desktop-base-action: #505660;
@@ -284,60 +293,60 @@ html[data-desktop-preset="graphite"][data-desktop-mode="dark"] {
 }
 
 html[data-desktop-preset="forest"][data-desktop-mode="dark"] {
-  --desktop-preset-tint: #78977a;
-  --desktop-ink: #edf3e8;
-  --desktop-base-muted: #bbccba;
-  --desktop-base-surface: rgba(24, 35, 25, 0.97);
-  --desktop-base-chrome: rgba(12, 25, 15, 0.93);
-  --desktop-base-chrome-rgb: 12, 25, 15;
-  --desktop-base-panel-dark: rgba(12, 24, 14, 0.97);
+  --desktop-preset-tint: #819e86;
+  --desktop-ink: #f0f5ed;
+  --desktop-base-muted: #c0cfbd;
+  --desktop-base-surface: rgba(18, 24, 19, 0.98);
+  --desktop-base-chrome: rgba(21, 30, 23, 0.94);
+  --desktop-base-chrome-rgb: 21, 30, 23;
+  --desktop-base-panel-dark: rgba(21, 30, 23, 0.98);
   --desktop-line: rgba(222, 237, 216, 0.16);
-  --desktop-base-accent: #b8d2ac;
+  --desktop-base-accent: #b1c9a8;
   --desktop-base-action: #456c40;
   --desktop-base-action-rgb: 69, 108, 64;
   --workspace-heading-ink: var(--desktop-ink);
 }
 
 html[data-desktop-preset="stone"][data-desktop-mode="dark"] {
-  --desktop-preset-tint: #a68c74;
-  --desktop-ink: #f2ede6;
-  --desktop-base-muted: #c9bfb3;
-  --desktop-base-surface: rgba(38, 31, 26, 0.97);
-  --desktop-base-chrome: rgba(27, 21, 17, 0.93);
-  --desktop-base-chrome-rgb: 27, 21, 17;
-  --desktop-base-panel-dark: rgba(25, 20, 16, 0.97);
+  --desktop-preset-tint: #b0997e;
+  --desktop-ink: #f5efe6;
+  --desktop-base-muted: #d0c3b2;
+  --desktop-base-surface: rgba(26, 21, 17, 0.98);
+  --desktop-base-chrome: rgba(31, 25, 19, 0.94);
+  --desktop-base-chrome-rgb: 31, 25, 19;
+  --desktop-base-panel-dark: rgba(31, 25, 19, 0.98);
   --desktop-line: rgba(237, 225, 210, 0.17);
-  --desktop-base-accent: #dcc3a7;
+  --desktop-base-accent: #d9c0a0;
   --desktop-base-action: #79583b;
   --desktop-base-action-rgb: 121, 88, 59;
   --workspace-heading-ink: var(--desktop-ink);
 }
 
 html[data-desktop-preset="ocean"][data-desktop-mode="dark"] {
-  --desktop-preset-tint: #6796af;
-  --desktop-ink: #e9f1f7;
-  --desktop-base-muted: #b5cad8;
-  --desktop-base-surface: rgba(21, 32, 42, 0.97);
-  --desktop-base-chrome: rgba(10, 22, 32, 0.93);
-  --desktop-base-chrome-rgb: 10, 22, 32;
-  --desktop-base-panel-dark: rgba(10, 21, 31, 0.97);
+  --desktop-preset-tint: #7a91b6;
+  --desktop-ink: #edf2fb;
+  --desktop-base-muted: #becce0;
+  --desktop-base-surface: rgba(16, 22, 33, 0.98);
+  --desktop-base-chrome: rgba(20, 28, 42, 0.94);
+  --desktop-base-chrome-rgb: 20, 28, 42;
+  --desktop-base-panel-dark: rgba(20, 28, 42, 0.98);
   --desktop-line: rgba(219, 235, 245, 0.16);
-  --desktop-base-accent: #acd0e6;
-  --desktop-base-action: #356881;
-  --desktop-base-action-rgb: 53, 104, 129;
+  --desktop-base-accent: #adc8e9;
+  --desktop-base-action: #405f86;
+  --desktop-base-action-rgb: 64, 95, 134;
   --workspace-heading-ink: var(--desktop-ink);
 }
 
 html[data-desktop-preset="blush"][data-desktop-mode="dark"] {
-  --desktop-preset-tint: #ae7e96;
-  --desktop-ink: #f6ebf1;
-  --desktop-base-muted: #d1bbc8;
-  --desktop-base-surface: rgba(39, 26, 35, 0.97);
-  --desktop-base-chrome: rgba(27, 15, 23, 0.93);
-  --desktop-base-chrome-rgb: 27, 15, 23;
-  --desktop-base-panel-dark: rgba(25, 14, 22, 0.97);
+  --desktop-preset-tint: #b18b9f;
+  --desktop-ink: #f8eef4;
+  --desktop-base-muted: #d6bfcc;
+  --desktop-base-surface: rgba(25, 18, 23, 0.98);
+  --desktop-base-chrome: rgba(31, 22, 29, 0.94);
+  --desktop-base-chrome-rgb: 31, 22, 29;
+  --desktop-base-panel-dark: rgba(31, 22, 29, 0.98);
   --desktop-line: rgba(243, 220, 233, 0.16);
-  --desktop-base-accent: #e2b4ce;
+  --desktop-base-accent: #ddbad0;
   --desktop-base-action: #86516e;
   --desktop-base-action-rgb: 134, 81, 110;
   --workspace-heading-ink: var(--desktop-ink);
@@ -356,6 +365,15 @@ body:has(.orbis-theme) .orbis-dropdown-menu {
   border-radius: 18px;
   box-shadow: 0 24px 64px rgba(5, 22, 17, 0.3);
   backdrop-filter: var(--orbis-glass-filter, blur(24px));
+  -webkit-backdrop-filter: var(--orbis-glass-filter, blur(24px));
+}
+body:has(.orbis-theme) :is(.orbis-dropdown-menu, .dropdown-menu) {
+  --tblr-bg-surface: var(--desktop-menu-surface);
+  --tblr-secondary-color: var(--desktop-menu-muted);
+  --desktop-context-muted: var(--desktop-menu-muted);
+  background: var(--desktop-menu-surface);
+  backdrop-filter: var(--desktop-chrome-filter);
+  -webkit-backdrop-filter: var(--desktop-chrome-filter);
 }
 body:has(.orbis-theme) .modal-header,
 body:has(.orbis-theme) .modal-footer {
@@ -367,7 +385,7 @@ body:has(.orbis-theme) .modal-header {
 }
 body:has(.orbis-theme) .text-muted {
   /* biome-ignore lint/complexity/noImportantStyles: Tabler marks this muted utility important. */
-  color: var(--desktop-muted) !important;
+  color: var(--desktop-context-muted, var(--desktop-muted)) !important;
 }
 body:has(.orbis-theme) .dropdown-item {
   color: var(--desktop-ink);
@@ -836,4 +854,8 @@ body:has(.orbis-theme) button:has(> .orbis-remove-icon) {
   align-items: center;
   justify-content: center;
   gap: 8px;
+}
+
+body:has(.orbis-theme) .orbis-dropdown-menu {
+  box-shadow: none;
 }

@@ -5,7 +5,7 @@ import type { DesktopPreferences } from '../desktop-preferences/desktop-preferen
 export type SettingsPreferenceSection = 'settings' | 'dashboard' | 'wallpapers' | 'themes';
 const fields = {
   settings: ['serverName', 'showStoreRecommendations', 'hiddenStoreRecommendationCategories'],
-  dashboard: ['density', 'workspace', 'windows', 'appLaunch'],
+  dashboard: ['density', 'workspace', 'windows', 'appLaunch', 'toolbarOrder'],
   wallpapers: ['wallpaper', 'wallpaperMode', 'wallpaperPreset'],
   themes: ['preset', 'mode'],
 } as const;

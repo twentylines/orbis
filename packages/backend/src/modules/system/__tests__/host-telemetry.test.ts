@@ -21,6 +21,63 @@ function sample() {
 }
 
 describe('validated host device readings', () => {
+  it('accepts a valid host battery and hides it for older helpers', () => {
+    expect(parseHostTelemetry({ ...sample(), battery: { percent: 0, charging: null, extra: 'private' } })).toHaveProperty('battery', {
+      percent: 0,
+      charging: null,
+    });
+    expect(parseHostTelemetry(sample())).toHaveProperty('battery', null);
+    for (const battery of [
+      { percent: -1, charging: false },
+      { percent: 101, charging: false },
+      { percent: 10.5, charging: false },
+      { percent: 10, charging: 'yes' },
+    ]) {
+      expect(parseHostTelemetry({ ...sample(), battery })).toHaveProperty('battery', null);
+    }
+  });
+  it('keeps measured battery details and ignores unsupported private fields', () => {
+    const battery = {
+      percent: 76,
+      charging: false,
+      state: 'discharging',
+      healthPercent: 92.4,
+      powerWatts: 12.5,
+      energyNowWh: 38,
+      energyFullWh: 50,
+      energyDesignWh: 54.1,
+      timeRemainingSeconds: 10944,
+      cycleCount: 173,
+      manufacturer: 'Fixture',
+      model: 'Laptop battery',
+      batteryCount: 1,
+    };
+    expect(parseHostTelemetry({ ...sample(), battery: { ...battery, serialNumber: 'private' } })).toHaveProperty('battery', battery);
+  });
+  it('retains charge when optional battery readings are malformed', () => {
+    const result = parseHostTelemetry({
+      ...sample(),
+      battery: {
+        percent: 52,
+        charging: null,
+        healthPercent: 101,
+        powerWatts: -1,
+        cycleCount: 1.5,
+        timeRemainingSeconds: Number.POSITIVE_INFINITY,
+        model: 'bad\nlabel',
+        batteryCount: 33,
+      },
+    });
+    expect(result).toHaveProperty('battery', {
+      percent: 52,
+      charging: null,
+      healthPercent: null,
+      powerWatts: null,
+      cycleCount: null,
+      timeRemainingSeconds: null,
+      model: null,
+    });
+  });
   it('preserves unavailable rates and strips fields outside the public contract', () => {
     const value = { ...sample(), commands: ['private'], mountOptions: 'secret' };
     const result = parseHostTelemetry(value);
@@ -98,6 +155,16 @@ describe('read-only host device socket', () => {
     expect(calls).toEqual(['GET /v1/telemetry']);
     vi.setSystemTime(Date.now() + 10_001);
     expect(await service.read()).not.toBe(first);
+    expect(calls).toEqual(['GET /v1/telemetry', 'GET /v1/telemetry']);
+  });
+
+  it('retries stale samples quickly after asking the helper to refresh', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    body = { ...sample(), stale: true };
+    const service = new HostTelemetryService();
+    await service.read();
+    vi.setSystemTime(Date.now() + 2001);
+    await service.read();
     expect(calls).toEqual(['GET /v1/telemetry', 'GET /v1/telemetry']);
   });
 
