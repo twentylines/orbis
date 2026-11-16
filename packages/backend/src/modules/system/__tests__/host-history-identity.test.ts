@@ -18,6 +18,7 @@ function sample() {
     disks: [
       { device: 'sda', readBytes: 51200, writtenBytes: 102400, readBytesPerSecond: 5120, writeBytesPerSecond: 10240, busyPercent: 10, inFlight: 1 },
     ],
+    battery: null,
     omitted: { filesystems: 0, network: 0, disks: 0 },
     unavailable: [],
   };
