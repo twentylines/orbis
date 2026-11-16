@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { type } from 'arktype';
 import { ConfigurationService } from '@/core/config/configuration.service';
+import { PasskeySnapshotError, pinPasskeySnapshot } from './passkey-snapshot';
 
 const base64 = type('string > 0 & string <= 2048').narrow((v) => /^[A-Za-z0-9_-]+$/.test(v));
 const credentialSchema = type({
@@ -37,6 +38,7 @@ export class PasskeyStore {
   private loaded?: Promise<void>;
   private queue: Promise<unknown> = Promise.resolve();
   private unavailable = false;
+  private readFence = false;
   constructor(private readonly config: ConfigurationService) {}
   private file() {
     return path.join(this.config.get('directories').dataDir, 'state', 'auth', 'passkeys.json');
@@ -74,9 +76,53 @@ export class PasskeyStore {
     if (this.unavailable) throw new ServiceUnavailableException('Passkeys could not be read safely. Use your password to sign in.');
     return structuredClone(this.state);
   }
+  async withReadFence<T>(work: () => Promise<T>): Promise<T> {
+    if (this.readFence) throw new ServiceUnavailableException('A passkey snapshot is already active. Try again shortly.');
+    this.readFence = true;
+    let pinned: Awaited<ReturnType<typeof pinPasskeySnapshot>> | undefined;
+    let check: (() => Promise<void>) | undefined;
+    let checked = false;
+    try {
+      const dataDir = this.config.get('directories').dataDir;
+      const file = path.join(dataDir, 'state', 'auth', 'passkeys.json');
+      await this.load();
+      await this.queue.catch(() => undefined);
+      if (this.unavailable) throw new ServiceUnavailableException('Passkey storage is unavailable. Use your password to sign in.');
+      const expected = JSON.stringify(this.state);
+      const snapshot = await pinPasskeySnapshot(dataDir, this.state);
+      pinned = snapshot;
+      check = async () => {
+        try {
+          if (this.file() !== file || JSON.stringify(this.state) !== expected) throw new PasskeySnapshotError();
+          await snapshot.check();
+        } catch {
+          throw new PasskeySnapshotError();
+        }
+      };
+      await check();
+      const value = await work();
+      checked = true;
+      await check();
+      return value;
+    } catch (error) {
+      if (error instanceof PasskeySnapshotError) this.unavailable = true;
+      throw error;
+    } finally {
+      try {
+        if (check && !checked)
+          await check().catch(() => {
+            this.unavailable = true;
+          });
+        await pinned?.close();
+      } finally {
+        this.readFence = false;
+      }
+    }
+  }
   change<T>(mutate: (state: PasskeyState) => T | Promise<T>): Promise<T>;
   change<T, R>(mutate: (state: PasskeyState) => T | Promise<T>, afterSave: (value: T) => R | Promise<R>): Promise<R>;
   change<T, R>(mutate: (state: PasskeyState) => T | Promise<T>, afterSave?: (value: T) => R | Promise<R>): Promise<T | R> {
+    if (this.readFence) return Promise.reject(new ServiceUnavailableException('A passkey snapshot is active. Try again shortly.'));
     const task = this.queue
       .catch(() => undefined)
       .then(async () => {
