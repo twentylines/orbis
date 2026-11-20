@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type } from 'arktype';
 import { Link } from 'react-router';
 import { httpsSettingsPath, httpsSetupVisible } from '@/desktop/secure-access';
 import { nearbyAdvertisingMessage, nearbyUnavailableCode, nearbyUnavailableMessage, type NearbyUnavailableCode } from './nearby-visibility-reason';
 import { Button } from '@/components/ui/Button';
-import { Switch } from '@/components/ui/Switch';
+import { useAppContext } from '@/context/app-context';
+import { useUserContext } from '@/context/user-context';
 import { useWindowVisible } from '@/desktop/window-visibility';
+import { AutosavedSettingSwitch } from '@/modules/settings/components/autosaved-setting-switch';
+import { useAutosavedToggle } from '@/modules/settings/hooks/use-autosaved-toggle';
 import { nearbyAddress, nearbyFallback, nearbyOrigin } from './nearby-api';
 import './nearby-visibility.css';
 
@@ -71,86 +75,77 @@ export async function setNearbyVisibility(enabled: boolean, signal?: AbortSignal
   return current;
 }
 
-export function NearbyVisibility({ disabled = false }: { disabled?: boolean }) {
+const nearbyVisibilityKey = (userId: number) => ['nearby-discovery-policy', userId] as const;
+
+export function useNearbyVisibilityToggle(enabled: boolean, disabled = false) {
+  const { user } = useAppContext();
+  const { sessionAbortSignal } = useUserContext();
   const visible = useWindowVisible();
-  const [state, setState] = useState<NearbyVisibilityState | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
-  const current = useRef<AbortController | null>(null);
-  const generation = useRef(0);
-  const running = useRef(false);
-  const run = useCallback(
-    async (enabled?: boolean) => {
-      if (!visible || disabled || running.current) return;
-      running.current = true;
-      const version = ++generation.current;
-      const operation = new AbortController();
-      current.current?.abort();
-      current.current = operation;
-      setBusy(true);
-      setMessage('');
-      try {
-        const result = enabled === undefined ? await readNearbyVisibility(operation.signal) : await setNearbyVisibility(enabled, operation.signal);
-        if (generation.current === version && !operation.signal.aborted) setState(result);
-      } catch (error) {
-        if (generation.current === version && !operation.signal.aborted) {
-          setState(null);
-          setMessage(error instanceof Error ? error.message : nearbyFallback);
-        }
-      } finally {
-        if (generation.current === version) {
-          running.current = false;
-          setBusy(false);
-        }
-      }
+  const client = useQueryClient();
+  const queryKey = nearbyVisibilityKey(user.id);
+  const allowed = enabled && visible && user.operator === true && !disabled;
+  const status = useQuery({
+    queryKey,
+    enabled: allowed,
+    retry: false,
+    queryFn: ({ signal }) => readNearbyVisibility(AbortSignal.any([signal, sessionAbortSignal])),
+  });
+  const state = status.data;
+  const toggle = useAutosavedToggle({
+    id: 'nearby-discovery',
+    scope: 'nearby-discovery-policy',
+    saved: state?.available ? state.enabled : false,
+    disabled: !allowed || !state?.available,
+    readError: status.isError ? status.error.message : undefined,
+    save: async (checked, signal) => {
+      const saved = await setNearbyVisibility(checked, signal);
+      await client.cancelQueries({ queryKey, exact: true });
+      signal.throwIfAborted();
+      client.setQueryData(queryKey, saved);
     },
-    [visible, disabled],
-  );
+  });
+  return { toggle, status, allowed };
+}
+
+export function NearbyVisibility({ disabled = false }: { disabled?: boolean }) {
+  const { toggle, status, allowed } = useNearbyVisibilityToggle(true, disabled);
+  const state = status.data;
+  const client = useQueryClient();
+  const { user } = useAppContext();
   useEffect(() => {
-    if (visible && !disabled) void run();
-    return () => {
-      generation.current++;
-      current.current?.abort();
-      running.current = false;
-    };
-  }, [visible, disabled, run]);
-  useEffect(() => {
-    if (!visible || !state?.available || !state.sharing) return;
+    if (!allowed || !state?.available || !state.sharing) return;
     const expiry = Date.parse(state.sharing.expiresAt);
     const timer = setTimeout(
-      () => setState((current) => (current === state ? { ...state, sharing: null } : current)),
+      () =>
+        client.setQueryData<NearbyVisibilityState>(nearbyVisibilityKey(user.id), (current) =>
+          current === state ? { ...state, sharing: null } : current,
+        ),
       Math.max(0, expiry - Date.now()),
     );
     return () => clearTimeout(timer);
-  }, [state, visible]);
+  }, [allowed, client, state, user.id]);
   return (
     <div className="nearby-visibility">
-      <Switch
-        label="Allow nearby discovery"
-        checked={state?.available ? state.enabled : false}
-        disabled={disabled || busy || !visible || !state?.available}
-        onCheckedChange={(enabled) => {
-          void run(enabled);
-        }}
-      />
+      <AutosavedSettingSwitch label="Allow nearby discovery" toggle={{ ...toggle, disabled: toggle.disabled || toggle.pending }} showStatus />
       <p>When advertising, nearby Orbis servers can find this host’s private LAN address. Pairing and transfers still require HTTPS and approval.</p>
       <output aria-live="polite">
-        {message ||
-          (state?.available
+        {toggle.pending || toggle.error
+          ? ''
+          : state?.available
             ? nearbyAdvertisingMessage(state)
             : state
               ? nearbyUnavailableMessage(state.reasonCode)
-              : busy
+              : status.isFetching
                 ? 'Checking nearby discovery…'
-                : 'Nearby discovery status has not been confirmed.')}
+                : 'Nearby discovery status has not been confirmed.'}
       </output>
       <div className="nearby-visibility-actions">
         <Button
           type="button"
           variant="outline"
-          disabled={disabled || busy || !visible}
+          disabled={!allowed || toggle.pending || status.isFetching}
           onClick={() => {
-            void run();
+            void status.refetch();
           }}
         >
           Refresh

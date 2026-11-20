@@ -65,7 +65,7 @@ export class AppStoreRepository {
     return this.databaseService.db.update(appStore).set({ hash: data.hash, url: data.url }).where(eq(appStore.slug, slug));
   }
 
-  public async updateAppStore(slug: string, data: Omit<NewAppStore, 'hash' | 'slug' | 'url'>) {
+  public async updateAppStore(slug: string, data: Partial<Pick<NewAppStore, 'name' | 'enabled'>>) {
     const update = await this.databaseService.db
       .update(appStore)
       .set({ name: data.name, enabled: data.enabled })

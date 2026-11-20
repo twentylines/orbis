@@ -132,19 +132,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
   min-height: 36px;
   padding: 6px 0;
   background: transparent;
   color: var(--desktop-muted);
   font-weight: 600;
-}
-.orbis-store-tile-action svg {
-  flex: none;
-  transition: transform 180ms ease;
-}
-.orbis-store-tile:hover .orbis-store-tile-action svg {
-  transform: translateX(3px);
 }
 @container (max-width: 26rem) {
   .orbis-store .orbis-store-tile.app-tile {
@@ -186,15 +178,7 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .orbis-store .orbis-store-tile.app-tile,
-  .orbis-store-tile-action svg {
+  .orbis-store .orbis-store-tile.app-tile {
     transition: none;
   }
-  .orbis-store-tile:hover .orbis-store-tile-action svg {
-    transform: none;
-  }
-}
-.orbis-store[data-reduced-motion="true"] .orbis-store-tile-action svg {
-  transition: none;
-  transform: none;
 }

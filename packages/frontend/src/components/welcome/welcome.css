@@ -57,6 +57,9 @@
   padding: 8px 12px;
   margin-inline: -12px;
 }
+:where(.orbis-setup-stage) {
+  scrollbar-width: thin;
+}
 .orbis-setup-step {
   display: grid;
   gap: 28px;
@@ -181,30 +184,6 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
 }
 .orbis-setup-palette strong {
   font-size: 0.875rem;
-}
-.orbis-setup-palette[data-palette="frost"] {
-  --swatch: #748f9f;
-  --swatch-surface: #e7edf0;
-}
-.orbis-setup-palette[data-palette="graphite"] {
-  --swatch: #343637;
-  --swatch-surface: #e7e8e8;
-}
-.orbis-setup-palette[data-palette="forest"] {
-  --swatch: #214f40;
-  --swatch-surface: #e1e9e3;
-}
-.orbis-setup-palette[data-palette="stone"] {
-  --swatch: #86624f;
-  --swatch-surface: #ede6df;
-}
-.orbis-setup-palette[data-palette="ocean"] {
-  --swatch: #346e88;
-  --swatch-surface: #e0eaed;
-}
-.orbis-setup-palette[data-palette="blush"] {
-  --swatch: #925d79;
-  --swatch-surface: #eee1e7;
 }
 .orbis-setup-choice-group {
   display: grid;

@@ -13,10 +13,9 @@ import { MemoryRouter } from 'react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createAppQueryClient } from '@/lib/query-client';
 import { getInstalledAppsOptions, searchAppsOptions } from '@/api-client/@tanstack/react-query.gen';
-import { disableStoreRecommendations, StoreCollectionArt, StoreDiscover, suggestionItemMotion, suggestionSurfaceMotion } from './store-discover';
+import { StoreCollectionArt, StoreDiscover, suggestionItemMotion, suggestionSurfaceMotion } from './store-discover';
 import { StoreCatalogue, storeCataloguePositionMotion } from '@/modules/app/pages/store-catalogue';
 import { mediaApps } from './store-curation';
-import { StoreRecommendationSettings } from '@/modules/settings/containers/store-recommendation-settings';
 import { StorePreviewContext, type StorePreview } from '../../pages/store-preview-context';
 
 const app = (id: string, category: AppInfoSimple['categories'][number], overrides: Partial<AppInfoSimple> = {}): AppInfoSimple => ({
@@ -176,33 +175,15 @@ describe('recommendation transitions', () => {
         null,
         createElement(StoreCatalogue, {
           apps: [app('one', 'ai'), app('two', 'ai')],
-          collections: createElement('div', { className: 'orbis-store-editorial' }, 'suggestions'),
-          collectionsAfter: 1,
           lastElementRef: () => {},
         }),
       ),
     );
     expect(html.match(/class="orbis-store-grid-item"/g)).toHaveLength(2);
-    expect(html.indexOf('orbis-store-editorial')).toBeGreaterThan(html.indexOf('orbis-store-grid-item'));
-    expect(html.lastIndexOf('orbis-store-grid-item')).toBeGreaterThan(html.indexOf('orbis-store-editorial'));
   });
 });
 
 describe('recommendation preferences', () => {
-  test('the Store hide button writes the global preference used by Settings', () => {
-    let update: { showStoreRecommendations: boolean } | undefined;
-    disableStoreRecommendations((next) => {
-      update = next;
-    });
-    const saved = normalisePreferences({ ...defaultDesktopPreferences, ...update });
-    expect(saved.showStoreRecommendations).toBe(false);
-
-    const settings = renderToStaticMarkup(
-      createElement(StoreRecommendationSettings, { shown: saved.showStoreRecommendations, hidden: [], onChange: () => {}, onRestore: () => {} }),
-    );
-    expect(settings).toContain('aria-checked="false"');
-  });
-
   test('legacy preferences default to shown and unhidden; account import/export preserves independent choices', () => {
     const { showStoreRecommendations: _shown, hiddenStoreRecommendationCategories: _hidden, ...legacy } = defaultDesktopPreferences;
     expect(isPreferences(legacy)).toBe(true);
@@ -221,15 +202,6 @@ describe('recommendation preferences', () => {
     expect(validHiddenRecommendationCategories(['gaming', 'media'])).toBe(true);
     expect(isPreferences({ ...defaultDesktopPreferences, showStoreRecommendations: 'false' })).toBe(false);
     expect(isPreferences({ ...defaultDesktopPreferences, hiddenStoreRecommendationCategories: ['invalid'] })).toBe(false);
-  });
-  test('Settings exposes a labelled switch and a separate restore action', () => {
-    const html = renderToStaticMarkup(
-      createElement(StoreRecommendationSettings, { shown: false, hidden: ['gaming'], onChange: () => {}, onRestore: () => {} }),
-    );
-    expect(html).toContain('Show suggestions');
-    expect(html).toContain('aria-checked="false"');
-    expect(html).toContain('Restore hidden categories');
-    expect(html).not.toContain('href=');
   });
 });
 
@@ -361,18 +333,40 @@ test('game artwork uses centered single-icon positioning and a non-overlapping g
 });
 
 test('an open split preview hides the entire recommendation section', () => {
+  expect(renderSuggestions({ catalogue: [app('crafty', 'gaming')], preview: previewFor('crafty:enabled') })).toBe('');
+});
+
+function previewFor(selectedUrn: string, options: Partial<StorePreview> = {}): StorePreview {
+  return {
+    closePath: '/app-store',
+    split: true,
+    selectedUrn,
+    onCardMount: () => {},
+    onDetailsMount: () => {},
+    previewId: 'store-app-preview',
+    close: () => {},
+    nextHistory: () => ({}),
+    ...options,
+  };
+}
+
+test('an app opened from recommendations retains its exact row and artwork without sibling suggestions or controls', () => {
+  const urn = 'crafty:enabled';
+  const preview = previewFor(urn, { suggestion: { kind: 'recommendation', urn, category: 'gaming' } });
   const html = renderSuggestions({
-    catalogue: [app('crafty', 'gaming')],
-    preview: {
-      closePath: '/app-store',
-      split: true,
-      selectedUrn: 'crafty:enabled',
-      onCardMount: () => {},
-      onDetailsMount: () => {},
-      previewId: 'fixture',
-      close: () => {},
-      nextHistory: () => ({}),
-    },
+    catalogue: [app('crafty', 'gaming'), app('crafty', 'gaming', { urn: 'crafty:other' }), app('valheim', 'gaming'), app('ollama', 'ai')],
+    mediaCatalogue: [app('jellyfin', 'media')],
+    installedApps: [app('crafty', 'gaming')],
+    preview,
   });
-  expect(html).toBe('');
+  expect(html).toContain('data-selected-suggestion="true"');
+  expect(html).toContain('data-recommendation-key="crafty:enabled"');
+  expect(html).toContain('/app-store/enabled/crafty');
+  expect(html).toContain('aria-expanded="true"');
+  expect(html.match(/data-recommendation-category=/g)).toHaveLength(1);
+  expect(html.match(/data-recommendation-key=/g)).toHaveLength(1);
+  expect(html.match(/class="orbis-store-artwork-app"/g)).toHaveLength(1);
+  expect(html).not.toMatch(/crafty:other|valheim|ollama|Media library|Browse|Refresh|Do not show suggestions|Dismiss/);
+  expect(renderSuggestions({ catalogue: [app('crafty', 'gaming')], preview: { ...preview, split: false } })).toBe('');
+  expect(renderSuggestions({ catalogue: [app('crafty', 'gaming')], hidden: ['gaming'], preview })).toBe('');
 });

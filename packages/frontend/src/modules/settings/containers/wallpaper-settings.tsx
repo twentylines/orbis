@@ -1,6 +1,8 @@
 import { useDesktopPreferences } from '@/desktop/preferences';
-import { themePresets, presetLabels, presetWallpaperPreviews } from '@/desktop/wallpaper-presets';
+import { useUserContext } from '@/context/user-context';
+import { visibleThemePresets, presetLabels, presetWallpaperPreviews } from '@/desktop/wallpaper-presets';
 import { Switch } from '@/components/ui/Switch';
+import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { IconPhoto, IconTrash, IconUpload } from '@tabler/icons-react';
 import { rememberBrowserWallpaper, forgetBrowserWallpaper } from '@/desktop/wallpaper-cache';
 import { checkWallpaper, sendWallpaper, wallpaperRequestError } from '@/desktop/wallpaper-upload';
@@ -9,11 +11,13 @@ import { useWallpaperImage } from '@/desktop/wallpaper-layer';
 import { AppearanceRange } from './appearance-controls';
 
 export function WallpaperSettings() {
-  const { preferences, update, updateAppearance, wallpaperRevision, refreshWallpaper } = useDesktopPreferences();
+  const { preferences, updateAppearance, commitWallpaperChoice, wallpaperRevision, refreshWallpaper } = useDesktopPreferences();
+  const { sessionAbortSignal } = useUserContext();
   const value = preferences.appearance;
+  const matchesPreset = preferences.wallpaperMode === 'theme';
   const [uploaded, setUploaded] = useState<string | null>(value.wallpaperImage);
   const [infoAttempt, setInfoAttempt] = useState(0);
-  const [operation, setOperation] = useState<'checking' | 'uploading' | 'removing' | null>(null);
+  const [operation, setOperation] = useState<'checking' | 'uploading' | 'removing' | 'applying' | null>(null);
   const busy = operation !== null;
   const [progress, setProgress] = useState<number | null>(null);
   const [tone, setTone] = useState<'status' | 'error' | 'success'>('status');
@@ -24,13 +28,14 @@ export function WallpaperSettings() {
   const mounted = useRef(true);
   const mutationRevision = useRef(0);
   const initialImage = useRef(value.wallpaperImage);
+  const choosing = useRef(false);
 
   const imageUnavailable = useCallback(() => {
     setTone('error');
     setMessage('Uploaded image is unavailable. Replace it or choose another wallpaper.');
   }, []);
   const uploadedPreview = useWallpaperImage(
-    uploaded,
+    matchesPreset ? null : uploaded,
     preferences.wallpaperMode !== 'custom' || value.wallpaperImage !== uploaded,
     wallpaperRevision,
     imageUnavailable,
@@ -41,6 +46,7 @@ export function WallpaperSettings() {
     if (value.wallpaperImage) setUploaded(value.wallpaperImage);
   }, [value.wallpaperImage]);
   useEffect(() => {
+    if (matchesPreset) return;
     const controller = new AbortController();
     const revision = mutationRevision.current;
     void fetch(`/api/desktop-preferences/wallpaper/info?refresh=${infoAttempt}`, {
@@ -68,7 +74,7 @@ export function WallpaperSettings() {
     return () => {
       controller.abort();
     };
-  }, [infoAttempt]);
+  }, [infoAttempt, matchesPreset]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -76,6 +82,28 @@ export function WallpaperSettings() {
       request.current?.abort();
     };
   }, []);
+
+  const chooseWallpaper = async (patch: Parameters<typeof commitWallpaperChoice>[0], refresh = false) => {
+    if (busy || request.current || choosing.current) return;
+    choosing.current = true;
+    setOperation('applying');
+    setTone('status');
+    setMessage('Applying wallpaper…');
+    try {
+      await commitWallpaperChoice(patch);
+      if (sessionAbortSignal.aborted || !mounted.current) return;
+      if (refresh) refreshWallpaper();
+      setMessage('');
+    } catch {
+      if (!sessionAbortSignal.aborted && mounted.current) {
+        setTone('error');
+        setMessage('Could not apply this wallpaper. Try again.');
+      }
+    } finally {
+      choosing.current = false;
+      if (mounted.current) setOperation(null);
+    }
+  };
 
   const upload = async (file?: File) => {
     if (!file || busy || request.current) return;
@@ -86,20 +114,21 @@ export function WallpaperSettings() {
     mutationRevision.current += 1;
     setMessage('Checking image…');
     const controller = new AbortController();
+    const signal = AbortSignal.any([controller.signal, sessionAbortSignal]);
     request.current = controller;
     const timeout = window.setTimeout(() => controller.abort(new DOMException('Upload timed out', 'TimeoutError')), 120000);
     try {
-      const mime = await checkWallpaper(file, controller.signal);
+      const mime = await checkWallpaper(file, signal);
       setOperation('uploading');
       setMessage('Uploading image…');
-      const hash = await sendWallpaper(file, controller.signal, setProgress);
+      const hash = await sendWallpaper(file, signal, setProgress);
       const remembered = await rememberBrowserWallpaper(hash, new Blob([file], { type: mime }));
-      controller.signal.throwIfAborted();
+      signal.throwIfAborted();
       if (!mounted.current) return;
       setUploaded(hash);
       initialImage.current = hash;
-      update({ wallpaperMode: 'custom' });
-      updateAppearance({ wallpaperImage: hash });
+      await commitWallpaperChoice({ wallpaperMode: 'custom', appearance: { wallpaperImage: hash } });
+      signal.throwIfAborted();
       refreshWallpaper();
       setTone('success');
       setMessage(
@@ -108,7 +137,7 @@ export function WallpaperSettings() {
           : 'Wallpaper uploaded. This browser could not remember it for sign-in.',
       );
     } catch (error) {
-      if (mounted.current) {
+      if (mounted.current && !sessionAbortSignal.aborted) {
         setTone('error');
         setMessage(
           controller.signal.reason?.name === 'TimeoutError'
@@ -133,13 +162,14 @@ export function WallpaperSettings() {
     setInfoError('');
     mutationRevision.current += 1;
     const controller = new AbortController();
+    const signal = AbortSignal.any([controller.signal, sessionAbortSignal]);
     request.current = controller;
     const timeout = window.setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), 30000);
     try {
-      const response = await fetch('/api/desktop-preferences/wallpaper', { method: 'DELETE', credentials: 'include', signal: controller.signal });
+      const response = await fetch('/api/desktop-preferences/wallpaper', { method: 'DELETE', credentials: 'include', signal });
       if (!response.ok) throw new Error(wallpaperRequestError(response.status, await response.json().catch(() => null)));
       await forgetBrowserWallpaper();
-      controller.signal.throwIfAborted();
+      signal.throwIfAborted();
       if (!mounted.current) return;
       setUploaded(null);
       initialImage.current = null;
@@ -148,7 +178,7 @@ export function WallpaperSettings() {
       setTone('success');
       setMessage('Uploaded wallpaper removed from this account and browser.');
     } catch (error) {
-      if (mounted.current) {
+      if (mounted.current && !sessionAbortSignal.aborted) {
         setTone('error');
         setMessage(
           controller.signal.reason?.name === 'TimeoutError'
@@ -171,166 +201,180 @@ export function WallpaperSettings() {
     <section className="appearance-section appearance-wallpaper-section" aria-labelledby="appearance-wallpaper">
       <div>
         <h2 id="appearance-wallpaper">Wallpaper</h2>
-        <p>Images stay private on your server. This browser remembers the last wallpaper for sign-in and loading screens.</p>
+        {matchesPreset ? null : (
+          <p>Uploaded images stay on your server. This browser remembers your uploaded wallpaper for sign-in and loading screens.</p>
+        )}
       </div>
       <div className="appearance-wallpaper-settings">
-        <Switch
-          label="Match wallpaper to colour preset"
-          checked={preferences.wallpaperMode === 'theme'}
-          disabled={busy}
-          onCheckedChange={(enabled) =>
-            update({
-              wallpaperMode: enabled ? 'theme' : 'custom',
-              wallpaperPreset: preferences.wallpaperPreset ?? (!enabled && !value.wallpaperImage ? preferences.preset : null),
-            })
-          }
-        />
-        <div className="appearance-wallpapers">
-          {themePresets.map((preset) => (
-            <button
-              key={preset}
-              type="button"
-              className="appearance-wallpaper"
-              disabled={busy}
-              aria-pressed={
-                preferences.wallpaperMode === 'custom' &&
-                !value.wallpaperImage &&
-                (preferences.wallpaperPreset ?? ({ sandstone: 'stone', tidal: 'ocean', canopy: 'forest' } as const)[preferences.wallpaper]) === preset
-              }
-              onClick={() => update({ wallpaperMode: 'custom', wallpaperPreset: preset, appearance: { ...value, wallpaperImage: null } })}
-            >
-              <span className="appearance-wallpaper-preview" aria-hidden="true">
-                <img
-                  src={presetWallpaperPreviews[preset]}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: 'inherit' }}
-                />
-              </span>
-              <strong>{presetLabels[preset]}</strong>
-            </button>
-          ))}
-          {uploaded ? (
-            <button
-              type="button"
-              className="appearance-wallpaper"
-              disabled={busy}
-              aria-pressed={preferences.wallpaperMode === 'custom' && value.wallpaperImage === uploaded}
-              onClick={() => {
-                update({ wallpaperMode: 'custom', appearance: { ...value, wallpaperImage: uploaded } });
-                refreshWallpaper();
-              }}
-            >
-              <span className="appearance-wallpaper-preview appearance-upload-preview">
-                <IconPhoto size={24} aria-hidden="true" />
-                {uploadedPreview.source ? (
-                  <img key={uploadedPreview.source} src={uploadedPreview.source} alt="" onError={uploadedPreview.unavailable} />
-                ) : null}
-              </span>
-              <strong>Uploaded image</strong>
-            </button>
-          ) : null}
-        </div>
-        <div className="appearance-actions">
-          <button type="button" disabled={busy} aria-describedby="wallpaper-upload-status" onClick={() => input.current?.click()}>
-            <IconUpload size={18} aria-hidden="true" />
-            {operation === 'checking'
-              ? 'Checking image…'
-              : operation === 'uploading'
-                ? `Uploading${progress === null ? '…' : ` ${progress}%`}`
-                : uploaded
-                  ? 'Replace image'
-                  : 'Upload image'}
-          </button>
-          {uploaded || value.wallpaperImage ? (
-            <button type="button" disabled={busy} onClick={() => void remove()}>
-              <IconTrash className="orbis-remove-icon" size={18} aria-hidden="true" />
-              Remove uploaded image
-            </button>
-          ) : null}
-          <input
-            ref={input}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            aria-label="Upload wallpaper image"
-            hidden
-            onChange={(event) => {
-              void upload(event.target.files?.[0]);
-              event.target.value = '';
-            }}
+        <div className="appearance-wallpaper-match">
+          <Switch
+            label="Match wallpaper to colour preset"
+            checked={matchesPreset}
+            disabled={busy}
+            onCheckedChange={(enabled) =>
+              void chooseWallpaper({
+                wallpaperMode: enabled ? 'theme' : 'custom',
+                wallpaperPreset: preferences.wallpaperPreset ?? (!enabled && !value.wallpaperImage ? preferences.preset : null),
+              })
+            }
           />
-        </div>
-        <div className="appearance-upload-status" data-tone={tone} aria-busy={busy}>
-          {busy ? (
-            <progress
-              max={100}
-              value={operation === 'uploading' && progress !== null ? progress : undefined}
-              aria-label={operation === 'removing' ? 'Removing wallpaper' : 'Uploading wallpaper'}
+          {matchesPreset ? (
+            <div
+              role="img"
+              aria-label="Current wallpaper preview"
+              className="appearance-matched-wallpaper"
+              style={{ backgroundImage: `var(--orbis-pack-wallpaper, url("${presetWallpaperPreviews[preferences.preset]}"))` }}
             />
           ) : null}
-          <output id="wallpaper-upload-status" className="appearance-upload-message" aria-live="polite">
-            {message || infoError}
-          </output>
-          {infoError && !busy ? (
-            <button
-              type="button"
-              onClick={() => {
-                setMessage('');
-                setInfoAttempt((attempt) => attempt + 1);
-              }}
-            >
-              Retry uploaded image
-            </button>
-          ) : null}
         </div>
-        <p className="appearance-upload-help">PNG, JPEG or WebP · Up to 32 MB and 64 megapixels. Original image quality is preserved.</p>
-        <fieldset className="appearance-wallpaper-controls" disabled={busy}>
-          <legend>Image layout</legend>
-          <SelectionGroup className="appearance-choice">
-            <button type="button" aria-pressed={value.wallpaperFit === 'cover'} onClick={() => updateAppearance({ wallpaperFit: 'cover' })}>
-              Fill screen
-            </button>
-            <button type="button" aria-pressed={value.wallpaperFit === 'contain'} onClick={() => updateAppearance({ wallpaperFit: 'contain' })}>
-              Fit whole image
-            </button>
-          </SelectionGroup>
-          <div className="appearance-range-grid">
-            <AppearanceRange
-              label="Horizontal position"
-              value={value.wallpaperX}
-              max={100}
-              onChange={(wallpaperX) => updateAppearance({ wallpaperX })}
-            />
-            <AppearanceRange
-              label="Vertical position"
-              value={value.wallpaperY}
-              max={100}
-              onChange={(wallpaperY) => updateAppearance({ wallpaperY })}
-            />
-            <AppearanceRange
-              label="Dim wallpaper"
-              value={value.wallpaperDim}
-              max={70}
-              onChange={(wallpaperDim) => updateAppearance({ wallpaperDim })}
-            />
-            <AppearanceRange
-              label="Wallpaper blur"
-              value={value.wallpaperBlur}
-              max={24}
-              unit="px"
-              onChange={(wallpaperBlur) => updateAppearance({ wallpaperBlur })}
-            />
+        {matchesPreset ? null : (
+          <div className="appearance-wallpaper-options">
+            <div className="appearance-wallpapers">
+              {visibleThemePresets.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  className="appearance-wallpaper"
+                  disabled={busy}
+                  aria-pressed={
+                    preferences.wallpaperMode === 'custom' &&
+                    !value.wallpaperImage &&
+                    (preferences.wallpaperPreset ?? ({ sandstone: 'stone', tidal: 'ocean', canopy: 'forest' } as const)[preferences.wallpaper]) ===
+                      preset
+                  }
+                  onClick={() => void chooseWallpaper({ wallpaperMode: 'custom', wallpaperPreset: preset, appearance: { wallpaperImage: null } })}
+                >
+                  <span className="appearance-wallpaper-preview" aria-hidden="true">
+                    <img
+                      src={presetWallpaperPreviews[preset]}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: 'inherit' }}
+                    />
+                  </span>
+                  <strong>{presetLabels[preset]}</strong>
+                </button>
+              ))}
+              {uploaded ? (
+                <button
+                  type="button"
+                  className="appearance-wallpaper"
+                  disabled={busy}
+                  aria-pressed={preferences.wallpaperMode === 'custom' && value.wallpaperImage === uploaded}
+                  onClick={() => void chooseWallpaper({ wallpaperMode: 'custom', appearance: { wallpaperImage: uploaded } }, true)}
+                >
+                  <span className="appearance-wallpaper-preview appearance-upload-preview">
+                    <IconPhoto size={24} aria-hidden="true" />
+                    {uploadedPreview.source ? (
+                      <img key={uploadedPreview.source} src={uploadedPreview.source} alt="" onError={uploadedPreview.unavailable} />
+                    ) : null}
+                  </span>
+                  <strong>Uploaded image</strong>
+                </button>
+              ) : null}
+            </div>
+            <div className="appearance-actions">
+              <button type="button" disabled={busy} aria-describedby="wallpaper-upload-status" onClick={() => input.current?.click()}>
+                <IconUpload size={18} aria-hidden="true" />
+                {operation === 'checking'
+                  ? 'Checking image…'
+                  : operation === 'uploading'
+                    ? `Uploading${progress === null ? '…' : ` ${progress}%`}`
+                    : uploaded
+                      ? 'Replace image'
+                      : 'Upload image'}
+              </button>
+              {uploaded || value.wallpaperImage ? (
+                <button type="button" disabled={busy} onClick={() => void remove()}>
+                  <IconTrash className="orbis-remove-icon" size={18} aria-hidden="true" />
+                  Remove uploaded image
+                </button>
+              ) : null}
+              <input
+                ref={input}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                aria-label="Upload wallpaper image"
+                hidden
+                onChange={(event) => {
+                  void upload(event.target.files?.[0]);
+                  event.target.value = '';
+                }}
+              />
+            </div>
+            <div className="appearance-upload-status" data-tone={tone} aria-busy={operation !== null}>
+              {operation === 'checking' || operation === 'uploading' || operation === 'removing' ? (
+                <progress
+                  max={100}
+                  value={operation === 'uploading' && progress !== null ? progress : undefined}
+                  aria-label={operation === 'removing' ? 'Removing wallpaper' : 'Uploading wallpaper'}
+                />
+              ) : null}
+              <output id="wallpaper-upload-status" className="appearance-upload-message" aria-live="polite">
+                {message || infoError}
+              </output>
+              {infoError && !busy ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMessage('');
+                    setInfoAttempt((attempt) => attempt + 1);
+                  }}
+                >
+                  Retry uploaded image
+                </button>
+              ) : null}
+            </div>
+            <p className="appearance-upload-help">PNG, JPEG or WebP · Up to 32 MB and 64 megapixels. Original image quality is preserved.</p>
+            <fieldset className="appearance-wallpaper-controls" disabled={busy}>
+              <legend>Image layout</legend>
+              <SelectionGroup className="appearance-choice">
+                <button type="button" aria-pressed={value.wallpaperFit === 'cover'} onClick={() => updateAppearance({ wallpaperFit: 'cover' })}>
+                  Fill screen
+                </button>
+                <button type="button" aria-pressed={value.wallpaperFit === 'contain'} onClick={() => updateAppearance({ wallpaperFit: 'contain' })}>
+                  Fit whole image
+                </button>
+              </SelectionGroup>
+              <div className="appearance-range-grid">
+                <AppearanceRange
+                  label="Horizontal position"
+                  value={value.wallpaperX}
+                  max={100}
+                  onChange={(wallpaperX) => updateAppearance({ wallpaperX })}
+                />
+                <AppearanceRange
+                  label="Vertical position"
+                  value={value.wallpaperY}
+                  max={100}
+                  onChange={(wallpaperY) => updateAppearance({ wallpaperY })}
+                />
+                <AppearanceRange
+                  label="Dim wallpaper"
+                  value={value.wallpaperDim}
+                  max={70}
+                  onChange={(wallpaperDim) => updateAppearance({ wallpaperDim })}
+                />
+                <AppearanceRange
+                  label="Wallpaper blur"
+                  value={value.wallpaperBlur}
+                  max={24}
+                  unit="px"
+                  onChange={(wallpaperBlur) => updateAppearance({ wallpaperBlur })}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => updateAppearance({ wallpaperFit: 'cover', wallpaperX: 50, wallpaperY: 0, wallpaperDim: 0, wallpaperBlur: 0 })}
+              >
+                Reset image layout
+              </button>
+            </fieldset>
           </div>
-          <button
-            type="button"
-            onClick={() => updateAppearance({ wallpaperFit: 'cover', wallpaperX: 50, wallpaperY: 0, wallpaperDim: 0, wallpaperBlur: 0 })}
-          >
-            Reset image layout
-          </button>
-        </fieldset>
+        )}
+        {matchesPreset && message ? <output aria-live="polite">{message}</output> : null}
       </div>
     </section>
   );
 }
-import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';

@@ -1,29 +1,17 @@
 import { hasIndependentUpdateSchedules, type AutomaticUpdateSettings, type AutomaticUpdateStatus } from '@/desktop/automatic-updates-api';
 
-export function automaticScheduleDirty(
-  mode: 'all' | 'apps',
-  saved: AutomaticUpdateStatus | undefined,
-  draft: AutomaticUpdateSettings | undefined,
-  time: string | null,
-) {
-  if (!saved || !draft || !hasIndependentUpdateSchedules(saved)) return false;
-  const savedTime = mode === 'apps' ? saved.settings.schedule.time : saved.orbisSchedule?.time;
-  return (
-    time !== (savedTime ?? null) ||
-    (mode === 'apps'
-      ? (draft.apps?.enabled ?? false) !== (saved.settings.apps?.enabled ?? false)
-      : draft.orbis.enabled !== saved.settings.orbis.enabled || draft.orbis.mode !== saved.settings.orbis.mode)
-  );
-}
+export type AutomaticScheduleEdit = { mode?: AutomaticUpdateSettings['orbis']['mode']; time?: string };
 
-export function automaticSchedulePlan(mode: 'all' | 'apps', latest: AutomaticUpdateStatus, draft: AutomaticUpdateSettings, time: string) {
+export function automaticSchedulePlan(mode: 'all' | 'apps', latest: AutomaticUpdateStatus, edit: AutomaticScheduleEdit) {
   if (!hasIndependentUpdateSchedules(latest)) throw new Error('Update Orbis to configure separate update schedules.');
-  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error('Enter a valid update time.');
+  if (edit.time !== undefined && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(edit.time)) throw new Error('Enter a valid update time.');
   return {
-    settings:
-      mode === 'apps'
-        ? { ...latest.settings, apps: draft.apps, schedule: { ...latest.settings.schedule, time } }
-        : { ...latest.settings, orbis: draft.orbis },
-    options: { expectedRevision: latest.revision, ...(mode === 'all' ? { orbisSchedule: { time } } : {}) },
+    settings: {
+      ...latest.settings,
+      apps: undefined,
+      orbis: mode === 'all' && edit.mode ? { ...latest.settings.orbis, mode: edit.mode } : latest.settings.orbis,
+      schedule: mode === 'apps' && edit.time ? { ...latest.settings.schedule, time: edit.time } : latest.settings.schedule,
+    },
+    options: { expectedRevision: latest.revision, ...(mode === 'all' && edit.time ? { orbisSchedule: { time: edit.time } } : {}) },
   };
 }

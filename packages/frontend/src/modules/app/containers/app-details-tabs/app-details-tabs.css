@@ -226,14 +226,10 @@
 .app-detail-link {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
   max-width: 100%;
   color: var(--desktop-accent);
 }
 .app-detail-link > span {
   min-width: 0;
   overflow-wrap: anywhere;
-}
-.app-detail-link > svg {
-  flex: none;
 }

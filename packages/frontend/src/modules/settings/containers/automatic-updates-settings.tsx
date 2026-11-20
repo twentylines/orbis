@@ -1,6 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Switch } from '@/components/ui/Switch';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { TimeField, useTimeField } from '@/components/ui/TimeField/TimeField';
 import { useWindowVisible } from '@/desktop/window-visibility';
@@ -13,18 +12,21 @@ import {
   saveAutomaticUpdateSettings,
   readAutomaticUpdateSettings,
   hasIndependentUpdateSchedules,
-  type IndependentScheduleOptions,
   type AutomaticUpdateSettings,
 } from '@/desktop/automatic-updates-api';
 import './automatic-updates-settings.css';
 import { SystemUpdatesSettings } from './system-updates-settings';
 import { AutomaticAppUpdateSwitch } from './app-update-policy';
-import { useSettingsSave } from '../pages/settings-save';
-import { automaticScheduleDirty, automaticSchedulePlan } from '../helpers/update-schedule-draft';
+import { useDebouncedPreferenceSave } from '../hooks/use-debounced-preference-save';
+import { AutosavedSettingSwitch } from '../components/autosaved-setting-switch';
+import { automaticSettingsScope, useAutomaticUpdateToggle } from '../hooks/use-update-setting-toggles';
+import { automaticSchedulePlan, type AutomaticScheduleEdit } from '../helpers/update-schedule-draft';
+
+type OrbisUpdateMode = AutomaticUpdateSettings['orbis']['mode'];
 
 type ScheduleLifetime = Readonly<{ epoch: object; signal: AbortSignal; version: number }>;
-type ScheduleWrite = ScheduleLifetime & { settings: AutomaticUpdateSettings; options: IndependentScheduleOptions };
-type ScheduleDraft = { settings: AutomaticUpdateSettings; time: string | null | undefined; epoch: object; version: number };
+type ScheduleWrite = ScheduleLifetime & AutomaticScheduleEdit;
+type ScheduleDraft = { time: string | null; epoch: object; version: number };
 
 export function AutomaticUpdatesSettings({ mode = 'all' }: { mode?: 'all' | 'apps' }) {
   const id = useId();
@@ -51,12 +53,25 @@ export function AutomaticUpdatesSettings({ mode = 'all' }: { mode?: 'all' | 'app
   }, [visible, clock]);
   const currentServerTime = clock ? formatAutomaticUpdateServerTime(clock.value, Math.max(0, performance.now() - clock.receivedAt)) : null;
   const [draft, setDraft] = useState<ScheduleDraft | null>(null);
+  const [requestedTime, setRequestedTime] = useState<ScheduleWrite | null>(null);
+  const [requestedMode, setRequestedMode] = useState<ScheduleWrite | null>(null);
   const activeDraft = draft?.epoch === sessionEpoch ? draft : null;
+  const orbis = useAutomaticUpdateToggle('orbis', status.data, visible && mode === 'all');
   const timeDraft = activeDraft?.time;
+  const savedMode = status.data?.settings.orbis.mode;
+  const selectedMode = requestedMode?.epoch === sessionEpoch ? requestedMode.mode : savedMode;
+  const independent = hasIndependentUpdateSchedules(status.data);
+  const savedTime = mode === 'apps' ? status.data?.settings.schedule.time : status.data?.orbisSchedule?.time;
   const save = useMutation({
+    scope: { id: automaticSettingsScope },
+    networkMode: 'always',
+    retry: false,
     mutationFn: async (write: ScheduleWrite) => {
       assertCurrent(write);
-      const result = await saveAutomaticUpdateSettings(write.settings, write.options, write.signal);
+      const latest = await readAutomaticUpdateSettings(write.signal);
+      assertCurrent(write);
+      const { settings, options } = automaticSchedulePlan(mode, latest, write);
+      const result = await saveAutomaticUpdateSettings(settings, options, write.signal);
       assertCurrent(write);
       return result;
     },
@@ -64,62 +79,47 @@ export function AutomaticUpdatesSettings({ mode = 'all' }: { mode?: 'all' | 'app
       if (write.signal.aborted || write.epoch !== currentEpoch.current) return;
       client.setQueryData(options.queryKey, result);
       void client.invalidateQueries({ queryKey: ['orbis-system-update-schedule'] });
-      setDraft((current) => (current?.epoch === write.epoch && current.version === write.version ? null : current));
+      if (write.time !== undefined) {
+        setDraft((current) => (current?.epoch === write.epoch && current.version === write.version ? null : current));
+        setRequestedTime((current) => (current === write ? null : current));
+      }
+      if (write.mode !== undefined) setRequestedMode((current) => (current === write ? null : current));
     },
   });
-  const currentSave = save.variables?.epoch === sessionEpoch && !save.variables.signal.aborted;
-  const saving = save.isPending && currentSave;
-  const value = activeDraft?.settings ?? status.data?.settings;
-  const independent = hasIndependentUpdateSchedules(status.data);
-  const savedTime = mode === 'apps' ? status.data?.settings.schedule.time : status.data?.orbisSchedule?.time;
   const time = useTimeField({
     value: timeDraft === undefined ? (savedTime ?? null) : timeDraft,
     format: preferences.appearance.timeFormat,
     onFormatChange: (timeFormat) => updateAppearance({ timeFormat }),
-    onChange: (next) => {
-      if (value) setDraft({ settings: value, time: next, epoch: sessionEpoch, version: ++editVersion.current });
-      save.reset();
-    },
+    onChange: (next) => setDraft({ time: next, epoch: sessionEpoch, version: ++editVersion.current }),
   });
-  const resolvedValue = value && time.value ? structuredClone(value) : null;
-  const timeInvalid = Boolean(independent && timeDraft !== undefined && value && !resolvedValue);
-  const change = (next: AutomaticUpdateSettings) => {
-    setDraft({ settings: next, time: timeDraft, epoch: sessionEpoch, version: ++editVersion.current });
-    save.reset();
-  };
-  const dirty = automaticScheduleDirty(
-    mode,
-    status.data,
-    mode === 'apps' && value ? { ...value, apps: status.data?.settings.apps } : value,
-    time.value,
+  const ready = Boolean(status.data?.available && independent);
+  const writeTime = requestedTime?.epoch === sessionEpoch && requestedTime.time === time.value ? requestedTime : null;
+  const writeMode = requestedMode?.epoch === sessionEpoch ? requestedMode : null;
+  const timeSave = useDebouncedPreferenceSave(
+    writeTime ? String(writeTime.version) : null,
+    async () => {
+      if (writeTime) await save.mutateAsync(writeTime);
+    },
+    { delay: 0, ready, signal: sessionAbortSignal, unsaved: activeDraft !== null && time.value !== savedTime },
   );
-  const capture = (settings: AutomaticUpdateSettings, selectedTime: string) => ({
-    settings: structuredClone(settings),
-    selectedTime,
-    epoch: sessionEpoch,
-    signal: sessionAbortSignal,
-    version: activeDraft?.version ?? editVersion.current,
-  });
-  const commit = async (write: ReturnType<typeof capture>) => {
-    assertCurrent(write);
-    const latest = await readAutomaticUpdateSettings(write.signal);
-    assertCurrent(write);
-    const next = mode === 'apps' ? { ...write.settings, apps: latest.settings.apps } : write.settings;
-    const plan = automaticSchedulePlan(mode, latest, next, write.selectedTime);
-    await save.mutateAsync({ ...plan, epoch: write.epoch, signal: write.signal, version: write.version });
-    assertCurrent(write);
-  };
-  const sharedSave = useSettingsSave({
-    section: 'updates',
-    dirty: dirty || timeInvalid,
-    pending: saving,
-    prepare: async () => {
-      if (!time.finish() || !resolvedValue || !time.value || !status.data?.available || !independent) return null;
-      const write = capture(resolvedValue, time.value);
-      assertCurrent(write);
-      return () => commit(write);
+  const modeSave = useDebouncedPreferenceSave(
+    writeMode ? String(writeMode.version) : null,
+    async () => {
+      if (writeMode) await save.mutateAsync(writeMode);
     },
-  });
+    { delay: 0, ready, signal: sessionAbortSignal },
+  );
+  const changeMode = (next: OrbisUpdateMode) =>
+    setRequestedMode({ mode: next, epoch: sessionEpoch, signal: sessionAbortSignal, version: ++editVersion.current });
+  const commitTime = (next: string) => {
+    if (next === savedTime) {
+      setDraft(null);
+      setRequestedTime(null);
+      return;
+    }
+    if (requestedTime?.time === next && requestedTime.epoch === sessionEpoch) return;
+    setRequestedTime({ time: next, epoch: sessionEpoch, signal: sessionAbortSignal, version: editVersion.current });
+  };
   return (
     <section
       id={mode === 'all' ? 'setting-orbis-updates' : 'setting-app-updates'}
@@ -138,78 +138,57 @@ export function AutomaticUpdatesSettings({ mode = 'all' }: { mode?: 'all' | 'app
           </button>
         </p>
       ) : null}
-      {value ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (sharedSave.shared) return void sharedSave.save?.();
-            time.finish();
-            if (dirty && resolvedValue && time.value && independent) void commit(capture(resolvedValue, time.value)).catch(() => undefined);
-          }}
-        >
-          <fieldset className="settings-save-fields" disabled={sharedSave.pending || !independent}>
-            {mode === 'all' ? (
+      {status.data ? (
+        <fieldset className="settings-save-fields" disabled={!independent}>
+          {mode === 'all' ? (
+            <>
+              <AutosavedSettingSwitch label="Update Orbis automatically" toggle={orbis} />
+              <fieldset disabled={!orbis.checked || !ready} className="automatic-updates-modes">
+                <legend>When to update Orbis</legend>
+                <label>
+                  <input type="radio" name={`${id}-mode`} checked={selectedMode === 'idle'} onChange={() => changeMode('idle')} />
+                  <span>When Orbis is idle</span>
+                </label>
+                <label>
+                  <input type="radio" name={`${id}-mode`} checked={selectedMode === 'scheduled'} onChange={() => changeMode('scheduled')} />
+                  <span>After the daily update time</span>
+                </label>
+              </fieldset>
+              {status.data?.pauseReason ? <p>{status.data.pauseReason}</p> : null}
+              {status.data?.lastAttempt ? <p>Last Orbis check: {status.data.lastAttempt.message ?? status.data.lastAttempt.state}</p> : null}
+            </>
+          ) : null}
+          {mode === 'apps' ? <AutomaticAppUpdateSwitch /> : null}
+          <TimeField
+            control={time}
+            label={mode === 'apps' ? 'App update time' : 'Orbis update time'}
+            id={mode === 'apps' ? 'setting-app-update-time' : 'setting-update-time'}
+            disabled={timeSave.pending || !ready}
+            describedBy={`${id}-server-time`}
+            onCommit={commitTime}
+          />
+          <p id={`${id}-server-time`} className="automatic-updates-server-time">
+            {currentServerTime ? (
               <>
-                <Switch
-                  label="Update Orbis automatically"
-                  checked={value.orbis.enabled}
-                  disabled={saving || (!status.data?.available && !value.orbis.enabled)}
-                  onCheckedChange={(enabled) => change({ ...value, orbis: { ...value.orbis, enabled } })}
-                />
-                <fieldset disabled={!value.orbis.enabled || !status.data?.available || saving} className="automatic-updates-modes">
-                  <legend>When to update Orbis</legend>
-                  <label>
-                    <input
-                      type="radio"
-                      name={`${id}-mode`}
-                      checked={value.orbis.mode === 'idle'}
-                      onChange={() => change({ ...value, orbis: { ...value.orbis, mode: 'idle' } })}
-                    />
-                    <span>When Orbis is idle</span>
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name={`${id}-mode`}
-                      checked={value.orbis.mode === 'scheduled'}
-                      onChange={() => change({ ...value, orbis: { ...value.orbis, mode: 'scheduled' } })}
-                    />
-                    <span>After the daily update time</span>
-                  </label>
-                </fieldset>
-                {status.data?.pauseReason ? <p>{status.data.pauseReason}</p> : null}
-                {status.data?.lastAttempt ? <p>Last Orbis check: {status.data.lastAttempt.message ?? status.data.lastAttempt.state}</p> : null}
+                Server time: <time>{currentServerTime}</time> · {serverTime?.timezone}
               </>
-            ) : null}
-            {mode === 'apps' ? <AutomaticAppUpdateSwitch /> : null}
-            <TimeField
-              control={time}
-              label={mode === 'apps' ? 'App update time' : 'Orbis update time'}
-              id={mode === 'apps' ? 'setting-app-update-time' : 'setting-update-time'}
-              disabled={saving || !status.data?.available}
-              describedBy={`${id}-server-time`}
-            />
-            <p id={`${id}-server-time`} className="automatic-updates-server-time">
-              {currentServerTime ? (
-                <>
-                  Server time: <time>{currentServerTime}</time> · {serverTime?.timezone}
-                </>
-              ) : (
-                'Server time is unavailable.'
-              )}
-            </p>
-            {independent ? null : <p role="note">Update Orbis to configure separate update schedules.</p>}
-            {status.data?.available === false ? <p role="alert">{status.data.reason ?? 'Automatic updates are unavailable.'}</p> : null}
-            {save.isError && currentSave ? (
-              <InlineFeedback>{save.error instanceof Error ? save.error.message : 'The update schedule could not be saved.'}</InlineFeedback>
-            ) : null}
-            {sharedSave.shared ? null : (
-              <button className="automatic-updates-save" type="submit" disabled={!dirty || timeInvalid || saving || !status.data?.available}>
-                {saving ? 'Saving…' : 'Save'}
-              </button>
+            ) : (
+              'Server time is unavailable.'
             )}
-          </fieldset>
-        </form>
+          </p>
+          {independent ? null : <p role="note">Update Orbis to configure separate update schedules.</p>}
+          {status.data?.available === false ? <p role="alert">{status.data.reason ?? 'Automatic updates are unavailable.'}</p> : null}
+          {[modeSave, timeSave].map((result, index) =>
+            result.error ? (
+              <InlineFeedback key={index === 0 ? 'mode' : 'time'}>
+                {result.error}{' '}
+                <button type="button" className="btn btn-outline-primary" onClick={result.retry}>
+                  Retry
+                </button>
+              </InlineFeedback>
+            ) : null,
+          )}
+        </fieldset>
       ) : null}
     </section>
   );

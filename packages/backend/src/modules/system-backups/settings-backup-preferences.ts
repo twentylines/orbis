@@ -1,10 +1,11 @@
 import { desktopAppearanceSchema } from '@runtipi/common/schemas';
+import { desktopMaterialFields, hasDesktopMaterialOverrides } from '@runtipi/common/schemas/desktop-appearance';
 import { desktopPreferencesSchema } from '../desktop-preferences/desktop-preferences.dto';
 import type { DesktopPreferences } from '../desktop-preferences/desktop-preferences.service';
 
 export type SettingsPreferenceSection = 'settings' | 'dashboard' | 'wallpapers' | 'themes';
 const fields = {
-  settings: ['serverName', 'showStoreRecommendations', 'hiddenStoreRecommendationCategories'],
+  settings: ['serverName', 'showLogicalProcessors', 'showStoreRecommendations', 'hiddenStoreRecommendationCategories'],
   dashboard: ['density', 'workspace', 'windows', 'appLaunch', 'toolbarOrder'],
   wallpapers: ['wallpaper', 'wallpaperMode', 'wallpaperPreset'],
   themes: ['preset', 'mode'],
@@ -12,8 +13,8 @@ const fields = {
 const appearance = {
   settings: ['textScale', 'timeFormat', 'motion', 'transparency', 'lowEffects', 'oledDark'],
   dashboard: ['dockPlacement', 'dockSize', 'dockAutoHide', 'dockPins'],
-  wallpapers: ['wallpaperImage', 'wallpaperFit', 'wallpaperX', 'wallpaperY', 'wallpaperDim', 'wallpaperBlur'],
-  themes: ['accent', 'surfaceOpacity', 'chromeOpacity', 'glassBlur', 'chromeBlur', 'glassTint'],
+  wallpapers: ['wallpaperImage', 'wallpaperFit', 'wallpaperColours', 'wallpaperX', 'wallpaperY', 'wallpaperDim', 'wallpaperBlur'],
+  themes: ['accent', 'themeColour', ...desktopMaterialFields, 'materialMode'],
 } as const;
 const sections = ['settings', 'dashboard', 'wallpapers', 'themes'] as const;
 const fail = () => new Error('The desktop backup contains unsupported preferences. No settings were restored.');
@@ -36,7 +37,7 @@ export function validateSettingsPreferencePatch(section: SettingsPreferenceSecti
 export function splitSettingsPreferences(value: unknown): Record<SettingsPreferenceSection, Partial<DesktopPreferences>> {
   const preferences = full.assert(structuredClone(value));
   const known = new Set<string>(Object.values(fields).flat());
-  const knownAppearance = new Set<string>(Object.values(appearance).flat());
+  const knownAppearance = new Set<string>([...Object.values(appearance).flat(), 'wallpaperUnsplash']);
   if (
     Object.keys(preferences).some((key) => key !== 'appearance' && !known.has(key)) ||
     Object.keys(preferences.appearance ?? {}).some((key) => !knownAppearance.has(key))
@@ -64,6 +65,21 @@ export function mergeSettingsPreferences(
   for (const section of sections) {
     if (!Object.hasOwn(patches, section)) continue;
     const patch = validateSettingsPreferencePatch(section, patches[section]);
+    if (
+      section === 'wallpapers' &&
+      (fields.wallpapers.some((key) => Object.hasOwn(patch, key)) || Object.hasOwn(patch.appearance ?? {}, 'wallpaperImage'))
+    ) {
+      patch.appearance = { ...patch.appearance, wallpaperUnsplash: null };
+    }
+    const restoredAppearance = patch.appearance;
+    if (
+      section === 'themes' &&
+      restoredAppearance &&
+      restoredAppearance.materialMode === undefined &&
+      desktopMaterialFields.some((key) => Object.hasOwn(restoredAppearance, key))
+    ) {
+      restoredAppearance.materialMode = hasDesktopMaterialOverrides(restoredAppearance) ? 'custom' : 'default';
+    }
     next = full.assert({ ...next, ...patch, ...(patch.appearance ? { appearance: { ...next.appearance, ...patch.appearance } } : {}) });
   }
   if (next.appearance) desktopAppearanceSchema.onUndeclaredKey('reject').assert(next.appearance);

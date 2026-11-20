@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import {
   readClusterSync,
   runClusterSync,
+  saveClusterAutomatic,
   saveClusterSync,
   saveReceiving,
   syncEndpoint,
@@ -90,6 +91,25 @@ test('manual sync binds the current source account, pairing generation and targe
     await expect(runClusterSync({ ...host, plan: { ...plan, trustCurrent: false } })).rejects.toThrow('using your account');
     await expect(runClusterSync({ ...host, plan: { ...plan, usesYourAccount: false } })).rejects.toThrow('using your account');
     expect(calls).toHaveLength(1);
+  });
+});
+test('keep-in-sync autosave sends just the reviewed plan revision and new policy', async () => {
+  const plan = host.plan;
+  if (!plan) throw new Error('Expected a configured host plan');
+  const signal = new AbortController().signal;
+  await withFetch(Response.json({ saved: true, automatic: false, revision: 4 }), async (calls) => {
+    expect(await saveClusterAutomatic(host, false, signal)).toEqual({ saved: true, automatic: false, revision: 4 });
+    expect(calls[0]).toMatchObject({ url: `/api/cluster/settings-sync/plans/${id}/automatic`, init: { method: 'PUT', signal } });
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ revision: 3, automatic: false });
+    await expect(saveClusterAutomatic({ ...host, plan: { ...plan, usesYourAccount: false } }, false, signal)).rejects.toThrow('using your account');
+    await expect(saveClusterAutomatic({ ...host, plan: { ...plan, trustCurrent: false } }, false, signal)).rejects.toThrow('using your account');
+    expect(calls).toHaveLength(1);
+  });
+  await withFetch(Response.json({ saved: true, automatic: true, revision: 4 }), async () => {
+    await expect(saveClusterAutomatic(host, false, signal)).rejects.toThrow('did not confirm');
+  });
+  await withFetch(Response.json({ saved: true, automatic: false, revision: 3 }), async () => {
+    await expect(saveClusterAutomatic(host, false, signal)).rejects.toThrow('did not confirm');
   });
 });
 test('unselecting a host saves no categories and no automatic rule', async () => {

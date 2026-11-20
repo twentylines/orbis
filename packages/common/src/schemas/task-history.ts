@@ -14,6 +14,17 @@ export const taskActionSchema = type.enumerated(
   'update',
 );
 export const taskStatusSchema = type.enumerated('queued', 'running', 'succeeded', 'failed', 'interrupted', 'unconfirmed');
+export const taskPhaseSchema = type.enumerated(
+  'preparing',
+  'pulling_images',
+  'stopping',
+  'backing_up',
+  'publishing',
+  'starting',
+  'verifying',
+  'committing',
+  'recovering',
+);
 const timestamp = type('string').narrow((value) => Number.isFinite(Date.parse(value)));
 
 export const taskRecordSchema = type({
@@ -22,6 +33,7 @@ export const taskRecordSchema = type({
   displayName: type('string').moreThanLength(0).lessThanLength(512).optional(),
   action: taskActionSchema,
   status: taskStatusSchema,
+  phase: taskPhaseSchema.optional(),
   createdAt: timestamp,
   updatedAt: timestamp,
   startedAt: timestamp.or('null'),
@@ -38,6 +50,7 @@ export const taskHistorySchema = type({
 });
 
 export type TaskRecord = typeof taskRecordSchema.infer;
+export type TaskPhase = typeof taskPhaseSchema.infer;
 export type TaskAction = typeof taskActionSchema.infer;
 export type TaskHistory = typeof taskHistorySchema.infer;
 

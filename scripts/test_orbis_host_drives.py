@@ -250,9 +250,19 @@ class DriveHealthTests(unittest.TestCase):
             self.assertTrue(self.reader.start_test(row["id"], "extended")["accepted"])
             self.assertEqual(command.call_args.args[0], ["-j", "-t", "long", "-d", "nvme", "/dev/nvme0"])
 
+    def test_missing_tools_are_explicit_and_recovery_restarts_collection_immediately(self):
+        with mock.patch.object(DRIVES.threading, "Thread") as thread:
+            with mock.patch.object(self.reader, "executable", side_effect=DRIVES.SmartToolsMissing("Tool missing")):
+                self.assertEqual(self.reader.read(), {"available": False, "reason": "Tool missing", "toolsMissing": True})
+            thread.assert_not_called()
+            self.reader.last_attempt = self.reader.clock()
+            with mock.patch.object(self.reader, "executable", return_value="/usr/sbin/smartctl"):
+                self.assertEqual(self.reader.read(), {"available": False, "reason": "Collecting drive health readings."})
+            thread.assert_called_once()
+
     def test_repeated_reads_share_collection_and_stale_sample_is_marked(self):
         self.reader.sample = {"available": True, "sampledAt": "2020-01-01T00:00:00Z", "drives": []}
-        with mock.patch.object(DRIVES.threading, "Thread") as thread:
+        with mock.patch.object(self.reader, "executable"), mock.patch.object(DRIVES.threading, "Thread") as thread:
             self.assertTrue(self.reader.read()["stale"])
             self.reader.read()
             self.assertEqual(thread.call_count, 1)

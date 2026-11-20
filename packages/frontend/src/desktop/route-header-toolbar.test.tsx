@@ -34,10 +34,12 @@ test('the header status announces changes without an idle spinner and reserves s
   const clean = renderToStaticMarkup(<SettingsDirtyIndicator dirty={false} />);
   const dirty = renderToStaticMarkup(<SettingsDirtyIndicator dirty />);
   const pending = renderToStaticMarkup(<SettingsDirtyIndicator dirty={false} pending />);
+  const loading = renderToStaticMarkup(<SettingsDirtyIndicator dirty={false} loading />);
   for (const [markup, announcement] of [
     [clean, ''],
     [dirty, 'Unsaved changes'],
     [pending, 'Saving…'],
+    [loading, 'Loading…'],
   ] as const) {
     expect(markup).toContain('<output class="settings-system-status"');
     expect(markup).toContain('aria-live="polite"');
@@ -55,4 +57,5 @@ test('the header status announces changes without an idle spinner and reserves s
   expect(dirty).not.toContain('<svg');
   expect(pending).toContain('Saving…');
   expect(pending).toContain('settings-status-spinner');
+  expect(loading).toContain('settings-status-spinner');
 });

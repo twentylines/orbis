@@ -82,7 +82,8 @@ export async function clusterRequest<T>(
   if (accountPairing && url.protocol !== 'https:') throw new BadRequestException('Use HTTPS for account pairing.');
   if (certificate && url.protocol !== 'https:') throw new BadRequestException('A confirmed peer certificate requires HTTPS.');
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
-  const deadline = Date.now() + 12_000;
+  const smartToolsReview = endpoint === '/api/cluster/peer' && 'command' in body && body.command === 'smart-tools-plan';
+  const deadline = Date.now() + (smartToolsReview ? 60_000 : 12_000);
   const addresses = isIP(hostname)
     ? [{ address: hostname, family: isIP(hostname) }]
     : await new Promise<LookupAddress[]>((resolve, reject) => {

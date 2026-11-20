@@ -4,12 +4,20 @@ import { GuestHeader } from '@/components/header/guest-header';
 import { BaseDashboardLayout } from '@/components/layouts/dashboard/base-dashboard-layout';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
 import { AppTile } from '@/modules/app/components/app-tile/app-tile';
-import { IconLock, IconLockOff } from '@tabler/icons-react';
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { IconLock, IconLockOff, IconSettings } from '@tabler/icons-react';
+import { Link } from 'react-router';
+import { useSuspenseQueries } from '@tanstack/react-query';
 import '@/styles/app-grid.css';
 import { EmptyPage } from '@/components/empty-page/empty-page';
 import { useUserContext } from '@/context/user-context';
 import { GuestLinkTile } from '../components/guest-link-tile';
+import './guest-dashboard.css';
+
+export const GuestDashboardPending = () => (
+  <BaseDashboardLayout header={<GuestHeader />} pageTitle={<h1 className="page-title guest-dashboard-title">Applications</h1>} startupReady={false}>
+    <output className="visually-hidden">Loading shared applications…</output>
+  </BaseDashboardLayout>
+);
 
 const Tile = ({ data, localDomain, sslPort }: { data: GuestAppsDto['installed'][number]; localDomain: string; sslPort: number }) => {
   const { info, app, metadata } = data;
@@ -76,18 +84,21 @@ const Tile = ({ data, localDomain, sslPort }: { data: GuestAppsDto['installed'][
 export const GuestDashboard = () => {
   const { localDomain, sslPort } = useUserContext();
 
-  const { data: appsData } = useSuspenseQuery({
-    ...getGuestAppsOptions(),
-  });
-
-  const { data: linksData } = useSuspenseQuery({
-    ...getGuestLinksOptions(),
-  });
+  const [{ data: appsData }, { data: linksData }] = useSuspenseQueries({ queries: [getGuestAppsOptions(), getGuestLinksOptions()] });
 
   const hasContent = appsData.installed.length > 0 || linksData.links.length > 0;
 
   return (
-    <BaseDashboardLayout header={<GuestHeader />} pageTitle={<h1 className="page-title">Applications</h1>}>
+    <BaseDashboardLayout
+      header={<GuestHeader />}
+      pageTitle={<h1 className="page-title guest-dashboard-title">Applications</h1>}
+      layoutActions={
+        <Link className="guest-dashboard-manage" to="/login?return_to=%2Fapps" aria-label="Manage shared applications. Sign in to continue.">
+          <IconSettings size={20} aria-hidden="true" />
+          <span>Manage</span>
+        </Link>
+      }
+    >
       {!hasContent && <EmptyPage title="GUEST_DASHBOARD_NO_APPS" subtitle="GUEST_DASHBOARD_NO_APPS_SUBTITLE" />}
       <div className="row row-cards">
         {appsData.installed.map((appData) => {

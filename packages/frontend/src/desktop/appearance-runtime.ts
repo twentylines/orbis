@@ -29,6 +29,7 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   const base = (name: string) => colour(source.getPropertyValue(`--desktop-base-${name}`).trim());
   const mix = (first: Rgba, second: Rgba, amount: number): Rgba => {
     const alpha = first[3] * (1 - amount) + second[3] * amount;
+    if (alpha === 0) return [first[0], first[1], first[2], 0];
     return first
       .slice(0, 3)
       .map((channel, index) => (channel * first[3] * (1 - amount) + (second[index] ?? 0) * second[3] * amount) / alpha)
@@ -47,8 +48,8 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   };
   const black: Rgba = [0, 0, 0, 1];
   const white: Rgba = [255, 255, 255, 1];
-  const backgrounds = (value: Rgba): Rgba[] =>
-    [0, 255].map(
+  const backgrounds = (value: Rgba, brightest = 255): Rgba[] =>
+    [0, brightest].map(
       (channel) =>
         value
           .slice(0, 3)
@@ -66,7 +67,9 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   };
   const properties = [
     'surface',
+    'pane-surface',
     'chrome',
+    'chrome-rgb',
     'muted',
     'accent',
     'action',
@@ -84,8 +87,13 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
     'oled-panel',
     'glass-filter',
     'chrome-filter',
+    'chrome-backdrop-brightness',
+    'glass-chrome-blur',
+    'tray-chrome-filter',
     'menu-surface',
     'menu-muted',
+    'theme-ink',
+    'theme-tint',
   ];
   const next = new Map<string, string>();
   const set = (name: string, value: string) => next.set(name, value);
@@ -125,15 +133,38 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   root.dataset.orbisTransparency = solid ? 'solid' : 'glass';
   root.dataset.orbisEffects = low ? 'low' : 'full';
 
-  const opacity = numeric('surfaceOpacity', 90, 100);
-  const chromeOpacity = numeric('chromeOpacity', 80, 100);
-  const tint = oled ? 0 : (numeric('glassTint', 0, 30) ?? 0) / 100;
-  const blur = numeric('glassBlur', 0, 40);
-  const materialChanged = solid || opacity !== null || chromeOpacity !== null || tint > 0;
-  const preset = colour(source.getPropertyValue('--desktop-preset-tint').trim());
+  const legacyMaterial = [
+    numeric('surfaceOpacity', 0, 100),
+    numeric('chromeOpacity', 0, 100),
+    numeric('glassBlur', 0, 40),
+    numeric('chromeBlur', 0, 64),
+    numeric('glassTint', 0, 30),
+  ].some((value) => value !== null);
+  const customMaterial = options.materialMode === 'custom' || (options.materialMode !== 'default' && legacyMaterial);
+  const opacity = customMaterial ? numeric('surfaceOpacity', 0, 100) : null;
+  const chromeOpacity = customMaterial ? numeric('chromeOpacity', 0, 100) : null;
+  const tint = oled || !customMaterial ? 0 : (numeric('glassTint', 0, 30) ?? 0) / 100;
+  const blur = customMaterial ? numeric('glassBlur', 0, 40) : null;
+  const themeColour = typeof options.themeColour === 'string' && /^#[a-f0-9]{6}$/i.test(options.themeColour) ? colour(options.themeColour) : null;
+  const materialChanged = solid || opacity !== null || chromeOpacity !== null || tint > 0 || themeColour !== null;
+  const preset =
+    themeColour ?? colour((source.getPropertyValue('--desktop-base-preset-tint') || source.getPropertyValue('--desktop-preset-tint')).trim());
   const surface = base('surface');
   const chrome = base('chrome');
   const panel = base('panel-dark');
+  if (themeColour) {
+    const surfaceRgb = mix(themeColour, mode === 'dark' ? black : white, mode === 'dark' ? 0.84 : 0.88);
+    const chromeRgb = mix(themeColour, black, 0.72);
+    const panelRgb = mix(themeColour, black, 0.82);
+    for (let channel = 0; channel < 3; channel++) {
+      surface[channel] = Math.round(surfaceRgb[channel] ?? 0);
+      chrome[channel] = Math.round(chromeRgb[channel] ?? 0);
+      panel[channel] = Math.round(panelRgb[channel] ?? 0);
+    }
+    set('chrome-rgb', chrome.slice(0, 3).join(', '));
+    set('theme-tint', css(themeColour));
+    set('theme-ink', css(mix(themeColour, mode === 'dark' ? white : black, mode === 'dark' ? 0.95 : 0.85)));
+  }
   if (oled) {
     surface[0] = surface[1] = surface[2] = 0;
     surface[3] = 1;
@@ -143,13 +174,30 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   }
   if (opacity !== null) surface[3] = opacity / 100;
   if (chromeOpacity !== null) chrome[3] = chromeOpacity / 100;
-  const defaultChromeOpacity = mode === 'dark' ? 0.72 : 0.84;
+  const defaultChromeOpacity = mode === 'dark' ? 0.76 : 0.84;
   const defaultChromeChanged = !solid && chromeOpacity === null && chrome[3] > defaultChromeOpacity;
   if (defaultChromeChanged) chrome[3] = defaultChromeOpacity;
   if (solid) surface[3] = chrome[3] = panel[3] = 1;
   const tintedSurface = [...mix(surface, preset, tint).slice(0, 3), surface[3]] as Rgba;
-  const relatedDarkGlass = mode === 'dark' && !solid;
-  let tintedChrome = [...mix(relatedDarkGlass ? surface : chrome, preset, tint).slice(0, 3), chrome[3]] as Rgba;
+  // Large panes expose the blurred wallpaper; controls retain their denser fill.
+  // An explicit opacity and accessibility preferences still take precedence.
+  const paneSurface = [...tintedSurface] as Rgba;
+  if (!solid && opacity === null) paneSurface[3] = Math.min(paneSurface[3], mode === 'dark' ? 0.9 : 0.76);
+  const paneBackgrounds = (value: Rgba) =>
+    [value, mix(value, preset, 0.08), mix(value, preset, 0.2)].flatMap((background) => backgrounds(background));
+  const inkValue = (source.getPropertyValue('--desktop-base-ink') || source.getPropertyValue('--desktop-ink')).trim();
+  const paneInk = themeColour ? colour(next.get('theme-ink') ?? '') : inkValue ? colour(inkValue) : mode === 'dark' ? white : black;
+  while (opacity === null && paneSurface[3] < 1 && !paneBackgrounds(paneSurface).every((background) => contrast(paneInk, background) >= 4.65))
+    paneSurface[3] = Math.min(1, Math.round((paneSurface[3] + 0.01) * 100) / 100);
+  const paneChanged = paneSurface[3] !== tintedSurface[3];
+  set('pane-surface', css(paneSurface));
+  // Photo presets already define their dark chrome independently of the panel tint.
+  const defaultChromeTint = themeColour ? 0.14 : Number(source.getPropertyValue('--desktop-base-chrome-tint').trim() || '0.14');
+  const chromeTint = mode === 'dark' && !solid && !customMaterial ? defaultChromeTint : tint;
+  const guardedGlass = !solid && (chromeOpacity !== null || mode === 'dark');
+  // Separate the paint colour from its opacity so tint also works at zero alpha.
+  const chromePaint: Rgba = guardedGlass ? [chrome[0], chrome[1], chrome[2], 1] : chrome;
+  let tintedChrome = [...mix(chromePaint, preset, chromeTint).slice(0, 3), chrome[3]] as Rgba;
   const originalChrome = tintedChrome;
   const menuOpacity = mode === 'dark' ? 0.72 : 0.86;
   const menuSurface: Rgba = [
@@ -157,11 +205,19 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
     solid ? 1 : Math.max(mode === 'dark' ? 0.72 : 0.8, Math.min(menuOpacity, tintedSurface[3])),
   ] as Rgba;
   set('menu-surface', css(menuSurface));
-  set('menu-muted', css(readable(base('muted'), backgrounds(menuSurface), mode === 'dark')));
+  const menuInk = paneInk;
+  const menuBackgrounds = [menuSurface, mix(menuSurface, preset, 0.2), mix(surface, menuInk, 0.12)].flatMap((background) => backgrounds(background));
+  set('menu-muted', css(readable(base('muted'), menuBackgrounds, mode === 'dark')));
   const chromeInk = colour(source.getPropertyValue('--desktop-chrome-ink').trim());
-  const chromeBackgrounds = (value: Rgba) => backgrounds(value).flatMap((background) => [background, mix(background, white, 0.2)]);
+  const controlBackgrounds = (paint: Rgba, brightness: number, highlight: number) =>
+    backgrounds(paint, 255 * brightness).flatMap((background) => [background, mix(background, white, highlight)]);
+  const highlight = guardedGlass ? 0.24 : 0.2;
+  const hasChromeContrast = (paint: Rgba, brightness: number) =>
+    controlBackgrounds(paint, brightness, highlight).every((background) => contrast(chromeInk, background) >= 4.65);
+  let brightness = 1;
   let chromeAdjusted = false;
-  // Include the selected dock bubble and a white wallpaper behind the bar.
+  // Bound the tint once at full opacity. For custom glass, any remaining glare
+  // comes from the backdrop, including light page content under sticky chrome.
   for (let shade = 0; shade <= 100; shade += 1) {
     tintedChrome = [
       Math.round(originalChrome[0] * (1 - shade / 100)),
@@ -170,34 +226,50 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
       originalChrome[3],
     ];
     chromeAdjusted = shade > 0;
-    if (chromeBackgrounds(tintedChrome).every((background) => contrast(chromeInk, background) >= 4.65)) break;
+    const reference: Rgba = guardedGlass ? [tintedChrome[0], tintedChrome[1], tintedChrome[2], 1] : tintedChrome;
+    if (hasChromeContrast(reference, 1)) break;
   }
+  if (guardedGlass && !hasChromeContrast(tintedChrome, 1)) {
+    let lower = 0;
+    let upper = 100;
+    while (upper - lower > 1) {
+      const percent = Math.floor((lower + upper) / 2);
+      if (hasChromeContrast(tintedChrome, percent / 100)) lower = percent;
+      else upper = percent;
+    }
+    brightness = lower / 100;
+    set('chrome-backdrop-brightness', `brightness(${brightness})`);
+    set('tray-chrome-filter', 'var(--desktop-glass-chrome-filter)');
+  }
+  const chromeBackgrounds = controlBackgrounds(tintedChrome, brightness, highlight);
   if (materialChanged) {
     set('surface', css(tintedSurface));
     set('panel-dark', css([...mix(panel, preset, tint).slice(0, 3), panel[3]] as Rgba));
   }
-  if (materialChanged || chromeAdjusted || defaultChromeChanged || relatedDarkGlass) set('chrome', css(tintedChrome));
+  if (materialChanged || chromeAdjusted || defaultChromeChanged || chromeTint > 0) set('chrome', css(tintedChrome));
   if (solid || blur === 0) set('glass-filter', 'none');
   else if (blur !== null) set('glass-filter', `blur(${blur}px) saturate(1.2)`);
-  const chromeBlur = numeric('chromeBlur', 0, 64);
+  const chromeBlur = customMaterial ? numeric('chromeBlur', 0, 64) : null;
   if (solid || chromeBlur === 0) set('chrome-filter', 'none');
   else if (chromeBlur !== null) set('chrome-filter', `blur(${chromeBlur}px) saturate(1.2)`);
 
-  const accent = typeof options.accent === 'string' && /^#[a-f0-9]{6}$/i.test(options.accent) ? colour(options.accent) : null;
-  set('chrome-muted', css(readable(mix(chromeInk, originalChrome, 0.25), chromeBackgrounds(tintedChrome), true)));
-  set('chrome-focus', css(readable(accent ?? base('focus'), chromeBackgrounds(tintedChrome), true, 3.1)));
+  if (brightness < 1 && (chromeBlur === 0 || (chromeBlur === null && blur === 0))) set('glass-chrome-blur', 'blur(0px)');
+
+  const accent = typeof options.accent === 'string' && /^#[a-f0-9]{6}$/i.test(options.accent) ? colour(options.accent) : themeColour;
+  set('chrome-muted', css(readable(mix(chromeInk, originalChrome, 0.25), chromeBackgrounds, true)));
+  set('chrome-focus', css(readable(accent ?? base('focus'), chromeBackgrounds, true, 3.1)));
   root.dataset.orbisColourCustom = materialChanged || accent ? 'true' : 'false';
-  if (!materialChanged && !accent) {
+  if (!materialChanged && !accent && !paneChanged) {
     commit();
     return;
   }
-  const behind = [tintedSurface, mix(tintedSurface, preset, 0.08), mix(tintedSurface, preset, 0.2)].flatMap(backgrounds);
+  const behind = [...paneBackgrounds(tintedSurface), ...paneBackgrounds(paneSurface)];
   const dark = mode === 'dark';
   const foreground = readable(accent ?? base('accent'), behind, dark);
   set('accent', css(foreground));
   set('focus', css(foreground));
   set('muted', css(readable(base('muted'), behind, dark)));
-  if (materialChanged) {
+  if (materialChanged || paneChanged) {
     for (const name of ['positive', 'negative', 'warning', 'info']) set(name, css(readable(base(name), behind, dark)));
   }
   if (accent) {

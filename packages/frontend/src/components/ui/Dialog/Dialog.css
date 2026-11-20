@@ -171,7 +171,8 @@ body:has(.orbis-theme) .orbis-dialog-content .orbis-dialog-header {
   box-shadow: none;
 }
 body:has(.orbis-theme) .orbis-dialog-content .btn:focus-visible {
-  outline: none;
+  outline: 2px solid var(--desktop-focus);
+  outline-offset: 3px;
   box-shadow: none;
   text-decoration: none;
   background: var(--tblr-btn-hover-bg, color-mix(in srgb, var(--desktop-accent) 24%, var(--desktop-surface)));
@@ -182,7 +183,6 @@ body:has(.orbis-theme) .orbis-dialog-content .btn:not(.btn-primary, .btn-danger)
   background: color-mix(in srgb, var(--desktop-preset-tint) 18%, var(--desktop-surface));
 }
 .orbis-dialog-content .orbis-dialog-close:focus-visible {
-  outline: none;
   background: color-mix(in srgb, var(--desktop-accent) 24%, var(--desktop-surface));
   border-color: var(--desktop-accent);
   color: var(--desktop-ink);

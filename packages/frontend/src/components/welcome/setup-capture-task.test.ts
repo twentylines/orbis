@@ -76,3 +76,14 @@ test('a failed preference save is a separate stable task with only its safe reas
     false,
   );
 });
+
+test('dismissed setup notices can be read as history without changing their failed result or original timestamp', () => {
+  const storage = memoryStorage();
+  const occurredAt = '2026-11-03T02:30:00.000Z';
+  recordSetupFailureTask(7, attemptId, 'capture-failed', occurredAt, storage);
+  dismissSetupFailureTask(7, attemptId, storage);
+  expect(setupFailureTasks(7, storage)).toEqual([]);
+  expect(setupFailureTasks(7, storage, true)).toMatchObject([
+    { id: attemptId, status: 'failed', createdAt: occurredAt, setupFailureDismissed: true },
+  ]);
+});

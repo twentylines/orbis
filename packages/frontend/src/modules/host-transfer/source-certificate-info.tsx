@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { IconChevronDown, IconDownload } from '@tabler/icons-react';
+import { IconDownload } from '@tabler/icons-react';
+import { DisclosureIndicator } from '@/components/ui/DisclosureIndicator/DisclosureIndicator';
 import { Button } from '@/components/ui/Button';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { useReducedMotion } from '@/desktop/motion-preferences';
@@ -41,7 +42,7 @@ export function SourceCertificateInfo() {
   return (
     <div className="source-certificate-picker">
       <Button type="button" variant="outline" aria-expanded={open} aria-controls={`${id}-panel`} onClick={toggle}>
-        Source certificate <IconChevronDown size={17} aria-hidden="true" />
+        Source certificate <DisclosureIndicator size={17} />
       </Button>
       <AnimatePresence initial={false}>
         {open ? (

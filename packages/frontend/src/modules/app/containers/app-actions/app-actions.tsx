@@ -5,9 +5,8 @@ import {
   IconDownload,
   IconEdit,
   IconEraser,
-  IconExternalLink,
+  IconLockOpen,
   IconLock,
-  IconLockOff,
   IconPlayerPause,
   IconPlayerPlay,
   IconRefresh,
@@ -37,10 +36,13 @@ import { UpdateSettingsDialog } from '../../components/dialogs/update-settings-d
 import { TemplateSyncDialog } from '../../components/template-sync-dialog/template-sync-dialog';
 import { useAppStatus } from '../../helpers/use-app-status';
 import { Tooltip } from 'react-tooltip';
-import { DropdownMenuSeparator } from '@/components/ui/DropdownMenu/DropdownMenu';
+import { appDestinations } from '@/desktop/app-destinations';
+import { primaryAppAddress } from '@/desktop/app-opening';
+import { DropdownMenuChevron, DropdownMenuSeparator } from '@/components/ui/DropdownMenu/DropdownMenu';
 import { useLocation, useNavigate } from 'react-router';
 import { useAppLauncher } from '@/desktop/app-launcher';
 import { useStorePreview } from '../../pages/store-preview-context';
+import { catalogueInstallAllowed } from '../../helpers/catalogue-compatibility';
 import { AppSettingsEditor } from '../../components/dialogs/update-settings-dialog/app-settings-editor';
 
 interface IProps {
@@ -68,8 +70,6 @@ const ActionButton: React.FC<BtnProps> = (props) => {
   );
 };
 
-type OpenType = 'local' | 'domain' | 'local_domain';
-
 export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps) => {
   const openApp = useAppLauncher();
   const installDisclosure = useDisclosure();
@@ -93,11 +93,14 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
     } else updateSettingsDisclosure.open();
   };
 
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const destinations = appDestinations(
+    { app, info, metadata },
+    { localDomain, sslPort },
+    typeof window !== 'undefined' ? window.location.hostname : '',
+  );
+  const preferredAddress = primaryAppAddress(destinations, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
   const versionIsIgnored = app?.ignoredVersion === metadata.latestVersion;
   const updateAvailable = Number(app?.version ?? 0) < Number(metadata?.latestVersion || 0);
-
-  const appLocalDomain = `${metadata.localSubdomain}.${localDomain}${sslPort !== 443 ? `:${sslPort}` : ''}`;
 
   const startMutation = useMutation({
     ...startAppMutation(),
@@ -241,40 +244,51 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
   const StopButton = (
     <ActionButton key="stop" IconComponent={IconPlayerPause} onClick={stopDisclosure.open} title={t('APP_ACTION_STOP')} intent="default" />
   );
-  const InstallButton = <ActionButton key="install" onClick={installDisclosure.open} title={t('APP_ACTION_INSTALL')} intent="success" />;
+  const InstallButton = (
+    <ActionButton
+      key="install"
+      disabled={!catalogueInstallAllowed(info)}
+      onClick={installDisclosure.open}
+      title={t('APP_ACTION_INSTALL')}
+      intent="success"
+    />
+  );
 
   const OpenButton = (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button className="action-button app-launch-button">
-          {t('APP_ACTION_OPEN')}
-          <IconExternalLink className="ms-1" size={14} />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuGroup>
-          {app?.exposed && app.domain && (
-            <DropdownMenuItem onClick={() => handleOpen('domain')}>
-              <IconLock className="text-green me-2" size={16} />
-              {app.domain}
-              {sslPort !== 443 ? `:${sslPort}` : ''}
-            </DropdownMenuItem>
-          )}
-          {app?.exposedLocal && (
-            <DropdownMenuItem onClick={() => handleOpen('local_domain')}>
-              <IconLock className="text-muted me-2" size={16} />
-              {appLocalDomain}
-            </DropdownMenuItem>
-          )}
-          {(app?.openPort || !info.dynamic_config) && (
-            <DropdownMenuItem onClick={() => handleOpen('local')}>
-              <IconLockOff className="text-muted me-2" size={16} />
-              {hostname}:{app?.port ?? info.port}
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="app-launch-actions" key="open">
+      <Button
+        className="action-button app-launch-button"
+        disabled={!preferredAddress}
+        onClick={() => preferredAddress && handleOpen(preferredAddress)}
+      >
+        {t('APP_ACTION_OPEN')}
+      </Button>
+      {destinations.length > 1 ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button className="action-button app-address-button" aria-label={`Choose address for ${info.name}`}>
+              <DropdownMenuChevron />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuGroup>
+              {destinations.map(({ label, url }) => (
+                <DropdownMenuItem key={url} onClick={() => handleOpen(url)}>
+                  {url.startsWith('https:') ? (
+                    <IconLock className="me-2" size={16} aria-hidden="true" />
+                  ) : (
+                    <IconLockOpen className="me-2" size={16} aria-hidden="true" />
+                  )}
+                  <span>
+                    {label}: {new URL(url).host}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+    </div>
   );
 
   const buttons: React.JSX.Element[] = [];
@@ -310,7 +324,7 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
       listItemsDestructive.push(ResetListItem);
       listItemsDestructive.push(RemoveListItem);
 
-      if (!info.no_gui && (app?.exposedLocal || app?.openPort || app?.exposed)) {
+      if (destinations.length > 0) {
         buttons.unshift(OpenButton);
       }
 
@@ -343,27 +357,10 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
       break;
   }
 
-  const handleOpen = (type: OpenType) => {
-    let url = '';
-    const { https } = info;
-    const protocol = https ? 'https' : 'http';
-
-    if (typeof window !== 'undefined') {
-      // Current domain
-      const domain = window.location.hostname;
-      url = `${protocol}://${domain}:${app?.port ?? info.port}${info.url_suffix || ''}`;
-    }
-
-    if (type === 'domain' && app?.domain) {
-      url = `https://${app.domain}${sslPort !== 443 ? `:${sslPort}` : ''}${info.url_suffix || ''}`;
-    }
-
-    if (type === 'local_domain') {
-      url = `https://${appLocalDomain}${info.url_suffix || ''}`;
-    }
-
-    if (!openApp({ urn: info.urn, name: info.name, categories: info.categories, preferredUrl: url })) window.open(url, '_blank', 'noreferrer');
-  };
+  function handleOpen(url: string) {
+    if (!openApp({ urn: info.urn, name: info.name, categories: info.categories, preferredUrl: url }))
+      window.open(url, '_blank', 'noopener,noreferrer');
+  }
 
   return (
     <>

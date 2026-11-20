@@ -103,12 +103,6 @@ body:has(.orbis-theme) .container-resources[tabindex="-1"]:focus {
 .container-resources-note summary::-webkit-details-marker {
   display: none;
 }
-.container-resources-note summary svg {
-  flex: 0 0 16px;
-}
-.container-resources-note[open] > summary svg {
-  transform: rotate(90deg);
-}
 .container-resources-note p {
   margin: 4px 0 14px;
 }
@@ -266,13 +260,9 @@ body:has(.orbis-theme) .container-resource-toggle:focus-visible {
   grid-column: 1 / -1;
   grid-row: 2;
 }
-.container-resource-chevron {
+.container-resource-toggle > .orbis-disclosure-indicator {
   grid-column: 3;
   grid-row: 1;
-  transition: transform 200ms ease;
-}
-.container-resource-toggle[data-state="open"] > .container-resource-chevron {
-  transform: rotate(90deg);
 }
 .container-resource-expanded {
   overflow: hidden;
@@ -315,6 +305,7 @@ body:has(.orbis-theme) .container-resource-toggle:focus-visible {
 .desktop .container-resource-action {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   justify-content: center;
   min-height: 44px;
   max-width: 100%;
@@ -481,6 +472,32 @@ body:has(.orbis-theme)
   font-variant-numeric: tabular-nums;
   font-size: 1rem;
 }
+.container-resources:not(.is-compact) .container-resource-list > .container-resource-entry {
+  margin-block: 8px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 4%, transparent);
+}
+.container-resources:not(.is-compact) .container-resource-toggle {
+  padding: 14px;
+}
+.container-resources:not(.is-compact) .container-resource-bar {
+  display: none;
+}
+.container-resource-detail-body {
+  padding: 16px;
+  border-top: 1px solid var(--desktop-line);
+}
+.container-resource-detail-body dl {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9em), 1fr));
+  gap: 18px 24px;
+}
+.container-resource-detail-body dt {
+  font-size: 0.75rem;
+}
+.container-resource-detail-body dd {
+  font-size: 0.875rem;
+}
 body:has(.orbis-theme) .container-resource-filters > .container-health-select {
   flex: 1 1 180px;
   width: auto;
@@ -520,16 +537,11 @@ body:has(.orbis-theme) .container-resource-filters > .container-health-select {
     justify-content: start;
     text-align: left;
   }
-  .container-resource-chevron {
+  .container-resource-toggle > .orbis-disclosure-indicator {
     grid-column: 2;
   }
   .container-resource-toggle > .container-resource-bar {
     grid-row: 3;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .container-resource-chevron {
-    transition: none;
   }
 }
 @media (forced-colors: active) {

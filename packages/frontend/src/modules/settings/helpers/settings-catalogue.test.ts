@@ -7,9 +7,20 @@ import {
   settingsLocation,
   settingsCatalogue,
   settingsPath,
+  settingsReviewPath,
   type SettingsSection,
 } from './settings-catalogue';
 const operator = { operator: true, advanced: true };
+
+test('quick actions use explicit review destinations and ordinary navigation clears stale actions', () => {
+  const reset = settingsCatalogue.find((entry) => entry.id === 'system-reset');
+  const backup = settingsCatalogue.find((entry) => entry.id === 'server-backups');
+  if (!reset || !backup) throw new Error('Missing review destinations.');
+  expect(settingsReviewPath(reset)).toBe('/settings?tab=about&setting=system-reset&action=reset-orbis');
+  expect(settingsReviewPath(backup)).toBe('/settings?tab=backups&setting=server-backups&action=create-backup');
+  expect(searchSettings('reset orbis', { operator: false })).not.toContainEqual(reset);
+  expect(settingsLocation('/settings', '?tab=about&setting=system-reset&action=reset-orbis', 'general').search).toBe('?tab=general');
+});
 
 test('individual settings rank exact words, joined words and transposed/omitted letters deterministically', () => {
   for (const [query, id] of [
@@ -90,4 +101,20 @@ test('HTTPS setup appears only for HTTP access and keeps its real dedicated anch
 
 test('removed seasonal control has no dead settings search destination', () => {
   expect(settingsCatalogue.some((entry) => entry.id === 'automatic-themes' || entry.anchor === 'setting-allowAutoThemes')).toBe(false);
+});
+
+test('Search keeps active app-source and account links after the retired Settings sections are removed', () => {
+  for (const query of ['store suggestions', 'backup security']) {
+    const matches = searchSettings(query, operator);
+    expect(matches.some((entry) => ['store-recommendations-heading', 'setting-capture-authentication'].includes(entry.anchor))).toBe(false);
+  }
+  for (const [query, destination] of [
+    ['App sources', '/settings?tab=store&setting=store-sources'],
+    ['Password', '/settings?tab=security&setting=password'],
+    ['Passkeys', '/settings?tab=security&setting=passkeys'],
+    ['Two-factor authentication', '/settings?tab=security&setting=two-factor'],
+    ['Server backups', '/settings?tab=backups&setting=server-backups'],
+  ] as const) {
+    expect(searchSettings(query, operator).map(settingsPath)[0]).toBe(destination);
+  }
 });

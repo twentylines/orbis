@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import { IconPlus, IconSwitchHorizontal, IconX } from '@tabler/icons-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useDesktopPreferences } from './preferences';
-import type { Telemetry } from './telemetry';
+import { hostCpuPercent, type Telemetry } from './telemetry';
 import { useAppContext } from '@/context/app-context';
 import { useConnectionStore } from '@/stores/connection-store';
 import { RackDeck } from './rack-deck';
@@ -227,7 +227,7 @@ function useRackReadings(enabled: boolean, readings?: Record<string, ServerReadi
           : (readings?.[server.id] ??
             (sample
               ? {
-                  cpu: sample.cpu.totalPercent,
+                  cpu: hostCpuPercent(sample.cpu),
                   memory: typeof total === 'number' && total > 0 && typeof available === 'number' ? (1 - available / total) * 100 : null,
                   online: true,
                 }

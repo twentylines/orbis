@@ -11,7 +11,7 @@ import { motion } from 'framer-motion';
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Trans, useTranslation } from 'react-i18next';
-import { IconArrowRight, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
+import { IconArrowRight } from '@tabler/icons-react';
 import type { TranslatableError } from '@/types/error.types';
 import { redirect, useLocation, useNavigate, useNavigation, useParams } from 'react-router';
 import type { Route } from './+types/app-update-page';
@@ -240,7 +240,6 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
         )}
         <div className="app-update-footer pt-3 border-top">
           <Button onClick={() => navigate(location.state?.from || '/apps')} disabled={update.isPending}>
-            <IconChevronLeft className="me-1" size={16} />
             {update.isSuccess ? t('APP_ACTION_DONE', { defaultValue: 'Done' }) : t('APP_ACTION_CANCEL')}
           </Button>
           <div className="app-update-navigation">
@@ -252,7 +251,6 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
             {!isLastStep && (
               <Button variant="outline" onClick={() => setCurrentStep((step) => step + 1)} disabled={update.isPending}>
                 {t('APP_UPDATE_FORM_NEXT')}
-                <IconChevronRight className="ms-2 text-muted" size={12} />
               </Button>
             )}
             {isLastStep && (

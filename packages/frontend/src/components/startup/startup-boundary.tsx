@@ -113,16 +113,17 @@ export function StartupBoundary({ children }: PropsWithChildren) {
     if (!ready || sessionPending || themeHandoff.pending || phase !== 'loading') return;
     const authTarget = authDestination?.isConnected ? authDestination : document.querySelector<HTMLElement>('.desktop-auth:not(.desktop-auth-setup)');
     const desktopTarget = document.querySelector<HTMLElement>('.desktop');
+    const guestTarget = desktopTarget?.classList.contains('desktop-guest');
     if (
       morph &&
       !morph.cancelled &&
-      (sessionTransition === 'logging-out' ? !authTarget : !desktopTarget && !document.querySelector('.desktop-auth-setup'))
+      (sessionTransition === 'logging-out' ? !authTarget && !guestTarget : !desktopTarget && !document.querySelector('.desktop-auth-setup'))
     )
       return;
     let timer: number | undefined;
     let stopFormation: (() => void) | undefined;
     const reveal = () => {
-      setHomeLanding(sessionTransition === 'preparing-orbis' || Boolean(document.querySelector('.desktop-view-home')));
+      setHomeLanding(sessionTransition === 'preparing-orbis' || Boolean(document.querySelector('.desktop-view-home, .desktop-guest')));
       if (sessionTransition === 'preparing-orbis') {
         setPhase('circle');
         return;

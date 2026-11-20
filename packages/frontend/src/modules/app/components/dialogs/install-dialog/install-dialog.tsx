@@ -16,6 +16,7 @@ import { type FormValues, InstallForm } from '../../install-form/install-form';
 import { useOptionalCluster } from '@/desktop/cluster';
 import { ClusterInstallDialog } from '@/desktop/cluster-install';
 import { useAppContext } from '@/context/app-context';
+import { catalogueInstallAllowed } from '../../../helpers/catalogue-compatibility';
 
 interface IProps {
   info: AppInfo;
@@ -79,7 +80,13 @@ const LocalInstallDialog: React.FC<IProps> = ({ info, isOpen, onClose }) => {
               </Alert>
             )}
             <InstallForm
-              onSubmit={(data) => installMutation.mutate({ path: { urn: info.urn }, body: normalizeFormValues(data) })}
+              onSubmit={(data) => {
+                if (!catalogueInstallAllowed(info)) {
+                  toast.error('This app is unavailable for installation.');
+                  return;
+                }
+                installMutation.mutate({ path: { urn: info.urn }, body: normalizeFormValues(data) });
+              }}
               formFields={info.form_fields}
               info={info}
               formId={formId}

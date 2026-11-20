@@ -1,0 +1,22 @@
+.monitor-cpu-heading > .monitor-logical-switch {
+  flex: 0 1 auto;
+  align-self: center;
+  min-height: 44px;
+  max-width: 100%;
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.monitor-logical-switch > .form-check-label {
+  overflow-wrap: break-word;
+}
+.desktop .monitor-logical-switch > .switch-root:focus-visible {
+  outline: 2px solid var(--desktop-focus);
+  outline-offset: 4px;
+}
+.monitor-cpu-source-note {
+  margin: 0 0 16px;
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}

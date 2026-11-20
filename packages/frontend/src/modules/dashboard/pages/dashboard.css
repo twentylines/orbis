@@ -351,7 +351,7 @@
   min-width: 0;
   flex: 1 1 calc((100% - 36px) / 3);
   grid-column: span 4;
-  animation: orbis-panel-enter 0.56s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: orbis-panel-enter 0.56s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 .workspace-widget:nth-child(1) {
   animation-delay: 0.06s;
@@ -390,16 +390,15 @@
 .workspace-apps,
 .workspace-activity,
 .workspace-storage,
+.workspace-operations,
 .workspace-attention {
-  background: var(--desktop-surface);
+  background: var(--desktop-pane-surface);
   border: 1px solid var(--desktop-edge);
   color: var(--desktop-ink);
   border-radius: 24px;
-  box-shadow:
-    0 24px 58px rgba(12, 38, 34, 0.17),
-    inset 0 1px var(--desktop-highlight);
-  backdrop-filter: var(--orbis-glass-filter, blur(20px) saturate(1.22));
-  -webkit-backdrop-filter: var(--orbis-glass-filter, blur(20px) saturate(1.22));
+  box-shadow: 0 24px 58px rgba(12, 38, 34, 0.17);
+  backdrop-filter: var(--desktop-pane-filter);
+  -webkit-backdrop-filter: var(--desktop-pane-filter);
 }
 .workspace-panel-kicker {
   display: block;
@@ -415,12 +414,12 @@
   min-height: 0;
   position: relative;
   overflow: visible;
-  background: color-mix(in srgb, var(--desktop-surface) 72%, transparent);
+  background: var(--desktop-pane-surface);
   border: 1px solid var(--desktop-line);
   border-radius: 24px;
   box-shadow: none;
-  backdrop-filter: var(--orbis-glass-filter, blur(20px) saturate(1.22));
-  -webkit-backdrop-filter: var(--orbis-glass-filter, blur(20px) saturate(1.22));
+  backdrop-filter: var(--desktop-pane-filter);
+  -webkit-backdrop-filter: var(--desktop-pane-filter);
 }
 :root[data-orbis-transparency="solid"] .workspace-apps {
   background: var(--desktop-surface);
@@ -568,7 +567,7 @@
   border-radius: 16px;
   border: 1px solid transparent;
   text-decoration: none;
-  background: color-mix(in srgb, var(--desktop-preset-tint) 5%, transparent);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 14%, transparent);
   text-align: left;
   transition:
     background 0.18s ease,
@@ -590,13 +589,13 @@
   animation-delay: 0.24s;
 }
 .workspace-app:hover {
-  background: color-mix(in srgb, var(--desktop-preset-tint) 16%, var(--desktop-surface));
+  background: color-mix(in srgb, var(--desktop-preset-tint) 22%, transparent);
   border-color: var(--desktop-accent);
   text-decoration: none;
   box-shadow: none;
 }
 .workspace-app:active {
-  background: color-mix(in srgb, var(--desktop-preset-tint) 22%, var(--desktop-surface));
+  background: color-mix(in srgb, var(--desktop-preset-tint) 28%, transparent);
 }
 .workspace-app .app-logo {
   flex: none;
@@ -608,13 +607,17 @@
   flex-direction: column;
   min-width: 0;
   gap: 4px;
-  align-self: stretch;
+  align-self: center;
 }
 .workspace-app-copy strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   font-size: 0.875rem;
+  line-height: 1.4;
   color: var(--desktop-ink);
 }
 .workspace-app-title {
@@ -624,6 +627,10 @@
   min-width: 0;
   font-size: 0.875rem;
 }
+.workspace-app-title strong {
+  flex: 0 1 auto;
+  min-width: 0;
+}
 .workspace-app-copy small {
   line-height: 1.35;
   white-space: normal;
@@ -632,7 +639,7 @@
   text-transform: capitalize;
 }
 .workspace-app-copy .docker-health {
-  margin-top: auto;
+  margin-top: 0;
 }
 .workspace-app-status {
   position: absolute;
@@ -648,9 +655,7 @@
 .desktop[data-desktop-mode="dark"] .workspace-storage,
 .desktop[data-desktop-mode="dark"] .workspace-attention {
   border-color: rgba(255, 255, 255, 0.13);
-  box-shadow:
-    0 24px 58px rgba(3, 15, 14, 0.28),
-    inset 0 1px rgba(255, 255, 255, 0.07);
+  box-shadow: 0 24px 58px rgba(3, 15, 14, 0.28);
 }
 
 .workspace-app-status.running {
@@ -787,13 +792,11 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background: var(--desktop-status-background);
-  background-color: var(--desktop-surface);
+  background: var(--desktop-pane-status-background);
+  background-color: transparent;
   border-color: var(--desktop-edge);
   color: var(--desktop-ink);
-  box-shadow:
-    0 26px 58px rgba(7, 34, 31, 0.29),
-    inset 0 1px rgba(255, 255, 255, 0.1);
+  box-shadow: 0 26px 58px rgba(7, 34, 31, 0.22);
 }
 .workspace-activity::before {
   content: "";
@@ -1169,11 +1172,12 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background: color-mix(in srgb, var(--desktop-warning) 7%, var(--desktop-surface));
+  background: color-mix(in srgb, var(--desktop-preset-tint) 7%, var(--desktop-pane-surface));
+  border-color: color-mix(in srgb, var(--desktop-warning) 25%, var(--desktop-line));
 }
 
 .workspace-attention::before {
-  content: "";
+  content: none;
   position: absolute;
   z-index: -1;
   top: -95px;
@@ -1297,13 +1301,27 @@
   color: var(--desktop-ink);
 }
 .workspace-operations {
-  background: var(--desktop-surface);
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border: 1px solid var(--desktop-line);
   border-radius: 22px;
   color: var(--desktop-ink);
-  box-shadow:
-    0 24px 58px rgba(12, 38, 34, 0.17),
-    inset 0 1px var(--desktop-highlight);
+  box-shadow: 0 24px 58px rgba(12, 38, 34, 0.17);
+}
+.workspace-operations::before {
+  /* Keep the filtered wallpaper separate from refreshed operation text. */
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--desktop-pane-surface);
+  backdrop-filter: var(--desktop-pane-filter);
+  -webkit-backdrop-filter: var(--desktop-pane-filter);
+  pointer-events: none;
 }
 .workspace-operations .workspace-section-heading {
   margin-bottom: 14px;
@@ -1679,7 +1697,7 @@
     font-size: 0.75rem;
   }
   .workspace-widget .workspace-app-list {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5em), 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 14.5rem), 1fr));
     gap: 12px;
   }
   .workspace-editor {
@@ -1720,8 +1738,8 @@
   .workspace-app {
     padding: 12px;
     gap: 10px;
-    flex-direction: column;
-    align-items: start;
+    flex-direction: row;
+    align-items: center;
   }
   .workspace-app-scroll[data-scroll="true"] {
     padding-right: 0;
@@ -1737,11 +1755,11 @@
   }
   .workspace-app {
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
   }
   .workspace-app-copy {
-    flex-basis: 6em;
+    flex-basis: 0;
   }
 }
 
@@ -1777,8 +1795,9 @@
 }
 .workspace-app-manage {
   position: absolute;
-  top: 4px;
+  top: 50%;
   right: 4px;
+  translate: 0 -50%;
   display: grid;
   place-items: center;
   width: 44px;
@@ -1792,7 +1811,7 @@
 }
 
 .workspace {
-  --workspace-app-row-height: 8rem;
+  --workspace-app-row-height: 5.5rem;
 }
 .workspace[data-app-view="icons"] {
   --workspace-app-row-height: 6.5rem;
@@ -1816,7 +1835,8 @@
     flex: none;
     flex-direction: column;
     min-height: 0;
-    height: var(--workspace-widget-height, calc(var(--workspace-app-row-height) * 3 + 105px + max(36px, 1.875rem)));
+    height: var(--workspace-widget-height, auto);
+    max-height: var(--workspace-widget-height, calc(var(--workspace-app-row-height) * 3 + 105px + max(36px, 1.875rem)));
   }
   .workspace-apps > .workspace-section-heading {
     flex: none;

@@ -1,7 +1,11 @@
 import type { TaskRecord } from '@runtipi/common/schemas/task-history';
 
 export type SetupFailureOutcome = 'capture-failed' | 'capture-not-started' | 'preferences-save-failed';
-export type SetupFailureTask = TaskRecord & { setupFailureOutcome: SetupFailureOutcome; setupFailureReason?: string };
+export type SetupFailureTask = TaskRecord & {
+  setupFailureOutcome: SetupFailureOutcome;
+  setupFailureReason?: string;
+  setupFailureDismissed?: boolean;
+};
 type FailureEntry = { attemptId: string; outcome: SetupFailureOutcome; occurredAt: string; dismissed: boolean; reason?: string };
 type FailureLedger = { version: 1; entries: FailureEntry[] };
 type Storage = Pick<globalThis.Storage, 'getItem' | 'setItem'>;
@@ -96,12 +100,12 @@ export function recordSetupFailureTask(
   }
 }
 
-export function setupFailureTasks(ownerId: number, suppliedStorage?: Storage | null): SetupFailureTask[] {
+export function setupFailureTasks(ownerId: number, suppliedStorage?: Storage | null, includeDismissed = false): SetupFailureTask[] {
   const storage = browserStorage(suppliedStorage);
   if (!storage) return [];
   try {
     return readLedger(ownerId, storage)
-      .entries.filter((entry) => !entry.dismissed)
+      .entries.filter((entry) => includeDismissed || !entry.dismissed)
       .map((entry) => ({
         id: entry.attemptId,
         appUrn: (entry.outcome === 'preferences-save-failed' ? 'orbis:settings' : 'orbis:time-machine') as TaskRecord['appUrn'],
@@ -114,6 +118,7 @@ export function setupFailureTasks(ownerId: number, suppliedStorage?: Storage | n
         finishedAt: entry.occurredAt,
         attentionRevision: 0,
         setupFailureOutcome: entry.outcome,
+        ...(entry.dismissed ? { setupFailureDismissed: true } : {}),
         ...(entry.reason ? { setupFailureReason: entry.reason } : {}),
       }));
   } catch {

@@ -1,15 +1,41 @@
 import { prefersReducedMotion } from './motion-setting';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import type { DesktopAppearance } from '@runtipi/common/schemas/desktop-appearance';
-import { resolveWallpaperKey, wallpaperSources, type WallpaperChoice } from './wallpaper-presets';
+import {
+  resolveWallpaperKey,
+  taggedWallpaperColours,
+  wallpaperSources,
+  type WallpaperChoice,
+  type WallpaperPresentationColours,
+} from './wallpaper-presets';
 import { readWallpaperImage, rememberBrowserWallpaper, wallpaperCacheEvent } from './wallpaper-cache';
 import { publicThemePackWallpaper, subscribeThemePackAppearance, themePackAppearanceSnapshot } from '@/modules/theme-packs/theme-pack-cache';
 import './wallpaper.css';
 import { setWallpaperTextSample } from './wallpaper-text';
 import type { WallpaperPixels } from './wallpaper-contrast';
 import { WallpaperTransition } from './wallpaper-transition';
+import { selectWallpaperColours } from './wallpaper-palette';
 
 const contrastPixels = new WeakMap<HTMLImageElement, WallpaperPixels>();
+
+function imagePixels(image: HTMLImageElement): WallpaperPixels {
+  const cached = contrastPixels.get(image);
+  if (cached) return cached;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 96;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context || !image.naturalWidth || !image.naturalHeight) throw new Error('Wallpaper pixels are unavailable.');
+  context.drawImage(image, 0, 0, 96, 96);
+  const pixels = {
+    width: 96,
+    height: 96,
+    sourceWidth: image.naturalWidth,
+    sourceHeight: image.naturalHeight,
+    data: context.getImageData(0, 0, 96, 96).data,
+  };
+  contrastPixels.set(image, pixels);
+  return pixels;
+}
 
 const subscribeMotion = (changed: () => void) => {
   try {
@@ -28,15 +54,19 @@ function WallpaperImages({
   reduced,
   onError,
   onReady,
+  prepare,
+  onReveal,
 }: {
   source: string;
   imageStyle: CSSProperties;
   reduced: boolean;
   onError?: () => void;
   onReady: (image: HTMLImageElement) => void;
+  prepare: (image: HTMLImageElement) => boolean;
+  onReveal: (image: HTMLImageElement) => void;
 }) {
-  const callbacks = useRef({ onReady, onError });
-  callbacks.current = { onReady, onError };
+  const callbacks = useRef({ onReady, onError, prepare, onReveal });
+  callbacks.current = { onReady, onError, prepare, onReveal };
   const render = useRef<(frames: ReturnType<WallpaperTransition['snapshot']>) => void>(() => undefined);
   const transition = useRef<WallpaperTransition | null>(null);
   if (!transition.current)
@@ -46,6 +76,8 @@ function WallpaperImages({
       (frames) => render.current(frames),
       (image) => callbacks.current.onReady(image),
       () => callbacks.current.onError?.(),
+      undefined,
+      (image) => callbacks.current.onReveal(image),
     );
   const model = transition.current;
   const [frames, setFrames] = useState(() => model.snapshot());
@@ -55,11 +87,16 @@ function WallpaperImages({
     if (!model.needsDecode(id) || decoding.current.has(image)) return;
     decoding.current.add(image);
     const ready = () => {
-      if (image.complete && image.naturalWidth > 0) model.loaded(id);
+      if (!model.needsDecode(id)) return;
+      if (image.complete && image.naturalWidth > 0 && callbacks.current.prepare(image)) model.loaded(id);
       else model.error(id);
     };
-    if (typeof image.decode === 'function') void image.decode().then(ready, ready);
-    else ready();
+    if (typeof image.decode === 'function') {
+      void image.decode().then(ready, () => {
+        if (image.crossOrigin === 'anonymous') model.error(id);
+        else ready();
+      });
+    } else ready();
   };
   useLayoutEffect(() => {
     model.activate();
@@ -136,13 +173,19 @@ export function WallpaperLayer({
   authenticated = false,
   revision = 0,
   onUnavailable,
+  automaticColours = false,
+  onReveal,
 }: {
   choice: WallpaperChoice & { appearance?: Partial<DesktopAppearance> };
   authenticated?: boolean;
   revision?: number;
   onUnavailable?: () => void;
+  automaticColours?: boolean;
+  onReveal?: (colours: WallpaperPresentationColours | null) => void;
 }) {
   const layer = useRef<HTMLDivElement>(null);
+  const [revealedSource, setRevealedSource] = useState<string | null>(null);
+  const preparedColours = useRef(new WeakMap<HTMLImageElement, WallpaperPresentationColours>());
   const systemReducedMotion = useSyncExternalStore(subscribeMotion, prefersReducedMotion, fullMotion);
   const themePack = useSyncExternalStore(subscribeThemePackAppearance, themePackAppearanceSnapshot, themePackAppearanceSnapshot);
   const value = {
@@ -165,28 +208,38 @@ export function WallpaperLayer({
     choice.wallpaperMode === 'theme' || (choice.wallpaperMode === undefined && !choice.wallpaperPreset && !value.wallpaperImage)
       ? themePack && publicThemePackWallpaper(themePack)
       : null;
-  const source = hash ? custom.source : packSource || wallpaperSources[resolveWallpaperKey(choice)];
+  const fallback = packSource || wallpaperSources[resolveWallpaperKey(choice)];
+  const source = hash ? (custom.source ?? revealedSource) : fallback;
+  const surfaceSource = revealedSource ?? fallback;
+  const prepare = useCallback(
+    (image: HTMLImageElement) => {
+      const current = image.getAttribute('src');
+      if (!current) return false;
+      if (!automaticColours || preparedColours.current.has(image)) return true;
+      try {
+        const colours = taggedWallpaperColours(current) ?? selectWallpaperColours(imagePixels(image).data);
+        preparedColours.current.set(image, colours);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [automaticColours],
+  );
+  const reveal = useCallback(
+    (image: HTMLImageElement) => {
+      const current = image.getAttribute('src');
+      if (!current || current !== source) return;
+      setRevealedSource(current);
+      onReveal?.(automaticColours && prepare(image) ? (preparedColours.current.get(image) ?? null) : null);
+    },
+    [automaticColours, onReveal, prepare, source],
+  );
   const publishContrast = useCallback(
     (image: HTMLImageElement) => {
       if (!layer.current?.parentElement?.classList.contains('desktop') || !image.naturalWidth || image.getAttribute('src') !== source) return;
       try {
-        let pixels = contrastPixels.get(image);
-        if (!pixels) {
-          const canvas = document.createElement('canvas');
-          canvas.width = 96;
-          canvas.height = 96;
-          const context = canvas.getContext('2d', { willReadFrequently: true });
-          if (!context) return;
-          context.drawImage(image, 0, 0, 96, 96);
-          pixels = {
-            width: 96,
-            height: 96,
-            sourceWidth: image.naturalWidth,
-            sourceHeight: image.naturalHeight,
-            data: context.getImageData(0, 0, 96, 96).data,
-          };
-          contrastPixels.set(image, pixels);
-        }
+        const pixels = imagePixels(image);
         setWallpaperTextSample({ pixels, fit: value.wallpaperFit, x: value.wallpaperX, y: value.wallpaperY, dim: value.wallpaperDim / 100 });
       } catch {
         // Cross-origin pack artwork can disallow sampling; retain the theme's readable fallback.
@@ -197,8 +250,11 @@ export function WallpaperLayer({
   );
   useEffect(() => {
     for (const image of layer.current?.querySelectorAll<HTMLImageElement>('img[data-wallpaper-displayed="true"]') ?? [])
-      if (image.complete) publishContrast(image);
-  }, [publishContrast]);
+      if (image.complete && image.naturalWidth > 0) {
+        publishContrast(image);
+        if (prepare(image)) reveal(image);
+      }
+  }, [prepare, publishContrast, reveal]);
   useEffect(() => {
     const desktop = layer.current?.parentElement?.classList.contains('desktop');
     return () => {
@@ -210,7 +266,7 @@ export function WallpaperLayer({
     if (!surface) return;
     // iOS Safari extends the scrolling surface beneath its toolbar, beyond fixed images.
     const properties = {
-      '--orbis-wallpaper-image': source ? `url(${JSON.stringify(source)})` : 'none',
+      '--orbis-wallpaper-image': surfaceSource ? `url(${JSON.stringify(surfaceSource)})` : 'none',
       '--orbis-wallpaper-fit': value.wallpaperFit,
       '--orbis-wallpaper-position': `${value.wallpaperX}% ${value.wallpaperY}%`,
       '--orbis-wallpaper-dim': String(value.wallpaperDim / 100),
@@ -223,7 +279,7 @@ export function WallpaperLayer({
         else surface.style.removeProperty(property);
       }
     };
-  }, [source, value.wallpaperFit, value.wallpaperX, value.wallpaperY, value.wallpaperDim]);
+  }, [surfaceSource, value.wallpaperFit, value.wallpaperX, value.wallpaperY, value.wallpaperDim]);
   return (
     <div
       ref={layer}
@@ -248,6 +304,8 @@ export function WallpaperLayer({
           }}
           onError={hash ? custom.unavailable : undefined}
           onReady={publishContrast}
+          prepare={prepare}
+          onReveal={reveal}
         />
       ) : null}
       <div className="desktop-wallpaper-shade" />

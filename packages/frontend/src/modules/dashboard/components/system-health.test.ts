@@ -1,7 +1,7 @@
 /// <reference types="bun" />
 import { expect, test } from 'bun:test';
 import type { HostSensors, HostTemperature } from '@runtipi/common/schemas';
-import type { Telemetry } from '@/desktop/telemetry';
+import { hostCpuPercent, type Telemetry } from '@/desktop/telemetry';
 import { advanceSystemHealth, highTemperature, highUsage, temperatureLimit, type SystemHealth } from './system-health';
 import { sensorOptions } from './use-system-health';
 
@@ -59,6 +59,30 @@ test('requires a full observed minute for CPU and two minutes for memory', () =>
   expect(minute.cpu?.active).toBe(true);
   expect(minute.memory?.active).toBe(false);
   expect(run(61, 120, minute).memory?.active).toBe(true);
+});
+
+test('system CPU accepts the full host percentage range and rejects runtime or invalid totals', () => {
+  expect(hostCpuPercent(telemetry(0, 0).cpu)).toBe(0);
+  expect(hostCpuPercent(telemetry(0, 100).cpu)).toBe(100);
+  expect(hostCpuPercent(telemetry(0, 95, 95, 'runtime').cpu)).toBeNull();
+  expect(hostCpuPercent()).toBeNull();
+  for (const totalPercent of [null, -1, Number.NaN, Number.POSITIVE_INFINITY, 100.1]) {
+    expect(hostCpuPercent({ ...telemetry(0).cpu, totalPercent })).toBeNull();
+  }
+});
+
+test('runtime CPU readings never start alerts or count as recovery for a host alert', () => {
+  let runtimeState: SystemHealth = {};
+  for (let seconds = 0; seconds <= 120; seconds++) {
+    runtimeState = advanceSystemHealth(runtimeState, { telemetry: telemetry(seconds, 99, 95, 'runtime') }, epoch + seconds * 1000);
+  }
+  expect(runtimeState.cpu).toBeUndefined();
+  expect(runtimeState.memory?.active).toBe(true);
+
+  const active = run(0, 60);
+  const fallback = advanceSystemHealth(active, { telemetry: telemetry(61, 1, 95, 'runtime') }, epoch + 61_000);
+  expect(fallback.cpu).toMatchObject({ label: 'CPU load', source: 'host-proc', value: 95, active: true, fresh: false, recoverySince: null });
+  expect(fallback.memory?.fresh).toBe(true);
 });
 
 test('isolated spikes and interrupted observations never become sustained alerts', () => {
@@ -120,9 +144,14 @@ test('temperature uses real 30-second sample times, host limits and recovery hys
   expect(advanceSystemHealth(cooling, { sensors: sensors(150, sensor(83)) }, epoch + 150_000)['temperature:package']?.active).toBe(false);
 });
 
-test('a changed CPU source or sensor threshold starts a new observation window', () => {
+test('missing host CPU readings interrupt a sustained observation window', () => {
   const state = run(0, 59);
-  expect(advanceSystemHealth(state, { telemetry: telemetry(60, 95, 95, 'runtime') }, epoch + 60_000).cpu?.active).toBe(false);
+  const fallback = advanceSystemHealth(state, { telemetry: telemetry(60, 95, 95, 'runtime') }, epoch + 60_000);
+  expect(fallback.cpu).toMatchObject({ active: false, fresh: false, highSince: null });
+  expect(step(fallback, 61).cpu).toMatchObject({ active: false, fresh: true, highSince: epoch + 61_000 });
+});
+
+test('a changed sensor threshold starts a new observation window', () => {
   let thermal = advanceSystemHealth({}, { sensors: sensors(0) }, epoch);
   thermal = advanceSystemHealth(thermal, { sensors: sensors(30) }, epoch + 30_000);
   expect(advanceSystemHealth(thermal, { sensors: sensors(60, sensor(95, 90)) }, epoch + 60_000)['temperature:package']?.active).toBe(false);

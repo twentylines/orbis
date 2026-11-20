@@ -50,6 +50,12 @@
 .orbis-store-recommendations > .orbis-store-collections {
   position: relative;
 }
+.orbis-store .orbis-store-recommendations[data-selected-suggestion] .orbis-store-collections {
+  grid-template-columns: minmax(0, 1fr);
+}
+.orbis-store[data-split-preview="true"] :is(.orbis-store-recommendations[inert], .orbis-store-recommendations [inert]) {
+  display: none;
+}
 .orbis-store-recommendations[inert] {
   overflow: hidden;
 }

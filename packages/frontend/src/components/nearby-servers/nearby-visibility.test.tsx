@@ -1,5 +1,9 @@
 import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { appContextQueryKey, userContextQueryKey } from '@/api-client/@tanstack/react-query.gen';
+import { AppContextProvider } from '@/context/app-context';
+import { UserContextProvider } from '@/context/user-context';
 import { NearbyVisibility, readNearbyVisibility, setNearbyVisibility } from './nearby-visibility';
 
 const sharing = { interface: 'eth0', origin: 'https://source.example.test', expiresAt: new Date(Date.now() + 180_000).toISOString() };
@@ -26,10 +30,22 @@ async function withFetch(responses: (Response | Error)[], run: (calls: { url: un
 }
 test('visibility renders a disabled unconfirmed switch, without a manual interface/origin/lease form', async () => {
   await withFetch([], async (calls) => {
-    const html = renderToStaticMarkup(<NearbyVisibility />);
+    const client = new QueryClient();
+    client.setQueryData(appContextQueryKey(), { user: { id: 7, operator: true } });
+    client.setQueryData(userContextQueryKey(), { isLoggedIn: true });
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <UserContextProvider>
+          <AppContextProvider>
+            <NearbyVisibility />
+          </AppContextProvider>
+        </UserContextProvider>
+      </QueryClientProvider>,
+    );
+    client.clear();
     expect(html).toContain('Allow nearby discovery');
     expect(html).toContain('disabled');
-    expect(html).toContain('not been confirmed');
+    expect(html).toContain('Checking nearby discovery');
     expect(html).not.toContain('<form');
     expect(html).not.toContain('two minutes');
     expect(html).not.toContain('https://');

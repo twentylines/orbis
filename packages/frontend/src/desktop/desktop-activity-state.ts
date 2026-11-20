@@ -1,6 +1,7 @@
 import type { TaskRecord } from '@runtipi/common/schemas';
 import { coreUpdateTitle, coreWatchIsActive, type CoreUpdateWatch } from './core-update-state';
 import { formatOrbisVersion } from './orbis-version';
+import { taskProgressLabel } from './task-progress';
 
 export type PackageActivityJob = { id: string; kind?: 'refresh' | 'smart-tools'; state: string; operationCount?: number; message?: string };
 export type DesktopActivityItem = {
@@ -48,7 +49,7 @@ export function desktopActivity(
     id: task.id,
     kind: 'app',
     title: `${verbs[task.action]} ${name(task)}`,
-    detail: task.status === 'queued' ? 'Queued' : 'In progress',
+    detail: taskProgressLabel(task) ?? (task.status === 'queued' ? 'Queued' : 'In progress'),
     state: task.status,
     appUrn: task.appUrn,
   }));

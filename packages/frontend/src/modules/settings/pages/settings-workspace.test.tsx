@@ -110,14 +110,14 @@ test('a hidden parent settings window suppresses its active category dialog with
   expect(hidden).not.toContain('Inactive portal');
 });
 
-test('settings search renders as a header control while section Save stays in its content heading', () => {
+test('settings search renders as a header control with no preference Save button', () => {
   const panels = Object.fromEntries(settingsSections.map(({ id }) => [id, <input key={id} aria-label={`Draft ${id}`} />])) as Record<
     SettingsSection,
     React.ReactNode
   >;
   const search = renderToStaticMarkup(<SettingsSearch access={{ operator: true }} onSetting={() => {}} />);
   const markup = renderToStaticMarkup(
-    <SettingsSaveProvider onSection={() => {}}>
+    <SettingsSaveProvider>
       <SettingsWorkspace current="general" access={{ operator: true }} onSection={() => {}} onSetting={() => {}} panels={panels} />
     </SettingsSaveProvider>,
   );
@@ -126,12 +126,10 @@ test('settings search renders as a header control while section Save stays in it
   expect(search).toContain('placeholder="Find a setting"');
   expect(search).toContain('data-focus-surface="parent"');
   expect(markup).not.toContain('class="settings-search settings-header-search"');
-  expect(markup.match(/>Save<\/button>/g)).toHaveLength(1);
+  expect(markup).not.toMatch(/>Save<\/button>/);
   const sectionHeader = markup.match(/<header class="settings-content-heading">[\s\S]*?<\/header>/)?.[0] ?? '';
   expect(sectionHeader).toContain('<h2>General</h2>');
-  expect(sectionHeader).toContain('>Save</button>');
-  expect(sectionHeader).toContain('settings-save-actions');
-  expect(sectionHeader.indexOf('settings-save-secondary-actions')).toBeLessThan(sectionHeader.indexOf('>Save</button>'));
+  expect(sectionHeader).toContain('settings-save-secondary-actions');
   expect(markup).not.toContain('<h1');
   expect(markup).not.toContain('settings-header-status');
 });
@@ -167,7 +165,7 @@ test('OLED search target resolves to the separate switch control', () => {
   expect(controls.some((control) => control.props['data-setting-focus'] === 'oled')).toBe(true);
 });
 
-test('React-mounted handlers query through the portal target, clear and blur, and run the shared Save plan', async () => {
+test('React-mounted handlers query through the portal target, clear and blur, and retain secondary header actions', async () => {
   const child = Bun.spawn([process.execPath, new URL('./settings-workspace-interaction.fixture.tsx', import.meta.url).pathname], {
     cwd: new URL('../../../../..', import.meta.url).pathname,
     stdout: 'pipe',
@@ -180,7 +178,6 @@ test('React-mounted handlers query through the portal target, clear and blur, an
     portalTarget: true,
     network: false,
     layout: false,
-    eventsSeen: ['prepare', 'commit'],
     headerActionMoves: ['header', 'hidden', 'restored', 'removed'],
   });
 });

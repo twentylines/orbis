@@ -14,6 +14,7 @@ import { HttpsSettings } from '../containers/https-settings';
 import { httpsSetupVisible } from '@/desktop/secure-access';
 import { SettingsSaveProvider } from './settings-save';
 import { AppUpdatePolicyProvider } from '../containers/app-update-policy';
+import { useSettingsToggleSaving } from '../hooks/use-autosaved-toggle';
 import {
   resolveSettingsSection,
   settingAvailable,
@@ -22,7 +23,7 @@ import {
   type SettingEntry,
   type SettingsSection,
 } from '../helpers/settings-catalogue';
-import { revealSetting } from '../helpers/reveal-setting';
+import { openSettingReview, revealSetting } from '../helpers/reveal-setting';
 
 const TimeMachineSettings = lazy(() =>
   import('@/modules/time-machine/time-machine-settings').then((module) => ({ default: module.TimeMachineSettings })),
@@ -45,6 +46,7 @@ export default function SettingsPage() {
   const { userSettings, user } = useAppContext();
   const { sessionAbortSignal } = useUserContext();
   const { syncState } = useDesktopPreferences();
+  const savingToggle = useSettingsToggleSaving();
   const visible = useWindowVisible();
   const access = {
     operator: user.operator === true,
@@ -71,6 +73,8 @@ export default function SettingsPage() {
     void navigate({ pathname: location.pathname, search: `?${params}`, hash: '' }, { replace: true, preventScrollReset: true });
   }, [access.http, searchParams, navigate, location.pathname]);
   const root = useRef<HTMLDivElement>(null);
+  const reviewedLocation = useRef<string | null>(null);
+  const reviewAction = viewParams.get('action');
   const revealGeneration = useRef(location.key);
   revealGeneration.current = location.key;
   const updateLocation = (section: SettingsSection, entry?: SettingEntry) => {
@@ -80,17 +84,27 @@ export default function SettingsPage() {
   useEffect(() => {
     const element = root.current;
     if (!element || !allowedTarget || !visible || navigating || revealGeneration.current !== location.key) return;
-    if (revealSetting(element, allowedTarget, prefersReducedMotion())) return;
+    const reveal = () => {
+      const requestedReview = allowedTarget.review?.id === reviewAction;
+      if (requestedReview && reviewedLocation.current === location.key) return true;
+      if (!revealSetting(element, allowedTarget, prefersReducedMotion())) return false;
+      if (requestedReview && reviewAction) {
+        if (!openSettingReview(element, allowedTarget, reviewAction)) return false;
+        reviewedLocation.current = location.key;
+      }
+      return true;
+    };
+    if (reveal()) return;
     const observer = new MutationObserver(() => {
-      if (revealGeneration.current === location.key && revealSetting(element, allowedTarget, prefersReducedMotion())) observer.disconnect();
+      if (revealGeneration.current === location.key && reveal()) observer.disconnect();
     });
-    observer.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+    observer.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'disabled'] });
     const timeout = window.setTimeout(() => observer.disconnect(), 5000);
     return () => {
       observer.disconnect();
       window.clearTimeout(timeout);
     };
-  }, [allowedTarget, visible, navigating, location.key]);
+  }, [allowedTarget, visible, navigating, location.key, reviewAction]);
 
   const loading = (
     <div className="settings-loading">
@@ -106,7 +120,7 @@ export default function SettingsPage() {
   );
   return (
     <div className="desktop-settings" ref={root}>
-      <SettingsSaveProvider backgroundSaving={syncState === 'saving'} signal={sessionAbortSignal} onSection={(section) => updateLocation(section)}>
+      <SettingsSaveProvider backgroundSaving={syncState === 'saving' || savingToggle} signal={sessionAbortSignal}>
         <AppUpdatePolicyProvider>
           <SettingsWorkspace
             current={current}

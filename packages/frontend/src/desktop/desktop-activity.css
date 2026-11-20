@@ -4,6 +4,9 @@
   align-items: stretch;
   gap: 12px;
   min-width: 0;
+  flex: none;
+  width: var(--orbis-dock-side-width, 100%);
+  height: var(--orbis-dock-side-height, 100%);
   overflow: auto hidden;
   scrollbar-width: none;
   scroll-padding-inline: 4px;
@@ -16,6 +19,13 @@
 }
 .desktop-activity-rail .desktop-dock-companion-content {
   width: max(64px, calc((100cqw - (var(--activity-count, 1) - 1) * 12px) / var(--activity-count, 1)));
+}
+.desktop-dock[data-scroll-folding] .desktop-activity-rail > .desktop-dock-companion:not([aria-hidden="true"]),
+.desktop-dock[data-scroll-folding] .desktop-activity-rail > .desktop-dock-companion:not([aria-hidden="true"]) > .desktop-dock-companion-content {
+  /* biome-ignore lint/complexity/noImportantStyles: Contracted pills must override the measured inline dimensions during the shared dock animation. */
+  width: var(--orbis-dock-activity-pill-width) !important;
+  /* biome-ignore lint/complexity/noImportantStyles: Preserve the animated side-pill height over its expanded inline dimensions. */
+  height: var(--orbis-dock-side-height) !important;
 }
 .desktop-activity {
   display: none;
@@ -38,17 +48,17 @@
   gap: 10px;
   width: 100%;
   height: 100%;
-  min-height: 68px;
-  padding: 10px 14px;
+  min-height: min(68px, var(--orbis-dock-side-height, 68px));
+  padding: 10px calc(14px - var(--orbis-dock-fold, 0) * 4px);
   border: 1px solid transparent;
-  border-radius: var(--orbis-dock-radius, 20px);
+  border-radius: calc(var(--orbis-dock-radius, 20px) + (28px - var(--orbis-dock-radius, 20px)) * var(--orbis-dock-fold, 0));
   color: var(--desktop-chrome-ink);
   background: var(--desktop-chrome);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  backdrop-filter: var(--desktop-chrome-filter);
-  -webkit-backdrop-filter: var(--desktop-chrome-filter);
+  backdrop-filter: var(--desktop-glass-chrome-filter);
+  -webkit-backdrop-filter: var(--desktop-glass-chrome-filter);
 }
 .desktop-activity-trigger:focus-visible,
 .desktop-activity-heading button:focus-visible,
@@ -56,9 +66,6 @@
 .desktop-activity-list:focus-visible {
   outline: 3px solid var(--desktop-chrome-ink);
   outline-offset: -5px;
-}
-.desktop-activity-trigger > svg {
-  flex: none;
 }
 .desktop-activity-icon {
   flex: none;
@@ -85,10 +92,16 @@
   .desktop-activity-trigger {
     padding-inline: 10px;
   }
-  .desktop-activity-summary,
-  .desktop-activity-trigger > svg {
+  .desktop-activity-summary {
     display: none;
   }
+}
+.desktop-dock[data-scroll-compact-labels] .desktop-activity-summary {
+  display: grid;
+  flex: initial;
+}
+.desktop-dock[data-scroll-compact-labels] .desktop-activity-summary > :not(strong) {
+  display: none;
 }
 .desktop-activity-summary strong,
 .desktop-activity-summary small {
@@ -119,8 +132,8 @@
   color: var(--desktop-chrome-ink);
   border: 1px solid transparent;
   outline: none;
-  backdrop-filter: var(--desktop-chrome-filter);
-  -webkit-backdrop-filter: var(--desktop-chrome-filter);
+  backdrop-filter: var(--desktop-glass-chrome-filter);
+  -webkit-backdrop-filter: var(--desktop-glass-chrome-filter);
   box-shadow: 0 16px 42px rgb(0 0 0 / var(--activity-shadow-opacity, 0.2));
 }
 .desktop-activity-panel {

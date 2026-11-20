@@ -26,7 +26,9 @@
   border-radius: 0;
 }
 .desktop-route-window[data-window-navigation="desktop"] .desktop-window-content {
-  background: var(--desktop-surface);
+  background: var(--desktop-pane-surface);
+  backdrop-filter: var(--desktop-pane-filter);
+  -webkit-backdrop-filter: var(--desktop-pane-filter);
   view-transition-name: orbis-section;
 }
 .desktop-route-window[data-window-navigation="desktop"]:not([data-window-scrolls-frame="true"]) {

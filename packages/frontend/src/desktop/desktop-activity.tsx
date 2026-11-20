@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useMutationState } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import * as Dialog from '@radix-ui/react-dialog';
-import { IconApps, IconChevronDown, IconChevronUp, IconPackage, IconServerCog, IconHistory } from '@tabler/icons-react';
+import { IconApps, IconMinus, IconPackage, IconServerCog, IconHistory } from '@tabler/icons-react';
 import { Link } from 'react-router';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { useAppContext } from '@/context/app-context';
@@ -14,6 +14,7 @@ import { useTasks } from './tasks';
 import { useDesktopWindows } from './window-viewport';
 import { desktopActivityGroups, type DesktopActivity, type DesktopActivityItem } from './desktop-activity-state';
 import { DockCompanion } from './dock-companion';
+import { dockNavigationFocusTarget } from './dock-scroll-reveal';
 import { useTimeMachineActivity } from '@/modules/time-machine/use-time-machine-activity';
 import { RecoveryProgressBar } from '@/components/recovery-progress/recovery-progress';
 import './desktop-activity.css';
@@ -21,9 +22,7 @@ import './desktop-activity.css';
 const activityMotionDuration = 260;
 
 function focusDock() {
-  const target =
-    document.querySelector<HTMLElement>('.desktop-dock-item[aria-current="page"]') ?? document.querySelector<HTMLElement>('.desktop-dock-item');
-  target?.focus({ preventScroll: true });
+  dockNavigationFocusTarget()?.focus({ preventScroll: true });
 }
 
 function ActivityIcon({ kind, appUrn }: Pick<DesktopActivityItem, 'kind' | 'appUrn'>) {
@@ -67,14 +66,20 @@ export function DockActivity() {
     clock.current = { signature, at: typeof time === 'number' ? time : null };
   }
   return (
-    <DockCompanion visible={desktop && groups.length > 0} side="left" duration={activityMotionDuration} motionStart={clock.current.at} retainOnExit>
+    <DockCompanion
+      visible={desktop && groups.length > 0}
+      side="left"
+      duration={activityMotionDuration}
+      motionStart={clock.current.at}
+      retainOnExit
+      expandedWidth={`min(calc(${groups.length} * clamp(164px, calc(174px * var(--orbis-text-scale, 1)), 230px) + ${Math.max(0, groups.length - 1) * 12}px), var(--orbis-activity-space, 230px))`}
+    >
       <div
         className="desktop-activity-rail"
         data-activity-count={groups.length}
         style={
           {
             '--activity-count': Math.max(1, groups.length),
-            width: `min(calc(${groups.length} * clamp(164px, calc(174px * var(--orbis-text-scale, 1)), 230px) + ${Math.max(0, groups.length - 1) * 12}px), var(--orbis-activity-space, 230px))`,
           } as CSSProperties
         }
       >
@@ -149,6 +154,9 @@ function ActivityPill({ activity, desktop }: { activity: DesktopActivity; deskto
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(panel.current);
+    observer.observe(trigger.current);
+    const dock = trigger.current.closest('.desktop-dock');
+    if (dock) observer.observe(dock);
     window.addEventListener('resize', measure);
     return () => {
       observer.disconnect();
@@ -204,7 +212,6 @@ function ActivityPill({ activity, desktop }: { activity: DesktopActivity; deskto
                   <small>{displayed.detail}</small>
                   {displayed.kind === 'time-machine' ? <RecoveryProgressBar label="Time Machine capture" percentage={displayed.percentage} /> : null}
                 </span>
-                <IconChevronUp size={16} aria-hidden="true" />
               </button>
             </Dialog.Trigger>
             <Dialog.Portal forceMount>
@@ -244,7 +251,7 @@ function ActivityPill({ activity, desktop }: { activity: DesktopActivity; deskto
                           <Dialog.Title>Activity</Dialog.Title>
                           <Dialog.Close asChild>
                             <button type="button" aria-label="Collapse activity details">
-                              <IconChevronDown size={20} aria-hidden="true" />
+                              <IconMinus size={20} aria-hidden="true" />
                             </button>
                           </Dialog.Close>
                         </div>

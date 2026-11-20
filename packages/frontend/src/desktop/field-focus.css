@@ -2,39 +2,23 @@ body:has(.orbis-theme) :is(.form-control, .form-select) {
   border-width: 2px;
   border-style: solid;
 }
-body:has(.orbis-theme)
-  :is(
-    button,
-    a[href],
-    input:not([type="hidden"]),
-    select,
-    textarea,
-    summary,
-    [role="button"],
-    [role="tab"],
-    [role="switch"],
-    [tabindex]
+/* A fallback for keyboard controls. Component focus styles keep priority. */
+:where(body:has(.orbis-theme))
+  :where(button, a[href], input:not([type="hidden"]), select, textarea, summary, [tabindex]):where(
+    :not(:disabled, [tabindex^="-"], h1, h2, h3, h4, h5, h6, [role="heading"], [role="dialog"], [role="alertdialog"])
   ):focus-visible {
+  outline: 2px solid var(--desktop-focus);
+  outline-offset: 3px;
+}
+/* Programmatic title and dialog targets do not need a new frame. */
+:where(body:has(.orbis-theme)) :where([tabindex^="-"]:is(h1, h2, h3, h4, h5, h6, [role="heading"], [role="dialog"], [role="alertdialog"])):focus {
   outline: none;
 }
-body:has(.orbis-theme)
-  :is(button, a[href], input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="tab"], [role="switch"], [tabindex]):not(
-    :is(
-        .btn,
-        .form-control,
-        .form-select,
-        [data-focus-surface="parent"],
-        .desktop-brand,
-        .desktop-update-notice,
-        .settings-search-field input,
-        .desktop-search-trigger,
-        .desktop-mode-toggle,
-        .desktop-task-trigger,
-        .desktop-icon-button
-      )
-  ):not(h1, h2, h3, h4, h5, h6, [role="heading"]):focus-visible {
-  /* biome-ignore lint/complexity/noImportantStyles: Preserve keyboard indication when low-effects removes decorative shadows. */
-  box-shadow: inset 0 0 0 9999px color-mix(in srgb, var(--desktop-focus) 12%, transparent) !important;
+/* The surrounding surface owns focus for compound search fields. */
+body:has(.orbis-theme) :is(input, textarea)[data-focus-surface="parent"]:is(:focus, :focus-visible),
+body:has(.orbis-theme) .settings-search-field input:is(:focus, :focus-visible) {
+  outline: none;
+  box-shadow: none;
 }
 body:has(.orbis-theme) :is(.form-control, .form-select:not([aria-haspopup="menu"])):is(:focus, :focus-visible),
 body:has(.orbis-theme) .form-select[aria-haspopup="menu"]:is(:focus-visible, [aria-expanded="true"]) {
@@ -49,39 +33,11 @@ body:has(.orbis-theme) .btn:is(:focus-visible, [aria-haspopup="menu"][aria-expan
   box-shadow: none;
 }
 @media (forced-colors: active) {
-  body:has(.orbis-theme)
-    :is(
-      button,
-      a[href],
-      input:not([type="hidden"]),
-      select,
-      textarea,
-      summary,
-      [role="button"],
-      [role="tab"],
-      [role="switch"],
-      [tabindex]
+  :where(body:has(.orbis-theme))
+    :where(button, a[href], input:not([type="hidden"]), select, textarea, summary, [tabindex]):where(
+      :not(:disabled, [tabindex^="-"], h1, h2, h3, h4, h5, h6, [role="heading"], [role="dialog"], [role="alertdialog"])
     ):focus-visible {
     outline: 2px solid Highlight;
     outline-offset: 2px;
-  }
-  body:has(.orbis-theme)
-    :is(button, a[href], input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="tab"], [role="switch"], [tabindex]):not(
-      :is(
-          .btn,
-          .form-control,
-          .form-select,
-          [data-focus-surface="parent"],
-          .desktop-brand,
-          .desktop-update-notice,
-          .settings-search-field input,
-          .desktop-search-trigger,
-          .desktop-mode-toggle,
-          .desktop-task-trigger,
-          .desktop-icon-button
-        )
-    ):focus-visible {
-    /* biome-ignore lint/complexity/noImportantStyles: Remove the normal-color fill in forced colors. */
-    box-shadow: none !important;
   }
 }

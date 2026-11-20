@@ -1,11 +1,10 @@
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Switch } from '@/components/ui/Switch';
 import { IconAdjustmentsCode } from '@tabler/icons-react';
 import clsx from 'clsx';
 import type React from 'react';
-import { Suspense, lazy, useEffect } from 'react';
-import { Controller, useForm, useWatch } from 'react-hook-form';
+import { Suspense, lazy, useRef, useState } from 'react';
+import { Controller, useForm, type RegisterOptions } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'react-tooltip';
 import validator from 'validator';
@@ -15,7 +14,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { THEME_COLOR_ENUM } from '../color-selector/color-selector';
 import { THEME_BASE_ENUM, type ThemeBase } from '../theme-base-selector/theme-base-selector';
 import { TimeZoneSuspense } from '@/components/timezone-selector/timezone.suspense';
-import { useSettingsSave } from '../../pages/settings-save';
+import { useSettingsPreferenceActivity } from '../../pages/settings-save';
+import { InlineFeedback } from '@/components/ui/Alert/Alert';
+import type { useGeneralSettingToggles } from '../../hooks/use-general-setting-toggles';
+import { AutosavedSettingSwitch } from '../autosaved-setting-switch';
 
 const TimeZoneSelector = lazy(() =>
   import('@/components/timezone-selector/timezone-selector').then((module) => ({
@@ -41,8 +43,8 @@ const settingsSchema = type({
   advancedSettings: 'boolean?',
   internalIp: 'string.ip.v4?',
   listenIp: 'string.ip.v4?',
-  port: '1 <= number <= 65535?',
-  sslPort: '1 <= number <= 65535?',
+  port: '1 <= number.integer <= 65535?',
+  sslPort: '1 <= number.integer <= 65535?',
   eventsTimeout: 'number.integer >= 1?',
   maxBackups: '0 <= number.integer <= 100?',
   persistTraefikConfig: 'boolean?',
@@ -81,12 +83,12 @@ interface IProps {
   currentBaseTheme?: ThemeBase;
   onSubmit: (values: SettingsFormValues) => void | Promise<void>;
   initialValues?: Partial<SettingsFormValues>;
-  loading?: boolean;
-  submitErrors?: Record<string, string>;
+  signal?: AbortSignal;
+  toggles: ReturnType<typeof useGeneralSettingToggles>;
 }
 
 export const UserSettingsForm = (props: IProps) => {
-  const { onSubmit, initialValues, loading, submitErrors } = props;
+  const { onSubmit, initialValues, signal, toggles } = props;
   const { t } = useTranslation();
 
   const validateFields = (values: SettingsFormValues) => {
@@ -104,61 +106,66 @@ export const UserSettingsForm = (props: IProps) => {
   };
 
   const {
+    guestDashboard: _guest,
+    allowErrorMonitoring: _reporting,
+    advancedSettings: _advanced,
+    persistTraefikConfig: _proxy,
+    ...draftValues
+  } = initialValues ?? {};
+  const {
     register,
-    handleSubmit,
+    getValues,
+    clearErrors,
     setError,
     control,
-    reset,
-    formState: { errors, isDirty },
-  } = useForm<SettingsFormValues>({ values: initialValues });
-  const advancedSettings = useWatch({ control, name: 'advancedSettings' }) ?? false;
+    resetField,
+    formState: { errors, dirtyFields },
+  } = useForm<SettingsFormValues>({ values: draftValues, resetOptions: { keepDirtyValues: true } });
+  const advancedSettings = toggles['advanced-settings'].checked;
+  type Field = keyof SettingsFormValues;
+  const inFlight = useRef(new Set<Field>());
+  const [pending, setPending] = useState<ReadonlySet<Field>>(() => new Set());
+  const [failed, setFailed] = useState<ReadonlySet<Field>>(() => new Set());
+  const [saved, setSaved] = useState(false);
+  useSettingsPreferenceActivity(pending.size > 0, saved, failed.size > 0 || Object.keys(dirtyFields).length > 0);
 
-  useEffect(() => {
-    if (submitErrors) {
-      for (const [key, value] of Object.entries(submitErrors)) {
-        setError(key as keyof SettingsFormValues, { message: value });
-      }
+  const commit = async (field: Field, value: SettingsFormValues[Field], changed = dirtyFields[field]) => {
+    if (signal?.aborted || !changed || inFlight.current.has(field)) return;
+    const patch = { [field]: value };
+    const domainError = validateFields(patch)[field];
+    const schema = settingsSchema(patch);
+    if (domainError || schema instanceof type.errors) {
+      setError(field, { message: domainError ?? (schema instanceof type.errors ? schema.summary : undefined) });
+      return;
     }
-  }, [submitErrors, setError]);
-
-  const validate = (values: SettingsFormValues) => {
-    const validationErrors = validateFields(values);
-
-    for (const [key, value] of Object.entries(validationErrors)) {
-      if (value) {
-        setError(key as keyof SettingsFormValues, { message: value });
-      }
+    clearErrors(field);
+    inFlight.current.add(field);
+    setPending(new Set(inFlight.current));
+    setFailed((current) => new Set([...current].filter((key) => key !== field)));
+    try {
+      await onSubmit(patch);
+      if (signal?.aborted) return;
+      if (Object.is(getValues(field), value)) resetField(field, { defaultValue: value });
+      setSaved(true);
+    } catch {
+      if (!signal?.aborted) setFailed((current) => new Set([...current, field]));
+    } finally {
+      inFlight.current.delete(field);
+      if (!signal?.aborted) setPending(new Set(inFlight.current));
     }
-
-    if (Object.keys(validationErrors).length === 0) {
-      const result = settingsSchema(values);
-      if (result instanceof type.errors) {
-        for (const [path, issue] of Object.entries(result.byPath ?? {})) {
-          setError(path as keyof SettingsFormValues, { message: issue.message });
-        }
-        return false;
-      }
-
-      return true;
-    }
-    return false;
   };
 
-  const sharedSave = useSettingsSave({
-    section: 'general',
-    dirty: isDirty,
-    pending: Boolean(loading),
-    prepare: async () => {
-      let snapshot: SettingsFormValues | null = null;
-      await handleSubmit((values) => {
-        if (validate(values)) snapshot = structuredClone(values);
-      })();
-      if (!snapshot) return null;
-      const values: SettingsFormValues = snapshot;
-      return async () => {
-        await onSubmit(values);
-        reset(values);
-      };
+  const preferenceInput = <K extends Field>(field: K, options?: RegisterOptions<SettingsFormValues, K>) => ({
+    ...register(field, {
+      ...options,
+      onBlur: () => void commit(field, getValues(field)),
+      onChange: () => clearErrors(field),
+    }),
+    disabled: pending.has(field),
+    onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+      event.preventDefault();
+      event.currentTarget.blur();
     },
   });
 
@@ -168,104 +175,59 @@ export const UserSettingsForm = (props: IProps) => {
   };
 
   return (
-    <form
-      className="flex flex-col mt-2"
-      onSubmit={handleSubmit(async (values) => {
-        if (sharedSave.shared) return sharedSave.save?.();
-        if (validate(values)) {
-          try {
-            await onSubmit(values);
-            reset(values);
-          } catch {
-            // The owning mutation presents the error and retains this draft.
-          }
-        }
-      })}
-    >
-      <fieldset className="settings-save-fields" disabled={loading || sharedSave.pending}>
+    <form className="flex flex-col mt-2" onSubmit={(event) => event.preventDefault()}>
+      <fieldset className="settings-save-fields">
         <div className="mb-3">
-          <Controller
-            control={control}
-            name="guestDashboard"
-            defaultValue={false}
-            render={({ field: { onChange, value, ref, ...rest } }) => (
-              <Switch
-                id="setting-guestDashboard"
-                className="mb-3"
-                ref={ref}
-                checked={value}
-                onCheckedChange={onChange}
-                {...rest}
-                label={
-                  <>
-                    {t('SETTINGS_GENERAL_GUEST_DASHBOARD')}
-                    <Tooltip className="tooltip" anchorSelect=".guest-dashboard-hint">
-                      {t('SETTINGS_GENERAL_GUEST_DASHBOARD_HINT')}
-                    </Tooltip>
-                    <span className={clsx('ms-1 form-help guest-dashboard-hint')}>?</span>
-                  </>
-                }
-              />
-            )}
+          <AutosavedSettingSwitch
+            id="setting-guestDashboard"
+            className="mb-3"
+            toggle={toggles['guest-dashboard']}
+            label={
+              <>
+                {t('SETTINGS_GENERAL_GUEST_DASHBOARD')}
+                <Tooltip className="tooltip" anchorSelect=".guest-dashboard-hint">
+                  {t('SETTINGS_GENERAL_GUEST_DASHBOARD_HINT')}
+                </Tooltip>
+                <span className={clsx('ms-1 form-help guest-dashboard-hint')}>?</span>
+              </>
+            }
           />
         </div>
         <div className="mb-3">
-          <Controller
-            control={control}
-            name="allowErrorMonitoring"
-            defaultValue={false}
-            render={({ field: { onChange, value, ref, ...rest } }) => (
-              <Switch
-                id="setting-allowErrorMonitoring"
-                className="mb-3"
-                ref={ref}
-                checked={value}
-                onCheckedChange={onChange}
-                {...rest}
-                label={
-                  <>
-                    {t('SETTINGS_GENERAL_ALLOW_ERROR_MONITORING')}
-                    <Tooltip className="tooltip" anchorSelect=".allow-errors-hint">
-                      {t('SETTINGS_GENERAL_ALLOW_ERROR_MONITORING_HINT')}
-                    </Tooltip>
-                    <span className={clsx('ms-1 form-help allow-errors-hint')}>?</span>
-                  </>
-                }
-              />
-            )}
+          <AutosavedSettingSwitch
+            id="setting-allowErrorMonitoring"
+            className="mb-3"
+            toggle={toggles['error-monitoring']}
+            label={
+              <>
+                {t('SETTINGS_GENERAL_ALLOW_ERROR_MONITORING')}
+                <Tooltip className="tooltip" anchorSelect=".allow-errors-hint">
+                  {t('SETTINGS_GENERAL_ALLOW_ERROR_MONITORING_HINT')}
+                </Tooltip>
+                <span className={clsx('ms-1 form-help allow-errors-hint')}>?</span>
+              </>
+            }
           />
         </div>
         <div className="mb-3">
-          <Controller
-            control={control}
-            name="advancedSettings"
-            defaultValue={false}
-            render={({ field: { onChange, value, ref, ...rest } }) => (
-              <div>
-                <Switch
-                  id="setting-advancedSettings"
-                  className="mb-3"
-                  ref={ref}
-                  checked={value}
-                  onCheckedChange={onChange}
-                  {...rest}
-                  label={
-                    <>
-                      {t('SETTINGS_GENERAL_ADVANCED_SETTINGS_TITLE')}
-                      <Tooltip className="tooltip" anchorSelect=".advanced-settings-hint">
-                        {t('SETTINGS_GENERAL_ADVANCED_SETTINGS_SUBTITLE')}
-                      </Tooltip>
-                      <span className={clsx('ms-1 form-help advanced-settings-hint')}>?</span>
-                    </>
-                  }
-                />
-              </div>
-            )}
+          <AutosavedSettingSwitch
+            id="setting-advancedSettings"
+            className="mb-3"
+            toggle={toggles['advanced-settings']}
+            label={
+              <>
+                {t('SETTINGS_GENERAL_ADVANCED_SETTINGS_TITLE')}
+                <Tooltip className="tooltip" anchorSelect=".advanced-settings-hint">
+                  {t('SETTINGS_GENERAL_ADVANCED_SETTINGS_SUBTITLE')}
+                </Tooltip>
+                <span className={clsx('ms-1 form-help advanced-settings-hint')}>?</span>
+              </>
+            }
           />
         </div>
         <div className="mb-3">
           <Input
-            {...register('appsRepoUrl')}
+            {...preferenceInput('appsRepoUrl')}
             id="setting-appsRepoUrl"
             label={
               <>
@@ -288,7 +250,14 @@ export const UserSettingsForm = (props: IProps) => {
             render={({ field: { onChange, value } }) => (
               <Suspense fallback={<TimeZoneSuspense />}>
                 <div id="setting-time-zone">
-                  <TimeZoneSelector onChange={onChange} timeZone={value} />
+                  <TimeZoneSelector
+                    onChange={(next) => {
+                      if (next === value || pending.has('timeZone')) return;
+                      onChange(next);
+                      void commit('timeZone', next, true);
+                    }}
+                    timeZone={value}
+                  />
                 </div>
               </Suspense>
             )}
@@ -296,7 +265,7 @@ export const UserSettingsForm = (props: IProps) => {
         </div>
         <div className="mb-3">
           <Input
-            {...register('localDomain')}
+            {...preferenceInput('localDomain')}
             id="setting-localDomain"
             label={
               <>
@@ -309,7 +278,7 @@ export const UserSettingsForm = (props: IProps) => {
             }
             error={errors.localDomain?.message}
             placeholder="tipi.lan"
-            disabled={!advancedSettings}
+            disabled={!advancedSettings || pending.has('localDomain')}
           />
           <Button id="setting-certificate" className="mt-2 mb-2" onClick={downloadCertificate}>
             {t('SETTINGS_GENERAL_DOWNLOAD_CERTIFICATE')}
@@ -323,34 +292,24 @@ export const UserSettingsForm = (props: IProps) => {
             </div>
             <p className="mb-4">{t('SETTINGS_GENERAL_ADVANCED_SETTINGS_SUBTITLE')}</p>
             <div className="mb-3">
-              <Controller
-                control={control}
-                name="persistTraefikConfig"
-                defaultValue={false}
-                render={({ field: { onChange, value, ref, ...rest } }) => (
-                  <Switch
-                    id="setting-persistTraefikConfig"
-                    className="mb-3"
-                    ref={ref}
-                    checked={value}
-                    onCheckedChange={onChange}
-                    {...rest}
-                    label={
-                      <>
-                        {t('SETTINGS_GENERAL_PERSIST_TRAEFIK_CONFIG')}
-                        <Tooltip className="tooltip" anchorSelect=".persist-traefik-config-hint">
-                          {t('SETTINGS_GENERAL_PERSIST_TRAEFIK_CONFIG_HINT')}
-                        </Tooltip>
-                        <span className={clsx('ms-1 form-help persist-traefik-config-hint')}>?</span>
-                      </>
-                    }
-                  />
-                )}
+              <AutosavedSettingSwitch
+                id="setting-persistTraefikConfig"
+                className="mb-3"
+                toggle={toggles['persist-proxy']}
+                label={
+                  <>
+                    {t('SETTINGS_GENERAL_PERSIST_TRAEFIK_CONFIG')}
+                    <Tooltip className="tooltip" anchorSelect=".persist-traefik-config-hint">
+                      {t('SETTINGS_GENERAL_PERSIST_TRAEFIK_CONFIG_HINT')}
+                    </Tooltip>
+                    <span className={clsx('ms-1 form-help persist-traefik-config-hint')}>?</span>
+                  </>
+                }
               />
             </div>
             <div className="mb-3">
               <Input
-                {...register('domain')}
+                {...preferenceInput('domain')}
                 id="setting-domain"
                 label={
                   <>
@@ -367,7 +326,7 @@ export const UserSettingsForm = (props: IProps) => {
             </div>
             <div className="mb-3">
               <Input
-                {...register('internalIp')}
+                {...preferenceInput('internalIp')}
                 id="setting-internalIp"
                 label={
                   <>
@@ -384,7 +343,7 @@ export const UserSettingsForm = (props: IProps) => {
             </div>
             <div className="mb-3">
               <Input
-                {...register('listenIp')}
+                {...preferenceInput('listenIp')}
                 id="setting-listenIp"
                 label={
                   <>
@@ -401,7 +360,7 @@ export const UserSettingsForm = (props: IProps) => {
             </div>
             <div className="mb-3">
               <Input
-                {...register('port', {
+                {...preferenceInput('port', {
                   valueAsNumber: true,
                 })}
                 id="setting-port"
@@ -422,7 +381,7 @@ export const UserSettingsForm = (props: IProps) => {
             </div>
             <div className="mb-3">
               <Input
-                {...register('sslPort', {
+                {...preferenceInput('sslPort', {
                   valueAsNumber: true,
                 })}
                 id="setting-sslPort"
@@ -443,7 +402,7 @@ export const UserSettingsForm = (props: IProps) => {
             </div>
             <div className="mb-3">
               <Input
-                {...register('eventsTimeout', {
+                {...preferenceInput('eventsTimeout', {
                   valueAsNumber: true,
                   required: true,
                 })}
@@ -464,7 +423,7 @@ export const UserSettingsForm = (props: IProps) => {
             </div>
             <div className="mb-3">
               <Input
-                {...register('maxBackups', {
+                {...preferenceInput('maxBackups', {
                   valueAsNumber: true,
                   required: true,
                 })}
@@ -487,7 +446,7 @@ export const UserSettingsForm = (props: IProps) => {
             </div>
             <div className="mb-3">
               <Input
-                {...register('appDataPath')}
+                {...preferenceInput('appDataPath')}
                 id="setting-appDataPath"
                 label={
                   <>
@@ -504,7 +463,7 @@ export const UserSettingsForm = (props: IProps) => {
             </div>
             <div className="mb-3">
               <Input
-                {...register('forwardAuthUrl')}
+                {...preferenceInput('forwardAuthUrl')}
                 id="setting-forwardAuthUrl"
                 label={
                   <>
@@ -525,7 +484,16 @@ export const UserSettingsForm = (props: IProps) => {
                 name="logLevel"
                 defaultValue="info"
                 render={({ field: { onChange, value } }) => (
-                  <Select value={value} defaultValue="info" onValueChange={onChange}>
+                  <Select
+                    value={value}
+                    defaultValue="info"
+                    disabled={pending.has('logLevel')}
+                    onValueChange={(next: LogLevel) => {
+                      if (next === value) return;
+                      onChange(next);
+                      void commit('logLevel', next, true);
+                    }}
+                  >
                     <SelectTrigger id="setting-logLevel" className="mb-3" name="logLevel" label={t('SETTINGS_GENERAL_LOG_LEVEL')}>
                       <SelectValue placeholder="Log level" />
                     </SelectTrigger>
@@ -542,10 +510,19 @@ export const UserSettingsForm = (props: IProps) => {
             </div>
           </div>
         )}
-        {sharedSave.shared ? null : (
-          <Button loading={loading} type="submit" intent="success">
-            {t('SAVE')}
-          </Button>
+        {failed.size > 0 && (
+          <InlineFeedback>
+            Some preferences could not be saved. Your changes are still here.
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                for (const field of failed) void commit(field, getValues(field), true);
+              }}
+            >
+              Retry
+            </Button>
+          </InlineFeedback>
         )}
       </fieldset>
     </form>

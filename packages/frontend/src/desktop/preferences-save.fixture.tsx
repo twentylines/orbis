@@ -99,8 +99,9 @@ mock.module('react-hot-toast', () => ({
 }));
 mock.module('react-router', () => ({ useLocation: () => ({ pathname: '/dashboard' }) }));
 let session = new PreferenceSession(true);
+let loggedIn = true;
 mock.module('@/context/user-context', () => ({
-  useUserContext: () => ({ isLoggedIn: true, sessionEpoch: session.epoch, sessionAbortSignal: session.signal }),
+  useUserContext: () => ({ isLoggedIn: loggedIn, sessionEpoch: session.epoch, sessionAbortSignal: session.signal }),
   UserContextProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 for (const [path, name] of [
@@ -114,6 +115,7 @@ mock.module('@/components/debug-panel/debug-panel', () => ({ DebugPanel: () => n
 mock.module('@/components/error/error-page', () => ({ ErrorPage: () => null }));
 const { createRoot } = await import('react-dom/client');
 const { DesktopPreferencesProvider, useDesktopPreferences, defaultDesktopPreferences } = await import('./preferences');
+const { useAppearanceSettingToggles } = await import('@/modules/settings/hooks/use-appearance-setting-toggles');
 const refreshedModule = './preferences?generation=2';
 const refreshedPreferences: typeof import('./preferences') | null = process.argv[2] === 'hmr-context-identity' ? await import(refreshedModule) : null;
 const CompositionProvider =
@@ -126,6 +128,11 @@ const client = (id: string) => {
   return current;
 };
 let nameDraft: ReturnType<typeof usePreferenceNameDraft>;
+let appearanceToggles: ReturnType<typeof useAppearanceSettingToggles>;
+function AppearanceSearchProbe() {
+  appearanceToggles = useAppearanceSettingToggles(['oled-dark-mode', 'energy-saving', 'surfaces'], true);
+  return null;
+}
 let sortable: ReturnType<typeof useWorkspaceSortable<string>>;
 const sortCommits: string[][] = [];
 function SortableProbe() {
@@ -144,16 +151,35 @@ function Probe({ id = 'main' }: { id?: string }) {
   controls = (refreshedPreferences?.useDesktopPreferences ?? useDesktopPreferences)();
   clients.set(id, controls);
   nameDraft = usePreferenceNameDraft(controls.preferences.serverName);
+  if (process.argv[2] === 'appearance-search-autosave') return <AppearanceSearchProbe />;
   return process.argv[2]?.startsWith('workspace-sort-') ? <SortableProbe /> : null;
 }
-type RequestRecord = { url: string; method: string; body: string; signal: AbortSignal | null | undefined; generation: string | null };
+type RequestRecord = {
+  url: string;
+  method: string;
+  body: string;
+  signal: AbortSignal | null | undefined;
+  generation: string | null;
+  selection: string | null;
+};
 const requests: RequestRecord[] = [];
 let server = structuredClone(defaultDesktopPreferences);
+if (process.argv[2] === 'retired-wallpaper-readback') server.appearance.wallpaperUnsplash = 'legacy-photo';
+if (process.argv[2]?.startsWith('logical-processors-')) delete server.showLogicalProcessors;
 let onboardingComplete =
   !process.argv[2]?.startsWith('onboarding-capture-') && process.argv[2] !== 'provider-composition' && process.argv[2] !== 'two-clients-onboarding';
 let generation: string | null = null;
 let layoutCapability = ['workspace-capable-backend', 'workspace-capability-downgrade'].includes(process.argv[2] ?? '');
 let intercept: ((r: RequestRecord) => Promise<Response> | undefined) | undefined;
+function applyPreferencePut(r: RequestRecord) {
+  const payload = JSON.parse(r.body);
+  if (payload.appearance?.wallpaperUnsplash === null && r.selection !== (server.appearance.wallpaperUnsplash ?? 'none'))
+    return new Response('', { status: 409 });
+  if (payload.appearance && !Object.hasOwn(payload.appearance, 'wallpaperUnsplash'))
+    payload.appearance.wallpaperUnsplash = server.appearance.wallpaperUnsplash ?? null;
+  server = payload;
+  return Response.json(server);
+}
 Object.assign(globalThis, {
   fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
     const r = {
@@ -162,10 +188,12 @@ Object.assign(globalThis, {
       body: String(init?.body ?? ''),
       signal: init?.signal,
       generation: new Headers(init?.headers).get('X-Orbis-Reset-Generation'),
+      selection: new Headers(init?.headers).get('X-Orbis-Unsplash-Selection'),
     };
     requests.push(r);
     const result = intercept?.(r);
     if (result) return result;
+    if (r.url.includes('/wallpaper/unsplash')) throw new Error('Retired wallpaper API was requested.');
     if (r.url.endsWith('/onboarding')) {
       if (r.method === 'POST' && generation && r.generation !== generation) return new Response('', { status: 409 });
       if (r.method === 'POST') onboardingComplete = true;
@@ -173,7 +201,7 @@ Object.assign(globalThis, {
     }
     if (r.method === 'PUT') {
       if (generation && r.generation !== generation) return new Response('', { status: 409 });
-      server = JSON.parse(r.body);
+      return applyPreferencePut(r);
     }
     return Response.json(server, {
       headers: {
@@ -237,6 +265,125 @@ const switchSession = async () => {
   });
 };
 const scenarios: Record<string, () => Promise<void>> = {
+  'appearance-search-autosave': async () => {
+    const oled = () => appearanceToggles['oled-dark-mode'];
+    const energy = () => appearanceToggles['energy-saving'];
+    expect(Object.keys(appearanceToggles)).toEqual(['oled-dark-mode', 'energy-saving']);
+    expect(oled()).toMatchObject({ checked: false, disabled: false, saved: false });
+    let result = deferred();
+    intercept = (request) => (request.method === 'PUT' ? result.promise : undefined);
+    await act(async () => {
+      nameDraft.setName('Unsaved unrelated name');
+      oled()?.setChecked(true);
+    });
+    expect(oled()).toMatchObject({ checked: true, pending: true, saved: false });
+    expect(energy()).toMatchObject({ checked: false, pending: false, saved: false });
+    await act(async () => {
+      await Bun.sleep(350);
+    });
+    expect(puts()).toHaveLength(1);
+    server = JSON.parse(puts()[0]?.body ?? '');
+    expect(server.serverName).toBe('Server');
+    expect(server.appearance).toMatchObject({ oledDark: true, lowEffects: false, transparency: 'system', motion: 'system' });
+    expect(nameDraft.name).toBe('Unsaved unrelated name');
+    await act(async () => result.resolve(Response.json(server)));
+    expect(oled()).toMatchObject({ pending: false, saved: true, error: null });
+
+    result = deferred();
+    await act(async () => energy()?.setChecked(true));
+    expect(energy()).toMatchObject({ checked: true, pending: true, saved: false });
+    expect(oled()).toMatchObject({ pending: false, saved: true, error: null });
+    await act(async () => {
+      await Bun.sleep(350);
+    });
+    await act(async () => result.resolve(new Response('', { status: 503 })));
+    expect(energy()).toMatchObject({ pending: false, saved: false });
+    expect(energy()?.error).toBe('This appearance change could not be saved. Try again.');
+    expect(typeof energy()?.retry).toBe('function');
+    expect(oled()).toMatchObject({ pending: false, saved: true, error: null });
+    intercept = undefined;
+    await act(async () => energy()?.retry?.());
+    expect(energy()).toMatchObject({ pending: true, saved: false, error: null });
+    await act(async () => {
+      await Bun.sleep(350);
+    });
+    expect(energy()).toMatchObject({ pending: false, saved: true, error: null });
+    expect(server.appearance).toMatchObject({ oledDark: true, lowEffects: true });
+    expect(server.serverName).toBe('Server');
+
+    result = deferred();
+    intercept = (request) => (request.method === 'PUT' ? result.promise : undefined);
+    const previousAction = oled()?.setChecked;
+    await act(async () => previousAction?.(false));
+    await act(async () => {
+      await Bun.sleep(350);
+    });
+    await switchSession();
+    expect(puts().at(-1)?.signal?.aborted).toBe(true);
+    await act(async () => {
+      result.resolve(Response.json(defaultDesktopPreferences));
+      previousAction?.(false);
+    });
+    expect(oled()).toMatchObject({ checked: false, pending: false, saved: false, error: null });
+    expect(energy()).toMatchObject({ checked: false, pending: false, saved: false, error: null });
+    expect(puts()).toHaveLength(4);
+
+    intercept = undefined;
+    await act(async () => {
+      const chooseEnergy = energy()?.setChecked;
+      chooseEnergy?.(true);
+      chooseEnergy?.(false);
+    });
+    expect(energy()).toMatchObject({ checked: false, pending: true, saved: false });
+    await act(async () => {
+      await Bun.sleep(350);
+    });
+    expect(energy()).toMatchObject({ checked: false, pending: false, saved: true });
+    expect(server.appearance.lowEffects).toBe(false);
+
+    session.invalidate();
+    session = new PreferenceSession(false);
+    loggedIn = false;
+    await act(async () => render());
+    expect(oled()).toMatchObject({ disabled: true, pending: false, saved: false });
+    await act(async () => oled()?.setChecked(true));
+    expect(puts()).toHaveLength(5);
+  },
+  'logical-processors-save': async () => {
+    expect(controls.preferences.showLogicalProcessors).toBe(true);
+    const result = deferred();
+    intercept = (request) => {
+      if (request.method !== 'PUT') return undefined;
+      server = JSON.parse(request.body);
+      return result.promise;
+    };
+    let save: Promise<void> | undefined;
+    await act(async () => {
+      save = controls.commit({ showLogicalProcessors: false });
+    });
+    expect(controls.syncState).toBe('saving');
+    expect(JSON.parse(puts().at(-1)?.body ?? '{}').showLogicalProcessors).toBe(false);
+    await act(async () => {
+      result.resolve(Response.json(server));
+      await save;
+    });
+    expect(controls.syncState).toBe('saved');
+    expect(controls.preferences.showLogicalProcessors).toBe(false);
+    await act(async () => root.unmount());
+    root = createRoot(container as unknown as HTMLElement);
+    await act(async () => render());
+    expect(controls.preferences.showLogicalProcessors).toBe(false);
+  },
+  'logical-processors-old-backend': async () => {
+    expect(controls.preferences.showLogicalProcessors).toBe(true);
+    intercept = (request) => (request.method === 'PUT' ? Promise.resolve(Response.json(server)) : undefined);
+    await act(async () => {
+      await expect(controls.commit({ showLogicalProcessors: false })).rejects.toThrow('did not save');
+    });
+    expect(JSON.parse(puts().at(-1)?.body ?? '{}').showLogicalProcessors).toBe(false);
+    expect(controls.syncState).toBe('error');
+    expect(controls.preferences.showLogicalProcessors).toBe(true);
+  },
   'workspace-sort-keyboard': async () => {
     const key = async (key: string) =>
       act(async () => {
@@ -570,6 +717,20 @@ const scenarios: Record<string, () => Promise<void>> = {
     expect(requests.at(-1)).toMatchObject({ url: '/api/desktop-preferences/onboarding', method: 'POST' });
     expect(controls.preferences.serverName).toBe('Ready without capture');
   },
+  'colour-slider-autosave': async () => {
+    for (const themeColour of ['#ae4866', '#ae4868', '#ae4869']) {
+      await act(async () => controls.updateAppearance({ themeColour }));
+      expect(controls.preferences.appearance.themeColour).toBe(themeColour);
+      expect(puts()).toHaveLength(0);
+    }
+    await act(async () => controls.updateAppearance({ accent: '#345678' }));
+    await act(async () => {
+      await Bun.sleep(350);
+    });
+    expect(puts()).toHaveLength(1);
+    expect(JSON.parse(puts()[0]?.body ?? '{}')).toMatchObject({ appearance: { themeColour: '#ae4869', accent: '#345678' } });
+    expect(controls.syncState).toBe('saved');
+  },
   'batched-edit-commit': async () => {
     await act(async () => {
       controls.updateAppearance({ textScale: 125 });
@@ -579,6 +740,20 @@ const scenarios: Record<string, () => Promise<void>> = {
     expect(JSON.parse(puts()[0]?.body ?? '{}')).toMatchObject({ density: 'compact', appearance: { textScale: 125 }, serverName: 'Saved name' });
     expect(controls.preferences.appearance.textScale).toBe(125);
     expect(controls.syncState).toBe('saved');
+  },
+  'retired-wallpaper-readback': async () => {
+    expect(controls.preferences.appearance.wallpaperUnsplash).toBe('legacy-photo');
+    await act(async () => {
+      await controls.commitWallpaperChoice({ wallpaperMode: 'custom', wallpaperPreset: 'stone' });
+    });
+    const request = puts().at(-1);
+    expect(request?.selection).toBeNull();
+    const payload = JSON.parse(request?.body ?? '{}');
+    expect(payload).toMatchObject({ wallpaperMode: 'custom', wallpaperPreset: 'stone' });
+    expect(payload.appearance).not.toHaveProperty('wallpaperUnsplash');
+    expect(server.appearance.wallpaperUnsplash).toBe('legacy-photo');
+    expect(controls.preferences.appearance.wallpaperUnsplash).toBe('legacy-photo');
+    expect(requests.some((entry) => entry.url.includes('/wallpaper/unsplash'))).toBe(false);
   },
   'newer-edit-during-save': async () => {
     const pending = deferred();

@@ -2,7 +2,7 @@ import { TranslatableError } from '@/common/error/translatable-error';
 import { Body, Controller, Delete, Get, Injectable, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
-import { EditLinkBodyDto, LinkBodyDto, LinksDto } from './dto/links.dto';
+import { EditLinkBodyDto, LINK_GUEST_VISIBILITY_PATCH, LinkBodyDto, LinksDto } from './dto/links.dto';
 import { LinksService } from './links.service';
 import { ApiResponse } from '@nestjs/swagger';
 
@@ -24,7 +24,7 @@ export class LinksController {
   async getLinks(@Req() req: Request) {
     const links = await this.linksService.getLinks(req.user?.id);
 
-    return LinksDto.parse({ links }, { reportOnly: true });
+    return LinksDto.parse({ links, editCapabilities: [LINK_GUEST_VISIBILITY_PATCH] }, { reportOnly: true });
   }
 
   @Post()

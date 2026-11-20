@@ -94,17 +94,6 @@ export function installationState(status?: string | null): 'ready' | 'busy' | 'm
   return !status || status === 'missing' ? 'missing' : 'busy';
 }
 
-export function storeView(value: string | null | undefined): 'apps' | 'discover' | 'themes' {
-  return value === 'themes' ? 'themes' : value === 'discover' || value === 'collections' ? 'discover' : 'apps';
-}
-
-export function storeEditorialFits(width: number, height: number, rootFontSize: number) {
-  return (
-    Number.isFinite(width) &&
-    Number.isFinite(height) &&
-    Number.isFinite(rootFontSize) &&
-    rootFontSize > 0 &&
-    width >= 68 * rootFontSize &&
-    height >= 40 * rootFontSize
-  );
+export function storeView(value: string | null | undefined): 'apps' | 'themes' {
+  return value === 'themes' ? 'themes' : 'apps';
 }

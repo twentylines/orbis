@@ -3,7 +3,8 @@ import { Children, isValidElement } from 'react';
 import { AutomaticUpdatesSettings, UpdateSchedules } from './automatic-updates-settings';
 import { SystemUpdatesSettings } from './system-updates-settings';
 const scenarios = [
-  'policy-shared-draft',
+  'policy-shared-auto-save',
+  'policy-error-retry',
   'policy-queued-session',
   'apps-queued-session',
   'core-queued-session',
@@ -18,6 +19,8 @@ const scenarios = [
   'apps-newer-draft',
   'core-newer-draft',
   'system-newer-draft',
+  'core-toggle-keeps-time-draft',
+  'system-toggle-keeps-time-draft',
   'global-session-prepare',
   'global-session-error',
   'global-session-new-save',

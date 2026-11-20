@@ -2,6 +2,7 @@
 import { describe, expect, test } from 'bun:test';
 import { runInNewContext } from 'node:vm';
 import { readFileSync } from 'node:fs';
+import { themePresets, wallpaperColourOverrides } from './wallpaper-presets';
 import { applyAppearanceRuntime } from './appearance-runtime';
 import { appearanceBootstrap, preferenceStorageKey } from './appearance-cache';
 
@@ -45,8 +46,8 @@ const actualPalette = (preset: string, dark: boolean) => {
     ...(dark ? declarations(`html[data-desktop-preset="${preset}"][data-desktop-mode="dark"]`) : {}),
   };
   for (const [name, value] of Object.entries(tokens)) {
-    const reference = value.match(/^var\((--[a-z-]+)\)$/)?.[1];
-    if (reference) tokens[name] = tokens[reference] ?? '';
+    const reference = value.match(/^var\((--[a-z-]+)(?:,\s*var\((--[a-z-]+)\))?\)$/);
+    if (reference) tokens[name] = tokens[reference[1] ?? ''] ?? tokens[reference[2] ?? ''] ?? '';
   }
   return tokens;
 };
@@ -114,6 +115,9 @@ const luminance = (value: number[]) =>
 const contrast = (first: number[], second: number[]) =>
   (Math.max(luminance(first), luminance(second)) + 0.05) / (Math.min(luminance(first), luminance(second)) + 0.05);
 
+const chromeBackdrop = (properties: Map<string, string>, wallpaper: number) =>
+  wallpaper * (rgb(properties.get('--orbis-chrome-backdrop-brightness') ?? 'brightness(1)')[0] ?? 1);
+
 describe('saved appearance applied before hydration and to live materials', () => {
   test('keeps menu blur independent from panels and disables both for solid surfaces', () => {
     const result = apply({ glassBlur: 12, chromeBlur: 48 });
@@ -125,14 +129,22 @@ describe('saved appearance applied before hydration and to live materials', () =
     expect(solid.properties.get('--orbis-chrome-filter')).toBe('none');
     expect(solid.properties.get('--orbis-glass-filter')).toBe('none');
   });
-  test('keeps the theme defaults exact and removes stale overrides on reset', () => {
+  test('keeps dense controls and preset colours while applying the default frosted pane', () => {
     const result = apply({});
     expect([...result.properties.keys()].sort()).toEqual([
+      '--orbis-accent',
       '--orbis-chrome-focus',
       '--orbis-chrome-muted',
       '--orbis-control-transition-duration',
+      '--orbis-focus',
+      '--orbis-info',
       '--orbis-menu-muted',
       '--orbis-menu-surface',
+      '--orbis-muted',
+      '--orbis-negative',
+      '--orbis-pane-surface',
+      '--orbis-positive',
+      '--orbis-warning',
     ]);
     expect(result.dataset).toEqual({
       orbisMotion: 'full',
@@ -145,19 +157,13 @@ describe('saved appearance applied before hydration and to live materials', () =
   test('ignores invalid or CSS-shaped values instead of writing them into styles', () => {
     const result = apply({
       accent: 'url(https://invalid.example)',
-      surfaceOpacity: 0,
-      chromeOpacity: 79,
+      surfaceOpacity: -1,
+      chromeOpacity: 101,
       glassBlur: 1000,
       glassTint: -1,
       lowEffects: 'yes',
     });
-    expect([...result.properties.keys()].sort()).toEqual([
-      '--orbis-chrome-focus',
-      '--orbis-chrome-muted',
-      '--orbis-control-transition-duration',
-      '--orbis-menu-muted',
-      '--orbis-menu-surface',
-    ]);
+    expect([...result.properties.entries()]).toEqual([...apply({}).properties.entries()]);
   });
   test('applies saved text sizing before stylesheet readiness and clears it at the default', () => {
     for (const textScale of [85, 125, 150]) {
@@ -193,10 +199,10 @@ describe('saved appearance applied before hydration and to live materials', () =
               ).toBeGreaterThanOrEqual(4.5);
               for (const backdrop of [0, 255])
                 expect(
-                  contrast(rgb(p.get('--orbis-chrome-focus') ?? ''), composite(rgb(p.get('--orbis-chrome') ?? ''), backdrop)),
+                  contrast(rgb(p.get('--orbis-chrome-focus') ?? ''), composite(rgb(p.get('--orbis-chrome') ?? ''), chromeBackdrop(p, backdrop))),
                 ).toBeGreaterThanOrEqual(3);
               for (const backdrop of [0, 255]) {
-                const paint = composite(rgb(p.get('--orbis-chrome') ?? ''), backdrop);
+                const paint = composite(rgb(p.get('--orbis-chrome') ?? ''), chromeBackdrop(p, backdrop));
                 const selected = paint.map((channel) => channel * 0.8 + 255 * 0.2);
                 expect(contrast(rgb(p.get('--orbis-chrome-muted') ?? ''), selected)).toBeGreaterThanOrEqual(4.5);
                 expect(contrast(rgb('#f5f8f2'), selected)).toBeGreaterThanOrEqual(4.5);
@@ -205,8 +211,8 @@ describe('saved appearance applied before hydration and to live materials', () =
             }
     expect(combinations).toBe(128);
   });
-  test('all 12 shipped palettes retain readable default controls and status labels', () => {
-    for (const preset of ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush']) {
+  test('all 20 shipped palettes retain readable default controls and status labels', () => {
+    for (const preset of themePresets) {
       for (const dark of [false, true]) {
         const tokens = actualPalette(preset, dark);
         const surface = rgb(tokens['--desktop-base-surface'] ?? '');
@@ -215,11 +221,17 @@ describe('saved appearance applied before hydration and to live materials', () =
           for (const amount of [0, 0.08, 0.2]) {
             const behind = composite(surface, backdrop).map((channel, index) => channel * (1 - amount) + (tint[index] ?? 0) * amount);
             for (const name of ['--desktop-ink', '--desktop-base-muted', '--desktop-base-accent']) {
-              expect(contrast(rgb(tokens[name] ?? ''), behind)).toBeGreaterThanOrEqual(4.5);
+              expect(
+                contrast(rgb(tokens[name] ?? ''), behind),
+                `${preset} ${dark ? 'dark' : 'light'} ${name} over ${backdrop} at ${amount}`,
+              ).toBeGreaterThanOrEqual(4.5);
             }
           }
         }
-        expect(contrast(rgb(tokens['--desktop-base-action'] ?? ''), rgb(tokens['--desktop-base-action-ink'] ?? ''))).toBeGreaterThanOrEqual(4.5);
+        expect(
+          contrast(rgb(tokens['--desktop-base-action'] ?? ''), rgb(tokens['--desktop-base-action-ink'] ?? '')),
+          `${preset} ${dark ? 'dark' : 'light'} action`,
+        ).toBeGreaterThanOrEqual(4.5);
         const custom = apply({ accent: '#00ffff', surfaceOpacity: 90, glassTint: 30 }, { dark, tokens });
         for (const backdrop of [0, 255]) {
           for (const name of ['accent', 'muted', 'positive', 'negative', 'warning', 'info']) {
@@ -231,6 +243,20 @@ describe('saved appearance applied before hydration and to live materials', () =
       }
     }
   });
+  test('keeps the sampled palette on accents and dense surfaces in both modes', () => {
+    for (const dark of [false, true]) {
+      const custom = apply({ themeColour: '#ed6929', accent: '#df4e09' }, { dark, tokens: actualPalette('ocean', dark) });
+      const [red = 0, green = 0, blue = 0] = rgb(custom.properties.get('--orbis-accent') ?? '');
+      expect(red).toBeGreaterThan(green);
+      expect(green).toBeGreaterThan(blue);
+      expect(red - blue).toBeGreaterThan(24);
+      const [actionRed = 0, , actionBlue = 0] = rgb(custom.properties.get('--orbis-action') ?? '');
+      expect(actionRed - actionBlue).toBeGreaterThan(100);
+      expect(custom.properties.get('--orbis-accent')).toBe(custom.properties.get('--orbis-focus'));
+      expect(custom.properties.get('--orbis-chrome-rgb')).toBe('66, 29, 11');
+      expect(custom.properties.get('--orbis-theme-tint')).toBe('rgba(237, 105, 41, 1)');
+    }
+  });
   test('Graphite remains neutral white in Light and neutral charcoal in Dark', () => {
     for (const dark of [false, true]) {
       const tokens = actualPalette('graphite', dark);
@@ -240,29 +266,132 @@ describe('saved appearance applied before hydration and to live materials', () =
       else expect(Math.min(...surface)).toBeGreaterThanOrEqual(250);
     }
   });
+  test('large panes visibly expose wallpaper while titles and small labels retain contrast in both startup and the workspace', () => {
+    for (const preset of themePresets) {
+      for (const dark of [false, true]) {
+        const tokens = actualPalette(preset, dark);
+        for (const firstPaint of [false, true]) {
+          const { properties, dataset } = apply({}, { dark, tokens, firstPaint });
+          const pane = rgb(properties.get('--orbis-pane-surface') ?? '');
+          expect(pane[3]).toBeGreaterThanOrEqual(dark ? 0.9 : 0.76);
+          expect(pane[3]).toBeLessThanOrEqual(dark ? 0.9 : 0.88);
+          expect(pane[3]).toBeLessThan(rgb(tokens['--desktop-base-surface'] ?? '')[3] ?? 1);
+          expect(properties.has('--orbis-surface')).toBe(false);
+          expect(dataset.orbisColourCustom).toBe('false');
+          for (const wallpaper of [0, 255]) {
+            for (const amount of [0, 0.08, 0.2]) {
+              const tint = rgb(tokens['--desktop-preset-tint'] ?? '');
+              const paint = composite(pane, wallpaper).map((channel, index) => channel * (1 - amount) + (tint[index] ?? 0) * amount);
+              expect(contrast(rgb(tokens['--desktop-ink'] ?? ''), paint)).toBeGreaterThanOrEqual(4.5);
+              for (const name of ['accent', 'muted', 'positive', 'negative', 'warning', 'info'])
+                expect(contrast(rgb(properties.get(`--orbis-${name}`) ?? ''), paint)).toBeGreaterThanOrEqual(4.5);
+            }
+          }
+        }
+      }
+    }
+  });
+  test('pane opacity respects custom fill, solid, OLED and device accessibility choices', () => {
+    expect(rgb(apply({ surfaceOpacity: 95 }).properties.get('--orbis-pane-surface') ?? '')[3]).toBe(0.95);
+    for (const options of [{ transparency: 'solid' }, { lowEffects: true }, { oledDark: true }]) {
+      const result = apply(options, { dark: true });
+      expect(rgb(result.properties.get('--orbis-pane-surface') ?? '')[3]).toBe(1);
+      expect(result.properties.get('--orbis-glass-filter')).toBe('none');
+    }
+    expect(rgb(apply({}, { solidSystem: true }).properties.get('--orbis-pane-surface') ?? '')[3]).toBe(1);
+    expect(rgb(apply({ transparency: 'glass' }, { solidSystem: true }).properties.get('--orbis-pane-surface') ?? '')[3]).toBeLessThan(0.9);
+  });
   test('floating glass remains translucent and readable across every preset and wallpaper extreme', () => {
-    for (const preset of ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush']) {
+    for (const preset of themePresets) {
       for (const dark of [false, true]) {
         const tokens = actualPalette(preset, dark);
         const { properties } = apply({}, { dark, tokens });
         const menu = rgb(properties.get('--orbis-menu-surface') ?? '');
         const chrome = rgb(properties.get('--orbis-chrome') ?? tokens['--desktop-base-chrome'] ?? '');
         expect(menu[3]).toBe(dark ? 0.72 : 0.86);
-        expect(chrome[3]).toBeLessThanOrEqual(dark ? 0.72 : 0.84);
-        if (dark) {
-          const shade = Math.max(...chrome.slice(0, 3)) / Math.max(...menu.slice(0, 3));
-          for (let channel = 0; channel < 3; channel++)
-            expect(Math.abs((chrome[channel] ?? Number.NaN) - (menu[channel] ?? Number.NaN) * shade)).toBeLessThanOrEqual(1.5);
-        }
+        expect(chrome[3]).toBeLessThanOrEqual(dark ? 0.76 : 0.84);
         for (const wallpaper of [0, 255]) {
           const behind = composite(menu, wallpaper);
           expect(contrast(rgb(tokens['--desktop-ink'] ?? ''), behind)).toBeGreaterThanOrEqual(4.5);
           expect(contrast(rgb(properties.get('--orbis-menu-muted') ?? ''), behind)).toBeGreaterThanOrEqual(4.5);
-          const selected = composite(chrome, wallpaper).map((channel) => channel * 0.8 + 255 * 0.2);
+          const selected = composite(chrome, chromeBackdrop(properties, wallpaper)).map((channel) => channel * 0.8 + 255 * 0.2);
           expect(contrast(rgb(tokens['--desktop-chrome-ink'] ?? ''), selected)).toBeGreaterThanOrEqual(4.5);
         }
       }
     }
+  });
+  test('dark Stone defaults match the approved saved pane and chrome composition', () => {
+    const options = { dark: true, tokens: actualPalette('stone', true) };
+    const defaults = apply({}, options).properties;
+    const reference = apply(
+      { materialMode: 'custom', transparency: 'glass', surfaceOpacity: 90, chromeOpacity: 76, chromeBlur: 14, glassTint: 0 },
+      options,
+    ).properties;
+    for (const token of ['pane-surface', 'chrome', 'chrome-backdrop-brightness', 'chrome-muted', 'chrome-focus']) {
+      expect(defaults.get(`--orbis-${token}`)).toBe(reference.get(`--orbis-${token}`));
+    }
+    expect(options.tokens['--desktop-default-chrome-filter']).toBe(reference.get('--orbis-chrome-filter'));
+  });
+  test('the entire opacity sweep retains the same chrome tint and readable controls in every palette', () => {
+    for (const dark of [false, true]) {
+      for (const preset of themePresets) {
+        const tokens = actualPalette(preset, dark);
+        const automatic = wallpaperColourOverrides({ themeColour: '#a8432c', accent: '#2fe3ba' });
+        for (const colours of [{}, automatic, { themeColour: '#ffffff', accent: '#692344' }]) {
+          const opacities = [100, 90, 89, 80, 76, 70, 50, 0];
+          const paints = opacities.map(
+            (chromeOpacity) =>
+              apply({ materialMode: 'custom', glassTint: 30, chromeBlur: 0, chromeOpacity, ...colours }, { dark, tokens }).properties,
+          );
+          const baseline = rgb(paints[0]?.get('--orbis-chrome') ?? '').slice(0, 3);
+          for (const [index, paint] of paints.entries()) {
+            const chrome = rgb(paint.get('--orbis-chrome') ?? '');
+            expect(chrome.slice(0, 3)).toEqual(baseline);
+            expect(chrome[3]).toBe((opacities[index] ?? 0) / 100);
+            for (const role of ['theme-tint', 'action', 'accent']) {
+              expect(paint.get(`--orbis-${role}`)).toBe(paints[0]?.get(`--orbis-${role}`));
+            }
+            expect(paint.get('--orbis-chrome-filter')).toBe('none');
+            if (paint.has('--orbis-chrome-backdrop-brightness')) expect(paint.get('--orbis-glass-chrome-blur')).toBe('blur(0px)');
+            for (const backdrop of [0, 255]) {
+              const resting = composite(chrome, chromeBackdrop(paint, backdrop));
+              const highlighted = resting.map((channel) => channel * 0.76 + 255 * 0.24);
+              for (const background of [resting, highlighted]) {
+                for (const ink of [tokens['--desktop-chrome-ink'] ?? '', '#fff7ec', paint.get('--orbis-chrome-muted') ?? '']) {
+                  expect(contrast(rgb(ink), background)).toBeGreaterThanOrEqual(4.5);
+                }
+                expect(contrast(rgb(paint.get('--orbis-chrome-focus') ?? ''), background)).toBeGreaterThanOrEqual(3);
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+  test('uses independently authored dark photo chrome while retaining explicit tint and custom colours', () => {
+    for (const preset of ['burgundy', 'amber', 'orange', 'blush']) {
+      const tokens = actualPalette(preset, true);
+      const base = rgb(tokens['--desktop-base-chrome'] ?? '');
+      const options = { dark: true, tokens };
+      const defaultChrome = rgb(apply({}, options).properties.get('--orbis-chrome') ?? '');
+      const untinted = apply({ materialMode: 'custom' }, options);
+      expect(defaultChrome).toEqual(rgb(untinted.properties.get('--orbis-chrome') ?? ''));
+      expect(defaultChrome[3]).toBe(0.76);
+
+      const tinted = apply({ materialMode: 'custom', chromeOpacity: 72, glassTint: 20 }, options);
+      const customChrome = rgb(tinted.properties.get('--orbis-chrome') ?? '');
+      expect(customChrome[3]).toBe(0.72);
+      expect(customChrome.slice(0, 3)).not.toEqual(base.slice(0, 3));
+
+      const customColour = { themeColour: '#a8432c' };
+      const legacyTokens = { ...tokens, '--desktop-base-chrome-tint': '' };
+      expect(apply(customColour, options).properties.get('--orbis-chrome')).toBe(
+        apply(customColour, { dark: true, tokens: legacyTokens }).properties.get('--orbis-chrome'),
+      );
+    }
+    const tokens = actualPalette('forest', true);
+    const legacyChrome = rgb(apply({}, { dark: true, tokens }).properties.get('--orbis-chrome') ?? '');
+    expect(legacyChrome.slice(0, 3)).not.toEqual(rgb(tokens['--desktop-base-chrome'] ?? '').slice(0, 3));
   });
   test('explicit solid and accessibility materials remain opaque, while explicit chrome opacity is preserved', () => {
     for (const options of [{ transparency: 'solid' }, { lowEffects: true }, { oledDark: true }]) {
@@ -296,7 +425,7 @@ describe('saved appearance applied before hydration and to live materials', () =
     expect(oled.dataset.orbisMotion).toBe('full');
     expect(oled.dataset.orbisOled).toBe('true');
     expect(themeCss).toContain(':root[data-orbis-oled="true"] body:has(.orbis-theme) :is(.alert, .workspace-message)');
-    for (const preset of ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush']) {
+    for (const preset of themePresets) {
       const ink = actualPalette(preset, true)['--desktop-ink'] ?? '';
       expect(contrast(rgb(ink), [0, 0, 0])).toBeGreaterThan(4.5);
     }
@@ -336,4 +465,71 @@ test('low-effects switches keep cheap transitions while explicit and system redu
   }
   expect(apply({ lowEffects: true }).dataset.orbisMotion).toBe('reduced');
   expect(apply({ lowEffects: true }).properties.get('--orbis-glass-filter')).toBe('none');
+});
+
+test('menu labels stay readable on tinted cards and selected menu items across every preset and wallpaper extreme', () => {
+  for (const preset of themePresets)
+    for (const dark of [false, true]) {
+      const tokens = actualPalette(preset, dark);
+      const { properties } = apply({}, { dark, tokens });
+      const menu = rgb(properties.get('--orbis-menu-surface') ?? '');
+      const muted = rgb(properties.get('--orbis-menu-muted') ?? '');
+      const tint = rgb(tokens['--desktop-preset-tint'] ?? '');
+      for (const wallpaper of [0, 255])
+        for (const amount of [0, 0.07, 0.16, 0.2]) {
+          const background = composite(menu, wallpaper).map((value, index) => value * (1 - amount) + (tint[index] ?? 0) * amount);
+          expect(contrast(muted, background)).toBeGreaterThanOrEqual(4.5);
+        }
+    }
+});
+
+test('explicit default keeps the accepted material and retains inactive custom values', () => {
+  for (const firstPaint of [false, true]) {
+    for (const dark of [false, true]) {
+      const previous = apply({}, { firstPaint, dark });
+      const retained = apply(
+        { materialMode: 'default', surfaceOpacity: 0, chromeOpacity: 0, glassBlur: 0, chromeBlur: 0, glassTint: 30 },
+        { firstPaint, dark },
+      );
+      expect([...retained.properties]).toEqual([...previous.properties]);
+      expect(retained.dataset).toEqual(previous.dataset);
+    }
+  }
+});
+
+test('all integer custom opacity values including zero survive startup without a hidden opacity floor', () => {
+  for (const firstPaint of [false, true]) {
+    for (const dark of [false, true]) {
+      for (const opacity of [0, 1, 25, 50, 68, 76, 89, 90, 100]) {
+        const { properties } = apply({ materialMode: 'custom', surfaceOpacity: opacity, chromeOpacity: opacity }, { firstPaint, dark });
+        expect(rgb(properties.get('--orbis-pane-surface') ?? '')[3]).toBe(opacity / 100);
+        expect(rgb(properties.get('--orbis-chrome') ?? '')[3]).toBe(opacity / 100);
+        expect([...properties.values()].every((value) => !/NaN|Infinity|undefined/.test(value))).toBe(true);
+      }
+    }
+  }
+  expect(apply({ surfaceOpacity: 25 }).properties.get('--orbis-pane-surface')).toBe(
+    apply({ materialMode: 'custom', surfaceOpacity: 25 }).properties.get('--orbis-pane-surface'),
+  );
+});
+
+test('custom theme seeds and independent accents are readable at default glass across modes and first paint', () => {
+  for (const themeColour of ['#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#f8da35', '#ad2756', '#ef9dc5']) {
+    for (const dark of [false, true]) {
+      for (const firstPaint of [false, true]) {
+        const { properties } = apply({ themeColour, accent: '#d33f91' }, { dark, firstPaint });
+        const ink = rgb(properties.get('--orbis-theme-ink') ?? '');
+        const pane = rgb(properties.get('--orbis-pane-surface') ?? '');
+        const tint = rgb(themeColour);
+        for (const wallpaper of [0, 255]) {
+          for (const amount of [0, 0.08, 0.2]) {
+            const paint = composite(pane, wallpaper).map((value, index) => value * (1 - amount) + (tint[index] ?? 0) * amount);
+            expect(contrast(ink, paint)).toBeGreaterThanOrEqual(4.5);
+          }
+        }
+        expect(contrast(rgb(properties.get('--orbis-action') ?? ''), [255, 255, 255])).toBeGreaterThanOrEqual(4.5);
+        expect(properties.get('--orbis-theme-tint')).toBeTruthy();
+      }
+    }
+  }
 });

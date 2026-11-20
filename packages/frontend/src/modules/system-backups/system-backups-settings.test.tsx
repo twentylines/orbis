@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
-import { appContextQueryKey } from '@/api-client/@tanstack/react-query.gen';
+import { appContextQueryKey, userContextQueryKey } from '@/api-client/@tanstack/react-query.gen';
+import { UserContextProvider } from '@/context/user-context';
 import { AppContextProvider } from '@/context/app-context';
 import { BackupApiError, startExport } from './backup-api';
 import { Dialog, retainDialogChildren } from '@/components/ui/Dialog/Dialog';
@@ -37,6 +38,7 @@ function render(
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
   client.setQueryData(appContextQueryKey(), { user: { id: 7, operator: true, totpEnabled: true } });
+  client.setQueryData(userContextQueryKey(), { isLoggedIn: true });
   client.setQueryData(['account-security', 7], { version: 1, revision: 0, requireCaptureAuthentication: false, requireRestoreAuthentication: false });
   const snapshot: BackupSnapshot = {
     exports: { available: true, retentionHours: 24, jobs: exports },
@@ -53,15 +55,17 @@ function render(
   const markup = renderToStaticMarkup(
     <MemoryRouter>
       <QueryClientProvider client={client}>
-        <AppContextProvider>
-          <SystemBackupsSettings
-            allowCreate={allowCreate}
-            restoreOnly={embedded}
-            embedded={embedded}
-            recoveryActions={recoveryActions}
-            initialImportId={initialImportId}
-          />
-        </AppContextProvider>
+        <UserContextProvider>
+          <AppContextProvider>
+            <SystemBackupsSettings
+              allowCreate={allowCreate}
+              restoreOnly={embedded}
+              embedded={embedded}
+              recoveryActions={recoveryActions}
+              initialImportId={initialImportId}
+            />
+          </AppContextProvider>
+        </UserContextProvider>
       </QueryClientProvider>
     </MemoryRouter>,
   );
@@ -642,16 +646,19 @@ test('completed exports keep a compact Download row without an active progress s
   expect(markup).not.toContain('recovery-scene');
 });
 
-test('retention uses the shared select and global Save without a duplicate local action', () => {
+test('retention uses the shared select without a manual Save action', () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
   client.setQueryData(appContextQueryKey(), { user: { id: 7, operator: true } });
+  client.setQueryData(userContextQueryKey(), { isLoggedIn: true });
   client.setQueryData(['orbis-backup-retention', 7], { version: 1, revision: 3, retentionHours: 168 });
   const markup = renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <AppContextProvider>
-        <SettingsSaveProvider onSection={() => undefined}>
-          <BackupRetentionSettings />
-        </SettingsSaveProvider>
+        <UserContextProvider>
+          <SettingsSaveProvider>
+            <BackupRetentionSettings />
+          </SettingsSaveProvider>
+        </UserContextProvider>
       </AppContextProvider>
     </QueryClientProvider>,
   );

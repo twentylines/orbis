@@ -142,33 +142,40 @@
   display: grid;
   gap: 12px;
 }
-.appearance-preset-wallpaper {
+.appearance-auto-colours {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-width: 0;
-  color: var(--desktop-muted);
-  font-size: 0.8125rem;
-  line-height: 1.45;
+  flex-wrap: wrap;
+  gap: 4px 12px;
 }
-.appearance-preset-wallpaper img {
-  flex: none;
-  width: 48px;
-  height: 32px;
-  object-fit: cover;
-  border-radius: 6px;
-}
-.appearance-preset-wallpaper span {
-  flex: 1;
-  min-width: 0;
-}
-.appearance-preset-wallpaper a {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
+.appearance-auto-colours > .orbis-switch {
   min-height: 44px;
-  color: var(--desktop-accent);
+  margin: 0;
+}
+.appearance-custom-colours > summary {
+  width: fit-content;
+  max-width: 100%;
+  padding-block: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.appearance-custom-colours > summary:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 3px;
+}
+.appearance-custom-colour-controls {
+  display: grid;
+  gap: 18px;
+  padding-block: 8px 4px;
+}
+.appearance-custom-colour {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+.appearance-custom-colour h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
 }
 .appearance-modes {
   display: grid;
@@ -304,9 +311,24 @@
   --swatch-dark: #15202a;
 }
 .appearance-preset-blush .appearance-swatch {
-  --swatch-tint: #ae7e8a;
-  --swatch-light: #fdf7fa;
-  --swatch-dark: #271a23;
+  --swatch-tint: #ec62a2;
+  --swatch-light: #ffe8f5;
+  --swatch-dark: #2a0e20;
+}
+.appearance-preset-burgundy .appearance-swatch {
+  --swatch-tint: #b43852;
+  --swatch-light: #fde5ea;
+  --swatch-dark: #280c13;
+}
+.appearance-preset-amber .appearance-swatch {
+  --swatch-tint: #e2bc25;
+  --swatch-light: #fff7d1;
+  --swatch-dark: #271e06;
+}
+.appearance-preset-orange .appearance-swatch {
+  --swatch-tint: #f97329;
+  --swatch-light: #ffe6d2;
+  --swatch-dark: #2e1307;
 }
 .appearance-wallpapers {
   display: grid;
@@ -371,8 +393,26 @@
   gap: 14px;
   align-content: start;
 }
-.appearance-wallpaper-settings > .orbis-switch {
-  justify-self: start;
+.appearance-wallpaper-match {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.appearance-matched-wallpaper {
+  flex: none;
+  width: 96px;
+  height: 56px;
+  border-radius: 10px;
+  background: var(--desktop-code-background) center / cover no-repeat;
+}
+.appearance-wallpaper-options {
+  display: grid;
+  gap: 14px;
+}
+.appearance-wallpaper-match > .orbis-switch {
+  max-width: 100%;
   min-height: 44px;
   margin: 0;
   gap: 12px;
@@ -611,39 +651,6 @@
   min-width: 0;
   align-content: start;
 }
-.appearance-accent-controls {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: stretch;
-  gap: 9px;
-}
-.appearance-accent-controls input {
-  min-height: 44px;
-  border: 1px solid var(--desktop-line);
-  border-radius: 9px;
-  background: var(--desktop-surface);
-  color: var(--desktop-ink);
-}
-.appearance-accent-controls .appearance-colour-value {
-  min-width: 0;
-  width: 10ch;
-  max-width: 100%;
-  padding: 8px 12px;
-  font-size: 1rem;
-  font-family: ui-monospace, monospace;
-}
-.appearance-accent-controls input:focus-visible {
-  outline: none;
-  background: color-mix(in srgb, var(--desktop-accent) 15%, var(--desktop-surface));
-}
-.appearance .appearance-accent-controls > :is(button, input) {
-  line-height: 1.5;
-}
-.appearance .appearance-accent-controls button:focus-visible {
-  outline: none;
-  background: color-mix(in srgb, var(--desktop-accent) 15%, var(--desktop-surface));
-}
 .appearance-range-slider:has(input:disabled) {
   opacity: 0.6;
 }
@@ -665,47 +672,56 @@ fieldset.appearance-choice {
   min-height: 44px;
   margin: 0;
 }
-.appearance-fine-controls {
+.appearance-material-controls.appearance-surface-options {
+  gap: 0;
+}
+.appearance-surface-choices {
+  --orbis-selection-fill: color-mix(in srgb, var(--desktop-accent) 22%, var(--desktop-surface));
+}
+@media (forced-colors: none) {
+  .appearance-surface-choices .orbis-selection-background {
+    border: 1px solid color-mix(in srgb, var(--desktop-accent) 60%, transparent);
+  }
+}
+.appearance .orbis-selection-group.appearance-surface-choices > button:focus-visible {
+  outline: 2px solid var(--desktop-focus);
+  outline-offset: 3px;
+}
+.appearance-custom-controls {
+  --appearance-custom-duration: var(--orbis-control-transition-duration, 180ms);
+  display: grid;
+  grid-template-rows: 0fr;
   min-width: 0;
-  border-radius: 10px;
-  background: var(--desktop-surface);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--appearance-custom-duration) ease,
+    opacity var(--appearance-custom-duration) ease,
+    visibility 0s linear var(--appearance-custom-duration);
 }
-.appearance-fine-controls > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 44px;
-  padding: 12px;
-  border-radius: inherit;
-  list-style: none;
-  cursor: pointer;
+.appearance-custom-controls[data-expanded="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
 }
-.appearance-fine-controls > summary::-webkit-details-marker {
-  display: none;
+:root:is([data-orbis-colour-switch], [data-orbis-palette-motion]) .appearance-custom-controls {
+  /* biome-ignore lint/complexity/noImportantStyles: Keep this geometry transition when the palette suppresses colour transitions. */
+  transition-property: grid-template-rows, opacity, visibility !important;
 }
-.appearance-fine-controls > summary:hover {
-  background: color-mix(in srgb, var(--desktop-preset-tint) 10%, transparent);
+.appearance-custom-clip {
+  min-width: 0;
+  min-height: 0;
+  overflow: clip;
 }
-.appearance-fine-controls > summary > svg {
-  flex: none;
-  transition: transform 180ms ease;
-}
-.appearance-fine-controls[open] > summary > svg {
-  transform: rotate(180deg);
-}
-.appearance-fine-controls > .appearance-range-grid {
-  padding: 12px;
-  animation: orbis-feedback-enter 180ms ease both;
-}
-.appearance-fine-controls > .appearance-actions {
-  padding: 0 12px 12px;
+.appearance-custom-content {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+  padding: 20px 8px 8px;
 }
 @media (prefers-reduced-motion: reduce) {
-  .appearance-fine-controls > summary > svg {
+  .appearance-custom-controls {
     transition: none;
-  }
-  .appearance-fine-controls > .appearance-range-grid {
-    animation: none;
   }
 }

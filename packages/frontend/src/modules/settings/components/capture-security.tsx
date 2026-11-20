@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { IconHistory } from '@tabler/icons-react';
 import { useAppContext } from '@/context/app-context';
@@ -8,7 +8,9 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { accountSecurityKey, readAccountSecurity, saveAccountSecurity } from '@/desktop/account-security-api';
-import { useSettingsSave } from '../pages/settings-save';
+import { useSettingsPreferenceActivity } from '../pages/settings-save';
+
+type PolicyPatch = { capture?: boolean; restore?: boolean };
 
 export function CaptureSecurity() {
   const { user } = useAppContext();
@@ -29,38 +31,63 @@ function CaptureSecuritySession({ ownerId, operator, totpEnabled }: { ownerId: n
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const enabled = draft ?? policy.data?.requireCaptureAuthentication ?? false;
   const restoreEnabled = restoreDraft ?? policy.data?.requireRestoreAuthentication ?? false;
-  const dirty = Boolean(
-    policy.data && (enabled !== policy.data.requireCaptureAuthentication || restoreEnabled !== Boolean(policy.data.requireRestoreAuthentication)),
-  );
-  const relaxing = Boolean((policy.data?.requireCaptureAuthentication && !enabled) || (policy.data?.requireRestoreAuthentication && !restoreEnabled));
+  const relaxCapture = policy.data?.requireCaptureAuthentication === true && draft === false;
+  const relaxRestore = policy.data?.requireRestoreAuthentication === true && restoreDraft === false;
+  const relaxing = relaxCapture || relaxRestore;
+  const enableCapture = policy.data?.requireCaptureAuthentication === false && draft === true;
+  const enableRestore = policy.data !== undefined && !policy.data.requireRestoreAuthentication && restoreDraft === true;
   const valid = !relaxing || Boolean(password && password.length <= 1024 && (!totpEnabled || /^\d{6}$/.test(code)));
-  const save = async () => {
-    if (!policy.data || !valid) throw new Error('Confirm your current password before turning authentication off.');
+  const write = async (patch: PolicyPatch, confirm = false) => {
+    if (!policy.data || savingRef.current || sessionAbortSignal.aborted || (confirm && (!relaxing || !valid))) return;
+    savingRef.current = true;
     setSaving(true);
     setError('');
-    const credentials = relaxing ? { password, ...(totpEnabled ? { totpCode: code } : {}) } : {};
-    setPassword('');
-    setCode('');
+    const credentials = confirm ? { password, ...(totpEnabled ? { totpCode: code } : {}) } : {};
+    if (confirm) {
+      setPassword('');
+      setCode('');
+    }
     try {
-      const saved = await saveAccountSecurity(
-        { expectedRevision: policy.data.revision, requireCaptureAuthentication: enabled, requireRestoreAuthentication: restoreEnabled },
+      const latest = confirm ? policy.data : await readAccountSecurity(sessionAbortSignal);
+      sessionAbortSignal.throwIfAborted();
+      const result = await saveAccountSecurity(
+        {
+          expectedRevision: latest.revision,
+          requireCaptureAuthentication: patch.capture ?? latest.requireCaptureAuthentication,
+          requireRestoreAuthentication: patch.restore ?? latest.requireRestoreAuthentication ?? false,
+        },
         credentials,
         sessionAbortSignal,
       );
-      queryClient.setQueryData(accountSecurityKey(ownerId), saved);
-      setDraft(null);
-      setRestoreDraft(null);
+      sessionAbortSignal.throwIfAborted();
+      queryClient.setQueryData(accountSecurityKey(ownerId), result);
+      if (patch.capture !== undefined) setDraft(null);
+      if (patch.restore !== undefined) setRestoreDraft(null);
+      setSaved(true);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'The security setting could not be saved.');
-      throw reason;
+      if (!sessionAbortSignal.aborted) setError(reason instanceof Error ? reason.message : 'The security setting could not be saved.');
     } finally {
-      setSaving(false);
+      savingRef.current = false;
+      if (!sessionAbortSignal.aborted) setSaving(false);
     }
   };
-  const shared = useSettingsSave({ section: 'security', dirty, pending: saving, prepare: async () => (valid && policy.data ? save : null) });
+  useSettingsPreferenceActivity(saving, saved, Boolean(error || relaxing));
+  const change = (field: 'capture' | 'restore', next: boolean) => {
+    const baseline = field === 'capture' ? policy.data?.requireCaptureAuthentication : Boolean(policy.data?.requireRestoreAuthentication);
+    const setField = field === 'capture' ? setDraft : setRestoreDraft;
+    setField(next === baseline ? null : next);
+    setError('');
+    if (next && next !== baseline) void write({ [field]: true });
+    if (next && baseline && (field === 'capture' ? !relaxRestore : !relaxCapture)) {
+      setPassword('');
+      setCode('');
+    }
+  };
   if (!operator) return null;
   return (
     <section id="setting-capture-authentication" className="settings-security-capture">
@@ -71,7 +98,7 @@ function CaptureSecuritySession({ ownerId, operator, totpEnabled }: { ownerId: n
       <Switch
         label="Require authentication for backup actions"
         checked={enabled}
-        onCheckedChange={setDraft}
+        onCheckedChange={(value) => change('capture', value)}
         disabled={saving || policy.isPending || policy.isError}
       />
       <p className="text-muted">
@@ -81,7 +108,7 @@ function CaptureSecuritySession({ ownerId, operator, totpEnabled }: { ownerId: n
       <Switch
         label="Require authentication for backup restores"
         checked={restoreEnabled}
-        onCheckedChange={setRestoreDraft}
+        onCheckedChange={(value) => change('restore', value)}
         disabled={saving || policy.isPending || policy.isError}
       />
       <p className="text-muted">
@@ -120,10 +147,45 @@ function CaptureSecuritySession({ ownerId, operator, totpEnabled }: { ownerId: n
           </Button>
         </InlineFeedback>
       ) : null}
-      {error ? <InlineFeedback>{error}</InlineFeedback> : null}
-      {!shared.shared && dirty ? (
-        <Button type="button" disabled={saving || !valid} onClick={() => void save().catch(() => undefined)}>
-          Save
+      {error ? (
+        <InlineFeedback>
+          {error}{' '}
+          {enableCapture || enableRestore ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saving}
+              onClick={() =>
+                void write({
+                  ...(enableCapture ? { capture: true } : {}),
+                  ...(enableRestore ? { restore: true } : {}),
+                })
+              }
+            >
+              Retry
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" disabled={saving} onClick={() => void policy.refetch()}>
+              Refresh policy
+            </Button>
+          )}
+        </InlineFeedback>
+      ) : null}
+      {relaxing ? (
+        <Button
+          type="button"
+          disabled={saving || !valid}
+          onClick={() =>
+            void write(
+              {
+                ...(relaxCapture ? { capture: false } : {}),
+                ...(relaxRestore ? { restore: false } : {}),
+              },
+              true,
+            )
+          }
+        >
+          Confirm change
         </Button>
       ) : null}
     </section>

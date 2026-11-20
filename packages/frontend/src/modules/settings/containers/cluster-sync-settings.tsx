@@ -1,13 +1,15 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox/Checkbox';
 import { useAppContext } from '@/context/app-context';
 import { useWindowVisible } from '@/desktop/window-visibility';
+import { useAutosavedToggle } from '../hooks/use-autosaved-toggle';
 import {
   clusterSyncKey,
   readClusterSync,
   runClusterSync,
+  saveClusterAutomatic,
   saveClusterSync,
   saveReceiving,
   syncCategoryKeys,
@@ -97,13 +99,13 @@ function Receiving({ value, busy, run }: { value: ClusterSyncSnapshot['receiving
       </p>
       {value.configured && !value.usesYourAccount ? (
         <p className="cluster-sync-warning">
-          Current receiving choices use another local operator account. Saving binds customisation to your account.
+          Current receiving choices use another local operator account. Confirming receiving binds customisation to your account.
         </p>
       ) : null}
       <Categories id={id} selected={selected} onChange={setSelected} disabled={busy} />
       <div className="cluster-sync-actions">
         <Button type="submit" intent="primary" disabled={busy}>
-          Save
+          Confirm receiving
         </Button>
       </div>
     </form>
@@ -111,15 +113,53 @@ function Receiving({ value, busy, run }: { value: ClusterSyncSnapshot['receiving
 }
 export function ClusterSyncHostChoices({ host, busy, run }: { host: ClusterSyncHost; busy: boolean; run: Run }) {
   const id = useId();
+  const { user } = useAppContext();
+  const client = useQueryClient();
+  const queryKey = clusterSyncKey(user.id);
+  const visible = useWindowVisible();
+  const reviewed = Boolean(host.plan?.usesYourAccount && host.plan.trustCurrent && host.plan.categories.length);
+  const autoSync = useAutosavedToggle({
+    id: `cluster-automatic:${host.id}`,
+    scope: `cluster-sync-plan:${host.id}`,
+    saved: host.plan?.automatic ?? false,
+    disabled: !reviewed || busy || !visible,
+    canSet: (checked) => !checked || host.available,
+    save: async (checked, signal) => {
+      const latest = client.getQueryData<ClusterSyncSnapshot>(queryKey)?.hosts.find((entry) => entry.id === host.id);
+      if (!latest) throw new Error('Refresh status and review this host before trying again.');
+      try {
+        const saved = await saveClusterAutomatic(latest, checked, signal);
+        await client.cancelQueries({ queryKey, exact: true });
+        signal.throwIfAborted();
+        client.setQueryData<ClusterSyncSnapshot>(
+          queryKey,
+          (current) =>
+            current && {
+              ...current,
+              hosts: current.hosts.map((entry) =>
+                entry.id === host.id && entry.plan?.revision === latest.plan?.revision && entry.plan
+                  ? { ...entry, plan: { ...entry.plan, automatic: saved.automatic, revision: saved.revision } }
+                  : entry,
+              ),
+            },
+        );
+      } catch (error) {
+        if (!signal.aborted) void client.invalidateQueries({ queryKey });
+        throw error;
+      }
+    },
+  });
   const [enabled, setEnabled] = useState(Boolean(host.plan?.categories.length));
   const [selected, setSelected] = useState<SyncCategory[]>(host.plan?.categories ?? []);
-  const [automatic, setAutomatic] = useState(host.plan?.automatic ?? false);
+  const [automaticDraft, setAutomaticDraft] = useState(host.plan?.automatic ?? false);
+  const automatic = reviewed ? (host.plan?.automatic ?? false) : automaticDraft;
   const actual = enabled ? selected : [];
   const dirty =
     JSON.stringify([...actual].sort()) !== JSON.stringify([...(host.plan?.categories ?? [])].sort()) ||
     (enabled && automatic) !== (host.plan?.automatic ?? false);
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (autoSync.pending) return;
     void run(
       (signal) => saveClusterSync(host, actual, enabled && automatic, signal),
       actual.length ? 'Sync choices saved. Use Sync now, or keep selected settings in sync.' : 'Settings sync disabled for this server.',
@@ -132,27 +172,30 @@ export function ClusterSyncHostChoices({ host, busy, run }: { host: ClusterSyncH
         <span>{host.available ? (host.plan ? statusLabels[host.plan.status] : 'Choose settings to sync') : 'Unavailable · check connection'}</span>
       </div>
       {host.plan && !host.plan.trustCurrent ? (
-        <p className="cluster-sync-warning">Pairing changed. Enable receiving on this server again, then save new sync choices.</p>
+        <p className="cluster-sync-warning">Pairing changed. Enable receiving on this server again, then confirm the new sync choices.</p>
       ) : null}
-      {host.plan && !host.plan.usesYourAccount ? <p>These choices use another admin account’s customisation. Save to use your account.</p> : null}
+      {host.plan && !host.plan.usesYourAccount ? (
+        <p>These choices use another admin account’s customisation. Confirm the sync choices to use your account.</p>
+      ) : null}
       <form className="cluster-sync-form" onSubmit={submit}>
         <Checkbox
           id={`${id}-enabled`}
           className="cluster-sync-check"
           checked={enabled}
-          disabled={busy}
+          disabled={busy || autoSync.pending}
           onCheckedChange={setEnabled}
           label={<strong>Sync to this server</strong>}
         />
         {enabled ? (
           <>
-            <Categories id={id} selected={selected} onChange={setSelected} disabled={busy} accepted={host.accepted} />
+            <Categories id={id} selected={selected} onChange={setSelected} disabled={busy || autoSync.pending} accepted={host.accepted} />
             <Checkbox
               id={`${id}-automatic`}
               className="cluster-sync-check"
-              checked={automatic}
-              disabled={busy || !host.available}
-              onCheckedChange={setAutomatic}
+              checked={reviewed ? autoSync.checked : automaticDraft}
+              disabled={reviewed ? autoSync.disabled || autoSync.pending : busy || !host.available}
+              aria-busy={autoSync.pending || undefined}
+              onCheckedChange={reviewed ? autoSync.setChecked : setAutomaticDraft}
               label={
                 <>
                   <strong>Keep selected settings in sync</strong>
@@ -160,17 +203,28 @@ export function ClusterSyncHostChoices({ host, busy, run }: { host: ClusterSyncH
                 </>
               }
             />
+            {autoSync.pending || autoSync.saved ? <output>{autoSync.pending ? 'Saving…' : 'Saved'}</output> : null}
+            {autoSync.error ? (
+              <p className="cluster-sync-warning" role="alert">
+                {autoSync.error}{' '}
+                {autoSync.retry ? (
+                  <Button type="button" variant="outline" onClick={autoSync.retry}>
+                    Try again
+                  </Button>
+                ) : null}
+              </p>
+            ) : null}
           </>
         ) : null}
         <div className="cluster-sync-actions">
-          <Button type="submit" intent="primary" disabled={busy || (enabled && !selected.length)}>
-            Save
+          <Button type="submit" intent="primary" disabled={busy || autoSync.pending || (enabled && !selected.length)}>
+            Confirm sync choices
           </Button>
           {host.plan?.categories.length ? (
             <Button
               type="button"
               variant="outline"
-              disabled={busy || dirty || !enabled || !host.available || !host.plan.usesYourAccount || !host.plan.trustCurrent}
+              disabled={busy || autoSync.pending || dirty || !enabled || !host.available || !host.plan.usesYourAccount || !host.plan.trustCurrent}
               onClick={() => {
                 void run(async (signal) => {
                   const result = await runClusterSync(host, signal);
@@ -298,7 +352,12 @@ export function ClusterSyncSettings() {
             ) : null}
             {status.data.hosts.length ? null : <p>Pair a server first. Then enable receiving categories on it before choosing settings here.</p>}
             {status.data.hosts.map((host) => (
-              <ClusterSyncHostChoices key={`${host.id}:${host.plan?.revision ?? 0}`} host={host} busy={busy || status.isError} run={run} />
+              <ClusterSyncHostChoices
+                key={JSON.stringify([host.id, host.plan?.categories, host.plan?.usesYourAccount, host.plan?.trustCurrent])}
+                host={host}
+                busy={busy || status.isError}
+                run={run}
+              />
             ))}
           </>
         ) : null}

@@ -11,9 +11,9 @@ export function useAppTrayLayout(desktop: boolean, count: number, element: HTMLE
     if (!primary) return;
     dock.dataset.minimizedCompact = String(count > 3);
     const measure = () => {
-      const item = element.querySelector<HTMLElement>('.app-tray-item');
       const list = element.querySelector<HTMLElement>('.app-tray-list');
-      if (!item || !list) return;
+      const inner = element.parentElement;
+      if (!list || !inner) return;
       const spacing = (target: Element, ...properties: string[]) => {
         const style = getComputedStyle(target);
         return properties.reduce((total, property) => total + (Number.parseFloat(style.getPropertyValue(property)) || 0), 0);
@@ -43,10 +43,10 @@ export function useAppTrayLayout(desktop: boolean, count: number, element: HTMLE
         spacing(dock, 'padding-left', 'padding-right', 'border-left-width', 'border-right-width') -
         padding -
         spacing(element, 'margin-left');
-      const slots = Math.max(1, Math.floor((available + gap) / (item.offsetWidth + gap)));
-      const width = `${Math.min(slots, count) * (item.offsetWidth + gap) - gap + padding}px`;
-      if (element.style.width !== width) element.style.width = width;
-      if (element.style.maxWidth !== width) element.style.maxWidth = width;
+      const itemWidth = Number.parseFloat(getComputedStyle(element).getPropertyValue('--app-tray-item-width')) || 118;
+      const slots = Math.max(1, Math.floor((available + gap) / (itemWidth + gap)));
+      const width = `${Math.min(slots, count) * (itemWidth + gap) - gap + padding}px`;
+      if (inner.style.getPropertyValue('--orbis-app-tray-width') !== width) inner.style.setProperty('--orbis-app-tray-width', width);
     };
     let frame = 0;
     const schedule = () => {

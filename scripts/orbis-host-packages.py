@@ -190,17 +190,20 @@ def selected_candidates(names: list[str], cache) -> list[dict]:
     return sorted(selected, key=lambda item: item["name"])
 
 
-def apt_install_command(selected: list[dict], *, simulate: bool) -> list[str]:
+def apt_install_command(selected: list[dict], *, simulate: bool, new_packages: bool = False) -> list[str]:
     command = ["/usr/bin/apt-get", "--no-remove", "--no-install-recommends"]
     if simulate:
         command.append("--simulate")
-    command.extend(["install", "--only-upgrade", "--"])
+    command.append("install")
+    if not new_packages:
+        command.append("--only-upgrade")
+    command.append("--")
     command.extend(f"{item['name']}={item['candidateVersion']}" for item in selected)
     return command
 
 
-def apt_apply_command(selected: list[dict]) -> list[str]:
-    command = apt_install_command(selected, simulate=False)
+def apt_apply_command(selected: list[dict], *, new_packages: bool = False) -> list[str]:
+    command = apt_install_command(selected, simulate=False, new_packages=new_packages)
     command[1:1] = ["-y", "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold"]
     return command
 
@@ -241,16 +244,62 @@ def parse_simulation(output: str, selected: list[dict]) -> list[dict]:
 def simulate_upgrades(names: list[str]) -> dict:
     require_ubuntu()
     selected = selected_candidates(names, apt_module().Cache())
+    return simulate_install(selected)
+
+
+def smart_tools_supported() -> bool:
+    try:
+        require_ubuntu()
+        apt_module()
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def simulate_smart_tools() -> dict:
+    release = require_ubuntu()
+    cache = apt_module().Cache()
+    archives = {release.get("VERSION_CODENAME") or "noble"}
+    archives |= {f"{archive}-{suffix}" for archive in archives for suffix in ("updates", "security", "backports")}
+
+    def official_candidate(name):
+        package = cache[name] if name in cache else None
+        version = package.candidate if package and not package.is_installed else None
+        origins = list(version.origins) if version else []
+        if not origins or not all(origin.trusted and origin.origin == "Ubuntu" and origin.archive in archives for origin in origins):
+            raise ValueError("A missing SMART package has no trusted Ubuntu candidate. Refresh the host package lists.")
+        return {"name": name, "installedVersion": None, "candidateVersion": version.version}
+
+    smartmontools = official_candidate("smartmontools")
+    selected = [smartmontools]
+    operations = simulate_install(selected, new_packages=True)["operations"]
+    seen = set()
+    for operation in operations:
+        name = operation["name"]
+        if name not in {"smartmontools", "libcap-ng0"} or name in seen or operation["action"] != "install":
+            raise ValueError("APT planned changes outside the smartmontools installation.")
+        seen.add(name)
+        candidate = smartmontools if name == "smartmontools" else official_candidate(name)
+        if name != "smartmontools":
+            selected.append(candidate)
+        if operation["candidateVersion"] != candidate["candidateVersion"]:
+            raise ValueError("APT changed a reviewed SMART package candidate.")
+    if len(selected) > 1 and simulate_install(selected, new_packages=True)["operations"] != operations:
+        raise ValueError("APT changed the transaction when pinning the SMART dependencies.")
+    return {"selected": selected, "operations": operations}
+
+
+def simulate_install(selected: list[dict], *, new_packages: bool = False) -> dict:
     environment = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "DEBIAN_FRONTEND": "noninteractive", "HOME": "/root"}
     try:
         with tempfile.TemporaryFile() as output:
             result = subprocess.run(
-                apt_install_command(selected, simulate=True),
+                apt_install_command(selected, simulate=True, new_packages=new_packages),
                 stdin=subprocess.DEVNULL,
                 stdout=output,
                 stderr=subprocess.STDOUT,
                 env=environment,
-                timeout=SIMULATION_TIMEOUT_SECONDS,
+                timeout=20 if new_packages else SIMULATION_TIMEOUT_SECONDS,
                 check=False,
             )
             output.seek(0, os.SEEK_END)

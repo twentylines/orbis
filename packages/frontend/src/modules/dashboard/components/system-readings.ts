@@ -39,5 +39,5 @@ export function statusNetwork(host: HostTelemetry | undefined, core: Telemetry |
     .sort((left, right) => Number(right.speedMbps !== null) - Number(left.speedMbps !== null) || left.interface.localeCompare(right.interface))[0];
   if (candidate) return { ...candidate, label: 'Network', scope: 'host' as const };
   const fallback = core?.network.find((item) => item.interface !== 'lo');
-  return fallback ? { ...fallback, label: 'Orbis core network', speedMbps: null, scope: 'runtime' as const } : null;
+  return fallback ? { ...fallback, label: 'Network', speedMbps: null, scope: 'runtime' as const } : null;
 }

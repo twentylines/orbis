@@ -6,7 +6,10 @@ import {
   nextAppsPreviewHistory,
   nextStorePreviewHistory,
   storePreviewDepth,
+  storePreviewLinkProps,
+  storePreviewSuggestion,
   storeReturnPath,
+  type StoreSuggestion,
 } from './store-preview-navigation';
 
 describe('Store preview history', () => {
@@ -46,6 +49,41 @@ describe('Store preview history', () => {
   });
   test('an excessive history chain closes to the catalogue instead of an earlier preview', () => {
     expect(nextStorePreviewHistory({ storePreviewDepth: 50 }, '', true).storePreviewDepth).toBe(0);
+  });
+
+  test('a suggestion entry preserves its exact opener through detail tabs and only matches the selected repository', () => {
+    const suggestion = { kind: 'recommendation', urn: 'crafty:official', category: 'gaming' } satisfies StoreSuggestion;
+    const initial = { pathname: '/app-store', search: '?view=apps', hash: '', key: 'index', state: null };
+    const click = storePreviewLinkProps(initial, suggestion.urn, suggestion);
+    expect(click).toEqual({
+      to: '/app-store/official/crafty?view=apps',
+      replace: false,
+      state: { storeReturnPath: '/app-store?view=apps', storePreviewDepth: 1, storeSuggestion: suggestion },
+    });
+    expect(storePreviewSuggestion(click.state, 'crafty:community')).toBeNull();
+    expect(storePreviewSuggestion(click.state, null)).toBeNull();
+    const tab = nextStorePreviewHistory(click.state, '?view=apps', true, storePreviewSuggestion(click.state, suggestion.urn));
+    expect(tab.storePreviewDepth).toBe(2);
+    expect(storePreviewSuggestion(tab, suggestion.urn)).toEqual(suggestion);
+  });
+
+  test('same-URL opener changes write distinct history entries and revisiting the same opener keeps its depth', () => {
+    const urn = 'crafty:official';
+    const suggestion = { kind: 'spotlight', urn } satisfies StoreSuggestion;
+    const initial = { pathname: '/app-store', search: '', hash: '', key: 'index', state: null };
+    const featured = storePreviewLinkProps(initial, urn, suggestion);
+    const location = { ...initial, pathname: featured.to, state: featured.state };
+    expect(storePreviewLinkProps(location, urn, suggestion)).toMatchObject({ replace: true, state: featured.state });
+
+    const ordinary = storePreviewLinkProps(location, urn);
+    expect(ordinary).toEqual({
+      to: featured.to,
+      replace: false,
+      state: { storeReturnPath: '/app-store', storePreviewDepth: 2 },
+    });
+    expect(storePreviewSuggestion(ordinary.state, urn)).toBeNull();
+    expect(storePreviewSuggestion(featured.state, urn)).toEqual(suggestion);
+    expect(storePreviewLinkProps({ ...location, state: ordinary.state }, urn)).toMatchObject({ replace: true, state: ordinary.state });
   });
 });
 

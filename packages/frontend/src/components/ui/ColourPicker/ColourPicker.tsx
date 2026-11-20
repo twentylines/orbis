@@ -5,7 +5,19 @@ import { Button } from '../Button';
 import { hexToHSV, hsvToHex, type HSV } from './colour';
 import './ColourPicker.css';
 
-export function ColourPicker({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
+export function ColourPicker({
+  value,
+  onChange,
+  label = 'Accent colour',
+  onReset,
+  sourceKey,
+}: {
+  value: string;
+  onChange: (hex: string) => void;
+  label?: string;
+  onReset?: () => void;
+  sourceKey?: string;
+}) {
   const id = useId();
   const opener = useRef<HTMLButtonElement>(null);
   const clickX = useRef<number | null>(null);
@@ -16,6 +28,25 @@ export function ColourPicker({ value, onChange }: { value: string; onChange: (he
   const [position, setPosition] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
   const [hsv, setHSV] = useState(() => hexToHSV(value));
   const [hex, setHex] = useState(value);
+  const inline = Boolean(onReset);
+  const submitted = useRef<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A different colour source resets the draft even when its hex is unchanged.
+  useLayoutEffect(() => {
+    if (!inline) return;
+    // An autosave echo acknowledges the colour without rounding the in-progress HSV channels.
+    const echoed = submitted.current === value;
+    submitted.current = null;
+    if (!echoed) {
+      setHSV(hexToHSV(value));
+      setHex(value);
+    }
+  }, [inline, sourceKey, value]);
+  const saveInline = (next: string) => {
+    const normalized = next.toLowerCase();
+    if (!inline || normalized === value.toLowerCase()) return;
+    submitted.current = normalized;
+    onChange(normalized);
+  };
   const valid = /^#[a-f0-9]{6}$/i.test(hex);
   const preview = hsvToHex(hsv);
   useLayoutEffect(() => {
@@ -44,8 +75,11 @@ export function ColourPicker({ value, onChange }: { value: string; onChange: (he
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(place);
     };
+    const initialAnchor = opener.current?.getBoundingClientRect();
     const dismissOnPageScroll = (event: Event) => {
       if (event.target instanceof Node && panel.contains(event.target)) return;
+      const anchor = opener.current?.getBoundingClientRect();
+      if (initialAnchor && anchor?.left === initialAnchor.left && anchor.top === initialAnchor.top) return;
       dismissedByScroll.current = true;
       setOpen(false);
     };
@@ -75,7 +109,9 @@ export function ColourPicker({ value, onChange }: { value: string; onChange: (he
   const changeChannel = (channel: keyof HSV, next: number) => {
     const updated = { ...hsv, [channel]: next };
     setHSV(updated);
-    setHex(hsvToHex(updated));
+    const nextHex = hsvToHex(updated);
+    setHex(nextHex);
+    saveInline(nextHex);
   };
   const channels = [
     { key: 'hue', label: 'Hue', max: 359, unit: '°', track: 'linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)' },
@@ -94,6 +130,80 @@ export function ColourPicker({ value, onChange }: { value: string; onChange: (he
       track: `linear-gradient(to right, #000, ${hsvToHex({ ...hsv, brightness: 100 })})`,
     },
   ] as const;
+  const fields = (
+    <div className="colour-picker-body">
+      <div className="colour-picker-preview">
+        <span className="colour-picker-sample" style={{ background: preview }} aria-hidden="true" />
+        <label htmlFor={`${id}-hex`}>
+          <span className="visually-hidden">{inline ? `${label} hex value` : 'Hex colour'}</span>
+          <input
+            id={`${id}-hex`}
+            value={hex}
+            maxLength={7}
+            spellCheck={false}
+            autoComplete="off"
+            aria-invalid={!valid}
+            aria-describedby={valid ? undefined : `${id}-error`}
+            onChange={(event) => {
+              const next = event.target.value;
+              setHex(next);
+              if (/^#[a-f0-9]{6}$/i.test(next)) {
+                const converted = hexToHSV(next);
+                setHSV({ ...converted, hue: converted.saturation ? converted.hue : hsv.hue });
+                saveInline(next);
+              }
+            }}
+          />
+        </label>
+      </div>
+      {valid ? null : (
+        <output id={`${id}-error`} className="colour-picker-error">
+          Enter # followed by six hexadecimal digits.
+        </output>
+      )}
+      <div className="colour-picker-channels">
+        {channels.map(({ key, label, max, unit, track }) => (
+          <label className="colour-picker-channel" key={key} htmlFor={`${id}-${key}`}>
+            <span id={`${id}-${key}-label`}>{label}</span>
+            <input
+              id={`${id}-${key}`}
+              type="range"
+              min={0}
+              max={max}
+              value={Math.round(hsv[key])}
+              aria-labelledby={`${id}-${key}-label`}
+              aria-valuetext={`${Math.round(hsv[key])}${unit}`}
+              style={{ '--colour-track': track, '--colour-thumb': preview } as CSSProperties}
+              onChange={(event) => changeChannel(key, Number(event.target.value))}
+            />
+            <output htmlFor={`${id}-${key}`}>
+              {Math.round(hsv[key])}
+              {unit}
+            </output>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+  if (onReset) {
+    return (
+      <div className="colour-picker-inline">
+        {fields}
+        <button
+          type="button"
+          className="colour-picker-reset"
+          onClick={() => {
+            submitted.current = null;
+            setHSV(hexToHSV(value));
+            setHex(value);
+            onReset();
+          }}
+        >
+          Use preset colour
+        </button>
+      </div>
+    );
+  }
   return (
     <DialogPrimitive.Root
       modal={false}
@@ -118,7 +228,7 @@ export function ColourPicker({ value, onChange }: { value: string; onChange: (he
           ref={opener}
           type="button"
           className="colour-picker-trigger"
-          aria-label="Choose accent colour"
+          aria-label={`Choose ${label.toLowerCase()}`}
           onPointerDown={(event) => {
             clickX.current = event.clientX;
           }}
@@ -141,7 +251,7 @@ export function ColourPicker({ value, onChange }: { value: string; onChange: (he
           style={{ ...position, visibility: position ? 'visible' : 'hidden' }}
         >
           <header className="colour-picker-header">
-            <DialogPrimitive.Title>Accent colour</DialogPrimitive.Title>
+            <DialogPrimitive.Title>{label}</DialogPrimitive.Title>
             <DialogPrimitive.Close asChild>
               <Button type="button" size="icon" aria-label="Close colour picker">
                 <IconX size={18} aria-hidden="true" />
@@ -151,57 +261,7 @@ export function ColourPicker({ value, onChange }: { value: string; onChange: (he
           <DialogPrimitive.Description className="visually-hidden">
             Adjust the colour sliders or enter a hex colour, then apply your choice.
           </DialogPrimitive.Description>
-          <div className="colour-picker-body">
-            <div className="colour-picker-preview">
-              <span className="colour-picker-sample" style={{ background: preview }} aria-hidden="true" />
-              <label htmlFor={`${id}-hex`}>
-                <span className="visually-hidden">Hex colour</span>
-                <input
-                  id={`${id}-hex`}
-                  value={hex}
-                  maxLength={7}
-                  spellCheck={false}
-                  autoComplete="off"
-                  aria-invalid={!valid}
-                  aria-describedby={valid ? undefined : `${id}-error`}
-                  onChange={(event) => {
-                    const next = event.target.value;
-                    setHex(next);
-                    if (/^#[a-f0-9]{6}$/i.test(next)) {
-                      const converted = hexToHSV(next);
-                      setHSV({ ...converted, hue: converted.saturation ? converted.hue : hsv.hue });
-                    }
-                  }}
-                />
-              </label>
-            </div>
-            {valid ? null : (
-              <output id={`${id}-error`} className="colour-picker-error">
-                Enter # followed by six hexadecimal digits.
-              </output>
-            )}
-            <div className="colour-picker-channels">
-              {channels.map(({ key, label, max, unit, track }) => (
-                <label className="colour-picker-channel" key={key} htmlFor={`${id}-${key}`}>
-                  <span>{label}</span>
-                  <input
-                    id={`${id}-${key}`}
-                    type="range"
-                    min={0}
-                    max={max}
-                    value={Math.round(hsv[key])}
-                    aria-valuetext={`${Math.round(hsv[key])}${unit}`}
-                    style={{ '--colour-track': track, '--colour-thumb': preview } as CSSProperties}
-                    onChange={(event) => changeChannel(key, Number(event.target.value))}
-                  />
-                  <output htmlFor={`${id}-${key}`}>
-                    {Math.round(hsv[key])}
-                    {unit}
-                  </output>
-                </label>
-              ))}
-            </div>
-          </div>
+          {fields}
           <footer className="colour-picker-footer">
             <Button type="button" onClick={() => setOpen(false)}>
               Cancel

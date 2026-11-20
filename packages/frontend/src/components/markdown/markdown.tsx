@@ -14,6 +14,13 @@ const MarkdownTable = ({ children }: { children?: React.ReactNode }) => (
   </section>
 );
 
+const MarkdownCodeBlock = ({ children }: { children?: React.ReactNode }) => (
+  // biome-ignore lint/a11y/noNoninteractiveTabindex: Wide code blocks need native keyboard scrolling.
+  <section className="orbis-markdown-code" tabIndex={0} aria-label="Code block">
+    <pre>{children}</pre>
+  </section>
+);
+
 export const Markdown: React.FC<{ content: string; className: string; tabIndex?: number; label?: string }> = ({
   content,
   className,
@@ -21,7 +28,11 @@ export const Markdown: React.FC<{ content: string; className: string; tabIndex?:
   label,
 }) => {
   const rendered = (
-    <ReactMarkdown remarkPlugins={[remarkBreaks, remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]} components={{ table: MarkdownTable }}>
+    <ReactMarkdown
+      remarkPlugins={[remarkBreaks, remarkGfm]}
+      rehypePlugins={[rehypeRaw, rehypeSanitize]}
+      components={{ table: MarkdownTable, pre: MarkdownCodeBlock }}
+    >
       {content}
     </ReactMarkdown>
   );

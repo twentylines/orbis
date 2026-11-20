@@ -1,11 +1,12 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select/Select';
 import { useAppContext } from '@/context/app-context';
+import { useUserContext } from '@/context/user-context';
 import { useWindowVisible } from '@/desktop/window-visibility';
-import { useSettingsSave } from '@/modules/settings/pages/settings-save';
+import { useDebouncedPreferenceSave } from '@/modules/settings/hooks/use-debounced-preference-save';
 import { readBackupRetention, saveBackupRetention } from './backup-api';
 
 const periods = new Map([
@@ -19,58 +20,57 @@ const periods = new Map([
 export function BackupRetentionSettings({ disabled = false }: { disabled?: boolean }) {
   const id = useId();
   const { user } = useAppContext();
+  const { sessionAbortSignal } = useUserContext();
   const visible = useWindowVisible();
   const client = useQueryClient();
   const queryKey = ['orbis-backup-retention', user?.id];
   const status = useQuery({
     queryKey,
-    queryFn: ({ signal }) => readBackupRetention(signal),
+    queryFn: ({ signal }) => readBackupRetention(AbortSignal.any([signal, sessionAbortSignal])),
     enabled: visible && user?.operator === true,
     retry: false,
   });
-  const lifetime = useRef<AbortController | null>(null);
-  useEffect(() => {
-    if (user?.operator !== true) return;
-    const controller = new AbortController();
-    lifetime.current = controller;
-    return () => {
-      controller.abort();
-      if (lifetime.current === controller) lifetime.current = null;
-    };
-  }, [user?.operator]);
-  const [draft, setDraft] = useState<number | null>(null);
-  const hours = draft ?? status.data?.retentionHours ?? 24;
+  const [draft, setDraft] = useState<{ hours: number; signal: AbortSignal } | null>(null);
+  const activeDraft = draft?.signal === sessionAbortSignal ? draft : null;
+  const hours = activeDraft?.hours ?? status.data?.retentionHours ?? 24;
   const save = useMutation({
-    mutationFn: async (write: { hours: number; revision: number; signal: AbortSignal }) => {
+    scope: { id: 'backup-retention' },
+    networkMode: 'always',
+    retry: false,
+    mutationFn: async (write: NonNullable<typeof activeDraft>) => {
       write.signal.throwIfAborted();
-      return saveBackupRetention(write.hours, write.revision, write.signal);
+      const latest = await readBackupRetention(write.signal);
+      write.signal.throwIfAborted();
+      return saveBackupRetention(write.hours, latest.revision, write.signal);
     },
     onSuccess: (result, write) => {
       if (write.signal.aborted) return;
       client.setQueryData(queryKey, result);
-      setDraft((value) => (value === write.hours ? null : value));
+      setDraft((value) => (value === write ? null : value));
       void client.invalidateQueries({ queryKey: ['orbis-full-backups', user?.id] });
     },
   });
-  const dirty = Boolean(status.data && hours !== status.data.retentionHours);
-  const prepare = async () => {
-    if (!status.data || disabled || user?.operator !== true || !lifetime.current || lifetime.current.signal.aborted) return null;
-    const write = { hours, revision: status.data.revision, signal: lifetime.current.signal };
-    return async () => {
-      await save.mutateAsync(write);
-    };
-  };
-  const shared = useSettingsSave({ section: 'backups', dirty, pending: save.isPending, prepare });
+  const autosave = useDebouncedPreferenceSave(
+    activeDraft ? String(activeDraft.hours) : null,
+    async () => {
+      if (activeDraft) await save.mutateAsync(activeDraft);
+    },
+    { delay: 0, ready: Boolean(status.data && !disabled && user?.operator === true), signal: sessionAbortSignal },
+  );
   const choices = new Map(periods);
   if (!choices.has(hours)) choices.set(hours, `${hours} hours`);
   return (
     <div className="system-backups-retention">
       <Select
         value={String(hours)}
-        disabled={disabled || user?.operator !== true || !status.data || save.isPending || shared.pending}
+        disabled={disabled || user?.operator !== true || !status.data || autosave.pending}
         onValueChange={(value) => {
-          setDraft(Number(value));
-          save.reset();
+          const hours = Number(value);
+          if (hours === status.data?.retentionHours) {
+            setDraft(null);
+          } else {
+            setDraft({ hours, signal: sessionAbortSignal });
+          }
         }}
       >
         <SelectTrigger id={`${id}-retention`} label="Keep server backups for" aria-describedby={`${id}-help`}>
@@ -87,33 +87,11 @@ export function BackupRetentionSettings({ disabled = false }: { disabled?: boole
         </SelectContent>
       </Select>
       <p id={`${id}-help`}>Existing backups keep at least their current expiry date. Downloaded files stay on your computer.</p>
-      {shared.shared ? null : (
-        <Button
-          type="button"
-          intent="primary"
-          disabled={!dirty || disabled || save.isPending}
-          loading={save.isPending}
-          onClick={() => {
-            void prepare()
-              .then((commit) => commit?.())
-              .catch(() => undefined);
-          }}
-        >
-          Save
-        </Button>
-      )}
-      {status.isError || save.isError ? (
+      {status.isError || autosave.error ? (
         <InlineFeedback>
-          {save.isError ? 'Backup retention could not be saved. Refresh the setting before trying again.' : 'Backup retention could not be read.'}
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              save.reset();
-              void status.refetch();
-            }}
-          >
-            Refresh
+          {autosave.error ?? 'Backup retention could not be read.'}
+          <Button type="button" variant="outline" onClick={autosave.error ? autosave.retry : () => void status.refetch()}>
+            Retry
           </Button>
         </InlineFeedback>
       ) : null}

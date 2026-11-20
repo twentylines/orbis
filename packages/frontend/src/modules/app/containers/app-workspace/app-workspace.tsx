@@ -7,7 +7,7 @@ import { useAppContext } from '@/context/app-context';
 import { useContainerTelemetry } from '@/desktop/containers';
 import { taskIsActive, useTasks } from '@/desktop/tasks';
 import type { AppDetails, AppInfo, AppMetadata } from '@/types/app.types';
-import { IconActivity, IconArrowLeft, IconArrowUpRight } from '@tabler/icons-react';
+import { IconActivity, IconArrowLeft } from '@tabler/icons-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useSearchParams } from 'react-router';
@@ -15,6 +15,7 @@ import { AppStatus } from '../../components/app-status/app-status';
 import { AppActions } from '../app-actions/app-actions';
 import { AppDetailsTabs } from '../app-details-tabs/app-details-tabs';
 import './app-workspace.css';
+import { AppCatalogueDetails } from '../../components/store-discover/app-catalogue-details';
 
 type Props = { info: AppInfo; app?: AppDetails | null; metadata: AppMetadata; logo?: ReactNode };
 
@@ -122,9 +123,9 @@ export function AppWorkspace({ info, app, metadata, logo }: Props) {
           <span>
             {active.length} operation{active.length === 1 ? '' : 's'} in progress
           </span>
-          <IconArrowUpRight size={17} aria-hidden="true" />
         </button>
       ) : null}
+      <AppCatalogueDetails info={info} />
       <AppDetailsTabs key={info.urn} info={info} app={app} metadata={metadata} />
     </div>
   );

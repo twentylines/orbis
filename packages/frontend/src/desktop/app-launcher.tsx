@@ -22,6 +22,7 @@ import { useAppContext } from '@/context/app-context';
 import type { DesktopWindowBounds } from '@runtipi/common/schemas';
 import { useDesktopWindows } from './window-viewport';
 import { DockCompanion } from './dock-companion';
+import { dockNavigationFocusTarget } from './dock-scroll-reveal';
 import { useDesktopPreferences } from './preferences';
 import { appAddress, appOpeningMode } from './app-opening';
 import { readOpenedApps, rememberOpenedApp, type OpenedApps } from './app-library';
@@ -37,8 +38,6 @@ import { AppEmbeddingProvider } from './app-embedding';
 import { appLaunchEvent } from './app-launch-event';
 import './app-launcher.css';
 
-const dockFocusTarget = () =>
-  document.querySelector<HTMLElement>('.desktop-dock-item[aria-current="page"]') ?? document.querySelector<HTMLElement>('.desktop-dock-item');
 const AppLauncherContext = createContext<(request: AppLaunchRequest) => boolean>(() => false);
 const AppTrayContext = createContext<ReactNode>(null);
 const OpenedAppsContext = createContext<OpenedApps>({});
@@ -142,7 +141,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
         (preferTray ? trayButton(urn) : null) ??
         surviving ??
         (opener?.isConnected && !opener.closest('[hidden],[inert]') ? opener : null) ??
-        dockFocusTarget();
+        dockNavigationFocusTarget();
       target?.focus({ preventScroll: true });
       target?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
     });
@@ -175,7 +174,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     if (windowsEnabled) return;
     if (document.activeElement instanceof Element && document.activeElement.closest('.orbis-app-launcher,.orbis-app-tray,.app-split-picker'))
-      dockFocusTarget()?.focus({ preventScroll: true });
+      dockNavigationFocusTarget()?.focus({ preventScroll: true });
     dispatch({ type: 'hide' });
   }, [windowsEnabled]);
   const saveBounds = (urn: string, bounds: DesktopWindowBounds) => {
@@ -195,6 +194,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     const inner = wrapper?.firstElementChild;
     if (!button || !dock || !primary || !wrapper || !inner) return button?.getBoundingClientRect();
     const box = button.getBoundingClientRect();
+    if (dock.hasAttribute('data-scroll-folding')) return box;
     const gap = Number.parseFloat(getComputedStyle(dock).columnGap) || 12;
     const leftSpace = [...dock.querySelectorAll<HTMLElement>(':scope > .desktop-dock-companion[data-side="left"]')].reduce(
       (sum, element) =>
@@ -237,7 +237,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   };
   const minimizedApps = useMemo(
     () => (
-      <DockCompanion visible={desktop && minimized.length > 0} side="right" retainOnExit>
+      <DockCompanion visible={desktop && minimized.length > 0} side="right" retainOnExit expandedWidth="var(--orbis-app-tray-width, max-content)">
         <fieldset ref={setTray} className="orbis-app-tray" aria-label="Minimized apps" title="Minimized apps — scroll horizontally for more">
           <ul className="app-tray-list">
             {minimized.map(({ request, status }) => (
@@ -255,7 +255,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                   onClick={() => {
                     openApp(request);
                     if (preferences.appLaunch.mode === 'tab' || preferences.appLaunch.apps[request.urn]?.mode === 'tab')
-                      dockFocusTarget()?.focus({ preventScroll: true });
+                      dockNavigationFocusTarget()?.focus({ preventScroll: true });
                   }}
                   onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
                 >
@@ -268,7 +268,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                   onClick={() => {
                     const index = minimized.findIndex((item) => item.request.urn === request.urn);
                     const next = minimized[index + 1] ?? minimized[index - 1];
-                    const target = next ? trayButton(next.request.urn) : dockFocusTarget();
+                    const target = next ? trayButton(next.request.urn) : dockNavigationFocusTarget();
                     dispatch({ type: 'remove', urn: request.urn });
                     origins.current.delete(request.urn);
                     openers.current.delete(request.urn);

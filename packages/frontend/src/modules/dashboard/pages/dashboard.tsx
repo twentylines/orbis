@@ -11,9 +11,8 @@ import { useWallpaperText } from '@/desktop/wallpaper-text';
 import { AppTabIndicator } from '@/desktop/app-tab-indicator';
 import { useAppContext } from '@/context/app-context';
 import { useTasks, taskIsActive, taskLabels, taskStates } from '@/desktop/tasks';
-import { IconApps, IconArrowRight, IconGripVertical, IconX, IconSettings, IconDownload, IconPencil, IconCheck } from '@tabler/icons-react';
+import { IconApps, IconGripVertical, IconX, IconSettings, IconDownload, IconPencil, IconCheck } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
-import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, lazy, Suspense } from 'react';
 import { Link } from 'react-router';
 import './dashboard.css';
@@ -31,6 +30,8 @@ const DashboardEditing = lazy(() => import('./dashboard-editing'));
 
 import { HomeSystemStatus } from '../components/home-system-status';
 import { SystemHealthAttention } from '../components/system-health-attention';
+import { HomeGreeting } from './home-greeting';
+import './home-heading.css';
 
 const labels: Record<WidgetId, string> = {
   applications: 'Applications',
@@ -66,7 +67,6 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   const heading = useRef<HTMLHeadingElement>(null);
   const editorMenu = useRef<HTMLDetailsElement>(null);
   const headingText = useWallpaperText<HTMLHeadingElement>();
-  const summaryText = useWallpaperText<HTMLParagraphElement>();
   const setHeading = useCallback(
     (element: HTMLHeadingElement | null) => {
       heading.current = element;
@@ -216,7 +216,6 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   const [scrollApps, setScrollApps] = useState(false);
   const { preferences, update, syncState, workspaceCapabilities } = useDesktopPreferences();
   const { workspace } = preferences;
-  const longServerName = preferences.serverName.length > 16 || preferences.serverName.split(/\s+/).some((word) => word.length > 7);
   const apps = useQuery({ ...getInstalledAppsOptions(), refetchInterval: 15000 });
   const containers = useContainerTelemetry();
   const tasks = useTasks();
@@ -320,13 +319,17 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
     applications: (
       <section className="workspace-apps" aria-labelledby="workspace-apps-title">
         <div className="workspace-section-heading">
-          <div>
+          <div className="workspace-app-heading-text">
             <h2 id="workspace-apps-title">Applications</h2>
+            {apps.data ? (
+              <p className="workspace-app-counts">
+                <span>{installed.length} installed</span>
+                <span>{running} running</span>
+              </p>
+            ) : null}
           </div>
           <div className="workspace-home-app-actions">
-            <Link to="/apps">
-              View all <IconArrowRight size={18} aria-hidden="true" />
-            </Link>
+            <Link to="/apps">View all</Link>
           </div>
         </div>
         {apps.isError ? (
@@ -358,7 +361,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
               <h3>Get started</h3>
               <p>Download apps from the store</p>
               <Link to="/app-store" className="workspace-store-link">
-                Open Store <IconArrowRight size={18} aria-hidden="true" />
+                Open Store
               </Link>
             </div>
           </div>
@@ -465,9 +468,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
             <h2 id="workspace-operations-title">Recent operations</h2>
             <p>{activeTasks.length ? `${activeTasks.length} in progress` : 'Application activity'}</p>
           </div>
-          <Link to="/tasks">
-            View all <IconArrowRight size={18} aria-hidden="true" />
-          </Link>
+          <Link to="/tasks">View all</Link>
         </div>
         {tasks.isError ? (
           <p role="alert">Operation history is unavailable.</p>
@@ -601,20 +602,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
       data-app-view={layout.appView}
     >
       <div className="workspace-heading">
-        <div className="workspace-heading-copy">
-          <h1
-            ref={setHeading}
-            tabIndex={focusOnMount ? -1 : undefined}
-            data-long-name={longServerName}
-            title={preferences.serverName}
-            aria-label={preferences.serverName}
-          >
-            <WrapWords text={preferences.serverName} />
-          </h1>
-          <p className="workspace-subline" ref={summaryText}>
-            {apps.data ? `${installed.length} installed · ${running} running` : 'Loading applications'}
-          </p>
-        </div>
+        <HomeGreeting headingRef={setHeading} focusable={focusOnMount} />
         <div className="workspace-actions">
           {editing ? (
             <button type="button" className="workspace-reset-layout" onClick={resetLayout}>

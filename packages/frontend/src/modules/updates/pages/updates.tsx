@@ -9,7 +9,18 @@ import { InstalledVersions } from '@/components/installed-versions/installed-ver
 import { OrbisReleaseNotes } from './orbis-release-notes';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
 import { useAppContext } from '@/context/app-context';
-import { IconAlertTriangle, IconArrowRight, IconBrandGithub, IconPackage, IconRefresh, IconServerCog, IconSettings } from '@tabler/icons-react';
+import { DisclosureIndicator } from '@/components/ui/DisclosureIndicator/DisclosureIndicator';
+import {
+  IconAlertTriangle,
+  IconBrandRedhat,
+  IconBrandUbuntu,
+  IconDeviceDesktopCog,
+  IconPackage,
+  IconPower,
+  IconRefresh,
+  IconServerCog,
+  IconSettings,
+} from '@tabler/icons-react';
 import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -18,7 +29,7 @@ import './updates.css';
 import { useCluster } from '@/desktop/cluster';
 import { ClusterUpdates } from '@/desktop/cluster-updates';
 import { UpdateAllButton } from '@/modules/app/components/update-all-button/update-all-button';
-import { UpdateTerminal } from './update-terminal';
+import { SystemUpdateProgress, UpdateRequestError } from './system-update-progress';
 import { compatibilityReviewTime, useCompatibilityResult } from './orbis-downgrade';
 import {
   rememberAcceptedCoreUpdate,
@@ -33,6 +44,8 @@ import { useReviewExpired } from '@/desktop/use-review-expired';
 import { orbisReleaseChannelsOptions, releaseChannelErrorMessage } from '@/desktop/release-channels';
 import { formatOrbisVersion } from '@/desktop/orbis-version';
 import { SentinelStatus } from './sentinel-status';
+import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
+import debianLogo from './debian-open-use.svg';
 
 type HostJob = {
   id: string;
@@ -114,6 +127,29 @@ type HostPackageJob = {
 };
 type HostPackageJobStatus = { available: boolean; job: HostPackageJob | null };
 
+const distributions = [
+  { name: /^ubuntu(?:\s|$)/i, brand: 'ubuntu' },
+  { name: /^debian(?:\s|$)/i, brand: 'debian' },
+  { name: /^red hat enterprise linux(?:\s|$)/i, brand: 'redhat' },
+] as const;
+
+function OperatingSystemArtwork({ name }: { name: string }) {
+  const brand = distributions.find((distribution) => distribution.name.test(name))?.brand ?? 'system';
+  return (
+    <div className="desktop-updates-artwork" data-brand={brand} aria-hidden="true">
+      {brand === 'ubuntu' ? (
+        <IconBrandUbuntu stroke={1.75} />
+      ) : brand === 'debian' ? (
+        <img src={debianLogo} width={87} height={108} alt="" />
+      ) : brand === 'redhat' ? (
+        <IconBrandRedhat stroke={1.75} />
+      ) : (
+        <IconDeviceDesktopCog stroke={1.55} />
+      )}
+    </div>
+  );
+}
+
 function packageSize(bytes: number | null): string {
   if (bytes === null) return 'Download size unavailable';
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(bytes / 1_000_000)} MB download`;
@@ -165,7 +201,7 @@ export default function Updates() {
 
 function LocalUpdates() {
   const tabsId = useId();
-  const [section, setSection] = useState<'orbis' | 'apps' | 'system'>('orbis');
+  const [section, setSection] = useState<'system' | 'apps'>('system');
   const [coreReview, setCoreReview] = useState<ReleaseCompatibility | null>(null);
   const coreReviewIntent = useRef(0);
   const coreUpdateRequested = useRef(false);
@@ -280,6 +316,7 @@ function LocalUpdates() {
       ({ app, metadata }) => Number(app.version) < Number(metadata.latestVersion) && app.ignoredVersion !== metadata.latestVersion,
     ) ?? [];
   const latest = channels.isError || releases.isError ? undefined : releases.data?.[0];
+  const orbisUpdateAvailable = !build.isError && newerOrbisRelease(latest, build.data?.version);
   const host = useQuery({
     queryKey: ['orbis-host-update-status'],
     queryFn: ({ signal }) => hostRequest<HostStatus>('status', undefined, signal),
@@ -407,7 +444,7 @@ function LocalUpdates() {
     mutationFn: (jobId: string) => hostRequest<{ jobId: string; state: string }>('recover', { jobId }),
     onSuccess: () => void host.refetch(),
   });
-  const job = host.data?.job;
+  const job = user.operator ? host.data?.job : undefined;
   const corePhase = (
     {
       preparing: 'Checking the release and backup storage…',
@@ -423,8 +460,9 @@ function LocalUpdates() {
   const jobBusy = job?.state === 'running' || job?.state === 'recovering';
   const canPlan = Boolean(
     build.data &&
-      newerOrbisRelease(latest, build.data.version) &&
+      orbisUpdateAvailable &&
       user?.operator === true &&
+      !host.isError &&
       host.data?.available &&
       host.data.enrolled &&
       host.data.imageMatches &&
@@ -438,7 +476,8 @@ function LocalUpdates() {
     `${item.name} ${packageSources(item.sources)}`.toLocaleLowerCase().includes(packageSearch.trim().toLocaleLowerCase()),
   );
   const visiblePackages = showAllPackages ? matchingPackages : matchingPackages.slice(0, 12);
-  const packageJobState = packageJob.data?.job?.state;
+  const latestPackageJob = user.operator ? packageJob.data?.job : null;
+  const packageJobState = latestPackageJob?.state;
   const packageJobBusy = packageJobState === 'queued' || packageJobState === 'running';
   const failedRefresh = packageJob.data?.job?.kind === 'refresh' && (packageJobState === 'failed' || packageJobState === 'interrupted');
   const packageJobNeedsInspection = !failedRefresh && (packageJobState === 'failed' || packageJobState === 'interrupted');
@@ -451,6 +490,9 @@ function LocalUpdates() {
     packageJobNeedsInspection ||
     jobBusy ||
     job?.state === 'interrupted';
+  const packageStatusUnavailable = user.operator && (systemPackages.isError || packageJob.isError || systemPackages.data?.available === false);
+  const packageInventory = user.operator && !systemPackages.isError && systemPackages.data?.available ? systemPackages.data : undefined;
+  const osName = packageInventory?.operatingSystem?.trim() ?? '';
   const refreshSupported = host.data?.capabilities?.includes('packages.refresh.v1') === true;
   const packageUpdateBlocked =
     packageControlsBlocked ||
@@ -490,17 +532,11 @@ function LocalUpdates() {
   return (
     <div className="desktop-updates">
       <div className="desktop-updates-toolbar">
-        <SelectionGroup className="desktop-updates-tabs" role="tablist" aria-label="Update categories">
+        <SelectionGroup className="desktop-updates-tabs" role="tablist" aria-label="Update views">
           {(
             [
-              {
-                key: 'orbis',
-                label: 'Orbis',
-                Icon: IconRefresh,
-                count: build.data && latest ? Number(Boolean(newerOrbisRelease(latest, build.data.version))) : null,
-              },
-              { key: 'apps', label: 'Apps', Icon: IconPackage, count: apps.data ? available.length : null },
-              { key: 'system', label: 'System', Icon: IconServerCog, count: systemPackages.data?.packageCount ?? null },
+              { key: 'system', label: 'System', Icon: IconServerCog, count: null },
+              { key: 'apps', label: 'Applications', Icon: IconPackage, count: apps.isError ? null : apps.data ? available.length : null },
             ] as const
           ).map(({ key, label, Icon, count }, index, tabs) => (
             <button
@@ -510,20 +546,18 @@ function LocalUpdates() {
               id={`${tabsId}-${key}-tab`}
               aria-controls={`${tabsId}-${key}-panel`}
               aria-selected={section === key}
-              aria-label={count !== null ? `${label}, ${count} available updates` : label}
+              aria-label={count ? `${label}, ${count} available updates` : undefined}
               tabIndex={section === key ? 0 : -1}
               onClick={() => setSection(key)}
               onKeyDown={(event) => {
                 const nextIndex =
-                  event.key === 'ArrowRight'
-                    ? (index + 1) % tabs.length
-                    : event.key === 'ArrowLeft'
-                      ? (index + tabs.length - 1) % tabs.length
-                      : event.key === 'Home'
-                        ? 0
-                        : event.key === 'End'
-                          ? tabs.length - 1
-                          : null;
+                  event.key === 'Home'
+                    ? 0
+                    : event.key === 'End'
+                      ? tabs.length - 1
+                      : event.key === 'ArrowRight' || event.key === 'ArrowLeft'
+                        ? 1 - index
+                        : null;
                 if (nextIndex === null) return;
                 event.preventDefault();
                 const next = tabs[nextIndex];
@@ -534,7 +568,7 @@ function LocalUpdates() {
             >
               <Icon size={18} aria-hidden="true" />
               <span>{label}</span>
-              {count !== null && count > 0 ? (
+              {count ? (
                 <span className="desktop-updates-tab-count" aria-hidden="true">
                   {count}
                 </span>
@@ -542,242 +576,304 @@ function LocalUpdates() {
             </button>
           ))}
         </SelectionGroup>
-        <Link className="desktop-updates-settings" to="/settings?tab=updates" aria-label="Update settings" title="Update settings">
-          <IconSettings size={20} aria-hidden="true" />
+        <Link className="desktop-update-action secondary desktop-updates-settings" to="/settings?tab=updates">
+          <IconSettings size={18} aria-hidden="true" /> Update settings
         </Link>
       </div>
-      <div className="desktop-updates-grid">
+      <div className="desktop-update-views">
         <section
-          className="desktop-updates-card"
+          className="desktop-updates-card desktop-updates-apps"
           id={`${tabsId}-apps-panel`}
           role="tabpanel"
           aria-labelledby={`${tabsId}-apps-tab`}
           hidden={section !== 'apps'}
         >
           <div className="desktop-updates-card-head">
-            <IconPackage size={22} aria-hidden="true" />
-            <div>
-              <h2 id="application-updates-title">Applications</h2>
-              <p>Updates from your configured app stores</p>
-            </div>
+            <span className="desktop-updates-card-icon">
+              <IconPackage size={20} aria-hidden="true" />
+            </span>
+            <h2>Applications</h2>
           </div>
-          {available.length > 0 && user.operator ? (
+          {!apps.isError && available.length > 0 && user.operator ? (
             <div className="desktop-update-actions">
               <UpdateAllButton />
             </div>
           ) : null}
           {apps.isPending ? <p>Checking installed applications…</p> : null}
           {apps.isError ? <p role="alert">Application updates could not be checked. Try again from Applications.</p> : null}
-          {apps.data && available.length === 0 ? <p>No app updates in the cached catalogue.</p> : null}
-          {available.map(({ app, info, metadata }) => {
-            const [appId, storeId] = info.urn.split(':');
-            return (
-              <Link className="desktop-update-app" to={`/apps/${storeId}/${appId}`} key={info.urn}>
-                <AppLogo urn={info.urn} size={42} alt="" />
-                <span>
-                  <strong title={info.name}>{info.name}</strong>
-                  <small>
-                    Version {app.version} → {metadata.latestVersion}
-                  </small>
-                </span>
-                <IconArrowRight size={18} aria-hidden="true" />
-              </Link>
-            );
-          })}
-          <Link className="desktop-update-link" to="/apps">
-            Manage applications <IconArrowRight size={16} aria-hidden="true" />
+          {!apps.isError && apps.data && available.length === 0 ? <p>No application updates found.</p> : null}
+          <div className="desktop-updates-app-list">
+            {!apps.isError &&
+              available.map(({ app, info, metadata }) => {
+                const [appId, storeId] = info.urn.split(':');
+                return (
+                  <Link className="desktop-update-app" to={`/apps/${storeId}/${appId}`} key={info.urn}>
+                    <AppLogo urn={info.urn} size={42} alt="" />
+                    <span>
+                      <strong title={info.name}>{info.name}</strong>
+                      <small>
+                        Version {app.version} → {metadata.latestVersion}
+                      </small>
+                    </span>
+                  </Link>
+                );
+              })}
+          </div>
+          <Link className="desktop-update-action secondary desktop-updates-app-link" to="/apps">
+            Manage applications
           </Link>
         </section>
 
-        <section
-          className="desktop-updates-card"
-          id={`${tabsId}-orbis-panel`}
+        <div
+          className="desktop-updates-grid"
+          id={`${tabsId}-system-panel`}
           role="tabpanel"
-          aria-labelledby={`${tabsId}-orbis-tab`}
-          hidden={section !== 'orbis'}
+          aria-labelledby={`${tabsId}-system-tab`}
+          hidden={section !== 'system'}
         >
-          <div className="desktop-updates-card-head desktop-orbis-release-head">
-            <IconBrandGithub size={22} aria-hidden="true" />
-            <div>
-              <h2 id="orbis-updates-title">Orbis</h2>
-            </div>
-          </div>
-          <Dialog
-            open={coreReview !== null}
-            onOpenChange={(open) => {
-              if (!open && !coreUpdatePending) setCoreReview(null);
-            }}
-          >
-            <DialogContent className="desktop-update-review-dialog" closeDisabled={coreUpdatePending} restoreFocusTo={coreReviewButton}>
-              <DialogHeader>
-                <DialogTitle>{coreReview?.crossesRuntipiBoundary ? 'Runtipi version changes' : 'Update Orbis?'}</DialogTitle>
-                <DialogDescription>
-                  {build.data?.version ? formatOrbisVersion(build.data.version) : 'Installed version'} →{' '}
-                  {coreReview?.tag ? formatOrbisVersion(coreReview.tag) : 'Selected release'}
-                </DialogDescription>
-              </DialogHeader>
-              {/* biome-ignore lint/a11y/noNoninteractiveTabindex: The update details scroll independently and need native keyboard access. */}
-              <section className="modal-body" tabIndex={0} aria-label="Update details">
-                {coreReview?.warning ? (
-                  <div className="desktop-update-risk" role="note">
-                    <strong>{coreReview.crossesRuntipiBoundary ? 'Downgrade boundary' : 'Host updater unavailable'}</strong>
-                    <p>{coreReview.warning}</p>
-                  </div>
-                ) : null}
-                {coreReview?.hostUpdateSupported ? (
-                  <ol className="desktop-update-process">
-                    <li>
-                      <strong>Verify</strong>
-                      <span>Check the published release, image, and available backup storage.</span>
-                    </li>
-                    <li>
-                      <strong>Back up and install</strong>
-                      <span>Create a verified recovery snapshot, then switch Orbis to {coreReview?.tag}.</span>
-                    </li>
-                    <li>
-                      <strong>Reconnect</strong>
-                      <span>Check server health and reconnect automatically. Restore the previous release if startup fails.</span>
-                    </li>
-                  </ol>
-                ) : null}
-              </section>
-              <DialogFooter className="desktop-update-plan-actions">
-                <button type="button" disabled={coreUpdatePending} onClick={() => setCoreReview(null)}>
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={!coreReview?.hostUpdateSupported || coreReview.crossesRuntipiBoundary || !canPlan || coreUpdatePending}
-                  onClick={() => {
-                    if (
-                      !coreReview?.hostUpdateSupported ||
-                      coreReview.crossesRuntipiBoundary ||
-                      coreUpdateRequested.current ||
-                      queryClient.isMutating({ mutationKey: coreUpdateKey, exact: true })
-                    )
-                      return;
-                    coreUpdateRequested.current = true;
-                    const tag = coreReview.tag;
-                    setCoreReview(null);
-                    setCoreRequestStage('checking');
-                    updateCore.mutate(tag);
-                  }}
-                >
-                  {coreUpdatePending ? (coreRequestStage === 'checking' ? 'Checking update…' : 'Starting update…') : 'Update Orbis'}
-                </button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          {lastCoreReview?.status === 'error' ? <p role="alert">{lastCoreReview.error?.message}</p> : null}
-          {latest ? (
-            <section className="desktop-orbis-update-target" aria-label="Available Orbis release">
-              <div>
-                <p>{newerOrbisRelease(latest, build.data?.version) ? 'Update available' : 'Latest release'}</p>
-                <h3>{formatOrbisVersion(latest.tag)}</h3>
-                <span>{channels.data?.current === 'nightly' ? 'Nightly channel' : 'Stable channel'}</span>
+          <section className="desktop-updates-card" aria-labelledby={`${tabsId}-orbis-title`}>
+            <div className="desktop-updates-product">
+              <div className="desktop-updates-card-head desktop-updates-product-head">
+                <h2 id={`${tabsId}-orbis-title`}>Orbis</h2>
               </div>
-              {newerOrbisRelease(latest, build.data?.version) ? (
-                <button
-                  className="desktop-update-action"
-                  type="button"
-                  disabled={!canPlan || checkingCore || coreUpdatePending}
-                  onClick={(event) => {
-                    updateCore.reset();
-                    coreReviewButton.current = event.currentTarget;
-                    reviewCore.mutate(latest.tag);
+              <div className="desktop-updates-product-content">
+                <Dialog
+                  open={coreReview !== null}
+                  onOpenChange={(open) => {
+                    if (!open && !coreUpdatePending) setCoreReview(null);
                   }}
                 >
-                  {checkingCore ? 'Preparing update…' : coreUpdatePending ? 'Starting update…' : 'Update'}
-                </button>
-              ) : null}
-            </section>
-          ) : null}
-          <div className="desktop-orbis-release-layout">
-            <div className="desktop-orbis-release-notes">
-              <div className="desktop-orbis-release-state" aria-live="polite" aria-busy={channels.isFetching || releases.isFetching}>
-                {channels.isPending ? <output>Checking the selected release channel…</output> : null}
-                {channels.isError ? (
-                  <>
-                    <p role="alert">
-                      {releaseChannelErrorMessage(channels.error, 'The selected release channel could not be checked.')} Latest release information is
-                      hidden until status recovers.
-                    </p>
-                    <button
-                      className="desktop-update-action secondary desktop-orbis-release-retry"
-                      type="button"
-                      onClick={() => void channels.refetch()}
-                      disabled={channels.isFetching}
-                    >
-                      {channels.isFetching ? 'Checking channel…' : 'Retry'}
-                    </button>
-                  </>
-                ) : null}
-                {channels.data && !channels.isError && releases.isPending ? <output>Checking published Orbis releases…</output> : null}
-                {channels.data && !channels.isError && releases.isError ? (
-                  <>
-                    <p role="alert">
-                      {orbisReleaseErrorMessage(
-                        releases.error,
-                        'Published Orbis releases could not be checked. No current or latest release is shown.',
-                      )}
-                    </p>
-                    <button
-                      className="desktop-update-action secondary desktop-orbis-release-retry"
-                      type="button"
-                      onClick={() => void releases.refetch()}
-                      disabled={releases.isFetching}
-                    >
-                      {releases.isFetching ? 'Checking releases…' : 'Retry'}
-                    </button>
-                  </>
-                ) : null}
-                {channels.data && !channels.isError && releases.data?.length === 0 ? <p>No published Orbis releases.</p> : null}
-                {latest ? (
-                  <div className="desktop-update-release">
-                    {latest.imageManifestUrl ? null : <p>No Orbis image manifest is attached to this release.</p>}
-                    {latest.priority === 'critical' && newerOrbisRelease(latest, build.data?.version) ? (
-                      <div className="desktop-critical-update" role="note" aria-label="Critical update">
-                        <IconAlertTriangle size={24} aria-hidden="true" />
-                        <div>
-                          <strong>Critical update</strong>
-                          <p>This release includes security fixes that need prompt attention. Review the changelog and install the update.</p>
+                  <DialogContent className="desktop-update-review-dialog" closeDisabled={coreUpdatePending} restoreFocusTo={coreReviewButton}>
+                    <DialogHeader>
+                      <DialogTitle>{coreReview?.crossesRuntipiBoundary ? 'Runtipi version changes' : 'Update Orbis?'}</DialogTitle>
+                      <DialogDescription>
+                        {build.data?.version ? formatOrbisVersion(build.data.version) : 'Installed version'} →{' '}
+                        {coreReview?.tag ? formatOrbisVersion(coreReview.tag) : 'Selected release'}
+                      </DialogDescription>
+                    </DialogHeader>
+                    {/* biome-ignore lint/a11y/noNoninteractiveTabindex: The update details scroll independently and need native keyboard access. */}
+                    <section className="modal-body" tabIndex={0} aria-label="Update details">
+                      {coreReview?.warning ? (
+                        <div className="desktop-update-risk" role="note">
+                          <strong>{coreReview.crossesRuntipiBoundary ? 'Downgrade boundary' : 'Host updater unavailable'}</strong>
+                          <p>{coreReview.warning}</p>
                         </div>
-                      </div>
+                      ) : null}
+                      {coreReview?.hostUpdateSupported ? (
+                        <ol className="desktop-update-process">
+                          <li>
+                            <strong>Verify</strong>
+                            <span>Check the published release, image, and available backup storage.</span>
+                          </li>
+                          <li>
+                            <strong>Back up and install</strong>
+                            <span>Create a verified recovery snapshot, then switch Orbis to {coreReview?.tag}.</span>
+                          </li>
+                          <li>
+                            <strong>Reconnect</strong>
+                            <span>Check server health and reconnect automatically. Restore the previous release if startup fails.</span>
+                          </li>
+                        </ol>
+                      ) : null}
+                    </section>
+                    <DialogFooter className="desktop-update-plan-actions">
+                      <button type="button" disabled={coreUpdatePending} onClick={() => setCoreReview(null)}>
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!coreReview?.hostUpdateSupported || coreReview.crossesRuntipiBoundary || !canPlan || coreUpdatePending}
+                        onClick={() => {
+                          if (
+                            !coreReview?.hostUpdateSupported ||
+                            coreReview.crossesRuntipiBoundary ||
+                            coreUpdateRequested.current ||
+                            queryClient.isMutating({ mutationKey: coreUpdateKey, exact: true })
+                          )
+                            return;
+                          coreUpdateRequested.current = true;
+                          const tag = coreReview.tag;
+                          setCoreReview(null);
+                          setCoreRequestStage('checking');
+                          updateCore.mutate(tag);
+                        }}
+                      >
+                        {coreUpdatePending ? (coreRequestStage === 'checking' ? 'Checking update…' : 'Starting update…') : 'Update Orbis'}
+                      </button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+                {lastCoreReview?.status === 'error' ? <p role="alert">{lastCoreReview.error?.message}</p> : null}
+                <div className="desktop-update-summary">
+                  <div aria-live="polite">
+                    {build.data && !build.isError ? (
+                      <p>
+                        Installed <strong>{formatOrbisVersion(build.data.version)}</strong>
+                      </p>
                     ) : null}
-                    <OrbisReleaseNotes latest={latest} installed={build.data?.version} channel={channels.data?.current} />
-                    <a href={latest.url} target="_blank" rel="noreferrer">
-                      View release on GitHub <IconArrowRight size={16} aria-hidden="true" />
-                    </a>
+                    {build.isPending ? <output>Reading installed version…</output> : null}
+                    {build.isError ? <p role="alert">The installed version could not be loaded.</p> : null}
+                    {latest ? (
+                      <p>
+                        {orbisUpdateAvailable ? (
+                          <>
+                            Update available <strong>{formatOrbisVersion(latest.tag)}</strong>
+                          </>
+                        ) : build.data?.version === latest.tag && !build.isError ? (
+                          'On the latest release'
+                        ) : (
+                          <>
+                            Latest release <strong>{formatOrbisVersion(latest.tag)}</strong>
+                          </>
+                        )}
+                        {channels.data ? <> · {channels.data.current === 'nightly' ? 'Nightly' : 'Stable'}</> : null}
+                      </p>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
-            </div>
-            <aside className="desktop-orbis-release-summary" aria-label="Installed versions">
-              <h3>Installed on this server</h3>
-              <div className="desktop-update-build">
-                {build.isPending ? 'Reading installed Orbis build…' : null}
-                {build.isError ? (
-                  <div role="alert">
-                    <p>The installed version could not be loaded.</p>
+                  {latest && orbisUpdateAvailable ? (
+                    <button
+                      className="desktop-update-action desktop-system-update-primary"
+                      type="button"
+                      disabled={!canPlan || checkingCore || coreUpdatePending}
+                      onClick={(event) => {
+                        updateCore.reset();
+                        coreReviewButton.current = event.currentTarget;
+                        reviewCore.mutate(latest.tag);
+                      }}
+                    >
+                      {checkingCore ? 'Preparing update…' : coreUpdatePending ? 'Starting update…' : 'Update Orbis'}
+                    </button>
+                  ) : null}
+                  {build.isError ? (
                     <button
                       type="button"
                       className="desktop-update-action secondary"
                       disabled={build.isFetching}
                       onClick={() => void build.refetch()}
                     >
-                      {build.isFetching ? 'Loading installed version…' : 'Reload installed version'}
+                      <IconRefresh size={17} aria-hidden="true" />
+                      {build.isFetching ? 'Loading version…' : 'Retry version check'}
                     </button>
-                  </div>
+                  ) : null}
+                </div>
+                <div className="desktop-orbis-release-state" aria-live="polite" aria-busy={channels.isFetching || releases.isFetching}>
+                  {channels.isPending ? <output>Checking the selected release channel…</output> : null}
+                  {channels.isError ? (
+                    <>
+                      <p role="alert">
+                        {releaseChannelErrorMessage(channels.error, 'The selected release channel could not be checked.')} Latest release information
+                        is hidden until status recovers.
+                      </p>
+                      <button
+                        className="desktop-update-action secondary desktop-orbis-release-retry"
+                        type="button"
+                        onClick={() => void channels.refetch()}
+                        disabled={channels.isFetching}
+                      >
+                        {channels.isFetching ? 'Checking channel…' : 'Retry'}
+                      </button>
+                    </>
+                  ) : null}
+                  {channels.data && !channels.isError && releases.isPending ? <output>Checking published Orbis releases…</output> : null}
+                  {channels.data && !channels.isError && releases.isError ? (
+                    <>
+                      <p role="alert">
+                        {orbisReleaseErrorMessage(
+                          releases.error,
+                          'Published Orbis releases could not be checked. No current or latest release is shown.',
+                        )}
+                      </p>
+                      <button
+                        className="desktop-update-action secondary desktop-orbis-release-retry"
+                        type="button"
+                        onClick={() => void releases.refetch()}
+                        disabled={releases.isFetching}
+                      >
+                        {releases.isFetching ? 'Checking releases…' : 'Retry'}
+                      </button>
+                    </>
+                  ) : null}
+                  {channels.data && !channels.isError && releases.data?.length === 0 ? <p>No published Orbis releases.</p> : null}
+                </div>
+              </div>
+              <div className="desktop-updates-artwork" data-brand="orbis" aria-hidden="true">
+                <OrbisLogo size={176} plain />
+              </div>
+            </div>
+            {latest?.priority === 'critical' && orbisUpdateAvailable ? (
+              <div className="desktop-critical-update" role="note" aria-label="Critical update">
+                <IconAlertTriangle size={22} aria-hidden="true" />
+                <div>
+                  <strong>Critical update</strong>
+                  <p>This release includes security fixes. Review the release notes and install the update.</p>
+                </div>
+              </div>
+            ) : null}
+            {user?.operator !== true ? <p className="desktop-update-note">Sign in with an administrator account to update Orbis.</p> : null}
+            {user?.operator === true && host.isPending ? <p className="desktop-update-note">Checking the local host service…</p> : null}
+            {host.isError ? (
+              <output className="desktop-update-note">{restarting ? watch.message : 'Waiting for the update service to respond.'}</output>
+            ) : null}
+            {host.data && !host.data.available ? (
+              <p className="desktop-update-note">
+                {restarting ? watch.message : host.data.reason || 'Host service disconnected. Connect it before updating Orbis.'}
+              </p>
+            ) : null}
+            {host.data?.available && !host.data.enrolled ? (
+              <p className="desktop-update-note">This installation is not enrolled for host updates.</p>
+            ) : null}
+            {host.data?.available && host.data.enrolled && !host.data.imageMatches ? (
+              <p className="desktop-update-note" role="alert">
+                The installed Orbis image differs from the one registered with the host service. Resolve the mismatch before updating.
+              </p>
+            ) : null}
+            {job && job.state !== 'complete' ? (
+              <section className={`desktop-update-job ${jobBusy ? 'is-busy' : ''}`} aria-label="Orbis update status" aria-live="polite">
+                <strong>{job.state === 'running' ? 'Installing Orbis' : job.state === 'recovering' ? 'Recovering Orbis' : 'Last update'}</strong>
+                <span>{job.message || corePhase || (jobBusy ? 'The page will reload automatically when the server is ready.' : job.state)}</span>
+                {jobBusy && job.download ? <UpdateDownloadProgress value={job.download} /> : null}
+                {job.state === 'interrupted' ? (
+                  <button type="button" disabled={recover.isPending} onClick={() => recover.mutate(job.id)}>
+                    {recover.isPending ? 'Starting recovery…' : 'Restore previous release'}
+                  </button>
                 ) : null}
+              </section>
+            ) : null}
+            {coreUpdatePending ? (
+              <output className="desktop-update-note" aria-live="polite">
+                {coreRequestStage === 'checking'
+                  ? 'Checking the release and backup storage…'
+                  : coreRequestStage === 'starting'
+                    ? 'Starting the update. The page will reload automatically when Orbis is ready.'
+                    : 'Preparing the update…'}
+              </output>
+            ) : null}
+            {lastCoreUpdate?.status === 'error' ? (
+              <p className="desktop-update-note" role="alert">
+                {lastCoreUpdate.error instanceof Error ? lastCoreUpdate.error.message : 'The update could not be started.'} Check the update status
+                before retrying.
+              </p>
+            ) : null}
+            {recover.isError ? (
+              <p className="desktop-update-note" role="alert">
+                {recover.error.message}
+              </p>
+            ) : null}
+            {build.data || job?.state === 'complete' ? (
+              <details className="desktop-system-update-details desktop-orbis-update-details">
+                <summary>
+                  <DisclosureIndicator size={17} />
+                  Installed build details
+                </summary>
                 {build.data ? (
-                  <>
+                  <div className="desktop-update-build">
                     <InstalledVersions
                       orbis={build.data.version}
                       runtipi={build.data.runtipiCompatibility || version.current}
                       channel={channels.isError ? 'unavailable' : (channels.data?.current ?? (channels.isPending ? 'loading' : 'unavailable'))}
                     />
                     <section className="desktop-update-build-details" aria-label="Build details">
-                      <h4>Build details</h4>
+                      <h3>Build details</h3>
                       {build.data.commit ? (
                         <div className="desktop-update-image">
                           <span>Commit</span>
@@ -793,417 +889,435 @@ function LocalUpdates() {
                         <span>Image digest unavailable.</span>
                       )}
                     </section>
-                  </>
+                  </div>
+                ) : null}
+                {job?.state === 'complete' ? (
+                  <section className="desktop-update-job" aria-label="Last Orbis update">
+                    <strong>Last update complete</strong>
+                    {job.message ? <span>{job.message}</span> : null}
+                  </section>
+                ) : null}
+              </details>
+            ) : null}
+          </section>
+
+          <section className="desktop-updates-card desktop-updates-host" aria-labelledby={`${tabsId}-os-title`}>
+            <div className="desktop-updates-product">
+              <div className="desktop-updates-card-head desktop-updates-product-head">
+                <h2 id={`${tabsId}-os-title`}>Operating system</h2>
+              </div>
+              <div className="desktop-updates-product-content">
+                {user.operator && !packageStatusUnavailable && systemPackages.data?.available ? (
+                  <div className="desktop-update-summary">
+                    <div aria-live="polite">
+                      <p>
+                        <strong>
+                          {systemPackages.data.packageCount
+                            ? `${systemPackages.data.packageCount} update${systemPackages.data.packageCount === 1 ? '' : 's'} available`
+                            : 'No updates found'}
+                        </strong>
+                      </p>
+                      {osName ? <p>{osName}</p> : null}
+                      {packageInventory?.checkedAt ? (
+                        <p className="desktop-host-package-times">
+                          Last checked <time dateTime={packageInventory.checkedAt}>{new Date(packageInventory.checkedAt).toLocaleString()}</time>
+                        </p>
+                      ) : null}
+                      {packageRestartRequired(systemPackages.data, restart) ? <p>Restart required</p> : null}
+                    </div>
+                  </div>
+                ) : null}
+                {user.operator ? (
+                  <div className="desktop-update-actions desktop-host-update-actions">
+                    {(systemPackages.data?.packageCount ?? 0) > 0 ? (
+                      <button
+                        type="button"
+                        className="desktop-update-action desktop-system-update-primary"
+                        aria-describedby={packageStatusUnavailable ? undefined : `${tabsId}-package-update-effects`}
+                        disabled={
+                          selectedPackages.length === 0 ||
+                          packageUpdateBlocked ||
+                          reviewRestart.isPending ||
+                          applyRestart.isPending ||
+                          coreWatchIsActive(watch)
+                        }
+                        onClick={() => installPackages.mutate([...selectedPackages])}
+                      >
+                        {installPackages.isPending
+                          ? packageRequestStage === 'checking'
+                            ? 'Checking updates…'
+                            : 'Starting update…'
+                          : (systemPackages.data?.packageCount ?? 0) > packageUpdateLimit
+                            ? `Update ${selectedPackages.length} packages`
+                            : 'Update system'}
+                      </button>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      className="desktop-update-action desktop-update-check"
+                      aria-describedby={missingHostFeatures.length ? `${tabsId}-host-help` : undefined}
+                      disabled={
+                        !refreshSupported ||
+                        host.isError ||
+                        !host.data?.enrolled ||
+                        !host.data.imageMatches ||
+                        host.data.coreHealth !== 'healthy' ||
+                        host.data.coreState !== 'running' ||
+                        packageControlsBlocked ||
+                        installPackages.isPending ||
+                        reviewRestart.isPending ||
+                        applyRestart.isPending ||
+                        coreWatchIsActive(watch)
+                      }
+                      onClick={(event) => {
+                        systemActionFocus.current =
+                          document.activeElement === event.currentTarget ? { control: event.currentTarget, kind: 'refresh' } : null;
+                        refreshPackages.mutate();
+                      }}
+                    >
+                      <IconRefresh size={17} aria-hidden="true" />
+                      <span className="desktop-update-check-label">
+                        <span className="desktop-update-check-reserve" aria-hidden="true">
+                          Check for updates
+                        </span>
+                        <span>
+                          {refreshPackages.isPending || (packageJobBusy && packageJob.data?.job?.kind === 'refresh')
+                            ? 'Checking…'
+                            : 'Check for updates'}
+                        </span>
+                      </span>
+                    </button>
+                    {packageRestartRequired(systemPackages.data, restart) ? (
+                      <button
+                        type="button"
+                        className="desktop-update-action"
+                        aria-describedby={missingHostFeatures.length ? `${tabsId}-host-help` : undefined}
+                        disabled={
+                          !restart?.available ||
+                          restartError ||
+                          reviewRestart.isPending ||
+                          applyRestart.isPending ||
+                          restart.job?.state === 'restarting' ||
+                          packageControlsBlocked ||
+                          coreWatchIsActive(watch)
+                        }
+                        onClick={(event) => {
+                          systemActionFocus.current =
+                            document.activeElement === event.currentTarget ? { control: event.currentTarget, kind: 'restart' } : null;
+                          restartReviewButton.current = event.currentTarget;
+                          reviewRestart.mutate();
+                        }}
+                      >
+                        <IconPower size={17} aria-hidden="true" />
+                        {reviewRestart.isPending ? 'Checking…' : 'Restart'}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+                {user.operator && !packageStatusUnavailable && systemPackages.data?.packageCount ? (
+                  <p className="desktop-update-note" id={`${tabsId}-package-update-effects`}>
+                    {selectedPackages.length} selected
+                    {systemPackages.data.packageCount > packageUpdateLimit ? ` · Up to ${packageUpdateLimit} per update` : ''}. Services may restart.
+                    The server will not reboot automatically. Package changes have no automatic rollback.
+                  </p>
                 ) : null}
               </div>
-              <SentinelStatus active={visible && section === 'orbis'} />
-            </aside>
-          </div>
-          {user?.operator !== true ? <p className="desktop-update-note">Sign in with an administrator account to update Orbis.</p> : null}
-          {user?.operator === true && host.isPending ? <p className="desktop-update-note">Checking the local host service…</p> : null}
-          {host.isError ? (
-            <output className="desktop-update-note">{restarting ? watch.message : 'Waiting for the update service to respond.'}</output>
-          ) : null}
-          {host.data && !host.data.available ? (
-            <p className="desktop-update-note">
-              {restarting ? watch.message : host.data.reason || 'Host service disconnected. Connect it before updating Orbis.'}
-            </p>
-          ) : null}
-          {host.data?.available && !host.data.enrolled ? (
-            <p className="desktop-update-note">This installation is not enrolled for host updates.</p>
-          ) : null}
-          {host.data?.available && host.data.enrolled && !host.data.imageMatches ? (
-            <p className="desktop-update-note" role="alert">
-              The running core does not match its enrolled image. Inspect the host before updating.
-            </p>
-          ) : null}
-          {latest && build.data?.version === latest.tag ? (
-            <p className="desktop-update-note">This server is on the latest published Orbis release.</p>
-          ) : null}
-          {job ? (
-            <section className={`desktop-update-job ${jobBusy ? 'is-busy' : ''}`} aria-label="Orbis update status" aria-live="polite">
-              <strong>{job.state === 'running' ? 'Installing Orbis' : job.state === 'recovering' ? 'Recovering Orbis' : 'Last update'}</strong>
-              <span>{job.message || corePhase || (jobBusy ? 'The page will reload automatically when the server is ready.' : job.state)}</span>
-              {jobBusy && job.download ? <UpdateDownloadProgress value={job.download} /> : null}
-              {job.state === 'interrupted' ? (
-                <button type="button" disabled={recover.isPending} onClick={() => recover.mutate(job.id)}>
-                  {recover.isPending ? 'Starting recovery…' : 'Restore previous release'}
-                </button>
-              ) : null}
-            </section>
-          ) : null}
-          {coreUpdatePending ? (
-            <output className="desktop-update-note" aria-live="polite">
-              {coreRequestStage === 'checking'
-                ? 'Checking the release and backup storage…'
-                : coreRequestStage === 'starting'
-                  ? 'Starting the update. The page will reload automatically when Orbis is ready.'
-                  : 'Preparing the update…'}
-            </output>
-          ) : null}
-          {lastCoreUpdate?.status === 'error' ? (
-            <p className="desktop-update-note" role="alert">
-              {lastCoreUpdate.error instanceof Error ? lastCoreUpdate.error.message : 'The update could not be started.'} Check the update status
-              before retrying.
-            </p>
-          ) : null}
-          {recover.isError ? (
-            <p className="desktop-update-note" role="alert">
-              {recover.error.message}
-            </p>
-          ) : null}
-        </section>
-
-        <section
-          className="desktop-updates-card desktop-updates-host"
-          id={`${tabsId}-system-panel`}
-          role="tabpanel"
-          aria-labelledby={`${tabsId}-system-tab`}
-          hidden={section !== 'system'}
-        >
-          <div className="desktop-updates-card-head">
-            <IconServerCog size={22} aria-hidden="true" />
-            <div>
-              <h2 id="host-updates-title">System updates</h2>
-              <p>Review package updates, installation progress and restart status.</p>
+              <OperatingSystemArtwork name={osName} />
             </div>
-            {user.operator ? (
-              <div className="desktop-update-actions desktop-host-update-actions">
-                <button
-                  type="button"
-                  className="desktop-update-action desktop-update-check"
-                  aria-describedby={missingHostFeatures.length ? `${tabsId}-host-help` : undefined}
-                  disabled={
-                    !refreshSupported ||
-                    !host.data?.enrolled ||
-                    !host.data.imageMatches ||
-                    host.data.coreHealth !== 'healthy' ||
-                    host.data.coreState !== 'running' ||
-                    packageControlsBlocked ||
-                    installPackages.isPending ||
-                    reviewRestart.isPending ||
-                    applyRestart.isPending ||
-                    coreWatchIsActive(watch)
-                  }
-                  onClick={(event) => {
-                    systemActionFocus.current =
-                      document.activeElement === event.currentTarget ? { control: event.currentTarget, kind: 'refresh' } : null;
-                    refreshPackages.mutate();
-                  }}
-                >
-                  <span className="desktop-update-check-reserve" aria-hidden="true">
-                    Check for updates
-                  </span>
-                  <span>
-                    {refreshPackages.isPending || (packageJobBusy && packageJob.data?.job?.kind === 'refresh') ? 'Checking…' : 'Check for updates'}
-                  </span>
-                </button>
-                {packageRestartRequired(systemPackages.data, restart) ? (
+            {refreshPackages.isError ? <UpdateRequestError error={refreshPackages.error} /> : null}
+            {installPackages.isError ? <UpdateRequestError error={installPackages.error} /> : null}
+            {user.operator && restart?.available === false && !missingHostFeatures.length && !packageStatusUnavailable ? (
+              <p className="desktop-update-note">{restart.reason}</p>
+            ) : null}
+            {restartError && !packageStatusUnavailable ? <p role="alert">Restart status could not be checked. Reconnecting to the server.</p> : null}
+            {restart?.job?.state === 'failed' ? <p role="alert">{restart.job.message}</p> : null}
+            {reviewRestart.isError || applyRestart.isError ? (
+              <p role="alert">Restart could not be started. Check the server status before trying again.</p>
+            ) : null}
+            <Dialog
+              open={Boolean(restartPlan)}
+              onOpenChange={(open) => {
+                if (!open && !applyRestart.isPending) closeRestartReview();
+              }}
+            >
+              <DialogContent closeDisabled={applyRestart.isPending} restoreFocusTo={restartReviewButton}>
+                <DialogHeader>
+                  <DialogTitle>Restart this server?</DialogTitle>
+                  <DialogDescription>
+                    Applications will stop while the server restarts. This page reloads automatically when the server is ready.
+                  </DialogDescription>
+                </DialogHeader>
+                {restartReviewExpired || reviewRestart.isError || applyRestart.isError ? (
+                  <div className="modal-body">
+                    {restartReviewExpired ? <output>Restart details expired. Check again before continuing.</output> : null}
+                    {reviewRestart.isError || applyRestart.isError ? (
+                      <p role="alert">Restart could not be started. Check the server status before trying again.</p>
+                    ) : null}
+                  </div>
+                ) : null}
+                <DialogFooter className="desktop-update-plan-actions">
+                  <button type="button" disabled={applyRestart.isPending} onClick={closeRestartReview}>
+                    Cancel
+                  </button>
                   <button
                     type="button"
-                    className="desktop-update-action"
-                    aria-describedby={missingHostFeatures.length ? `${tabsId}-host-help` : undefined}
-                    disabled={
-                      !restart?.available ||
-                      restartError ||
-                      reviewRestart.isPending ||
-                      applyRestart.isPending ||
-                      restart.job?.state === 'restarting' ||
-                      packageControlsBlocked ||
-                      coreWatchIsActive(watch)
-                    }
-                    onClick={(event) => {
-                      systemActionFocus.current =
-                        document.activeElement === event.currentTarget ? { control: event.currentTarget, kind: 'restart' } : null;
-                      restartReviewButton.current = event.currentTarget;
-                      reviewRestart.mutate();
+                    disabled={applyRestart.isPending || reviewRestart.isPending || !restartPlan}
+                    onClick={() => {
+                      if (!restartPlan) return;
+                      if (restartReviewExpired || reviewRestart.isError || applyRestart.isError || restartPlan.expiresAt * 1000 <= Date.now()) {
+                        applyRestart.reset();
+                        reviewRestart.mutate();
+                      } else applyRestart.mutate(restartPlan.planId);
                     }}
                   >
-                    {reviewRestart.isPending ? 'Checking…' : 'Restart'}
+                    {applyRestart.isPending ? 'Restarting…' : reviewRestart.isPending ? 'Checking…' : 'Restart'}
                   </button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+            {user?.operator !== true ? <p>Host package details require an operator account.</p> : null}
+            {user?.operator === true && systemPackages.isPending ? <p>Reading the host package cache…</p> : null}
+            {packageStatusUnavailable ? (
+              <div className="desktop-host-package-error" role="alert">
+                <p>
+                  {systemPackages.data?.available === false
+                    ? systemPackages.data.reason || 'This host does not have a supported package manager.'
+                    : 'System updates are unavailable. Check the server connection and try again.'}
+                </p>
+                <button
+                  type="button"
+                  className="desktop-update-action"
+                  disabled={systemPackages.isFetching || packageJob.isFetching || host.isFetching}
+                  onClick={() => {
+                    void Promise.all([systemPackages.refetch(), packageJob.refetch(), host.refetch()]);
+                  }}
+                >
+                  <IconRefresh size={17} aria-hidden="true" />
+                  {systemPackages.isFetching || packageJob.isFetching || host.isFetching ? 'Reconnecting…' : 'Retry system updates'}
+                </button>
+              </div>
+            ) : null}
+            {packageJobNeedsInspection ? (
+              <p role="alert" className="desktop-update-note">
+                A previous package installation needs attention. Review its terminal output and repair APT on the host before updating or restarting.
+              </p>
+            ) : null}
+            {failedRefresh ? (
+              <output className="desktop-update-note">
+                The package list check failed. Review the terminal output, then use Check for updates to retry. Installed packages were not changed by
+                this check.
+              </output>
+            ) : null}
+            {latestPackageJob ? <SystemUpdateProgress job={latestPackageJob} /> : null}
+            {user.operator && systemPackages.data?.available ? (
+              <details className="desktop-system-update-details">
+                <summary>
+                  <DisclosureIndicator size={17} />
+                  {(systemPackages.data?.packageCount ?? 0) > 0 ? 'Package details and exclusions' : 'Package details'}
+                </summary>
+                {systemPackages.data?.available ? (
+                  <p className="desktop-host-package-times">
+                    {systemPackages.data.indexesUpdatedAt
+                      ? `Package lists last changed ${new Date(systemPackages.data.indexesUpdatedAt).toLocaleString()}.`
+                      : 'Package list age unavailable.'}
+                    {systemPackages.data.rebootRequired ? ' A reboot request is recorded on this host.' : ''}
+                  </p>
+                ) : null}
+                {systemPackages.data?.truncated ? <output>Showing the first 1,000 packages. Check the host for the complete list.</output> : null}
+                {!!systemPackages.data?.packageCount && systemPackages.data.available ? (
+                  <>
+                    <p className="desktop-update-note">
+                      {systemPackages.data.packageCount > packageUpdateLimit
+                        ? `The first ${packageUpdateLimit} updates are selected for this transaction.`
+                        : 'All available updates are selected by default.'}{' '}
+                      Clear a package to exclude it from this update.
+                    </p>
+                    <div className="desktop-host-package-toolbar">
+                      <label className="desktop-host-package-search">
+                        <span>Filter package details</span>
+                        <input
+                          type="search"
+                          placeholder="Name or repository"
+                          value={packageSearch}
+                          onChange={(event) => {
+                            setPackageSearch(event.target.value);
+                            setShowAllPackages(false);
+                          }}
+                        />
+                      </label>
+                      <div className="desktop-host-package-selection">
+                        <strong>
+                          {selectedPackages.length} of {systemPackages.data.packageCount ?? 0} selected
+                        </strong>
+                        <div>
+                          <button
+                            type="button"
+                            disabled={
+                              matchingPackages.length === 0 || (!matchingSelection && matchingSelectionExceedsLimit) || packageControlsBlocked
+                            }
+                            onClick={() => {
+                              const names = matchingPackages.map((item) => item.name);
+                              setSelectedPackages(
+                                matchingSelection
+                                  ? selectedPackages.filter((name) => !names.includes(name))
+                                  : [...new Set([...selectedPackages, ...names])],
+                              );
+                            }}
+                          >
+                            {matchingSelection
+                              ? packageSearch
+                                ? 'Clear matching'
+                                : 'Clear selection'
+                              : packageSearch
+                                ? 'Select matching'
+                                : 'Select all'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    {(systemPackages.data.packages?.length ?? 0) > packageUpdateLimit ? (
+                      <p className="desktop-update-note">
+                        Up to {packageUpdateLimit} packages can be updated at a time. Remaining updates will be listed after installation.
+                      </p>
+                    ) : null}
+                    <ul className="desktop-host-package-list" aria-label="Available host package updates">
+                      {visiblePackages.map((item) => (
+                        <li className="desktop-host-package" key={item.name}>
+                          <label className="desktop-host-package-title">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${item.name} for update`}
+                              checked={selectedPackages.includes(item.name)}
+                              disabled={
+                                installPackages.isPending ||
+                                packageJob.isPending ||
+                                packageJob.isError ||
+                                packageJobBusy ||
+                                packageJobNeedsInspection ||
+                                (!selectedPackages.includes(item.name) && selectedPackages.length >= packageUpdateLimit)
+                              }
+                              onChange={(event) => {
+                                setSelectedPackages(
+                                  event.target.checked ? [...selectedPackages, item.name] : selectedPackages.filter((name) => name !== item.name),
+                                );
+                              }}
+                            />
+                            <strong title={item.name}>
+                              {[...item.name.matchAll(/[^:-]*[:-]|[^:-]+$/g)].map((part) => (
+                                <Fragment key={part.index}>
+                                  <WrapWords text={part[0]} />
+                                  <wbr />
+                                </Fragment>
+                              ))}
+                            </strong>
+                            {item.security ? <span>Security</span> : null}
+                          </label>
+                          <p className="desktop-host-package-versions">
+                            <code title={item.installedVersion}>{item.installedVersion}</code>
+                            <span aria-hidden="true">→</span>
+                            <code title={item.candidateVersion}>{item.candidateVersion}</code>
+                          </p>
+                          <small>{packageSources(item.sources)}</small>
+                          <div className="desktop-host-package-foot">
+                            <span>{packageSize(item.downloadBytes)}</span>
+                            <button
+                              type="button"
+                              aria-pressed={selectedPackage === item.name}
+                              onClick={() => setSelectedPackage(selectedPackage === item.name ? null : item.name)}
+                            >
+                              {selectedPackage === item.name ? 'Hide changes' : 'View changes'}
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    {matchingPackages.length === 0 ? <p>No packages match that search.</p> : null}
+                    {!showAllPackages && matchingPackages.length > visiblePackages.length ? (
+                      <button className="desktop-host-package-more" type="button" onClick={() => setShowAllPackages(true)}>
+                        Show all {matchingPackages.length} matching packages
+                      </button>
+                    ) : null}
+                    {selectedPackage ? (
+                      <section className="desktop-host-changelog" aria-label={`${selectedPackage} changelog`}>
+                        <div>
+                          <strong>{selectedPackage} changelog</strong>
+                          <button type="button" onClick={() => setSelectedPackage(null)} aria-label="Close package changelog">
+                            Close
+                          </button>
+                        </div>
+                        {packageChangelog.isPending ? <p>Reading the distribution changelog…</p> : null}
+                        {packageChangelog.isError ? <p role="alert">The distribution changelog could not be read.</p> : null}
+                        {packageChangelog.data?.available ? (
+                          <>
+                            <p>
+                              {packageChangelog.data.source} · candidate {packageChangelog.data.candidateVersion}
+                              {packageChangelog.data.truncated ? ' · Showing the first part' : ''}
+                            </p>
+                            <textarea
+                              className="desktop-host-changelog-body"
+                              aria-label="Distribution changelog text"
+                              readOnly
+                              spellCheck={false}
+                              value={packageChangelog.data.body}
+                            />
+                          </>
+                        ) : null}
+                        {packageChangelog.data && !packageChangelog.data.available ? (
+                          <p>{packageChangelog.data.reason || 'No distribution changelog available.'}</p>
+                        ) : null}
+                      </section>
+                    ) : null}
+                  </>
+                ) : null}
+              </details>
+            ) : null}
+          </section>
+          <SentinelStatus active={visible && section === 'system'}>
+            {user.operator ? (
+              <div id={`${tabsId}-host-help`} className="desktop-sentinel-connection">
+                <h3>System connection</h3>
+                {host.isPending ? <output>Checking connection…</output> : null}
+                {host.isError ? <p role="alert">{restarting ? watch.message : 'Waiting for the system service to respond.'}</p> : null}
+                {!host.isError && host.data ? (
+                  host.data.available ? (
+                    missingHostFeatures.length ? (
+                      <>
+                        <p>
+                          <strong>System service update needed</strong>
+                        </p>
+                        <p>Update the system service to enable {missingHostFeatures.join(' and ')}.</p>
+                        <a
+                          className="desktop-update-action secondary"
+                          href="https://github.com/twentylines/orbis/blob/main/HOST-SERVICE.md#upgrade-an-installed-helper"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          View setup guide
+                        </a>
+                      </>
+                    ) : (
+                      <p>
+                        <strong>Connected</strong>
+                      </p>
+                    )
+                  ) : (
+                    <p>{restarting ? watch.message : host.data.reason || 'System service disconnected.'}</p>
+                  )
                 ) : null}
               </div>
             ) : null}
-          </div>
-          {user.operator && missingHostFeatures.length ? (
-            <aside className="desktop-host-integration" aria-labelledby={`${tabsId}-host-help-title`}>
-              <div id={`${tabsId}-host-help`}>
-                <h3 id={`${tabsId}-host-help-title`}>Host service update needed</h3>
-                <p>Orbis and its host service update separately. Update the host service to enable {missingHostFeatures.join(' and ')}.</p>
-              </div>
-              <a
-                className="desktop-update-action"
-                href="https://github.com/twentylines/orbis/blob/main/HOST-SERVICE.md#upgrade-an-installed-helper"
-                target="_blank"
-                rel="noreferrer"
-              >
-                View setup guide
+          </SentinelStatus>
+          {latest ? (
+            <div className="desktop-updates-card desktop-updates-release">
+              <OrbisReleaseNotes latest={latest} installed={build.data?.version} channel={channels.data?.current} compact />
+              {latest.imageManifestUrl ? null : <p>No Orbis image manifest is attached to this release.</p>}
+              <a href={latest.url} target="_blank" rel="noreferrer" className="desktop-update-action secondary">
+                View release on GitHub
               </a>
-            </aside>
-          ) : null}
-          {refreshPackages.isError ? <p role="alert">{refreshPackages.error.message} Check the package job status before trying again.</p> : null}
-          {user.operator && restart?.available === false && !missingHostFeatures.length ? (
-            <p className="desktop-update-note">{restart.reason}</p>
-          ) : null}
-          {restartError ? <p role="alert">Restart status could not be checked. Reconnecting to the server.</p> : null}
-          {restart?.job?.state === 'failed' ? <p role="alert">{restart.job.message}</p> : null}
-          {reviewRestart.isError || applyRestart.isError ? (
-            <p role="alert">Restart could not be started. Check the server status before trying again.</p>
-          ) : null}
-          <Dialog
-            open={Boolean(restartPlan)}
-            onOpenChange={(open) => {
-              if (!open && !applyRestart.isPending) closeRestartReview();
-            }}
-          >
-            <DialogContent closeDisabled={applyRestart.isPending} restoreFocusTo={restartReviewButton}>
-              <DialogHeader>
-                <DialogTitle>Restart this server?</DialogTitle>
-                <DialogDescription>
-                  Applications will stop while the server restarts. This page reloads automatically when the server is ready.
-                </DialogDescription>
-              </DialogHeader>
-              {restartReviewExpired || reviewRestart.isError || applyRestart.isError ? (
-                <div className="modal-body">
-                  {restartReviewExpired ? <output>Restart details expired. Check again before continuing.</output> : null}
-                  {reviewRestart.isError || applyRestart.isError ? (
-                    <p role="alert">Restart could not be started. Check the server status before trying again.</p>
-                  ) : null}
-                </div>
-              ) : null}
-              <DialogFooter className="desktop-update-plan-actions">
-                <button type="button" disabled={applyRestart.isPending} onClick={closeRestartReview}>
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={applyRestart.isPending || reviewRestart.isPending || !restartPlan}
-                  onClick={() => {
-                    if (!restartPlan) return;
-                    if (restartReviewExpired || reviewRestart.isError || applyRestart.isError || restartPlan.expiresAt * 1000 <= Date.now()) {
-                      applyRestart.reset();
-                      reviewRestart.mutate();
-                    } else applyRestart.mutate(restartPlan.planId);
-                  }}
-                >
-                  {applyRestart.isPending ? 'Restarting…' : reviewRestart.isPending ? 'Checking…' : 'Restart'}
-                </button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          {user?.operator !== true ? <p>Host package details require an operator account.</p> : null}
-          {user?.operator === true && systemPackages.isPending ? <p>Reading the host package cache…</p> : null}
-          {systemPackages.isError ? (
-            <div className="desktop-host-package-error" role="alert">
-              <p>System updates could not be loaded. Check the server connection and try again.</p>
-              <button type="button" className="desktop-update-action" onClick={() => void systemPackages.refetch()}>
-                Retry system updates
-              </button>
             </div>
           ) : null}
-          {systemPackages.data && !systemPackages.data.available ? (
-            <p>{systemPackages.data.reason || 'This host does not have a supported package manager.'}</p>
-          ) : null}
-          {packageJob.isError ? <p role="alert">The host package job status is unavailable. Check it again before starting an update.</p> : null}
-          {packageJobNeedsInspection ? (
-            <p role="alert" className="desktop-update-note">
-              A previous package installation needs attention. Review its terminal output and repair APT on the host before updating or restarting.
-            </p>
-          ) : null}
-          {failedRefresh ? (
-            <output className="desktop-update-note">
-              The package list check failed. Review the terminal output, then use Check for updates to retry. Installed packages were not changed by
-              this check.
-            </output>
-          ) : null}
-          {packageJob.data?.job ? (
-            <output className={`desktop-host-package-job ${packageJobBusy ? 'is-busy' : ''}`} aria-live="polite">
-              <strong>
-                {packageJob.data.job.kind === 'refresh' ? 'Package list refresh' : 'Host package operation'}: {packageJob.data.job.state}
-                {packageJob.data.job.kind !== 'refresh' ? ` · ${packageJob.data.job.operationCount ?? 0} planned changes` : ''}
-              </strong>
-              <span>{packageJob.data.job.message || (packageJobBusy ? 'APT is working on the host. This page can be closed.' : '')}</span>
-              {packageJob.data.job.rebootRequired ? <span>The host requests a reboot. Orbis has not rebooted it.</span> : null}
-            </output>
-          ) : null}
-          {packageJob.data?.job ? <UpdateTerminal output={packageJob.data.job.output} state={packageJob.data.job.state} /> : null}
-          {systemPackages.data?.available ? (
-            <>
-              <div className="desktop-host-package-summary">
-                <div>
-                  <strong>
-                    {systemPackages.data.packageCount ?? 0} available package update{systemPackages.data.packageCount === 1 ? '' : 's'}
-                  </strong>
-                  <span>{systemPackages.data.operatingSystem || 'Host operating system'}</span>
-                </div>
-                {systemPackages.data.rebootRequired ? <span className="desktop-host-reboot">Restart required</span> : null}
-              </div>
-              <p className="desktop-host-package-times">
-                {systemPackages.data.checkedAt ? `Checked ${new Date(systemPackages.data.checkedAt).toLocaleString()}. ` : ''}
-                {systemPackages.data.indexesUpdatedAt
-                  ? `Package lists last changed ${new Date(systemPackages.data.indexesUpdatedAt).toLocaleString()}.`
-                  : 'Package list age unavailable.'}
-                {systemPackages.data.rebootRequired ? ' A reboot request is recorded on this host.' : ''}
-              </p>
-              {systemPackages.data.truncated ? <output>Showing the first 1,000 packages. Check the host for the complete list.</output> : null}
-              {(systemPackages.data.packageCount ?? 0) > 0 ? (
-                <>
-                  <div className="desktop-host-package-toolbar">
-                    <label className="desktop-host-package-search">
-                      <span>Find packages</span>
-                      <input
-                        type="search"
-                        placeholder="Name or repository"
-                        value={packageSearch}
-                        onChange={(event) => {
-                          setPackageSearch(event.target.value);
-                          setShowAllPackages(false);
-                        }}
-                      />
-                    </label>
-                    <div className="desktop-host-package-selection">
-                      <strong>
-                        {selectedPackages.length} of {systemPackages.data.packageCount ?? 0} selected
-                      </strong>
-                      <div>
-                        <button
-                          type="button"
-                          disabled={matchingPackages.length === 0 || (!matchingSelection && matchingSelectionExceedsLimit) || packageControlsBlocked}
-                          onClick={() => {
-                            const names = matchingPackages.map((item) => item.name);
-                            setSelectedPackages(
-                              matchingSelection
-                                ? selectedPackages.filter((name) => !names.includes(name))
-                                : [...new Set([...selectedPackages, ...names])],
-                            );
-                          }}
-                        >
-                          {matchingSelection
-                            ? packageSearch
-                              ? 'Clear matching'
-                              : 'Clear selection'
-                            : packageSearch
-                              ? 'Select matching'
-                              : 'Select all'}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={selectedPackages.length === 0 || packageUpdateBlocked}
-                          onClick={() => installPackages.mutate([...selectedPackages])}
-                        >
-                          {installPackages.isPending
-                            ? packageRequestStage === 'checking'
-                              ? 'Checking updates…'
-                              : 'Starting update…'
-                            : 'Update packages'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="desktop-update-note">
-                    Services may restart during installation. The server will not reboot automatically. Package changes have no automatic rollback.
-                  </p>
-                  {(systemPackages.data.packages?.length ?? 0) > packageUpdateLimit ? (
-                    <p className="desktop-update-note">
-                      Up to {packageUpdateLimit} packages can be updated at a time. Remaining updates will be listed after installation.
-                    </p>
-                  ) : null}
-                  {installPackages.isError ? <p role="alert">{installPackages.error.message}</p> : null}
-                  <ul className="desktop-host-package-list" aria-label="Available host package updates">
-                    {visiblePackages.map((item) => (
-                      <li className="desktop-host-package" key={item.name}>
-                        <label className="desktop-host-package-title">
-                          <input
-                            type="checkbox"
-                            aria-label={`Select ${item.name} for update`}
-                            checked={selectedPackages.includes(item.name)}
-                            disabled={
-                              installPackages.isPending ||
-                              packageJob.isPending ||
-                              packageJob.isError ||
-                              packageJobBusy ||
-                              packageJobNeedsInspection ||
-                              (!selectedPackages.includes(item.name) && selectedPackages.length >= packageUpdateLimit)
-                            }
-                            onChange={(event) => {
-                              setSelectedPackages(
-                                event.target.checked ? [...selectedPackages, item.name] : selectedPackages.filter((name) => name !== item.name),
-                              );
-                            }}
-                          />
-                          <strong title={item.name}>
-                            {[...item.name.matchAll(/[^:-]*[:-]|[^:-]+$/g)].map((part) => (
-                              <Fragment key={part.index}>
-                                <WrapWords text={part[0]} />
-                                <wbr />
-                              </Fragment>
-                            ))}
-                          </strong>
-                          {item.security ? <span>Security</span> : null}
-                        </label>
-                        <p className="desktop-host-package-versions">
-                          <code title={item.installedVersion}>{item.installedVersion}</code>
-                          <span aria-hidden="true">→</span>
-                          <code title={item.candidateVersion}>{item.candidateVersion}</code>
-                        </p>
-                        <small>{packageSources(item.sources)}</small>
-                        <div className="desktop-host-package-foot">
-                          <span>{packageSize(item.downloadBytes)}</span>
-                          <button
-                            type="button"
-                            aria-pressed={selectedPackage === item.name}
-                            onClick={() => setSelectedPackage(selectedPackage === item.name ? null : item.name)}
-                          >
-                            {selectedPackage === item.name ? 'Hide changes' : 'View changes'}
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                  {matchingPackages.length === 0 ? <p>No packages match that search.</p> : null}
-                  {!showAllPackages && matchingPackages.length > visiblePackages.length ? (
-                    <button className="desktop-host-package-more" type="button" onClick={() => setShowAllPackages(true)}>
-                      Show all {matchingPackages.length} matching packages
-                    </button>
-                  ) : null}
-                  {selectedPackage ? (
-                    <section className="desktop-host-changelog" aria-label={`${selectedPackage} changelog`}>
-                      <div>
-                        <strong>{selectedPackage} changelog</strong>
-                        <button type="button" onClick={() => setSelectedPackage(null)} aria-label="Close package changelog">
-                          Close
-                        </button>
-                      </div>
-                      {packageChangelog.isPending ? <p>Reading the distribution changelog…</p> : null}
-                      {packageChangelog.isError ? <p role="alert">The distribution changelog could not be read.</p> : null}
-                      {packageChangelog.data?.available ? (
-                        <>
-                          <p>
-                            {packageChangelog.data.source} · candidate {packageChangelog.data.candidateVersion}
-                            {packageChangelog.data.truncated ? ' · Showing the first part' : ''}
-                          </p>
-                          <textarea
-                            className="desktop-host-changelog-body"
-                            aria-label="Distribution changelog text"
-                            readOnly
-                            spellCheck={false}
-                            value={packageChangelog.data.body}
-                          />
-                        </>
-                      ) : null}
-                      {packageChangelog.data && !packageChangelog.data.available ? (
-                        <p>{packageChangelog.data.reason || 'No distribution changelog available.'}</p>
-                      ) : null}
-                    </section>
-                  ) : null}
-                </>
-              ) : (
-                <p>No package updates in the local cache.</p>
-              )}
-              <p className="desktop-update-note">Available updates come from the server’s package lists.</p>
-            </>
-          ) : null}
-        </section>
+        </div>
       </div>
     </div>
   );

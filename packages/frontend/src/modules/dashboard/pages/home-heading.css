@@ -1,0 +1,80 @@
+.workspace-greeting {
+  min-width: 0;
+}
+.workspace-heading .workspace-greeting h1 {
+  line-height: 1.04;
+}
+.workspace-greeting .workspace-subline {
+  margin-top: 0.08rem;
+  line-height: 1.35;
+}
+.workspace-app-heading-text {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.65rem;
+}
+.workspace-apps .workspace-section-heading .workspace-app-counts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.5rem;
+  margin: 0;
+  padding: 0.18rem 0.65rem;
+  border: 1px solid var(--desktop-line);
+  border-radius: 999px;
+  color: var(--desktop-muted);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 10%, transparent);
+}
+.workspace-app-counts span {
+  white-space: nowrap;
+}
+.workspace-app-counts span + span::before {
+  display: inline-block;
+  width: 0.25em;
+  height: 0.25em;
+  margin-inline-end: 0.5em;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.55;
+  vertical-align: 0.2em;
+  content: "";
+}
+@media (max-width: 650px) {
+  .workspace-heading .workspace-greeting h1 {
+    font-size: min(var(--orbis-compact-title, 2.25rem), clamp(1.5rem, calc(7.75vw * var(--orbis-text-scale, 1)), 2.25rem));
+  }
+}
+
+/* Give app names and status a full row when enlarged text outgrows the tile. */
+.workspace-app-entry {
+  container: workspace-app-inline / inline-size;
+}
+@container workspace-app-inline (max-width: 14rem) {
+  .workspace-app-entry > .workspace-app {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding-inline: 12px;
+  }
+  .workspace-app .app-logo {
+    justify-self: start;
+  }
+  .workspace-app-copy {
+    align-self: stretch;
+  }
+  .workspace-app-copy strong {
+    display: block;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    text-overflow: ellipsis;
+  }
+  .workspace-app-copy .docker-health > span {
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+  .workspace-app-entry > .workspace-app-manage {
+    top: 8px;
+    translate: none;
+  }
+}

@@ -1,6 +1,6 @@
 import { useServerPath } from '@/desktop/cluster-data';
 import { useQuery } from '@tanstack/react-query';
-import { IconChevronRight } from '@tabler/icons-react';
+import { DisclosureIndicator } from '@/components/ui/DisclosureIndicator/DisclosureIndicator';
 import type { HostSensors, HostSensorStatus } from '@runtipi/common/schemas';
 import { memo, useEffect, useRef } from 'react';
 import { useWindowVisible } from '@/desktop/window-visibility';
@@ -193,7 +193,7 @@ export const HostSensorsView = memo(function HostSensorsView() {
       ) : null}
       <details className="host-sensors-about">
         <summary>
-          <IconChevronRight size={16} aria-hidden="true" />
+          <DisclosureIndicator size={16} />
           <span>About these readings</span>
         </summary>
         <p>Readings come from sensors exposed by the Linux kernel. Virtual machines and some hardware drivers may not provide them.</p>

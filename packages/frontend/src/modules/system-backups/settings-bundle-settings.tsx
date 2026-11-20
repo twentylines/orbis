@@ -392,6 +392,7 @@ function SettingsBundleWorkspace({ initialFile, onReturn, restoreOnly }: { initi
             <Button
               type="button"
               intent="primary"
+              data-setting-review="create-backup"
               disabled={busy || restoreHeld || user?.operator !== true || !exportsFresh || !settingsBackupSelectionSchema.allows(selection)}
               onClick={() => open({ kind: 'create' })}
             >
@@ -453,6 +454,7 @@ function SettingsBundleWorkspace({ initialFile, onReturn, restoreOnly }: { initi
             type="button"
             variant="outline"
             disabled={busy || restoreHeld || !importsFresh || !importsQuery.data?.available}
+            data-setting-review="restore-backup"
             onClick={() => open({ kind: 'upload' })}
           >
             Restore

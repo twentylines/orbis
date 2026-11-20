@@ -24,7 +24,7 @@ export function isSetupFailureTask(task: TaskRecord | SetupFailureTask): task is
 }
 
 export function useTaskCentreRecords(serverRecords: TaskRecord[], ownerId: number, enabled = true) {
-  const snapshot = useCallback(() => JSON.stringify(setupFailureTasks(ownerId)), [ownerId]);
+  const snapshot = useCallback(() => JSON.stringify(setupFailureTasks(ownerId, undefined, true)), [ownerId]);
   const serialized = useSyncExternalStore(enabled ? subscribe : inactive, enabled ? snapshot : empty, empty);
   const failures = useMemo(() => JSON.parse(serialized) as SetupFailureTask[], [serialized]);
   const apps = useQuery({ ...getInstalledAppsOptions(), enabled });

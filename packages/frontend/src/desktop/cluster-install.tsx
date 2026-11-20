@@ -15,6 +15,7 @@ import { InstallFormButtons } from '@/modules/app/components/install-form-button
 import { clusterRequest, ServerSelector, useCluster } from './cluster';
 import { useDesktopPreferences } from './preferences';
 import './cluster-install.css';
+import { catalogueInstallAllowed } from '@/modules/app/helpers/catalogue-compatibility';
 
 type InstallContext = {
   info: AppInfo;
@@ -73,6 +74,7 @@ export function ClusterInstallDialog({
     !!target &&
     !!context &&
     !context.installed &&
+    catalogueInstallAllowed(context.info) &&
     !contextQuery.isFetching &&
     !contextQuery.isError &&
     !source.isError;
@@ -160,6 +162,10 @@ export function ClusterInstallDialog({
                   <p>Install apps from the cluster’s admin server.</p>
                 ) : context?.installed ? (
                   <p>This app is already installed on {targetName}. Choose another server to install a separate copy.</p>
+                ) : context && !catalogueInstallAllowed(context.info) ? (
+                  <p>
+                    This app is not available for installation on {targetName}. {context.info.compatibility?.reasons.join(' ')}
+                  </p>
                 ) : context ? (
                   <InstallForm
                     key={`${choice}:${context.info.urn}`}

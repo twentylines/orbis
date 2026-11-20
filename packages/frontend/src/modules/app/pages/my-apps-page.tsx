@@ -7,7 +7,8 @@ import { useSuspenseQuery } from '@tanstack/react-query';
 import { AppTile } from '../components/app-tile/app-tile';
 import { LinkTile } from '../components/link-tile/link-tile';
 import { ButtonTile } from '../components/button-tile/button-tile';
-import { IconAdjustmentsHorizontal, IconChevronDown, IconLayoutGridAdd, IconLinkPlus } from '@tabler/icons-react';
+import { IconAdjustmentsHorizontal, IconLayoutGridAdd, IconLinkPlus } from '@tabler/icons-react';
+import { DropdownMenuChevron } from '@/components/ui/DropdownMenu/DropdownMenu';
 import { useTranslation } from 'react-i18next';
 import { useDisclosure } from '@/lib/hooks/use-disclosure';
 import { AddLinkDialog } from '../components/dialogs/add-link/add-link-dialog';
@@ -177,9 +178,15 @@ function LocalApps() {
           <button type="button" aria-expanded={batchActions.isOpen} aria-controls={batchActionsId} onClick={() => batchActions.toggle()}>
             <IconAdjustmentsHorizontal size={17} aria-hidden="true" />
             Manage Orbis apps
-            <IconChevronDown size={15} aria-hidden="true" />
+            <DropdownMenuChevron />
           </button>
-          <div ref={batchPanel} id={batchActionsId} hidden={!batchActions.isOpen}>
+          <div
+            ref={batchPanel}
+            id={batchActionsId}
+            hidden={!batchActions.isOpen}
+            className="orbis-popup-surface"
+            data-state={batchActions.isOpen ? 'open' : 'closed'}
+          >
             <ActionBar className="app-library-batch-actions">
               <ActionBar.Left>
                 <StartAllButton availableUpdates={updatesAvailable} />

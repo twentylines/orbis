@@ -498,7 +498,7 @@ export function ClusterSettings() {
                 placeholder="My homelab"
               />
               <Button type="submit" disabled={busy || !clusterName.trim()} intent="primary">
-                {canManage ? 'Save' : 'Create cluster'}
+                {canManage ? 'Rename cluster' : 'Create cluster'}
               </Button>
             </div>
             {canManage && cluster.data?.servers.length === 1 ? (

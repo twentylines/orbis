@@ -46,6 +46,7 @@ export function useTimeField({
     const changed = canonical !== emitted.current;
     emitted.current = canonical;
     if (changed) onChange(canonical);
+    return canonical;
   };
   return {
     state,
@@ -73,6 +74,7 @@ export function TimeField({
   name,
   disabled = false,
   describedBy,
+  onCommit,
 }: {
   control: ReturnType<typeof useTimeField>;
   label: string;
@@ -80,6 +82,7 @@ export function TimeField({
   name?: string;
   disabled?: boolean;
   describedBy?: string;
+  onCommit?: (value: string) => void;
 }) {
   const generatedId = useId();
   const id = suppliedId ?? generatedId;
@@ -100,7 +103,17 @@ export function TimeField({
     }
   };
   return (
-    <fieldset className="orbis-time-field" aria-describedby={description}>
+    <fieldset
+      className="orbis-time-field"
+      aria-describedby={description}
+      onBlur={
+        onCommit
+          ? (event) => {
+              if (!event.currentTarget.contains(event.relatedTarget) && control.value) onCommit(control.value);
+            }
+          : undefined
+      }
+    >
       <legend>{label}</legend>
       <div className="orbis-time-parts" data-format={format}>
         {(['hour', 'minute'] as const).map((part) => (
@@ -143,7 +156,10 @@ export function TimeField({
             value={fields.period}
             disabled={disabled}
             onValueChange={(value) => {
-              if (value === 'AM' || value === 'PM') control.period(value);
+              if (value === 'AM' || value === 'PM') {
+                const next = control.period(value);
+                if (next) onCommit?.(next);
+              }
             }}
           >
             <SelectTrigger fitContent className="orbis-time-period" aria-label={`${label} AM or PM`}>

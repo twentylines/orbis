@@ -6,6 +6,7 @@ import { telemetryOptions } from '@/desktop/telemetry';
 import { formatUptime } from '@/desktop/uptime';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { useHostReadings } from './host-devices';
+import { GpuReadings } from './gpu-readings';
 import { SystemGauges } from './system-gauges';
 import { statusBytes, statusNetwork } from './system-readings';
 import { useNetworkWarmup } from './network-rate-warmup';
@@ -74,7 +75,7 @@ export function HomeSystemStatus() {
     memoryFree >= 0 &&
     memoryFree <= memoryTotal;
   const memoryUsed = memoryAvailable ? memoryTotal - memoryFree : null;
-  const cpuPercent = system.data?.cpu.totalPercent;
+  const cpuPercent = system.data?.cpu.scope === 'host-proc' ? system.data.cpu.totalPercent : null;
   const network = statusNetwork(host.isError ? undefined : host.data, system.data);
   return (
     <section
@@ -115,6 +116,7 @@ export function HomeSystemStatus() {
             <strong>{system.data ? formatUptime(system.data.cpu.uptimeSeconds) : '—'}</strong>
           </div>
           <NetworkSummary network={network} visible={visible} />
+          <GpuReadings data={sensors.data} stale={sensors.isError || Boolean(sensors.data?.available && sensors.data.stale)} compact />
         </div>
       )}
       <ContainerResources compact />

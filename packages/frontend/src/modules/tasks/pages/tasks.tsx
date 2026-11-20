@@ -1,23 +1,18 @@
-import { SourceRestoreRequests } from '@/modules/host-transfer/source-restore-requests';
-import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
-import { IconActivity, IconArrowUpRight, IconCheck, IconClock, IconAlertTriangle } from '@tabler/icons-react';
-import { useTasks, taskLabels, taskStates, taskIsActive } from '@/desktop/tasks';
-import type { TaskRecord } from '@runtipi/common/schemas';
-import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
+import { useSearchParams } from 'react-router';
+import { useTasks } from '@/desktop/tasks';
 import { useTimeMachineActivity } from '@/modules/time-machine/use-time-machine-activity';
-import { TimeMachineCaptureProgress } from '@/modules/time-machine/capture-progress';
 import { useAppContext } from '@/context/app-context';
-import { isSetupFailureTask, useTaskCentreRecords } from '@/desktop/task-centre-records';
+import { useRestoreRequests } from '@/modules/host-transfer/receiver-request-context';
+import { useTaskCentreRecords } from '@/desktop/task-centre-records';
 import { useSystemTaskActivity } from '@/desktop/use-system-task-activity';
-import { SystemTaskActivitySection } from '@/desktop/system-task-activity-view';
+import { DesktopTaskPanel } from '@/desktop/desktop-task-panel';
 import './tasks.css';
 
 export default function Tasks() {
   const { user } = useAppContext();
   const tasks = useTasks();
   const captures = useTimeMachineActivity();
-  const [filter, setFilter] = useState('all');
+  const requests = useRestoreRequests();
   const [params, setParams] = useSearchParams();
   const requestedApp = params.get('app');
   const appScope = requestedApp && requestedApp.length <= 180 && /^[^:]+:[^:]+$/.test(requestedApp) ? requestedApp : null;
@@ -25,34 +20,12 @@ export default function Tasks() {
   const serverRecords = tasks.data?.tasks ?? [];
   const centre = useTaskCentreRecords(serverRecords, user.id);
   const records = centre.records.filter((task) => !appScope || task.appUrn === appScope);
-  const { names } = centre;
-  const active = records.filter(taskIsActive);
-  const activeCount = active.length + (!appScope && captures.activity ? 1 : 0);
-  const review = records.filter((task) => ['failed', 'interrupted', 'unconfirmed'].includes(task.status));
-  const visible = records.filter(
-    (task) =>
-      filter === 'all' || (filter === 'active' ? taskIsActive(task) : filter === 'review' ? review.includes(task) : task.status === 'succeeded'),
-  );
-  const explain = (task: TaskRecord) =>
-    task.status === 'interrupted'
-      ? 'The server restarted before the outcome was confirmed. Check the app and instance logs before retrying.'
-      : task.status === 'unconfirmed'
-        ? 'The queue did not confirm this request. It may still be running; check the app before retrying.'
-        : task.status === 'failed'
-          ? 'Operation failed. Check Orbis logs for details.'
-          : task.status === 'queued'
-            ? 'Waiting for a lifecycle worker or another operation on this app.'
-            : task.status === 'running'
-              ? 'Operation running. Check Orbis logs for output.'
-              : 'Operation completed. Check the app’s health separately.';
-
   return (
-    <div className="task-centre">
-      {appScope ? null : <SourceRestoreRequests />}
+    <div className="task-centre-page">
       {appScope ? (
         <div className="task-scope">
           <span>
-            Application: <strong>{names.get(appScope) ?? appScope}</strong>
+            Application: <strong>{centre.names.get(appScope) ?? appScope}</strong>
           </span>
           <button
             type="button"
@@ -68,177 +41,27 @@ export default function Tasks() {
           </button>
         </div>
       ) : null}
-      <div className="task-summary">
-        <span className={`task-summary-orbit ${activeCount ? 'is-busy' : ''}`} data-attention={tasks.isError || review.length > 0} aria-hidden="true">
-          {tasks.isError || review.length > 0 ? <IconAlertTriangle size={30} stroke={1.5} /> : <IconActivity size={30} stroke={1.3} />}
-        </span>
-        <div>
-          <h2>
-            {tasks.data
-              ? !appScope && systemActivity.records.some((record) => record.bucket === 'active')
-                ? 'Operations in progress'
-                : activeCount
-                  ? `${activeCount} operation${activeCount === 1 ? '' : 's'} in progress`
-                  : !appScope && systemActivity.loading
-                    ? 'Reading system activity'
-                    : !appScope && systemActivity.incomplete
-                      ? 'Some activity is unavailable'
-                      : 'No operations in progress'
-              : tasks.isError
-                ? 'Operation history unavailable'
-                : 'Reading operations'}
-          </h2>
-          {review.length > 0 ? (
-            <p>
-              {review.length} operation{review.length === 1 ? ' needs' : 's need'} review.
-            </p>
-          ) : null}
-        </div>
-        <span className="task-retention">
-          Up to {tasks.data?.limit ?? 300} operations · {tasks.data?.retentionDays ?? 30} days
-        </span>
-      </div>
-      {tasks.isError ? (
-        <p className="workspace-message" role="alert">
-          Task history could not be refreshed. Previous records may be stale.{' '}
-          <button type="button" onClick={() => tasks.refetch()}>
-            Retry
-          </button>
-        </p>
-      ) : null}
-      {tasks.data?.storage === 'unavailable' ? (
-        <p className="workspace-message" role="alert">
-          History storage is unavailable. New records are held in memory and may be lost on restart.
-        </p>
-      ) : null}
-      <div className="task-toolbar">
-        <SelectionGroup as="fieldset">
-          <legend className="visually-hidden">Filter operations</legend>
-          {[
-            ['all', 'All'],
-            ['active', 'Active'],
-            ['review', 'Needs review'],
-            ['completed', 'Completed'],
-          ].map(([value, label]) => (
-            <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value ?? 'all')}>
-              {label}
-            </button>
-          ))}
-        </SelectionGroup>
-        <span>{tasks.data ? `Checked ${new Date(tasks.data.sampledAt).toLocaleTimeString()}` : 'Loading history'}</span>
-      </div>
-      {tasks.isPending ? <p>Loading operations…</p> : null}
-      {appScope ? null : <SystemTaskActivitySection activity={systemActivity} filter={filter} />}
-      {!tasks.isPending &&
-      !visible.length &&
-      (appScope || (!systemActivity.loading && !systemActivity.incomplete && !systemActivity.records.length)) &&
-      (appScope || !captures.activity || !['all', 'active'].includes(filter)) ? (
-        <div className="task-empty">
-          <IconClock size={32} stroke={1.4} aria-hidden="true" />
-          <h2>{filter === 'all' ? 'No recorded operations' : 'No matching operations'}</h2>
-          {filter === 'all' ? <p>App installs, starts, stops, updates, backups and restores are recorded here.</p> : null}
-        </div>
-      ) : null}
-      <ol className="task-list">
-        {!appScope && ['all', 'active'].includes(filter) && captures.activity ? (
-          <li className="task-time-machine" data-status="running">
-            {captures.data?.point ? (
-              <div>
-                <TimeMachineCaptureProgress point={captures.data.point} unavailable={captures.isError} />
-                <Link className="btn btn-outline" to="/settings?tab=time-machine">
-                  Time Machine
-                </Link>
-              </div>
-            ) : null}
-          </li>
-        ) : null}
-        {visible.map((task) => {
-          const [appId, storeId] = task.appUrn.split(':');
-          const setupFailure = isSetupFailureTask(task) ? task : null;
-          const preferenceFailure = setupFailure?.setupFailureOutcome === 'preferences-save-failed';
-          return (
-            <li key={task.id} data-status={task.status}>
-              <details>
-                <summary>
-                  <span className="task-symbol" aria-hidden="true">
-                    {taskIsActive(task) ? (
-                      <IconActivity size={20} />
-                    ) : task.status === 'succeeded' ? (
-                      <IconCheck size={20} />
-                    ) : (
-                      <IconAlertTriangle size={20} />
-                    )}
-                  </span>
-                  <span className="task-identity">
-                    <strong>
-                      {setupFailure ? (preferenceFailure ? 'Save' : 'Capture') : taskLabels[task.action]}{' '}
-                      <span>
-                        {setupFailure
-                          ? preferenceFailure
-                            ? 'Time Machine preferences'
-                            : 'Time Machine setup'
-                          : (names.get(task.appUrn) ?? task.displayName ?? appId)}
-                      </span>
-                    </strong>
-                    <small>
-                      {setupFailure ? 'Setup' : storeId} · <time dateTime={task.createdAt}>{new Date(task.createdAt).toLocaleString()}</time>
-                    </small>
-                  </span>
-                  <span className="task-state">{taskStates[task.status]}</span>
-                  <IconArrowUpRight className="task-disclosure" size={18} aria-hidden="true" />
-                </summary>
-                <div className="task-details">
-                  <p>
-                    {setupFailure
-                      ? preferenceFailure
-                        ? (setupFailure.setupFailureReason ?? 'The preference could not be saved. Review Time Machine settings and try again.')
-                        : setupFailure.setupFailureOutcome === 'capture-failed'
-                          ? 'The setup capture failed. You can start a new capture in Time Machine.'
-                          : 'The setup capture did not start, so no capture was created. You can try again in Time Machine.'
-                      : explain(task)}
-                  </p>
-                  <dl>
-                    <div>
-                      <dt>Started</dt>
-                      <dd>{task.startedAt ? new Date(task.startedAt).toLocaleString() : 'Not confirmed'}</dd>
-                    </div>
-                    <div>
-                      <dt>Finished</dt>
-                      <dd>{task.finishedAt ? new Date(task.finishedAt).toLocaleString() : 'Not confirmed'}</dd>
-                    </div>
-                    <div>
-                      <dt>Request</dt>
-                      <dd>{task.id}</dd>
-                    </div>
-                  </dl>
-                  <div className="task-links">
-                    {setupFailure ? (
-                      <Link to="/settings?tab=time-machine">{preferenceFailure ? 'Review Time Machine settings' : 'Open Time Machine'}</Link>
-                    ) : (
-                      <Link to={names.has(task.appUrn) ? `/apps/${encodeURIComponent(storeId ?? '')}/${encodeURIComponent(appId ?? '')}` : '/apps'}>
-                        {names.has(task.appUrn) ? 'Open application' : 'View applications'}
-                      </Link>
-                    )}
-                    <Link to="/settings?tab=logs">Open Orbis logs</Link>
-                    {setupFailure ? (
-                      <button
-                        type="button"
-                        className="btn btn-outline"
-                        aria-label={`Dismiss ${preferenceFailure ? 'Time Machine preference' : 'Time Machine setup capture'} failure`}
-                        onClick={() => {
-                          centre.dismiss(setupFailure.id);
-                        }}
-                      >
-                        Dismiss
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </details>
-            </li>
-          );
-        })}
-      </ol>
+      <DesktopTaskPanel
+        visibilityOwner={String(user.id)}
+        key={appScope ?? 'all'}
+        surface="page"
+        initialSource={appScope ?? 'all'}
+        tasks={records}
+        names={centre.names}
+        dismissSetupFailure={centre.dismiss}
+        restoreRequests={appScope ? undefined : requests}
+        systemActivity={appScope ? undefined : systemActivity}
+        loading={tasks.isPending}
+        failed={tasks.isError}
+        storageUnavailable={tasks.data?.storage === 'unavailable'}
+        capture={!appScope && captures.activity ? captures.data?.point : null}
+        captureFailed={!appScope && user.operator === true && captures.isError}
+        pendingRequests={appScope ? 0 : (requests?.pendingCount ?? 0)}
+        criticalUpdate={false}
+        retry={() => tasks.refetch({ cancelRefetch: false })}
+        retryCapture={() => captures.refetch({ cancelRefetch: false })}
+        close={() => undefined}
+      />
     </div>
   );
 }

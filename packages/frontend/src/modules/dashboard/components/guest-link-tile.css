@@ -1,8 +1,20 @@
 .guest-link-tile-button {
-  display: block;
   border: none;
   background: none;
   padding: 0;
   text-align: left;
   cursor: pointer;
+}
+.guest-link-tile-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+}
+.guest-link-tile-copy {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 0.25rem;
+  line-height: 1.5;
 }

@@ -9,17 +9,27 @@ type Props<T> = {
   onOpen?: () => void;
   onPreferencesChanged?: () => void;
   onClientStatusChanged?: () => void;
+  onTasksChanged?: () => void;
   params?: URLSearchParams;
 };
 
-export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, onPreferencesChanged, onClientStatusChanged, params }: Props<T>) => {
-  const handlers = useRef({ onEvent, onError, onOpen, onPreferencesChanged, onClientStatusChanged });
+export const useSSE = <T extends Topic>({
+  topic,
+  onEvent,
+  onError,
+  onOpen,
+  onPreferencesChanged,
+  onClientStatusChanged,
+  onTasksChanged,
+  params,
+}: Props<T>) => {
+  const handlers = useRef({ onEvent, onError, onOpen, onPreferencesChanged, onClientStatusChanged, onTasksChanged });
   const hasConnected = useRef(false);
   const [status, setStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'disconnected'>('connecting');
   const query = params?.toString() ?? '';
   useEffect(() => {
-    handlers.current = { onEvent, onError, onOpen, onPreferencesChanged, onClientStatusChanged };
-  }, [onEvent, onError, onOpen, onPreferencesChanged, onClientStatusChanged]);
+    handlers.current = { onEvent, onError, onOpen, onPreferencesChanged, onClientStatusChanged, onTasksChanged };
+  }, [onEvent, onError, onOpen, onPreferencesChanged, onClientStatusChanged, onTasksChanged]);
 
   const visible = useWindowVisible();
   useEffect(() => {
@@ -81,6 +91,9 @@ export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, onPre
       });
       source.addEventListener('client-status', () => {
         if (!disposed && source === stream) handlers.current.onClientStatusChanged?.();
+      });
+      source.addEventListener('tasks-changed', () => {
+        if (!disposed && source === stream) handlers.current.onTasksChanged?.();
       });
       source.onerror = (error) => {
         if (disposed || source !== stream) return;

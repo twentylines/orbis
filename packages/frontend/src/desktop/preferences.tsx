@@ -31,7 +31,13 @@ import {
   type WorkspaceLayout,
   type WorkspaceCapabilities,
 } from './workspace-layout';
-import { resolveWallpaperKey, type ThemePreset } from './wallpaper-presets';
+import {
+  resolveWallpaperKey,
+  themePresets,
+  wallpaperColourOverrides,
+  type ThemePreset,
+  type WallpaperPresentationColours,
+} from './wallpaper-presets';
 import { validHiddenRecommendationCategories, type StoreRecommendationCategory } from '@/modules/app/components/store-discover/store-recommendations';
 import { clientStatusHintEvent } from '@/components/recovery-progress/operation-status';
 import { beginResetStartup } from '@/components/startup/reset-startup';
@@ -50,7 +56,7 @@ export type WorkspacePreferences = {
 
 export type DesktopPreferences = {
   serverName: string;
-  preset: 'frost' | 'graphite' | 'forest' | 'stone' | 'ocean' | 'blush';
+  preset: ThemePreset;
   mode: ColourMode;
   density: 'comfortable' | 'compact';
   wallpaper: 'sandstone' | 'tidal' | 'canopy';
@@ -60,6 +66,7 @@ export type DesktopPreferences = {
   toolbarOrder?: ToolbarActionId[];
   windows: DesktopWindows;
   appLaunch: AppLaunchPreferences;
+  showLogicalProcessors?: boolean;
   appearance: DesktopAppearance;
   showStoreRecommendations: boolean;
   hiddenStoreRecommendationCategories: StoreRecommendationCategory[];
@@ -75,6 +82,7 @@ export const defaultDesktopPreferences: DesktopPreferences = {
   wallpaperPreset: null,
   windows: {},
   appLaunch: defaultAppLaunch,
+  showLogicalProcessors: true,
   appearance: normaliseDesktopAppearance(),
   showStoreRecommendations: true,
   hiddenStoreRecommendationCategories: [],
@@ -138,18 +146,19 @@ export const isPreferences = (value: unknown): value is StoredDesktopPreferences
     typeof candidate.serverName === 'string' &&
     candidate.serverName.length >= 1 &&
     candidate.serverName.length <= 40 &&
-    ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'].includes(String(candidate.preset)) &&
+    themePresets.some((preset) => preset === candidate.preset) &&
     (candidate.mode === undefined || ['light', 'dark', 'system'].includes(String(candidate.mode))) &&
     ['comfortable', 'compact'].includes(String(candidate.density)) &&
     (candidate.wallpaper === undefined || ['sandstone', 'tidal', 'canopy'].includes(String(candidate.wallpaper))) &&
     (candidate.wallpaperMode === undefined || ['theme', 'custom'].includes(String(candidate.wallpaperMode))) &&
     (candidate.wallpaperPreset === undefined ||
       candidate.wallpaperPreset === null ||
-      ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'].includes(String(candidate.wallpaperPreset))) &&
+      themePresets.some((preset) => preset === candidate.wallpaperPreset)) &&
     (candidate.workspace === undefined || isWorkspacePreferences(candidate.workspace)) &&
     (candidate.toolbarOrder === undefined || validToolbarOrder(candidate.toolbarOrder)) &&
     (candidate.windows === undefined || desktopWindowsSchema.allows(candidate.windows)) &&
     (candidate.appLaunch === undefined || appLaunchSchema.allows(candidate.appLaunch)) &&
+    (candidate.showLogicalProcessors === undefined || typeof candidate.showLogicalProcessors === 'boolean') &&
     (candidate.showStoreRecommendations === undefined || typeof candidate.showStoreRecommendations === 'boolean') &&
     (candidate.hiddenStoreRecommendationCategories === undefined ||
       validHiddenRecommendationCategories(candidate.hiddenStoreRecommendationCategories)) &&
@@ -168,6 +177,7 @@ export const normalisePreferences = (value: StoredDesktopPreferences): DesktopPr
   windows: value.windows ?? {},
   toolbarOrder: value.toolbarOrder ?? [...toolbarActionIds],
   appLaunch: value.appLaunch ?? defaultAppLaunch,
+  showLogicalProcessors: value.showLogicalProcessors ?? true,
   showStoreRecommendations: value.showStoreRecommendations ?? true,
   hiddenStoreRecommendationCategories: value.hiddenStoreRecommendationCategories ?? [],
   appearance: normaliseDesktopAppearance(value.appearance),
@@ -210,7 +220,10 @@ export type PreferenceContext = {
   cacheAvailable: boolean;
   update: (value: Partial<DesktopPreferences>) => void;
   commit: (value: Partial<DesktopPreferences>) => Promise<void>;
+  commitWallpaperChoice: (value: WallpaperChoicePatch) => Promise<void>;
   updateAppearance: (value: Partial<DesktopAppearance>) => void;
+  displayedWallpaperColours: WallpaperPresentationColours | null;
+  revealWallpaper: (colours: WallpaperPresentationColours | null) => void;
   wallpaperRevision: number;
   refreshWallpaper: () => void;
   updateWindow: (id: DesktopWindowId, value: DesktopWindowState) => void;
@@ -224,6 +237,15 @@ export type PreferenceContext = {
   setPreview: (value: DesktopPreferences | null) => void;
   setWorkspaceLoading: (loading: boolean) => void;
 };
+
+type WallpaperChoicePatch = Partial<Pick<DesktopPreferences, 'wallpaper' | 'wallpaperMode' | 'wallpaperPreset'>> & {
+  appearance?: Partial<DesktopAppearance>;
+};
+
+function savePayload(value: DesktopPreferences, capabilities: WorkspaceCapabilities) {
+  const { wallpaperUnsplash: _selection, ...appearance } = value.appearance;
+  return preferencePayload({ ...value, appearance }, capabilities);
+}
 
 const LOAD_NOTICE = 'desktop-preferences-load';
 
@@ -292,6 +314,15 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const [requiresOnboarding, setRequiresOnboarding] = useState(true);
   const [onboardingOrigin, setOnboardingOrigin] = useState<'fresh' | 'runtipi'>('fresh');
   const [onboardingGeneration, setOnboardingGeneration] = useState<string | null>(null);
+  const [presentedWallpaper, setPresentedWallpaper] = useState<{
+    session: object;
+    generation: string | null;
+    colours: WallpaperPresentationColours | null;
+  } | null>(null);
+  const presentation =
+    presentedWallpaper?.session === sessionEpoch && presentedWallpaper.generation === onboardingGeneration ? presentedWallpaper : null;
+  const displayedWallpaperColours = presentation?.colours ?? null;
+  const automaticColours = displayed.appearance.wallpaperColours && !preview ? displayedWallpaperColours : null;
   const completingSetup = useRef(false);
   const [syncState, setSyncState] = useState<PreferenceContext['syncState']>('local');
   const appearancePainted = useRef(false);
@@ -315,6 +346,24 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     [isCurrentSession, isLoggedIn, sessionEpoch],
   );
   const requestSignal = useCallback(() => AbortSignal.any([sessionAbortSignal, AbortSignal.timeout(20_000)]), [sessionAbortSignal]);
+  const revealWallpaper = useCallback(
+    (colours: WallpaperPresentationColours | null) => {
+      if (currentSession.current !== sessionEpoch || resetGeneration.current !== onboardingGeneration) return;
+      setPresentedWallpaper((previous) => {
+        if (
+          previous?.session === sessionEpoch &&
+          previous.generation === onboardingGeneration &&
+          previous.colours?.themeColour === colours?.themeColour &&
+          previous.colours?.accent === colours?.accent &&
+          previous.colours?.preset === colours?.preset
+        ) {
+          return previous;
+        }
+        return { session: sessionEpoch, generation: onboardingGeneration, colours };
+      });
+    },
+    [onboardingGeneration, sessionEpoch],
+  );
 
   useLayoutEffect(() => {
     mounted.current = true;
@@ -342,18 +391,28 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     const root = document.documentElement;
     const effectiveMode = displayed.mode === 'system' ? readSystemColourMode() : resolvedMode;
     const apply = () => {
-      root.dataset.desktopPreset = displayed.preset;
+      root.dataset.desktopPreset = automaticColours?.preset ?? displayed.preset;
       root.dataset.desktopMode = effectiveMode;
       root.dataset.desktopWallpaper = displayedWallpaper;
       root.dataset.desktopLocalWallpaper = String(displayed.wallpaperMode === 'custom' && Boolean(displayed.appearance.wallpaperImage));
       root.dataset.orbisAppearanceReady = 'true';
-      applyThemePackRuntime(themePack, effectiveMode, displayed.wallpaperMode === 'theme');
-      applyAppearanceRuntime(themePackAppearance(themePack, displayed.appearance), effectiveMode);
+      applyThemePackRuntime(themePack, effectiveMode, displayed.wallpaperMode === 'theme', !automaticColours?.preset);
+      const colours = wallpaperColourOverrides(automaticColours);
+      applyAppearanceRuntime(themePackAppearance(themePack, { ...displayed.appearance, ...colours }), effectiveMode);
     };
     transitionAppearance(
       apply,
-      appearancePainted.current,
-      JSON.stringify([effectiveMode, displayed.preset, displayed.appearance, displayedWallpaper, displayed.wallpaperMode, themePack]),
+      // The wallpaper already owns the crossfade. Commit its palette with the revealed frame.
+      appearancePainted.current && !automaticColours,
+      JSON.stringify([
+        effectiveMode,
+        displayed.preset,
+        displayed.appearance,
+        displayedWallpaper,
+        displayed.wallpaperMode,
+        themePack,
+        automaticColours,
+      ]),
     );
     appearancePainted.current = true;
     const queries = ['(prefers-reduced-motion: reduce)', '(prefers-reduced-transparency: reduce)'].flatMap((query) => {
@@ -367,7 +426,16 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     return () => {
       for (const query of queries) query.removeEventListener('change', apply);
     };
-  }, [displayed.appearance, displayed.preset, displayedWallpaper, displayed.mode, displayed.wallpaperMode, resolvedMode, themePack]);
+  }, [
+    displayed.appearance,
+    displayed.preset,
+    displayedWallpaper,
+    displayed.mode,
+    displayed.wallpaperMode,
+    resolvedMode,
+    themePack,
+    automaticColours,
+  ]);
 
   useEffect(() => {
     if (isLoggedIn && (!initialLoadComplete || loadStateSession !== sessionEpoch)) return;
@@ -509,9 +577,10 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
           setRequiresOnboarding(!status.complete);
           setOnboardingGeneration(status.generation);
           setOnboardingOrigin(status.origin);
-          const next = normalisePreferences(value);
-          if (reset || (revision.current === currentRevision && acknowledgedRevision.current === currentRevision))
+          if (reset || (revision.current === currentRevision && acknowledgedRevision.current === currentRevision)) {
+            const next = normalisePreferences(value);
             replacePreferences((previous) => (JSON.stringify(previous) === JSON.stringify(next) ? previous : next));
+          }
         }
       } catch {
         // The saved browser appearance remains available while the server reconnects.
@@ -520,9 +589,11 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         if (waiting && revision.current === acknowledgedRevision.current) void refresh();
       }
     };
-    const changed = () => void refresh();
+    const changed = () => {
+      void refresh();
+    };
     const focus = () => {
-      if (document.visibilityState === 'visible') void refresh();
+      if (document.visibilityState === 'visible') changed();
     };
     for (const event of ['focus', 'online', 'pageshow']) window.addEventListener(event, focus);
     document.addEventListener('visibilitychange', focus);
@@ -595,7 +666,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
             keepalive: true,
             signal: requestSignal(),
             headers: { 'Content-Type': 'application/json', 'X-Orbis-Reset-Generation': generation ?? 'none' },
-            body: JSON.stringify(preferencePayload(currentPreferences.current, capabilityRef.current)),
+            body: JSON.stringify(savePayload(currentPreferences.current, capabilityRef.current)),
           });
           if (!isCurrentSession()) return;
           if (generation !== resetGeneration.current) return;
@@ -623,13 +694,13 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     setSyncState(isLoggedIn ? (serverReady ? 'saving' : syncState === 'loading' ? 'loading' : 'error') : 'local');
     replacePreferences((previous) => {
       const next = { ...previous, ...value };
+      if (value.appearance) next.appearance = { ...value.appearance, wallpaperUnsplash: previous.appearance.wallpaperUnsplash };
       return isPreferences(next) ? next : previous;
     });
   };
 
-  const commit = async (value: Partial<DesktopPreferences>) => {
-    if (!canSave() || !serverReady || completingSetup.current || !isPreferences({ ...currentPreferences.current, ...value }))
-      throw new Error('These settings cannot be saved yet. Try again.');
+  const commitPatch = async (makePatch: (current: DesktopPreferences) => Partial<DesktopPreferences>) => {
+    if (!canSave() || !serverReady || completingSetup.current) throw new Error('These settings cannot be saved yet. Try again.');
     const expectedRevision = revision.current;
     const generation = resetGeneration.current;
     setSyncState('saving');
@@ -639,18 +710,28 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       if (revision.current !== expectedRevision) throw new Error('Settings changed while saving. Try again.');
       const baseline = currentPreferences.current;
       const submittedFieldEdits = new Map(fieldEdits.current);
+      const value = makePatch(baseline);
       const next = { ...baseline, ...value };
       if (!isPreferences(next)) throw new Error('Invalid settings. Try again.');
       const response = await fetch('/api/desktop-preferences', {
         method: 'PUT',
         credentials: 'include',
         signal: requestSignal(),
-        headers: { 'Content-Type': 'application/json', 'X-Orbis-Reset-Generation': generation ?? 'none' },
-        body: JSON.stringify(preferencePayload(next, capabilityRef.current)),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Orbis-Reset-Generation': generation ?? 'none',
+        },
+        body: JSON.stringify(savePayload(next, capabilityRef.current)),
       });
+      if (!response.ok) throw new Error('The settings could not be saved. Try again.');
+      if (typeof value.showLogicalProcessors === 'boolean') {
+        const saved: unknown = await response.json();
+        if (!isPreferences(saved)) throw new Error('The saved preferences could not be verified.');
+        if (typeof value.showLogicalProcessors === 'boolean' && saved.showLogicalProcessors !== value.showLogicalProcessors)
+          throw new Error('The server did not save the logical processor setting.');
+      }
       if (!isCurrentSession()) throw new Error('Your session changed. Reload your settings before saving.');
       if (generation !== resetGeneration.current) throw new Error('Orbis was reset. Reload your settings before saving.');
-      if (!response.ok) throw new Error('The settings could not be saved. Try again.');
       const unchanged = revision.current === expectedRevision;
       revision.current++;
       if (unchanged) acknowledgedRevision.current = revision.current;
@@ -660,7 +741,14 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
             ([key]) => fieldEdits.current.get(key as keyof DesktopPreferences) === submittedFieldEdits.get(key as keyof DesktopPreferences),
           ),
         );
-        return { ...previous, ...patch };
+        const updated = { ...previous, ...patch };
+        if (value.appearance) {
+          updated.appearance = {
+            ...updated.appearance,
+            wallpaperUnsplash: previous.appearance.wallpaperUnsplash,
+          };
+        }
+        return updated;
       });
       setSyncState(unchanged ? 'saved' : 'saving');
       remoteRefresh.current?.();
@@ -674,8 +762,16 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     }
   };
 
+  const commit = (value: Partial<DesktopPreferences>) => commitPatch(() => value);
+  const commitWallpaperChoice = ({ appearance, ...value }: WallpaperChoicePatch) =>
+    commitPatch((baseline) => ({ ...value, appearance: { ...baseline.appearance, ...appearance } }));
+
   const reset = () => {
     if (!canEdit() || completingSetup.current) return;
+    if (canSave() && serverReady) {
+      void commitPatch(() => ({ ...defaultDesktopPreferences, workspace: { ...defaultDesktopPreferences.workspace } })).catch(() => undefined);
+      return;
+    }
     revision.current += 1;
     for (const key of Object.keys(defaultDesktopPreferences)) fieldEdits.current.set(key as keyof DesktopPreferences, revision.current);
     setSyncState(isLoggedIn ? (serverReady ? 'saving' : syncState === 'loading' ? 'loading' : 'error') : 'local');
@@ -687,7 +783,8 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     revision.current += 1;
     fieldEdits.current.set('appearance', revision.current);
     setSyncState(isLoggedIn ? (serverReady ? 'saving' : syncState === 'loading' ? 'loading' : 'error') : 'local');
-    replacePreferences((previous) => ({ ...previous, appearance: { ...previous.appearance, ...value } }));
+    const { wallpaperUnsplash: _selection, ...appearance } = value;
+    replacePreferences((previous) => ({ ...previous, appearance: { ...previous.appearance, ...appearance } }));
   };
 
   const updateWindow = (id: DesktopWindowId, value: DesktopWindowState) => {
@@ -714,7 +811,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         credentials: 'include',
         signal: requestSignal(),
         headers: { 'Content-Type': 'application/json', 'X-Orbis-Reset-Generation': generation ?? 'none' },
-        body: JSON.stringify(preferencePayload(next, capabilityRef.current)),
+        body: JSON.stringify(savePayload(next, capabilityRef.current)),
       });
       if (!isCurrentSession()) throw new Error('Your session changed. Reload your settings before saving.');
       if (generation !== resetGeneration.current) throw new Error('Orbis was reset. Reload setup before saving.');
@@ -757,7 +854,10 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         cacheAvailable,
         update,
         commit,
+        commitWallpaperChoice,
         updateAppearance,
+        displayedWallpaperColours,
+        revealWallpaper,
         wallpaperRevision,
         refreshWallpaper: () => setWallpaperRevision((value) => value + 1),
         updateWindow,

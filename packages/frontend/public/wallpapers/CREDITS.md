@@ -32,3 +32,14 @@ The Forest v3, Ocean v4 and Blush v4 photographs are cropped to a desktop aspect
 - `forest-v2.webp`, `forest-v2-preview.webp` — Jozef020, [Lush forest reflection on calm green water](https://commons.wikimedia.org/wiki/File:Lush_forest_reflection_on_calm_green_water1.jpg), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 - `ocean-v2.webp`, `ocean-v2-preview.webp` — Mariola Grobelska, [Calm ocean stretches towards the cloudy horizon](https://unsplash.com/photos/calm-ocean-stretches-towards-the-cloudy-horizon-LavEygj4EXk), [Unsplash License](https://unsplash.com/license).
 - `blush-v2.webp`, `blush-v2-preview.webp` — Jeremy Bishop, [Purple and pink cloudy sky, Bondi Beach](https://commons.wikimedia.org/wiki/File:Purple_and_pink_cloudy_sky_(Unsplash).jpg), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+
+## Additional colour presets
+
+These wallpapers are cropped from photographs. The full backgrounds are 3840 × 2160, with separate 480 × 270 previews.
+
+| Preset | Files | Photographer | Source and licence |
+| --- | --- | --- | --- |
+| Burgundy | `burgundy-v1.webp`, `burgundy-v1-preview.webp` | v2osk | [Red rose, Southport](https://unsplash.com/photos/close-up-photo-of-red-rose-ze7vk-TKgAg), [Unsplash License](https://unsplash.com/license) |
+| Amber | `amber-v1.webp`, `amber-v1-preview.webp` | Susanne Jutzeler, suju-foto | [Sunflower field](https://www.pexels.com/photo/shallow-focus-photography-of-yellow-sunflower-field-under-sunny-sky-1169084/), [Pexels License](https://www.pexels.com/license/) |
+| Rose | `rose-v1.webp`, `rose-v1-preview.webp` | Michelle Leman | [Pink rose petals](https://www.pexels.com/photo/close-up-of-a-pink-rose-6765595/), [Pexels License](https://www.pexels.com/license/) |
+| Orange | `orange-v1.webp`, `orange-v1-preview.webp` | Fuzail Ahmad | [Orange gerbera](https://www.pexels.com/photo/macro-photography-of-flower-2081700/), [Pexels License](https://www.pexels.com/license/) |

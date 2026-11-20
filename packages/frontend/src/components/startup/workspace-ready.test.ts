@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { waitForWorkspaceReady } from './workspace-ready';
 
-function harness() {
+function harness(guest = false) {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const originalObserver = Object.getOwnPropertyDescriptor(globalThis, 'MutationObserver');
   const originalHeight = Object.getOwnPropertyDescriptor(globalThis, 'innerHeight');
@@ -13,15 +13,19 @@ function harness() {
     querySelector: () => (state.childPending ? {} : null),
     querySelectorAll: () => state.images,
   };
-  const surface = Object.assign(new EventTarget(), {
-    querySelector: (selector: string) => (selector === '.workspace' ? home : {}),
-    ownerDocument: {
-      fonts: {
-        ready: new Promise<void>((resolve) => {
-          releaseFonts = resolve;
-        }),
-      },
+  const ownerDocument = Object.assign(new EventTarget(), {
+    body: {},
+    querySelector: () => home,
+    fonts: {
+      ready: new Promise<void>((resolve) => {
+        releaseFonts = resolve;
+      }),
     },
+  });
+  const surface = Object.assign(new EventTarget(), {
+    classList: { contains: () => guest },
+    querySelector: (selector: string) => (selector === '.workspace' ? home : guest ? null : {}),
+    ownerDocument,
   });
   Object.defineProperty(globalThis, 'window', { configurable: true, value: { setTimeout, clearTimeout } });
   Object.defineProperty(globalThis, 'innerHeight', { configurable: true, value: 800 });
@@ -74,6 +78,42 @@ test('Home stays covered until both its widgets and its fonts have settled', asy
     expect(h.state.ready).toBe(1);
     h.changed();
     expect(h.state.ready).toBe(1);
+  } finally {
+    stop();
+    h.restore();
+  }
+});
+
+test('Guest suspense remains covered until shared content, fonts and visible images are ready', async () => {
+  const h = harness(true);
+  const stop = h.start();
+  try {
+    h.releaseFonts();
+    await Bun.sleep(0);
+    expect(h.state.ready).toBe(0);
+    h.state.dataReady = true;
+    h.state.childPending = true;
+    h.changed();
+    expect(h.state.ready).toBe(0);
+    h.state.childPending = false;
+    h.changed();
+    expect(h.state.ready).toBe(1);
+  } finally {
+    stop();
+    h.restore();
+  }
+});
+
+test('a failed or cancelled Guest load cannot reveal stale content', async () => {
+  const h = harness(true);
+  const stop = h.start(10);
+  try {
+    h.releaseFonts();
+    await Bun.sleep(25);
+    expect(h.state).toMatchObject({ ready: 0, slow: 1 });
+    h.state.dataReady = true;
+    h.changed();
+    expect(h.state.ready).toBe(0);
   } finally {
     stop();
     h.restore();

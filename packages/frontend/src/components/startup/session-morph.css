@@ -37,13 +37,11 @@
 .orbis-startup.orbis-startup-redesigned:is([data-session-state="signing-in"], [data-session-state="logging-out"]) {
   --orbis-session-ink: #ffffff;
 }
-.orbis-startup.orbis-startup-redesigned:is([data-session-state="signing-in"], [data-session-state="logging-out"])[data-desktop-mode="light"] {
-  --orbis-session-ink: #000000;
-}
 .orbis-startup.orbis-startup-redesigned:is([data-session-state="signing-in"], [data-session-state="logging-out"]) .orbis-startup-copy {
   color: var(--orbis-session-ink);
 }
 .orbis-startup.orbis-startup-redesigned:is([data-session-state="signing-in"], [data-session-state="logging-out"])
+  .orbis-startup-copy
   :is(.orbis-startup-title, .orbis-startup-detail) {
   color: inherit;
   text-shadow: none;

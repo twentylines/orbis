@@ -1,5 +1,3 @@
-import { useDesktopPreferences } from '@/desktop/preferences';
-import type { StoreRecommendationCategory } from '../components/store-discover/store-recommendations';
 import { useAppContext } from '@/context/app-context';
 import { useTasks } from '@/desktop/tasks';
 import {
@@ -20,21 +18,23 @@ import { useInfiniteScroll } from '@/lib/hooks/use-infinite-scroll';
 import { iconForCategory } from '@/modules/app/helpers/table-helpers';
 import { useAppStoreState } from '@/stores/app-store';
 import type { AppCategory, AppInfo, AppInfoSimple } from '@/types/app.types';
-import { IconArrowRight, IconSearch, IconX } from '@tabler/icons-react';
+import { IconSearch, IconX } from '@tabler/icons-react';
 import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useWindowVisible, WindowVisibilityContext } from '@/desktop/window-visibility';
-import { storeView, storeEditorialFits } from '../components/store-discover/store-curation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useWindowVisible } from '@/desktop/window-visibility';
+import { storeView } from '../components/store-discover/store-curation';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useLocation, useParams, useSearchParams } from 'react-router';
-import { disableStoreRecommendations, StoreDiscover } from '../components/store-discover/store-discover';
 import { StoreViewTransition } from '../components/store-discover/store-view-transition';
 import { StoreCatalogue } from './store-catalogue';
+import { StoreShowcase } from '../components/store-discover/store-showcase';
 import { nextStorePreviewHistory, type StorePreviewHistory } from './store-preview-navigation';
+import { useStorePreview } from './store-preview-context';
 import './app-store-page.css';
 import { ThemePacksCatalogue } from '@/modules/theme-packs/theme-packs-catalogue';
 import { InstallDialog } from '../components/dialogs/install-dialog/install-dialog';
 import toast from 'react-hot-toast';
+import { catalogueInstallAllowed } from '../helpers/catalogue-compatibility';
 
 export const AppStorePageSuspense = () => <DelayedRouteLoading label="Loading app catalogue…" />;
 
@@ -46,6 +46,9 @@ export default function AppStorePage() {
 
 function LocalStore() {
   const params = useParams<{ storeId: string; appId: string }>();
+  const preview = useStorePreview();
+  const splitPreview = Boolean(preview?.split && preview.selectedUrn);
+  const suggestion = preview?.suggestion;
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedStore = searchParams.get('store') ?? undefined;
@@ -55,18 +58,7 @@ function LocalStore() {
   const view = storeView(searchParams.get('view'));
   const browsing = view === 'apps';
   const themes = view === 'themes';
-  const surface = useRef<HTMLElement>(null);
   const visible = useWindowVisible();
-  const { preferences, update } = useDesktopPreferences();
-  const recommendationProps = {
-    enabled: preferences.showStoreRecommendations,
-    hiddenCategories: preferences.hiddenStoreRecommendationCategories,
-    onDisableSuggestions: () => disableStoreRecommendations(update),
-    onHideCategory: (category: StoreRecommendationCategory) =>
-      update({
-        hiddenStoreRecommendationCategories: [...new Set([...preferences.hiddenStoreRecommendationCategories, category])],
-      }),
-  };
   const { user } = useAppContext();
   const installed = useQuery({ ...getInstalledAppsOptions(), enabled: visible && browsing && user.operator, staleTime: 5000 });
   const installedApps = new Set(
@@ -119,7 +111,7 @@ function LocalStore() {
         void queryClient.invalidateQueries({ queryKey: getInstalledAppsOptions().queryKey });
         return;
       }
-      if (!details.info.available || details.info.deprecated) {
+      if (!catalogueInstallAllowed(details.info)) {
         toast.error('This app is unavailable for installation.');
         return;
       }
@@ -130,22 +122,6 @@ function LocalStore() {
       if (generation === installGeneration.current && scopeNow.current === scope) setInstallLoadingUrn(null);
     }
   };
-  const [editorialFits, setEditorialFits] = useState(false);
-  useLayoutEffect(() => {
-    const element = surface.current;
-    if (!element) return;
-    const catalogue = element.closest<HTMLElement>('.store-catalogue-pane');
-    const update = () =>
-      setEditorialFits(
-        storeEditorialFits(element.clientWidth, catalogue?.clientHeight ?? 0, Number.parseFloat(getComputedStyle(document.documentElement).fontSize)),
-      );
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    if (catalogue) observer.observe(catalogue);
-    observer.observe(document.documentElement);
-    update();
-    return () => observer.disconnect();
-  }, []);
   const visibleSearch = themes ? themeSearch : search;
   const reduced = useReducedMotion();
   const { t } = useTranslation();
@@ -161,10 +137,10 @@ function LocalStore() {
       update(next);
       setSearchParams(next, {
         preventScrollReset: true,
-        state: params.appId ? nextStorePreviewHistory(location.state as StorePreviewHistory | null, location.search, true) : undefined,
+        state: params.appId ? nextStorePreviewHistory(location.state as StorePreviewHistory | null, location.search, true, suggestion) : undefined,
       });
     },
-    [searchParams, setSearchParams, params.appId, location.state, location.search],
+    [searchParams, setSearchParams, params.appId, location.state, location.search, suggestion],
   );
   const clearSearch = () => {
     setLocalSearch('');
@@ -174,11 +150,7 @@ function LocalStore() {
     setCategory(nextCategory);
     changeQuery((next) => next.set('view', 'apps'));
   };
-  const discover = () => {
-    changeQuery((next) => next.set('view', 'discover'));
-  };
   const hasFilters = Boolean(search || category || selectedStore);
-  const showEditorial = visible && browsing && !params.appId && !hasFilters && preferences.showStoreRecommendations;
   const clearFilters = () => {
     clearSearch();
     setCategory(undefined);
@@ -213,9 +185,9 @@ function LocalStore() {
   if (params.storeId && !params.appId) return <Navigate to={`/app-store?store=${encodeURIComponent(params.storeId)}`} />;
   return (
     <section
-      ref={surface}
       className="orbis-store"
-      data-store-facet={themes ? 'themes' : browsing ? 'apps' : 'discover'}
+      data-store-facet={view}
+      data-split-preview={splitPreview || undefined}
       data-reduced-motion={reduced ? 'true' : undefined}
       aria-label="Store catalogue"
     >
@@ -231,7 +203,6 @@ function LocalStore() {
               }
               setLocalSearch(event.target.value);
               setSearch(event.target.value);
-              if (!browsing) changeQuery((next) => next.set('view', 'apps'));
             }}
             aria-label={themes ? 'Search theme packs' : t('APP_STORE_SEARCH_PLACEHOLDER')}
             placeholder="Search"
@@ -275,19 +246,19 @@ function LocalStore() {
                     Category
                   </span>
                 )}
-                <span className={category ? undefined : 'orbis-store-filter-default'}>
-                  <SelectValue />
-                </span>
+                <SelectValue className={category ? 'orbis-store-category-value' : 'orbis-store-category-value orbis-store-filter-default'} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All categories</SelectItem>
+                <SelectItem value="all">
+                  <span className="orbis-store-category-text">All categories</span>
+                </SelectItem>
                 {iconForCategory.map((item) => {
                   const CategoryIcon = item.icon;
                   return (
                     <SelectItem key={item.id} value={item.id}>
                       <span className="orbis-store-category-option">
                         <CategoryIcon size={18} aria-hidden="true" />
-                        {t(`APP_CATEGORY_${item.id.toUpperCase()}`)}
+                        <span className="orbis-store-category-text">{t(`APP_CATEGORY_${item.id.toUpperCase()}`)}</span>
                       </span>
                     </SelectItem>
                   );
@@ -341,11 +312,14 @@ function LocalStore() {
         active={view}
         themes={<ThemePacksCatalogue surface="store" search={themeSearch} />}
         apps={
-          <div className="orbis-store-catalogue" data-editorial={showEditorial ? 'true' : undefined}>
+          <div className="orbis-store-catalogue">
             <div className="orbis-store-results" aria-busy={updating || undefined}>
+              {!hasFilters && data ? (
+                <StoreShowcase apps={apps} storeId={selectedStore} installedApps={installedApps} pendingApps={pendingApps} onBrowse={browse} />
+              ) : null}
               <div className="orbis-store-result-heading">
                 <div>
-                  <h2>{category ? t(`APP_CATEGORY_${category.toUpperCase()}`) : search ? 'Search results' : 'Apps'}</h2>
+                  <h2>{category ? t(`APP_CATEGORY_${category.toUpperCase()}`) : search ? 'Search results' : 'All apps'}</h2>
                   <p aria-live="polite">
                     {updating
                       ? 'Updating results…'
@@ -372,7 +346,7 @@ function LocalStore() {
                         : 'The app catalogue could not be loaded.'}
                   </p>
                   <button type="button" onClick={() => void (isFetchNextPageError ? fetchNextPage() : refetch())}>
-                    Try again <IconArrowRight size={18} aria-hidden="true" />
+                    Try again
                   </button>
                 </div>
               ) : null}
@@ -383,24 +357,11 @@ function LocalStore() {
                   <StoreCatalogue
                     apps={apps}
                     lastElementRef={lastElementRef}
-                    collectionsAfter={editorialFits ? 8 : 16}
                     canInstall={user.operator && installed.isSuccess && tasks.isSuccess && !tasks.isError}
                     installedApps={installedApps}
                     pendingApps={pendingApps}
                     installLoadingUrn={installLoadingUrn}
                     onInstall={openInstall}
-                    collections={
-                      <WindowVisibilityContext.Provider value={visible && browsing && !params.appId && !hasFilters}>
-                        <StoreDiscover
-                          {...recommendationProps}
-                          presentation="editorial"
-                          onCollections={discover}
-                          key={`editorial-${selectedStore ?? 'all'}`}
-                          storeId={selectedStore}
-                          onBrowse={browse}
-                        />
-                      </WindowVisibilityContext.Provider>
-                    }
                   />
                   {hasNextPage ? (
                     <div className="orbis-store-pagination">
@@ -418,7 +379,7 @@ function LocalStore() {
                   <p>{hasFilters ? t('APP_STORE_NO_RESULTS_SUBTITLE') : 'No apps are available from the enabled repositories.'}</p>
                   {hasFilters ? (
                     <button type="button" onClick={clearFilters}>
-                      Show all apps <IconArrowRight size={18} aria-hidden="true" />
+                      Show all apps
                     </button>
                   ) : null}
                 </div>
@@ -426,7 +387,6 @@ function LocalStore() {
             </div>
           </div>
         }
-        discover={<StoreDiscover {...recommendationProps} key={selectedStore ?? 'all'} storeId={selectedStore} onBrowse={browse} />}
       />
       {install ? (
         <InstallDialog

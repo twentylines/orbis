@@ -1,0 +1,69 @@
+.monitor-gpu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 14px;
+}
+.monitor-gpu-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 6%, transparent);
+}
+.monitor-resource-eyebrow {
+  color: var(--desktop-status-muted);
+  font-size: 0.75rem;
+}
+.monitor-gpu-card h3 {
+  margin: 5px 0 8px;
+  font-size: 1rem;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+.monitor-gpu-card header p {
+  margin: 0;
+  color: var(--desktop-status-muted);
+  font-size: 0.8125rem;
+}
+.monitor-gpu-card meter {
+  display: block;
+  width: 100%;
+  height: 10px;
+  accent-color: var(--desktop-accent);
+}
+.workspace-gpus {
+  margin-block: 16px;
+}
+.workspace-gpu-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--desktop-ink);
+  font-size: 0.875rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+.workspace-gpus .monitor-gpu-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.workspace-gpus .monitor-resource-facts {
+  margin-block: 12px;
+}
+
+.workspace-gpus .monitor-resource-facts {
+  display: grid;
+  gap: 12px;
+}
+.workspace-gpus .monitor-resource-facts dt,
+.workspace-gpus .monitor-resource-note {
+  color: var(--desktop-status-muted);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+.workspace-gpus .monitor-resource-facts dd {
+  margin: 4px 0 0;
+  font-size: 1rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}

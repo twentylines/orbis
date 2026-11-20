@@ -50,6 +50,19 @@ describe('bounded theme runtime and personal override preservation', () => {
       expect(dataset.orbisThemePack).toBe('tideline@1.1.0');
     }
   });
+  test('a tagged wallpaper can replace the pack palette while retaining its treatment', () => {
+    const { properties, dataset } = root();
+    applyThemePackRuntime(alpine, 'dark', false);
+    const packFont = properties.get('--orbis-pack-font');
+    expect(properties.has('--desktop-base-accent')).toBe(true);
+    applyThemePackRuntime(alpine, 'dark', false, false);
+    for (const token of ['--desktop-base-surface', '--desktop-base-accent', '--desktop-base-chrome-rgb', '--desktop-line']) {
+      expect(properties.has(token)).toBe(false);
+    }
+    expect(properties.get('--orbis-pack-font')).toBe(packFont);
+    expect(dataset.orbisThemePack).toBe('alpine@1.1.0');
+  });
+
   test('keeps every authored setting and upload while nullable material values inherit pack treatment', () => {
     const personal = normaliseDesktopAppearance({
       accent: '#915221',
@@ -77,10 +90,16 @@ describe('bounded theme runtime and personal override preservation', () => {
     expect(themePackAppearance(alpine, personal)).toEqual(personal);
     expect(themePackAppearance(tideline, personal)).toEqual(personal);
     expect(JSON.stringify(personal)).toBe(original);
+    const legacy = { ...personal };
+    Reflect.deleteProperty(legacy, 'materialMode');
+    expect(themePackAppearance(alpine, legacy)).toEqual(personal);
     const defaults = normaliseDesktopAppearance();
     expect(themePackAppearance(alpine, defaults).glassBlur).toBe(12);
     expect(themePackAppearance(tideline, defaults).glassBlur).toBe(28);
     expect(defaults.glassBlur).toBeNull();
+    expect(themePackAppearance(tideline, normaliseDesktopAppearance({ materialMode: 'default', surfaceOpacity: 0, glassBlur: 0 }))).toEqual(
+      themePackAppearance(tideline, defaults),
+    );
     const { dataset } = root();
     applyThemePackRuntime(tideline, 'light', false);
     expect(dataset.orbisPackWallpaper).toBe('false');

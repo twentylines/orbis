@@ -15,6 +15,7 @@ import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'react-tooltip';
 import { hiddenTypes, validateAppConfig } from './form-validators';
+import { catalogueInstallDefaults } from '../../helpers/catalogue-compatibility';
 import { InstallFormField } from './install-form-field';
 
 interface IProps {
@@ -57,6 +58,8 @@ export const InstallForm = React.forwardRef<InstallFormValidationHandle, IProps>
   ({ formFields = [], info, onSubmit, initialValues, loading, formId, targetSettings, getTargetPort }, ref) => {
     const { t } = useTranslation();
     const { userSettings } = useAppContext();
+    const requiresAuth = info.compatibility?.requires_auth === true;
+    const formDefaults = catalogueInstallDefaults(info, initialValues);
     const fieldPrefix = React.useId();
     const fieldId = (name: string) => `${fieldPrefix}-${name}`;
     const { guestDashboard, localDomain, internalIp, domain, maxBackups: globalMaxBackups } = targetSettings ?? userSettings;
@@ -75,27 +78,32 @@ export const InstallForm = React.forwardRef<InstallFormValidationHandle, IProps>
       getFieldState,
       setFocus,
     } = useForm<FormValues>({
-      defaultValues: initialValues,
+      defaultValues: formDefaults,
     });
     const firstInvalidField = useRef<string | undefined>(undefined);
     const parentErrorFields = useRef(new Set<string>());
-    const watchExposed = watch('exposed', false);
-    const watchOpenPort = watch('openPort', !info.force_expose);
-    const watchExposedLocal = watch('exposedLocal', false);
+    const watchExposed = watch('exposed', Boolean(formDefaults?.exposed));
+    const watchOpenPort = watch('openPort', Boolean(formDefaults?.openPort ?? (!info.force_expose && !requiresAuth)));
+    const watchExposedLocal = watch('exposedLocal', Boolean(formDefaults?.exposedLocal));
 
     const { appName } = extractAppUrn(info.urn as AppUrn);
 
     useEffect(() => {
       if (initialValues && !isDirty) {
-        for (const [key, value] of Object.entries(initialValues)) {
+        for (const [key, value] of Object.entries(catalogueInstallDefaults(info, initialValues) ?? {})) {
           setValue(key, value as string);
         }
+      }
+      if (requiresAuth) {
+        setValue('enableAuth', true);
+        setValue('openPort', false);
+        if (!watchExposed) setValue('exposedLocal', true);
       }
       if (info.force_expose) {
         setValue('exposed', true);
         setValue('openPort', false);
       }
-    }, [initialValues, isDirty, setValue, info.force_expose]);
+    }, [initialValues, isDirty, setValue, info, requiresAuth, watchExposed]);
 
     const randomPortMutation = useMutation({
       ...getRandomPortMutation(),
@@ -172,7 +180,7 @@ export const InstallForm = React.forwardRef<InstallFormValidationHandle, IProps>
                     ref={ref}
                     checked={value}
                     onCheckedChange={onChange}
-                    disabled={loading}
+                    disabled={loading || (requiresAuth && !watchExposed)}
                     label={
                       <>
                         {t('APP_INSTALL_FORM_EXPOSE_LOCAL')}
@@ -197,6 +205,7 @@ export const InstallForm = React.forwardRef<InstallFormValidationHandle, IProps>
                     groupPrefix="https://"
                     groupSuffix={`.${localDomain}`}
                     {...register('localSubdomain')}
+                    defaultValue={requiresAuth ? info.urn.replace(/[^a-zA-Z0-9-]/g, '-').slice(0, 63) : undefined}
                     label={t('APP_INSTALL_FORM_LOCAL_SUBDOMAIN')}
                     error={errors.localSubdomain?.message}
                     disabled={loading}
@@ -214,7 +223,7 @@ export const InstallForm = React.forwardRef<InstallFormValidationHandle, IProps>
                     ref={ref}
                     checked={value}
                     onCheckedChange={onChange}
-                    disabled={loading}
+                    disabled={loading || requiresAuth}
                     label={
                       <>
                         {t('APP_INSTALL_FORM_ENABLE_AUTH')}
@@ -279,6 +288,9 @@ export const InstallForm = React.forwardRef<InstallFormValidationHandle, IProps>
 
     return (
       <form className="flex flex-col" onSubmit={handleSubmit(validate)} id={formId} aria-busy={loading}>
+        {requiresAuth ? (
+          <p className="form-text mb-4">This app uses Orbis sign-in. Access it through a local or public domain. Direct port access is disabled.</p>
+        ) : null}
         {(guestDashboard || formFields.filter(typeFilter).length !== 0) && <h3>{t('APP_INSTALL_FORM_GENERAL')}</h3>}
         {formFields.filter(typeFilter).map(renderField)}
         {guestDashboard && (
@@ -305,7 +317,7 @@ export const InstallForm = React.forwardRef<InstallFormValidationHandle, IProps>
             <Controller
               control={control}
               name="openPort"
-              defaultValue={!info.force_expose}
+              defaultValue={!info.force_expose && !requiresAuth}
               render={({ field: { onChange, value, ref, ...props } }) => (
                 <Switch
                   {...props}
@@ -313,7 +325,7 @@ export const InstallForm = React.forwardRef<InstallFormValidationHandle, IProps>
                   ref={ref}
                   checked={value}
                   onCheckedChange={onChange}
-                  disabled={loading || info.force_expose}
+                  disabled={loading || info.force_expose || requiresAuth}
                   label={
                     <>
                       {t('APP_INSTALL_FORM_OPEN_PORT')}

@@ -18,6 +18,7 @@ import { requireReleaseChannel } from './orbis-release-channel';
 import { OrbisReleaseChannelsService } from './orbis-release-channels.service';
 import { SentinelService } from './sentinel.service';
 import { SentinelReleasesService } from './sentinel-releases.service';
+import { InstalledSoftwareService } from './installed-software.service';
 
 @Controller('system')
 export class SystemController {
@@ -34,6 +35,7 @@ export class SystemController {
     private readonly channels: OrbisReleaseChannelsService,
     private readonly sentinel: SentinelService,
     private readonly sentinelReleases: SentinelReleasesService,
+    private readonly installedSoftware: InstalledSoftwareService,
   ) {}
 
   @UseGuards(AuthGuard)
@@ -109,6 +111,12 @@ export class SystemController {
       imageDigest: process.env.ORBIS_IMAGE_DIGEST || null,
       runtipiCompatibility: process.env.TIPI_VERSION || null,
     };
+  }
+
+  @UseGuards(AuthGuard)
+  @Get('/installed-software')
+  installedSoftwareVersions() {
+    return this.installedSoftware.read();
   }
 
   @UseGuards(AuthGuard)

@@ -8,7 +8,7 @@ import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
 import { animateSessionExit, rememberLogout } from '@/desktop/session-motion';
 import toast from 'react-hot-toast';
 import { useReducedMotion } from '@/desktop/motion-preferences';
-import { logout } from '@/api-client';
+import { logout, userContext } from '@/api-client';
 import { useAppContext } from '@/context/app-context';
 import { useUserContext } from '@/context/user-context';
 import { PageTitle } from '@/components/page-title/page-title';
@@ -33,6 +33,8 @@ import { Button } from '@/components/ui/Button';
 import { DockActivity } from '@/desktop/desktop-activity';
 import { DockGlass, useDockStartupReveal } from '@/desktop/dock-companion';
 import { DockSelection } from '@/desktop/dock-selection';
+import { useDockScroll } from '@/desktop/use-dock-scroll';
+import { DockScrollReveal } from '@/desktop/dock-scroll-reveal';
 import { useNavigationPreload, useNavigationWarmup } from '@/desktop/navigation-warmup';
 import { OrbisUpdateIcon, OrbisUpdateNotice } from '@/desktop/orbis-update-notice';
 import { revealPageFocus } from '@/desktop/window-viewport';
@@ -58,7 +60,7 @@ export const DashboardLayoutSuspense = () => {
 
 export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const { userSettings, apps } = useAppContext();
-  const { isLoggedIn, endSession } = useUserContext();
+  const { isLoggedIn, isGuestDashboardEnabled, endSession } = useUserContext();
   const startupSession = useStartupSession();
   const navigate = useNavigate();
   const { preferences, resolvedMode, update, requiresOnboarding } = useDesktopPreferences();
@@ -86,6 +88,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const reduceMotion = useReducedMotion();
   useEscapeBack(!requiresOnboarding && !loggingOff);
   const dock = useRef<HTMLElement>(null);
+  const dockScroll = useDockScroll(dock, location.pathname + location.search, !requiresOnboarding && !loggingOff);
   useLayoutEffect(() => {
     const receive = (event: Event) => {
       const editing = Boolean((event as CustomEvent<boolean>).detail);
@@ -178,8 +181,13 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
         window.dispatchEvent(new Event(endDesktopSessionEvent));
       });
       await Promise.all([request, exit.finished]);
-      await endSession();
-      void navigate('/login', { replace: true });
+      const response = await userContext({ credentials: 'omit', cache: 'no-store', signal: AbortSignal.timeout(4000), throwOnError: true }).catch(
+        () => undefined,
+      );
+      const publicContext = response?.data?.isLoggedIn === false ? response.data : undefined;
+      const guestDashboard = publicContext?.isGuestDashboardEnabled ?? isGuestDashboardEnabled;
+      await endSession(publicContext);
+      await navigate(guestDashboard ? '/dashboard' : '/login', { replace: true });
       void startupSession.finish();
     } catch {
       exit.cancel();
@@ -220,7 +228,15 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
           >
             <DesktopWallpaper />
             <header className="desktop-system-bar">
-              <Link to="/dashboard" className="desktop-brand" aria-label="Orbis workspace">
+              <Link
+                to="/dashboard"
+                className="desktop-brand"
+                aria-label="Orbis workspace"
+                onClick={(event) => {
+                  if (location.pathname === '/dashboard' && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)
+                    event.preventDefault();
+                }}
+              >
                 <OrbisLogo size={28} />
                 <span className="desktop-product">Orbis</span>
                 <span className="desktop-server-name">
@@ -282,10 +298,11 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               )}
             </main>
 
-            <nav ref={dock} className="desktop-dock" aria-label="Main navigation">
-              <DockGlass />
+            <nav ref={dock} className="desktop-dock" aria-label="Main navigation" data-scroll-collapsed={dockScroll.collapsed || undefined}>
+              <DockGlass collapsed={dockScroll.collapsed} reduced={Boolean(reduceMotion)} />
               <DockActivity />
-              <div className="desktop-dock-main">
+              <DockScrollReveal collapsed={dockScroll.collapsed} expand={dockScroll.expand} />
+              <div className="desktop-dock-main" inert={dockScroll.collapsed || undefined}>
                 <DockSelection path={dockSection?.path} reduced={Boolean(reduceMotion)} />
                 {navigation
                   .filter((item) => item.path !== '/tasks')

@@ -90,7 +90,7 @@ function parse<T>(schema: (raw: unknown) => T | type.errors, raw: unknown): T {
 }
 export function syncEndpoint(path: string) {
   if (path === '' || path === '/receiving') return `/api/cluster/settings-sync${path}`;
-  const matched = /^\/plans\/([^/]+)(\/run)?$/.exec(path);
+  const matched = /^\/plans\/([^/]+)(\/(?:run|automatic))?$/.exec(path);
   if (!matched?.[1] || uuid(matched[1]) instanceof type.errors) throw new Error('Choose one paired server for settings sync.');
   return `/api/cluster/settings-sync${path}`;
 }
@@ -128,6 +128,17 @@ export async function saveClusterSync(host: ClusterSyncHost, selected: SyncCateg
       signal,
     ),
   );
+}
+export async function saveClusterAutomatic(host: ClusterSyncHost, automatic: boolean, signal: AbortSignal) {
+  if (!host.plan?.usesYourAccount || !host.plan.trustCurrent || !host.plan.categories.length)
+    throw new Error('Save and review this host’s sync choices using your account first.');
+  const saved = parse(
+    type({ '+': 'reject', saved: 'true', automatic: 'boolean', revision: 'number.integer >= 0' }),
+    await request(`/plans/${host.id}/automatic`, 'PUT', { revision: host.plan.revision, automatic }, signal),
+  );
+  const expectedRevision = host.plan.revision + Number(host.plan.automatic !== automatic);
+  if (saved.automatic !== automatic || saved.revision !== expectedRevision) throw new Error('Settings sync did not confirm the policy.');
+  return saved;
 }
 export async function runClusterSync(host: ClusterSyncHost, signal?: AbortSignal) {
   if (!host.plan || !host.plan.usesYourAccount || !host.plan.trustCurrent)

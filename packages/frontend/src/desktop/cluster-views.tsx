@@ -1,7 +1,7 @@
 import type { MouseEvent } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useQueries } from '@tanstack/react-query';
-import { IconArrowRight, IconBrandDocker, IconExternalLink, IconRefresh, IconServer } from '@tabler/icons-react';
+import { IconBrandDocker, IconRefresh, IconServer } from '@tabler/icons-react';
 import type { ContainerTelemetry, DockerApps } from '@runtipi/common/schemas';
 import type { GetAppDto } from '@/api-client';
 import { AppLogo } from '@/components/app-logo/app-logo';
@@ -17,7 +17,7 @@ import { appDockerHealth } from './container-health';
 import { appCpuPercent } from './whole-host-cpu';
 import { clusterRequest, ServerRack, useCluster, type ClusterServer, type ServerReading } from './cluster';
 import { useDesktopPreferences } from './preferences';
-import type { Telemetry } from './telemetry';
+import { hostCpuPercent, type Telemetry } from './telemetry';
 import { formatUptime } from './uptime';
 import { useWindowVisible } from './window-visibility';
 import './cluster-views.css';
@@ -104,7 +104,7 @@ export function ClusterOverview() {
     servers.map((server, index): [string, ServerReading] => {
       const query = queries[index];
       const sample = query?.isError ? undefined : query?.data;
-      return [server.id, { cpu: sample?.cpu.totalPercent ?? null, memory: memoryPercent(sample), online: query?.isPending ? undefined : !!sample }];
+      return [server.id, { cpu: hostCpuPercent(sample?.cpu), memory: memoryPercent(sample), online: query?.isPending ? undefined : !!sample }];
     }),
   );
   if (cluster.isError) {
@@ -138,7 +138,7 @@ export function ClusterOverview() {
             </div>
           </div>
           <Link to="/updates" className="cluster-view-text-link">
-            View updates <IconArrowRight size={17} aria-hidden="true" />
+            View updates
           </Link>
         </div>
         <ServerRack readings={readings} />
@@ -158,12 +158,11 @@ export function ClusterOverview() {
                   </strong>
                   <span title={serverAddress(server)}>{serverAddress(server)}</span>
                 </span>
-                <IconArrowRight size={18} aria-hidden="true" />
               </button>
               <div className="cluster-summary-readings">
                 <div>
                   <span>CPU</span>
-                  <strong>{percent(sample?.cpu.totalPercent)}</strong>
+                  <strong>{percent(readings[server.id]?.cpu)}</strong>
                 </div>
                 <div>
                   <span>Memory</span>
@@ -267,9 +266,7 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
           </p>
         </div>
         <Button asChild>
-          <Link to="/updates">
-            Updates <IconArrowRight size={17} aria-hidden="true" />
-          </Link>
+          <Link to="/updates">Updates</Link>
         </Button>
       </header>
       {compact ? (
@@ -427,7 +424,7 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
                       rel="noopener noreferrer"
                       onClick={(event) => launch(event, server, entry, logoUrl, launchUrl)}
                     >
-                      Open <IconExternalLink size={16} aria-hidden="true" />
+                      Open
                     </a>
                   </Button>
                 ) : null}
@@ -546,7 +543,7 @@ export function ClusterStore() {
                 <p>{server.role === 'admin' ? 'Admin server' : 'Paired server'}</p>
                 {storeUrl ? (
                   <Button intent="primary" onClick={() => cluster.select(server.id)} aria-label={`Browse apps on ${name}`}>
-                    Browse apps <IconArrowRight size={17} aria-hidden="true" />
+                    Browse apps
                   </Button>
                 ) : (
                   <p>Server address unavailable.</p>

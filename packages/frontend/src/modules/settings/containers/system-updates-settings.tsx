@@ -1,6 +1,5 @@
 import { useId, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Switch } from '@/components/ui/Switch';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import {
   saveSystemUpdateSchedule,
@@ -11,11 +10,14 @@ import {
 import { TimeField, useTimeField } from '@/components/ui/TimeField/TimeField';
 import { useUserContext } from '@/context/user-context';
 import { useDesktopPreferences } from '@/desktop/preferences';
-import { useSettingsSave } from '../pages/settings-save';
+import { useDebouncedPreferenceSave } from '../hooks/use-debounced-preference-save';
+import { InlineFeedback } from '@/components/ui/Alert/Alert';
+import { AutosavedSettingSwitch } from '../components/autosaved-setting-switch';
+import { systemSettingsScope, useSystemUpdateToggle } from '../hooks/use-update-setting-toggles';
 
 type SystemLifetime = Readonly<{ epoch: object; signal: AbortSignal; version: number }>;
-type SystemWrite = SystemLifetime & { settings: { enabled: boolean; schedule?: { time: string }; expectedRevision?: number } };
-type SystemDraft = { enabled: boolean | null; time: string | null | undefined; epoch: object; version: number };
+type SystemWrite = SystemLifetime & { time: string };
+type SystemDraft = { time: string | null; epoch: object; version: number };
 
 export function SystemUpdatesSettings() {
   const id = useId();
@@ -33,12 +35,23 @@ export function SystemUpdatesSettings() {
   const options = systemUpdateScheduleOptions();
   const status = useQuery({ ...options, enabled: visible });
   const [draft, setDraft] = useState<SystemDraft | null>(null);
+  const [requested, setRequested] = useState<SystemWrite | null>(null);
   const activeDraft = draft?.epoch === sessionEpoch ? draft : null;
   const timeDraft = activeDraft?.time;
+  const toggle = useSystemUpdateToggle(status.data, visible);
   const save = useMutation({
+    scope: { id: systemSettingsScope },
+    networkMode: 'always',
+    retry: false,
     mutationFn: async (write: SystemWrite) => {
       assertCurrent(write);
-      const result = await saveSystemUpdateSchedule(write.settings, write.signal);
+      const latest = await readSystemUpdateSchedule(write.signal);
+      assertCurrent(write);
+      if (!hasIndependentUpdateSchedules(latest)) throw new Error('Update Orbis to configure a system update schedule.');
+      const result = await saveSystemUpdateSchedule(
+        { enabled: latest.settings.enabled, schedule: { time: write.time }, expectedRevision: latest.revision },
+        write.signal,
+      );
       assertCurrent(write);
       return result;
     },
@@ -46,11 +59,9 @@ export function SystemUpdatesSettings() {
       if (write.signal.aborted || write.epoch !== currentEpoch.current) return;
       client.setQueryData(options.queryKey, value);
       setDraft((current) => (current?.epoch === write.epoch && current.version === write.version ? null : current));
+      setRequested((current) => (current === write ? null : current));
     },
   });
-  const currentSave = save.variables?.epoch === sessionEpoch && !save.variables.signal.aborted;
-  const saving = save.isPending && currentSave;
-  const value = activeDraft?.enabled ?? status.data?.settings.enabled;
   const independent = hasIndependentUpdateSchedules(status.data);
   const savedTime = status.data?.settings.schedule?.time ?? null;
   const time = useTimeField({
@@ -58,48 +69,27 @@ export function SystemUpdatesSettings() {
     format: preferences.appearance.timeFormat,
     onFormatChange: (timeFormat) => updateAppearance({ timeFormat }),
     onChange: (next) => {
-      setDraft({ enabled: activeDraft?.enabled ?? null, time: next, epoch: sessionEpoch, version: ++editVersion.current });
-      save.reset();
+      setDraft({ time: next, epoch: sessionEpoch, version: ++editVersion.current });
     },
   });
-  const dirty =
-    (activeDraft?.enabled != null && activeDraft.enabled !== status.data?.settings.enabled) || (timeDraft !== undefined && time.value !== savedTime);
-  const prepare = async () => {
-    const validTime = value || timeDraft !== undefined ? time.finish() : Boolean(time.value);
-    if (value === undefined || !status.data?.available || !independent || (value && !validTime) || (timeDraft !== undefined && !validTime))
-      return null;
-    const write = {
-      enabled: value,
-      selectedTime: time.value,
-      epoch: sessionEpoch,
-      signal: sessionAbortSignal,
-      version: activeDraft?.version ?? editVersion.current,
-    };
-    assertCurrent(write);
-    return async () => {
-      assertCurrent(write);
-      const latest = await readSystemUpdateSchedule(write.signal);
-      assertCurrent(write);
-      if (!hasIndependentUpdateSchedules(latest)) throw new Error('Update Orbis to configure a system update schedule.');
-      await save.mutateAsync({
-        epoch: write.epoch,
-        signal: write.signal,
-        version: write.version,
-        settings: {
-          enabled: write.enabled,
-          ...(write.selectedTime ? { schedule: { time: write.selectedTime } } : {}),
-          expectedRevision: latest.revision,
-        },
-      });
-      assertCurrent(write);
-    };
+  const ready = Boolean(status.data?.available && independent);
+  const write = requested?.epoch === sessionEpoch && requested.time === time.value ? requested : null;
+  const autosave = useDebouncedPreferenceSave(
+    write ? String(write.version) : null,
+    async () => {
+      if (write) await save.mutateAsync(write);
+    },
+    { delay: 0, ready, signal: sessionAbortSignal, unsaved: activeDraft !== null && time.value !== savedTime },
+  );
+  const commitTime = (next: string) => {
+    if (next === savedTime) {
+      setDraft(null);
+      setRequested(null);
+      return;
+    }
+    if (requested?.time === next && requested.epoch === sessionEpoch) return;
+    setRequested({ time: next, epoch: sessionEpoch, signal: sessionAbortSignal, version: editVersion.current });
   };
-  const sharedSave = useSettingsSave({
-    section: 'updates',
-    dirty,
-    pending: saving,
-    prepare,
-  });
   return (
     <section id="setting-system-updates" className="automatic-updates-settings automatic-updates-system" aria-labelledby={`${id}-title`}>
       <header>
@@ -114,46 +104,30 @@ export function SystemUpdatesSettings() {
           </button>
         </p>
       ) : null}
-      {value !== undefined ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (sharedSave.shared) return void sharedSave.save?.();
-            void prepare()
-              .then((commit) => commit?.())
-              .catch(() => undefined);
-          }}
-        >
-          <fieldset className="settings-save-fields" disabled={sharedSave.pending || !independent}>
-            <TimeField control={time} label="System update time" id="setting-system-update-time" disabled={saving || !status.data?.available} />
-            <Switch
-              label="Update system packages automatically"
-              checked={value}
-              disabled={saving || !status.data?.available || (!value && !time.value)}
-              onCheckedChange={(enabled) => {
-                setDraft({ enabled, time: timeDraft, epoch: sessionEpoch, version: ++editVersion.current });
-                save.reset();
-              }}
-            />
-            {!savedTime && !time.value ? <p>Choose a time before enabling automatic system updates.</p> : null}
-            {independent ? null : <p role="note">Update Orbis to configure a separate system update schedule.</p>}
-            {status.data?.pauseReason ? <p>{status.data.pauseReason}</p> : null}
-            {status.data?.lastAttempt ? <p>Last system check: {status.data.lastAttempt.message ?? status.data.lastAttempt.state}</p> : null}
-            {status.data?.available === false ? <p role="alert">{status.data.reason}</p> : null}
-            {save.isError && currentSave ? (
-              <p role="alert">{save.error instanceof Error ? save.error.message : 'System update settings could not be saved.'}</p>
-            ) : null}
-            {sharedSave.shared ? null : (
-              <button
-                className="automatic-updates-save"
-                type="submit"
-                disabled={!dirty || saving || !status.data?.available || Boolean(value && !time.value)}
-              >
-                {saving ? 'Saving…' : 'Save'}
+      {status.data ? (
+        <fieldset className="settings-save-fields" disabled={!independent}>
+          <TimeField
+            control={time}
+            label="System update time"
+            id="setting-system-update-time"
+            disabled={autosave.pending || !ready}
+            onCommit={commitTime}
+          />
+          <AutosavedSettingSwitch label="Update system packages automatically" toggle={toggle} />
+          {savedTime ? null : <p>Set an update time before enabling automatic system updates.</p>}
+          {independent ? null : <p role="note">Update Orbis to configure a separate system update schedule.</p>}
+          {status.data?.pauseReason ? <p>{status.data.pauseReason}</p> : null}
+          {status.data?.lastAttempt ? <p>Last system check: {status.data.lastAttempt.message ?? status.data.lastAttempt.state}</p> : null}
+          {status.data?.available === false ? <p role="alert">{status.data.reason}</p> : null}
+          {autosave.error ? (
+            <InlineFeedback>
+              {autosave.error}{' '}
+              <button type="button" className="btn btn-outline-primary" onClick={autosave.retry}>
+                Retry
               </button>
-            )}
-          </fieldset>
-        </form>
+            </InlineFeedback>
+          ) : null}
+        </fieldset>
       ) : null}
     </section>
   );

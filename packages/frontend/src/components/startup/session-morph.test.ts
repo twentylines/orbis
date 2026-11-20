@@ -63,6 +63,7 @@ function harness() {
       calls,
       draft: 'retained draft',
       isConnected: true,
+      dataset: { desktopPreset: 'ocean', desktopMode: 'dark' },
       inert: false,
       children: [] as HTMLElement[],
       style: {
@@ -78,6 +79,7 @@ function harness() {
       },
       getBoundingClientRect: () => bounds,
       querySelector: (_selector: string): unknown => null,
+      querySelectorAll: (_selector: string): unknown[] => [],
       closest: () => ({ style: { setProperty: (name: string, value: string) => properties.set(name, value) } }),
       getAnimations: () => calls.map(({ animation }) => animation),
       animate: (frames: Keyframe[], timing: KeyframeAnimationOptions) => {
@@ -113,16 +115,19 @@ function harness() {
   set('document', { documentElement: root, timeline: { currentTime: 42 }, querySelector: () => source });
   set('innerWidth', 800);
   set('innerHeight', 600);
-  set('getComputedStyle', () => ({
+  set('getComputedStyle', (node?: { computedStyle?: Record<string, string> }) => ({
     position: 'relative',
     borderTopLeftRadius: '18px',
     backgroundColor: '#101820',
     background: 'rgba(0, 0, 0, 0.18)',
     boxShadow: '0px 8px 24px rgba(0, 0, 0, 0.2)',
+    backdropFilter: 'blur(28px)',
     objectFit: 'cover',
     objectPosition: '50% 0%',
     filter: 'none',
     transform: 'none',
+    getPropertyValue: (name: string) => properties.get(name) ?? '',
+    ...node?.computedStyle,
   }));
   return {
     source,
@@ -146,6 +151,31 @@ function harness() {
   };
 }
 
+test('captures one source palette with its wallpaper and refreshes it only for a new session morph', () => {
+  const h = harness();
+  try {
+    h.properties.set('--desktop-accent', 'rgb(40, 90, 150)');
+    h.properties.set('--desktop-surface', 'rgb(10, 20, 30)');
+    h.properties.set('--orbis-loading-size', '320px');
+    const first = beginSessionMorph('signing-in');
+    expect(first?.appearance?.choice).toMatchObject({ preset: 'ocean', mode: 'dark' });
+    expect(first?.appearance?.colours).toEqual({ '--desktop-accent': 'rgb(40, 90, 150)', '--desktop-surface': 'rgb(10, 20, 30)' });
+    h.source.dataset.desktopPreset = 'blush';
+    h.source.dataset.desktopMode = 'light';
+    h.properties.set('--desktop-accent', 'rgb(180, 60, 110)');
+    h.properties.set('--desktop-surface', 'rgb(250, 230, 240)');
+    expect(first?.appearance?.choice.preset).toBe('ocean');
+    expect(first?.appearance?.colours['--desktop-accent']).toBe('rgb(40, 90, 150)');
+    const second = beginSessionMorph('signing-in');
+    expect(first?.cancelled).toBe(true);
+    expect(second?.appearance?.choice).toMatchObject({ preset: 'blush', mode: 'light' });
+    expect(second?.appearance?.colours['--desktop-accent']).toBe('rgb(180, 60, 110)');
+    expect(second?.appearance?.colours).not.toHaveProperty('--orbis-loading-size');
+  } finally {
+    h.restore();
+  }
+});
+
 test('real source waits for the prepared shell, contracts on one clock, and cancellation restores its state', async () => {
   const h = harness();
   try {
@@ -162,35 +192,30 @@ test('real source waits for the prepared shell, contracts on one clock, and canc
     expect(h.source.style.zIndex).toBe('99');
     contractSessionMorph(model, h.shell as unknown as HTMLElement, false);
     await model.finished;
-    expect(h.source.calls).toHaveLength(1);
+    expect(h.source.calls).toHaveLength(0);
     expect(h.shell.calls).toHaveLength(1);
-    expect(h.source.calls[0]?.timing.duration).toBe(640);
-    expect(h.source.calls[0]?.animation.startTime).toBe(42);
+    expect(h.shell.calls[0]?.timing.duration).toBe(640);
     expect(h.shell.calls[0]?.animation.startTime).toBe(42);
     expect(h.card.calls).toHaveLength(1);
     expect(h.card.calls[0]?.animation.startTime).toBe(42);
     expect(h.card.calls[0]?.timing).toEqual({ duration: 640, easing: 'cubic-bezier(.22,.72,.18,1)', fill: 'both' });
     expect(h.card.calls[0]?.frames[0]).toMatchObject({ transform: 'none', borderRadius: '18px', width: '400px', height: '360px' });
     expect(h.card.calls[0]?.frames.at(-1)).toMatchObject({ transform: 'none', width: '176px', height: '176px', borderRadius: '88px' });
-    expect(h.shell.calls[0]?.frames[0]).toMatchObject({ opacity: 0, width: '400px', height: '360px', borderRadius: '18px' });
-    expect(h.shell.calls[0]?.frames.at(-1)).toMatchObject({ opacity: 1, width: '176px', height: '176px', borderRadius: '88px' });
-    expect(h.source.calls[0]?.frames.every((frame) => frame.opacity === 1)).toBe(true);
-    for (const [index, frame] of (h.card.calls[0]?.frames ?? []).entries()) {
-      expect(h.shell.calls[0]?.frames[index]).toMatchObject({
-        left: frame.left,
-        top: frame.top,
-        width: frame.width,
-        height: frame.height,
-        borderRadius: frame.borderRadius,
-      });
+    expect(h.shell.calls[0]?.frames[0]).toMatchObject({ opacity: 0, clipPath: 'inset(0px 0px round 18px)' });
+    expect(h.shell.calls[0]?.frames.at(-1)).toMatchObject({ opacity: 1, clipPath: 'inset(92px 112px round 88px)' });
+    for (const frame of h.shell.calls[0]?.frames ?? []) {
+      expect(frame).not.toHaveProperty('width');
+      expect(frame).not.toHaveProperty('height');
+      expect(frame).not.toHaveProperty('backdropFilter');
     }
+    expect(h.shell.style).toHaveProperty('backdropFilter', 'blur(28px)');
     expect(h.shell.style.background).toBe('rgba(0, 0, 0, 0.18)');
     expect(h.shell.style.boxShadow).toBe('none');
     expect(h.card.calls[0]?.frames.at(-1)?.boxShadow).toBe('none');
     expect(h.card.style.position).toBe('fixed');
     expect(h.card.style.transformOrigin).toBe('0 0');
     expect(h.card.style.overflow).toBe('hidden');
-    expect(h.source.calls[0]?.frames.every((frame) => frame.clipPath === undefined)).toBe(true);
+    expect(h.source.calls).toHaveLength(0);
     expect(h.source.draft).toBe('retained draft');
     model.cancel();
     expect(h.source.style.zIndex).toBe('');
@@ -210,13 +235,39 @@ test('the shared backdrop reuses the already loaded wallpaper and its actual app
   try {
     const card = h.source.querySelector('.card');
     const image = { complete: true, naturalWidth: 800, currentSrc: '/fixtures/wallpaper.svg', src: '/fixtures/wallpaper.svg' };
-    Object.assign(h.source, { querySelector: (selector: string) => (selector.includes('img:') ? image : card) });
+    Object.assign(h.source, {
+      querySelector: (selector: string) => (selector.includes('img[') ? image : card),
+      querySelectorAll: () => [image],
+    });
     const model = beginSessionMorph('signing-in');
     expect(model?.backdrop?.image).toBe(image as unknown as HTMLImageElement);
     expect(model?.backdrop?.src).toBe('/fixtures/wallpaper.svg');
     expect(model?.backdrop?.style).toEqual({ objectFit: 'cover', objectPosition: '50% 0%', filter: 'none', transform: 'none' });
     expect(model?.background).toBe('#101820');
     expect(model?.shade).toBe('rgba(0, 0, 0, 0.18)');
+  } finally {
+    h.restore();
+  }
+});
+
+test('both session directions retain the displayed wallpaper while a decoded replacement remains hidden', () => {
+  const h = harness();
+  try {
+    const card = h.source.querySelector('.card');
+    const displayed = { complete: true, naturalWidth: 800, src: '/displayed.webp', computedStyle: { opacity: '1' } };
+    const candidate = { complete: true, naturalWidth: 800, src: '/pending.webp', computedStyle: { opacity: '0' } };
+    Object.assign(h.source, {
+      querySelector: (selector: string) => (selector.includes('img[') ? displayed : selector === '.card' ? card : null),
+      querySelectorAll: () => [displayed, candidate],
+    });
+    for (const kind of ['signing-in', 'logging-out'] as const) {
+      expect(beginSessionMorph(kind)?.backdrop?.src).toBe('/displayed.webp');
+    }
+    // A marker-free source can still retain its visible image, never its hidden last child.
+    Object.assign(h.source, { querySelector: (selector: string) => (selector === '.card' ? card : null) });
+    expect(beginSessionMorph('signing-in')?.backdrop?.src).toBe('/displayed.webp');
+    displayed.computedStyle.opacity = '0';
+    expect(beginSessionMorph('signing-in')?.backdrop).toBeNull();
   } finally {
     h.restore();
   }
@@ -355,11 +406,8 @@ test('expansion reveals the actual login card and keeps its lift until the persi
     expect(h.target.calls[0]?.frames.at(-1)?.clipPath).toBe('inset(120px 200px 120px 200px round 18px)');
     expect(h.targetCard.calls).toHaveLength(0);
     expect(h.shell.calls[0]?.frames.at(-1)).toMatchObject({
-      left: '200px',
-      top: '120px',
-      width: '400px',
-      height: '360px',
-      transform: 'none',
+      clipPath: 'inset(0px 0px round 18px)',
+      transform: 'translate(0px, 0px)',
       opacity: 0,
     });
     expect(h.target.style.zIndex).toBe('101');
@@ -385,9 +433,8 @@ test('the exit handshake remains pending until the actual card and its contents 
       navigated = true;
     });
     contractSessionMorph(model, h.shell as unknown as HTMLElement, false);
-    h.source.calls[0]?.animation.finish();
     h.shell.calls[0]?.animation.finish();
-    expect(h.shell.style.background).toBe('transparent');
+    expect(h.shell.style).toHaveProperty('backdropFilter', 'blur(28px)');
     expect(h.source.style.opacity).toBe('');
     await Promise.resolve();
     expect(navigated).toBe(false);
@@ -491,7 +538,7 @@ test('the original full-screen wallpaper remains until the retained backdrop is 
       await Promise.resolve();
       expect(model.contracted).toBe(false);
       expect(h.source.style.opacity).toBe('');
-      expect(h.source.calls[0]?.frames.every((frame) => frame.clipPath === undefined)).toBe(true);
+      expect(h.source.calls).toHaveLength(0);
       decoded();
       await model.finished;
       expect(h.source.style.opacity).toBe('0');

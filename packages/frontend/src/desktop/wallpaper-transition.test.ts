@@ -7,6 +7,7 @@ function fixture() {
   const images = new Map<number, Image>();
   const animations: Array<{ id: number; frames: Keyframe[]; options: KeyframeAnimationOptions; cancelled: boolean; finish: () => void }> = [];
   const displayed: number[] = [];
+  const revealed: number[] = [];
   const snapshots: WallpaperFrame[][] = [];
   let errors = 0;
   const attach = (frames: WallpaperFrame[]) => {
@@ -48,6 +49,7 @@ function fixture() {
     (image) => displayed.push([...images].find(([, value]) => value === (image as unknown as Image))?.[0] ?? -1),
     () => errors++,
     (image) => (image as unknown as Image).computed,
+    (image) => revealed.push([...images].find(([, value]) => value === (image as unknown as Image))?.[0] ?? -1),
   );
   attach(model.snapshot());
   model.activate();
@@ -56,6 +58,7 @@ function fixture() {
     images,
     animations,
     displayed,
+    revealed,
     snapshots,
     get errors() {
       return errors;
@@ -73,6 +76,24 @@ function fixture() {
 }
 
 describe('wallpaper transition continuity', () => {
+  test('presents palette and frame only after successful decode and before the existing fade', async () => {
+    const page = fixture();
+    page.model.loaded(0);
+    const bad = page.request('bad-data');
+    page.model.error(bad);
+    expect(page.revealed).toEqual([0]);
+    expect(page.displayed).toEqual([0]);
+    const good = page.request('decoded-with-palette');
+    expect(page.revealed).toEqual([0]);
+    page.model.loaded(good);
+    expect(page.revealed).toEqual([0, good]);
+    expect(page.displayed).toEqual([0]);
+    expect(page.animations[0]?.id).toBe(good);
+    await page.finish();
+    expect(page.revealed).toEqual([0, good]);
+    expect(page.displayed).toEqual([0, good]);
+  });
+
   test('the initial decoded picture appears once; an unready choice cannot remove it', () => {
     const page = fixture();
     page.model.loaded(0);

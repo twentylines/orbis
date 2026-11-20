@@ -52,6 +52,33 @@ describe('host update authorization', () => {
     expect(hostUpdates.driveTest).toHaveBeenCalledExactlyOnceWith(body.id, 'short');
   });
 
+  it('only forwards an operator-confirmed SMART package review and plan ID', async () => {
+    const route = '/host-updates/drives/tools';
+    const headers = { Authorization: 'Bearer fixture-session', Host: 'orbis.example', Origin: 'http://orbis.example' };
+    const planId = '00000000-0000-4000-8000-000000000001';
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post(`${route}/plan`)
+          .set(headers)
+          .send({ names: ['other'] })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post(`${route}/apply`)
+          .set({ ...headers, Authorization: 'Bearer fixture-cli' })
+          .send({ planId })
+      ).status,
+    ).toBe(403);
+    expect(hostUpdates.smartToolsApply).not.toHaveBeenCalled();
+    expect((await request(app.getHttpServer()).post(`${route}/plan`).set(headers).send({})).status).toBe(200);
+    expect((await request(app.getHttpServer()).post(`${route}/apply`).set(headers).send({ planId })).status).toBe(202);
+    expect(hostUpdates.smartToolsPlan).toHaveBeenCalledExactlyOnceWith();
+    expect(hostUpdates.smartToolsApply).toHaveBeenCalledExactlyOnceWith(planId);
+  });
+
   beforeAll(async () => {
     const module = await Test.createTestingModule({
       controllers: [HostUpdatesController],

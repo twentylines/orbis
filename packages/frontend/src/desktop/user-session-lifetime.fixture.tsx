@@ -22,6 +22,7 @@ const client = {
       finishCancellation = resolve;
     }),
   removeQueries: () => undefined,
+  getQueryData: () => context,
   getMutationCache: () => ({ clear: () => undefined }),
   setQueryData: (_key: unknown, next: { isLoggedIn: boolean }) => {
     context = next;

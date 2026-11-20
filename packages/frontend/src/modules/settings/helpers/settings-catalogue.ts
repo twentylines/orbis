@@ -2,7 +2,7 @@ import { createSearchMatcher, normaliseSearch } from '@runtipi/common/search';
 export const settingsSections = [
   { id: 'general', label: 'General', detail: 'Server and network' },
   { id: 'customise', label: 'Customisation', detail: 'Colours and workspace' },
-  { id: 'store', label: 'Store', detail: 'Sources and suggestions' },
+  { id: 'store', label: 'Store', detail: 'Sources and app updates' },
   { id: 'updates', label: 'Updates', detail: 'Releases and schedules' },
   { id: 'backups', label: 'Backup & recovery', detail: 'Archives and transfers' },
   { id: 'time-machine', label: 'Time Machine', detail: 'Saved restore points' },
@@ -26,6 +26,8 @@ export type SettingEntry = {
   focus?: string;
   exactAliases?: readonly string[];
   controlLabel?: string;
+  fallbackControlLabel?: string;
+  review?: { id: 'reset-orbis' | 'reset-appearance' | 'create-backup' | 'restore-backup'; label: string };
 };
 export function resolveSettingsSection(value: string | null): SettingsSection {
   const aliases: Record<string, SettingsSection> = { appearance: 'customise', settings: 'general', appstores: 'store', backup: 'backups' };
@@ -42,6 +44,7 @@ export const settingsCatalogue: readonly SettingEntry[] = [
     anchor: 'setting-system-reset',
     aliases: 'reset erase preferences onboarding setup accounts',
     operator: true,
+    review: { id: 'reset-orbis', label: 'Reset' },
   },
   {
     id: 'time-machine',
@@ -85,7 +88,7 @@ export const settingsCatalogue: readonly SettingEntry[] = [
   },
   {
     id: 'colour-preset',
-    label: 'Colour preset',
+    label: 'Colour presets',
     section: 'customise',
     anchor: 'appearance-preset',
     aliases: 'color palette frost forest graphite stone ocean blush',
@@ -106,6 +109,7 @@ export const settingsCatalogue: readonly SettingEntry[] = [
     anchor: 'appearance-wallpaper',
     aliases: 'wallpaper dim darkness brightness',
     controlLabel: 'Dim wallpaper',
+    fallbackControlLabel: 'Match wallpaper to colour preset',
   },
   {
     id: 'wallpaper-blur',
@@ -114,8 +118,32 @@ export const settingsCatalogue: readonly SettingEntry[] = [
     anchor: 'appearance-wallpaper',
     aliases: 'wallpaper blur background',
     controlLabel: 'Wallpaper blur',
+    fallbackControlLabel: 'Match wallpaper to colour preset',
   },
-  { id: 'accent-colour', label: 'Accent colour', section: 'customise', anchor: 'appearance-accent', aliases: 'color custom hex buttons' },
+  {
+    id: 'auto-colours',
+    label: 'Auto colours',
+    section: 'customise',
+    anchor: 'appearance-colours',
+    aliases: 'automatic wallpaper colour theme accent',
+    controlLabel: 'Auto',
+  },
+  {
+    id: 'theme-colour',
+    label: 'Theme colour',
+    section: 'customise',
+    anchor: 'appearance-custom-colours',
+    aliases: 'color custom hex hue tint',
+    focus: '#appearance-theme-colour input, [data-colour-takeover]',
+  },
+  {
+    id: 'accent-colour',
+    label: 'Accent colour',
+    section: 'customise',
+    anchor: 'appearance-custom-colours',
+    aliases: 'color custom hex buttons',
+    focus: '#appearance-accent input, [data-colour-takeover]',
+  },
   {
     id: 'transparency',
     label: 'Transparency & blur',
@@ -169,6 +197,7 @@ export const settingsCatalogue: readonly SettingEntry[] = [
     section: 'customise',
     anchor: 'appearance-reset',
     aliases: 'restore defaults appearance reset',
+    review: { id: 'reset-appearance', label: 'Reset' },
   },
   { id: 'time-zone', label: 'Time zone', section: 'general', anchor: 'setting-time-zone', aliases: 'timezone clock time region', operator: true },
   {
@@ -202,6 +231,15 @@ export const settingsCatalogue: readonly SettingEntry[] = [
     anchor: 'setting-advancedSettings',
     aliases: 'advanced network ports internal ip listen address app data authentication',
     operator: true,
+  },
+  {
+    id: 'persist-proxy',
+    label: 'Keep proxy configuration',
+    section: 'general',
+    anchor: 'setting-persistTraefikConfig',
+    aliases: 'persist traefik reverse proxy configuration',
+    operator: true,
+    advanced: true,
   },
   { id: 'http-port', label: 'HTTP port', section: 'general', anchor: 'setting-port', aliases: 'port network http', operator: true, advanced: true },
   {
@@ -277,13 +315,6 @@ export const settingsCatalogue: readonly SettingEntry[] = [
     advanced: true,
   },
   {
-    id: 'store-suggestions',
-    label: 'Store suggestions',
-    section: 'store',
-    anchor: 'store-recommendations-heading',
-    aliases: 'recommendations collections gaming media ai categories hidden suggestions',
-  },
-  {
     id: 'store-app-updates',
     label: 'Automatic app updates',
     section: 'updates',
@@ -331,6 +362,16 @@ export const settingsCatalogue: readonly SettingEntry[] = [
     anchor: 'setting-server-backups',
     aliases: 'backup archive export encrypted create download',
     operator: true,
+    review: { id: 'create-backup', label: 'Create backup' },
+  },
+  {
+    id: 'restore-backup',
+    label: 'Restore a backup',
+    section: 'backups',
+    anchor: 'setting-server-backups',
+    aliases: 'restore import backup archive upload settings',
+    operator: true,
+    review: { id: 'restore-backup', label: 'Restore' },
   },
   {
     id: 'server-transfer',
@@ -429,6 +470,7 @@ export function searchSettings(query: string, access: SettingsAccess, limit = 12
     .map(({ entry }) => entry);
 }
 export const settingsPath = (entry: SettingEntry) => `/settings?tab=${entry.section}&setting=${entry.id}`;
+export const settingsReviewPath = (entry: SettingEntry) => `${settingsPath(entry)}${entry.review ? `&action=${entry.review.id}` : ''}`;
 export const settingAvailable = (entry: SettingEntry, access: SettingsAccess) =>
   (!entry.operator || access.operator) && (!entry.advanced || access.advanced) && (!entry.httpOnly || access.http === true);
 
@@ -439,6 +481,7 @@ export function retainSettingsSections(previous: ReadonlySet<SettingsSection>, c
 export function settingsLocation(pathname: string, search: string, section: SettingsSection, entry?: SettingEntry) {
   const params = new URLSearchParams(search);
   params.set('tab', section);
+  params.delete('action');
   if (entry) params.set('setting', entry.id);
   else params.delete('setting');
   return { pathname, search: `?${params}`, hash: '' };

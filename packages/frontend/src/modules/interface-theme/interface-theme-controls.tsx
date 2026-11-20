@@ -1,24 +1,50 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
-import { interfaceThemeSettingAllows, type InterfaceThemeSetting, type InterfaceThemeValue } from '@runtipi/common/schemas/interface-theme';
+import {
+  interfaceThemeSettingAllows,
+  interfaceThemeSettingsEntryAllows,
+  type InterfaceThemeSetting,
+  type InterfaceThemeValue,
+} from '@runtipi/common/schemas/interface-theme';
 import { registeredInterfaceTheme } from '@runtipi/common/schemas/interface-theme-registry';
 import { Button } from '@/components/ui/Button';
 import { Switch } from '@/components/ui/Switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
-import { useSettingsSave } from '@/modules/settings/pages/settings-save';
+import { useDebouncedPreferenceSave } from '@/modules/settings/hooks/use-debounced-preference-save';
 import type { InterfaceThemeDraft } from './theme-settings-drafts';
 import type { InterfaceThemeSession } from './use-interface-theme-session';
 import './interface-theme-controls.css';
 
-function NamespaceSave({ draft, session }: { draft: InterfaceThemeDraft; session: InterfaceThemeSession }) {
-  useSettingsSave({ section: 'customise', dirty: draft.dirty, pending: session.pending, prepare: () => session.prepare(draft.identity) });
-  return null;
+function NamespaceAutosave({ draft, session }: { draft: InterfaceThemeDraft; session: InterfaceThemeSession }) {
+  const { descriptor, values } = draft;
+  const valid = interfaceThemeSettingsEntryAllows(descriptor, { id: descriptor.id, settingsVersion: descriptor.settingsVersion, values });
+  const autosave = useDebouncedPreferenceSave(
+    draft.dirty && valid ? JSON.stringify(values) : null,
+    async () => {
+      const commit = await session.prepare(draft.identity);
+      if (!commit) throw new Error('Theme changes could not be prepared. Your draft is still here.');
+      await commit();
+    },
+    { ready: session.status === 'ready' && !session.pending, unsaved: draft.dirty },
+  );
+  return autosave.error ? (
+    <Button
+      type="button"
+      variant="outline"
+      disabled={session.pending}
+      onClick={() => {
+        void session.reload().then(autosave.retry);
+      }}
+    >
+      Retry {descriptor.name} settings
+    </Button>
+  ) : null;
 }
 
-export function InterfaceThemeSaveEntries({ session }: { session: InterfaceThemeSession }) {
+function InterfaceThemeAutosaves({ session }: { session: InterfaceThemeSession }) {
   return (
     <>
       {session.drafts.map((draft) => (
-        <NamespaceSave key={`${draft.descriptor.id}:${draft.descriptor.settingsVersion}`} draft={draft} session={session} />
+        <NamespaceAutosave key={`${draft.descriptor.id}:${draft.descriptor.settingsVersion}`} draft={draft} session={session} />
       ))}
     </>
   );
@@ -209,7 +235,7 @@ export function InterfaceThemeControls({ session, legacyControls }: { session: I
   const inactive = session.drafts.filter((draft) => draft.dirty && draft.descriptor.id !== descriptor?.id);
   return (
     <div className="interface-theme-controls">
-      <InterfaceThemeSaveEntries session={session} />
+      <InterfaceThemeAutosaves session={session} />
       {session.status === 'loading' || session.pending ? (
         <output className="appearance-note" aria-live="polite">
           {session.pending && session.status === 'ready' ? 'Saving or refreshing theme settings…' : 'Loading theme settings…'}
@@ -243,7 +269,7 @@ export function InterfaceThemeControls({ session, legacyControls }: { session: I
             <section className="appearance-section" key={group}>
               <div>
                 <h2>{labels[group] ?? group}</h2>
-                <p>{descriptor.name} provides these controls. Save keeps changes for this theme.</p>
+                <p>{descriptor.name} provides these controls.</p>
               </div>
               <div className="interface-theme-group">
                 {descriptor.settings
@@ -275,9 +301,7 @@ export function InterfaceThemeControls({ session, legacyControls }: { session: I
           </Button>
         </div>
       ) : null}
-      {inactive.length ? (
-        <output>Unsaved changes are also kept for {inactive.map((draft) => draft.descriptor.name).join(', ')}. Save includes those themes.</output>
-      ) : null}
+      {inactive.length ? <output>Unsaved changes are also kept for {inactive.map((draft) => draft.descriptor.name).join(', ')}.</output> : null}
       {(session.status === 'legacy' || session.status === 'error') && session.drafts.some((draft) => draft.dirty) ? (
         <Button
           type="button"

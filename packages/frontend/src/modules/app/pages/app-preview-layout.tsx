@@ -1,3 +1,4 @@
+import { PaneScrollProgress } from '@/components/pane-scroll-progress';
 import { DelayedRouteLoading } from '@/desktop/route-loading';
 import { prefersReducedMotion } from '@/desktop/motion-setting';
 import { revealPageFocus, useDesktopWindows } from '@/desktop/window-viewport';
@@ -14,11 +15,13 @@ import {
   nextAppsPreviewHistory,
   nextStorePreviewHistory,
   storePreviewDepth,
+  storePreviewSuggestion,
   storeReturnPath,
   type AppPreviewHistory,
 } from './store-preview-navigation';
 import { animatePreviewTiles, capturePreviewTiles, previewPaneMotion, type PreviewSnapshot } from './preview-motion';
 import './store-preview.css';
+import { resolvePreviewCard } from './preview-card-anchor';
 
 function alignCatalogueCard(catalogue: HTMLElement, card: HTMLElement, previousTop?: number) {
   const viewport = catalogue.getBoundingClientRect();
@@ -35,6 +38,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
   const visible = useWindowVisible();
   const state = location.state as AppPreviewHistory | null;
   const installed = source === 'installed';
+  const suggestion = installed ? null : storePreviewSuggestion(state, selected);
   const editing = installed && /\/edit(?:\/|$)/.test(location.pathname);
   const detailsPath = editing ? `${location.pathname.split('/edit')[0]}${location.search}` : null;
   const closePath = installed ? appsReturnPath(state, location.search) : storeReturnPath(state, location.search);
@@ -69,23 +73,29 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
     if (panelView) pane.current?.querySelector<HTMLElement>('.app-settings-preview > h2')?.focus({ preventScroll: true });
   }, [panelView]);
   const snapshot = useRef<PreviewSnapshot>([]);
-  const anchor = useRef<{ urn: string; top: number } | null>(null);
+  const anchor = useRef<{ urn: string; top: number; element: HTMLElement } | null>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const suggestionKind = installed ? undefined : (suggestion?.kind ?? null);
   const paneBounds = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
   const tileMotion = useRef<Animation[]>([]);
   const onCardMount = useCallback(
     (card: HTMLAnchorElement | null) => {
       if (!split || !selected || anchor.current || card?.dataset.storeApp !== selected) return;
+      if (suggestionKind !== undefined && (card.dataset.storeSuggestion ?? null) !== suggestionKind) return;
       const catalogue = card.closest<HTMLElement>('.store-catalogue-pane');
       if (catalogue) alignCatalogueCard(catalogue, card);
     },
-    [selected, split],
+    [selected, split, suggestionKind],
   );
   const capture = useCallback(
     (target?: Element | null) => {
+      const clicked = target?.closest<HTMLElement>('[data-store-app]');
+      if (clicked) opener.current = clicked;
       if (!split || !catalogue.current || !pane.current) return;
-      const link = target?.closest<HTMLElement>('[data-store-app]') ?? catalogue.current.querySelector<HTMLElement>('[aria-expanded="true"]');
+      const link = clicked ?? (selected ? resolvePreviewCard(catalogue.current, selected, opener.current, suggestionKind) : null);
       const urn = link?.dataset.storeApp;
-      anchor.current = link && urn ? { urn, top: link.getBoundingClientRect().top - catalogue.current.getBoundingClientRect().top } : null;
+      anchor.current =
+        link && urn ? { urn, top: link.getBoundingClientRect().top - catalogue.current.getBoundingClientRect().top, element: link } : null;
       snapshot.current = capturePreviewTiles(catalogue.current);
       paneBounds.current = {
         left: pane.current.offsetLeft,
@@ -94,9 +104,10 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
         height: pane.current.offsetHeight,
       };
     },
-    [split],
+    [selected, split, suggestionKind],
   );
   const previous = useRef<string | null>(null);
+  const previousSuggestionKind = useRef(suggestionKind);
   const scroll = useRef(0);
   const motion = useRef<Animation | null>(null);
 
@@ -110,7 +121,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
   const nextHistory = () =>
     installed
       ? nextAppsPreviewHistory(state, location.search, Boolean(selected))
-      : nextStorePreviewHistory(state, location.search, Boolean(selected));
+      : nextStorePreviewHistory(state, location.search, Boolean(selected), suggestion);
 
   useEffect(() => {
     const captureHistory = () => capture();
@@ -148,6 +159,9 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
   useLayoutEffect(() => {
     const last = previous.current;
     previous.current = selected;
+    const lastSuggestionKind = previousSuggestionKind.current;
+    const openerChanged = lastSuggestionKind !== suggestionKind;
+    previousSuggestionKind.current = suggestionKind;
     if (last !== selected) returningToDetails.current = false;
     const movingPane =
       motion.current?.playState === 'running' && motion.current.effect instanceof KeyframeEffect && motion.current.effect.target === pane.current;
@@ -161,9 +175,11 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
     tileMotion.current = [];
     if (split && catalogue.current) {
       const reference = anchor.current;
-      const urn = reference?.urn ?? selected;
-      const target = urn ? catalogue.current.querySelector<HTMLElement>(`[data-store-app="${CSS.escape(urn)}"]`) : null;
-      if (target) alignCatalogueCard(catalogue.current, target, reference?.top);
+      const urn = selected ?? reference?.urn;
+      const target = urn
+        ? resolvePreviewCard(catalogue.current, urn, reference?.element ?? opener.current, selected ? suggestionKind : lastSuggestionKind)
+        : null;
+      if (target) alignCatalogueCard(catalogue.current, target, reference && reference.urn === urn ? reference.top : undefined);
     }
     anchor.current = null;
     if (split && snapshot.current.length && !prefersReducedMotion()) {
@@ -186,7 +202,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
       } else setRetained(null);
       if (last && catalogue.current) {
         const target =
-          catalogue.current.querySelector<HTMLElement>(`[data-store-app="${CSS.escape(last)}"]`) ??
+          resolvePreviewCard(catalogue.current, last, opener.current, lastSuggestionKind) ??
           catalogue.current.querySelector<HTMLElement>('input:not([disabled]), select:not([disabled]), a[href], button:not([disabled])') ??
           document.querySelector<HTMLElement>('.desktop-dock-item[aria-current="page"]');
         target?.focus({ preventScroll: true });
@@ -203,7 +219,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
       return;
     }
     const element = split && (!last || movingPane) ? pane.current : content.current;
-    if (!element || prefersReducedMotion()) return;
+    if (!element || prefersReducedMotion() || (last === selected && openerChanged && !movingPane)) return;
     const animation = previewPaneMotion(element, true, movingPane ? visual : undefined);
     motion.current = animation;
     void animation.finished.then(
@@ -213,7 +229,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
       },
       () => undefined,
     );
-  }, [selected, split]);
+  }, [selected, split, suggestionKind]);
 
   return (
     <StorePreviewContext.Provider
@@ -221,6 +237,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
         closePath,
         split,
         selectedUrn: selected,
+        suggestion,
         onCardMount,
         onDetailsMount,
         previewId,
@@ -254,6 +271,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
             if (split && catalogue.current) scroll.current = catalogue.current.scrollTop;
           }}
         >
+          <PaneScrollProgress label="App catalogue scroll position" enabled={split && visible} />
           <WindowVisibilityContext.Provider value={visible && (!selected || split)}>{children}</WindowVisibilityContext.Provider>
         </div>
         <aside
@@ -269,6 +287,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
           <div className="store-preview-surface" aria-hidden="true" />
           {selected || (split && retained) ? (
             <div ref={content} className="store-preview-content">
+              <PaneScrollProgress label="App preview scroll position" enabled={split && visible && Boolean(selected)} />
               {split || editing || panelView ? (
                 <button
                   type="button"

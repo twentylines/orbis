@@ -9,7 +9,6 @@ import {
   missingRecommendations,
   resolveCuratedApp,
   storeView,
-  storeEditorialFits,
 } from './store-curation';
 import { createElement, type ComponentType, type ReactNode } from 'react';
 import { createInstance } from 'i18next';
@@ -354,7 +353,7 @@ describe('media stack install reconciliation', () => {
 });
 
 describe('catalogue-first Store presentation', () => {
-  test('collection shelves follow eight real catalogue links and do not replace or duplicate any app', () => {
+  test('catalogue rows retain their supplied order and exact app links', () => {
     const items = Array.from({ length: 12 }, (_, index) => app(`product-${index}`));
     const i18n = createInstance();
     void i18n.init({ lng: 'en', initImmediate: false, resources: { en: { translation: { APP_CATEGORY_MEDIA: 'Media' } } } });
@@ -368,63 +367,17 @@ describe('catalogue-first Store presentation', () => {
           createElement(StoreCatalogue, {
             apps: items,
             lastElementRef: () => undefined,
-            collections: createElement('aside', { 'data-collection-shelf': true }, 'Collections'),
           }),
         ),
       ),
     );
-    const shelf = html.indexOf('data-collection-shelf');
-    expect(shelf).toBeGreaterThan(html.indexOf('href="/app-store/official/product-7"'));
-    expect(shelf).toBeLessThan(html.indexOf('href="/app-store/official/product-8"'));
-    expect(html.match(/href="\/app-store\/official\/product-/g)?.length).toBe(12);
-    for (const item of items) expect(html.split(`href="/app-store/official/${item.id}"`).length).toBe(2);
-    const short = renderToStaticMarkup(
-      createElement(
-        I18nextProvider,
-        { i18n },
-        createElement(
-          MemoryRouter,
-          {},
-          createElement(StoreCatalogue, {
-            apps: items.slice(0, 3),
-            lastElementRef: () => undefined,
-            collections: createElement('aside', { 'data-collection-shelf': true }, 'Collections'),
-          }),
-        ),
-      ),
-    );
-    expect(short).not.toContain('data-collection-shelf');
-    expect(short.match(/href="\/app-store\/official\/product-/g)?.length).toBe(3);
+    const links = Array.from(html.matchAll(/href="\/app-store\/official\/(product-[0-9]+)"/g), ([, id]) => id);
+    expect(links).toEqual(items.map((item) => item.id));
   });
 
-  test('the root, explicit apps and unsupported views open the catalogue, while saved discovery URLs remain collections', () => {
-    for (const value of [undefined, null, '', 'apps', 'unknown']) expect(storeView(value)).toBe('apps');
-    expect(storeView('discover')).toBe('discover');
-    expect(storeView('collections')).toBe('discover');
+  test('catalogue, legacy discovery and unknown URLs choose Apps, and explicit Themes stays available', () => {
+    for (const value of [undefined, null, '', 'apps', 'discover', 'collections', 'unknown']) expect(storeView(value)).toBe('apps');
     expect(storeView('themes')).toBe('themes');
-  });
-
-  test('editorial content disappears before it crowds enlarged text and never treats invalid measurements as wide', () => {
-    expect(storeEditorialFits(1088, 640, 16)).toBe(true);
-    expect(storeEditorialFits(1087, 640, 16)).toBe(false);
-    expect(storeEditorialFits(1500, 960, 24)).toBe(false);
-    expect(storeEditorialFits(1632, 960, 24)).toBe(true);
-    for (const width of [320, 390, 768]) expect(storeEditorialFits(width, 960, 16)).toBe(false);
-    for (const [width, font] of [
-      [Number.POSITIVE_INFINITY, 16],
-      [1200, Number.NaN],
-      [1200, 0],
-    ])
-      expect(storeEditorialFits(width ?? 0, 960, font ?? 0)).toBe(false);
-  });
-
-  test('wide but short catalogue panes retain browsing space, including when text is enlarged', () => {
-    expect(storeEditorialFits(1800, 400, 16)).toBe(false);
-    expect(storeEditorialFits(1800, 639, 16)).toBe(false);
-    expect(storeEditorialFits(1800, 640, 16)).toBe(true);
-    expect(storeEditorialFits(1800, 711, 24)).toBe(false);
-    expect(storeEditorialFits(1800, 960, 24)).toBe(true);
-    for (const height of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) expect(storeEditorialFits(1800, height, 16)).toBe(false);
   });
 
   test('product cards keep exact repository and preview history, real descriptions and availability without nested install buttons', () => {
@@ -503,7 +456,7 @@ describe('catalogue-first Store presentation', () => {
       ),
     );
     expect(html).toContain('Plex is installed.');
-    expect(html).toContain('>Continue <svg');
+    expect(html).toContain('>Continue</button>');
     expect(html).toContain('/api/marketplace/apps/radarr%3Acommunity/image');
     expect(html).not.toContain('/api/marketplace/apps/jellyfin');
     expect(html).not.toContain('/api/marketplace/apps/qbittorrent');

@@ -1,8 +1,10 @@
 import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { appContextQueryKey } from '@/api-client/@tanstack/react-query.gen';
+import { appContextQueryKey, userContextQueryKey } from '@/api-client/@tanstack/react-query.gen';
 import { AppContextProvider } from '@/context/app-context';
+import { UserContextProvider } from '@/context/user-context';
+import type { ReactNode } from 'react';
 import { ClusterSyncHostChoices, ClusterSyncSettings } from './cluster-sync-settings';
 import { clusterSyncKey, type ClusterSyncHost, type ClusterSyncSnapshot } from './cluster-sync-api';
 
@@ -17,6 +19,23 @@ const host: ClusterSyncHost = {
   plan: null,
 };
 const run = async () => undefined;
+function renderSync(content: ReactNode, snapshot?: ClusterSyncSnapshot) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
+  client.setQueryData(appContextQueryKey(), { user: { id: 7, operator: true } });
+  client.setQueryData(userContextQueryKey(), { isLoggedIn: true });
+  if (snapshot) client.setQueryData(clusterSyncKey(7), snapshot);
+  try {
+    return renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <UserContextProvider>
+          <AppContextProvider>{content}</AppContextProvider>
+        </UserContextProvider>
+      </QueryClientProvider>,
+    );
+  } finally {
+    client.clear();
+  }
+}
 async function checkboxes(markup: string) {
   const boxes: { id: string; checked: boolean; disabled: boolean }[] = [];
   await new HTMLRewriter()
@@ -30,7 +49,7 @@ async function checkboxes(markup: string) {
   return boxes;
 }
 test('unselected hosts render one unchecked host choice and no implicit selected categories', async () => {
-  const markup = renderToStaticMarkup(<ClusterSyncHostChoices host={host} busy={false} run={run} />);
+  const markup = renderSync(<ClusterSyncHostChoices host={host} busy={false} run={run} />);
   expect((await checkboxes(markup)).map((box) => box.checked)).toEqual([false]);
   expect(markup).toContain('orbis-checkbox cluster-sync-check');
   expect(markup).toContain('Sync to this server');
@@ -48,7 +67,7 @@ test('reloaded saved rules hydrate exact category and keep-in-sync controls', as
     usesYourAccount: true,
     trustCurrent: true,
   };
-  const markup = renderToStaticMarkup(<ClusterSyncHostChoices host={{ ...host, plan }} busy={false} run={run} />);
+  const markup = renderSync(<ClusterSyncHostChoices host={{ ...host, plan }} busy={false} run={run} />);
   const boxes = await checkboxes(markup);
   expect(boxes.filter((box) => box.checked)).toHaveLength(3);
   expect(boxes.find((box) => box.id.endsWith('-customisation'))?.checked).toBe(true);
@@ -70,7 +89,7 @@ test('pairing changes, offline hosts and account mismatches make retry explicit'
     usesYourAccount: false,
     trustCurrent: false,
   };
-  const markup = renderToStaticMarkup(<ClusterSyncHostChoices host={{ ...host, available: false, plan }} busy={false} run={run} />);
+  const markup = renderSync(<ClusterSyncHostChoices host={{ ...host, available: false, plan }} busy={false} run={run} />);
   expect(markup).toContain('Pairing changed');
   expect(markup).toContain('another admin account');
   expect(markup).toContain('Unavailable');
@@ -78,8 +97,6 @@ test('pairing changes, offline hosts and account mismatches make retry explicit'
   expect(markup).toContain('disabled=""');
 });
 test('member receiving choices reload without account, hostname, wallpaper upload or package-install controls', async () => {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
-  client.setQueryData(appContextQueryKey(), { user: { id: 7, operator: true } });
   const value: ClusterSyncSnapshot = {
     version: 1,
     role: 'member',
@@ -87,19 +104,12 @@ test('member receiving choices reload without account, hostname, wallpaper uploa
     hosts: [],
     source: null,
   };
-  client.setQueryData(clusterSyncKey(7), value);
-  const markup = renderToStaticMarkup(
-    <QueryClientProvider client={client}>
-      <AppContextProvider>
-        <ClusterSyncSettings />
-      </AppContextProvider>
-    </QueryClientProvider>,
-  );
-  client.clear();
+  const markup = renderSync(<ClusterSyncSettings />, value);
   expect((await checkboxes(markup)).find((box) => box.id.endsWith('-customisation'))?.checked).toBe(true);
   expect(markup).toContain('your account here');
   expect(markup).toContain('Private wallpapers');
-  expect(markup).toContain('>Save</button>');
+  expect(markup).toContain('>Confirm receiving</button>');
+  expect(markup).not.toContain('>Save</button>');
   expect(markup).not.toContain('type="password"');
   expect(markup).not.toContain('Install');
 });
@@ -115,7 +125,7 @@ test('routine sync success captions stay quiet while skipped apps and conflicts 
     usesYourAccount: true,
     trustCurrent: true,
   };
-  const success = renderToStaticMarkup(
+  const success = renderSync(
     <ClusterSyncHostChoices
       host={{ ...host, plan: { ...base, results: [{ category: 'customisation', status: 'applied', skippedApps: 0 }] } }}
       busy={false}
@@ -125,7 +135,7 @@ test('routine sync success captions stay quiet while skipped apps and conflicts 
   expect(success).not.toContain('Selected settings synced');
   expect(success).not.toContain('Applied');
   expect(success).not.toContain('cluster-sync-results');
-  const problems = renderToStaticMarkup(
+  const problems = renderSync(
     <ClusterSyncHostChoices
       host={{
         ...host,

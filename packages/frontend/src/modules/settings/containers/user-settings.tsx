@@ -1,4 +1,4 @@
-import { updateUserSettingsMutation } from '@/api-client/@tanstack/react-query.gen';
+import { updateUserSettings } from '@/api-client/sdk.gen';
 import { useAppContext } from '@/context/app-context';
 import { useUserContext } from '@/context/user-context';
 import type { TranslatableError } from '@/types/error.types';
@@ -9,6 +9,7 @@ import { lazy } from 'react';
 import { type SettingsFormValues, UserSettingsForm } from '../components/user-settings-form/user-settings-form';
 import { UpdateSchedules } from './automatic-updates-settings';
 import { ReleaseChannelSettings } from './release-channel-settings';
+import { useGeneralSettingToggles } from '../hooks/use-general-setting-toggles';
 
 const SettingsBundleSettings = lazy(() =>
   import('@/modules/system-backups/settings-bundle-settings').then((module) => ({ default: module.SettingsBundleSettings })),
@@ -26,22 +27,28 @@ type Props = {
 export const UserSettingsContainer = ({ initialValues, section = 'general' }: Props) => {
   const { t } = useTranslation();
   const { refreshAppContext, user } = useAppContext();
-  const { refreshUserContext, setUserContext } = useUserContext();
+  const { refreshUserContext, sessionAbortSignal } = useUserContext();
+  const toggles = useGeneralSettingToggles(section === 'general');
   const updateSettings = useMutation({
-    ...updateUserSettingsMutation(),
-    onError: (e: TranslatableError) => {
-      toast.error(t(e.message, e.intlParams));
+    scope: { id: 'general-settings' },
+    networkMode: 'always',
+    retry: false,
+    mutationFn: async ({ body, signal }: { body: SettingsFormValues; signal: AbortSignal }) => {
+      signal.throwIfAborted();
+      await updateUserSettings({ body, signal, throwOnError: true });
+      signal.throwIfAborted();
     },
-    onSuccess: (_data, variables) => {
-      if (typeof variables.body.guestDashboard === 'boolean') {
-        setUserContext({ isGuestDashboardEnabled: variables.body.guestDashboard });
-      }
+    onError: (e: TranslatableError, { signal }) => {
+      if (!signal.aborted) toast.error(t(e.message, e.intlParams));
+    },
+    onSuccess: (_, { signal }) => {
+      if (signal.aborted) return;
       refreshAppContext();
       refreshUserContext();
     },
   });
 
-  const onSubmit = (values: SettingsFormValues) => updateSettings.mutateAsync({ body: { ...values } }).then(() => undefined);
+  const onSubmit = (body: SettingsFormValues) => updateSettings.mutateAsync({ body, signal: sessionAbortSignal });
 
   if (user?.operator !== true) return <p className="settings-permission">Server settings are managed by an operator.</p>;
   if (section === 'updates')
@@ -65,7 +72,7 @@ export const UserSettingsContainer = ({ initialValues, section = 'general' }: Pr
     );
   return (
     <div className="settings-general-form">
-      <UserSettingsForm initialValues={initialValues} onSubmit={onSubmit} loading={updateSettings.isPending} />
+      <UserSettingsForm key={user.id} initialValues={initialValues} onSubmit={onSubmit} signal={sessionAbortSignal} toggles={toggles} />
     </div>
   );
 };

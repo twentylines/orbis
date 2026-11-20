@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
-import { IconBrandGithub, IconCertificate, IconHeart, IconLogin, IconMoon, IconSun } from '@tabler/icons-react';
+import { IconCertificate, IconLogin, IconMoon, IconSun } from '@tabler/icons-react';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { useTranslation } from 'react-i18next';
 
@@ -14,26 +14,6 @@ export const GuestHeader = () => {
         <span>Orbis</span>
       </Link>
       <div className="desktop-system-actions">
-        <a
-          className="desktop-icon-button"
-          href="https://github.com/runtipi/runtipi"
-          target="_blank"
-          rel="noreferrer"
-          aria-label="Runtipi source"
-          title="Runtipi source"
-        >
-          <IconBrandGithub size={20} aria-hidden="true" />
-        </a>
-        <a
-          className="desktop-icon-button"
-          href="https://github.com/runtipi/runtipi?sponsor=1"
-          target="_blank"
-          rel="noreferrer"
-          aria-label={t('HEADER_SPONSOR')}
-          title={t('HEADER_SPONSOR')}
-        >
-          <IconHeart size={20} aria-hidden="true" />
-        </a>
         <a
           className="desktop-icon-button"
           href="/api/system/certificate"

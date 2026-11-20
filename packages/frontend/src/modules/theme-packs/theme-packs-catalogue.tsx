@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { ThemePackSnapshot } from '@runtipi/common/schemas/theme-pack';
 import type { ThemeFrameworkCatalogue } from '@runtipi/common/schemas/theme-framework-catalogue';
-import { IconChevronDown, IconTrash } from '@tabler/icons-react';
+import { IconTrash } from '@tabler/icons-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { themePacksChanged, themePacksRequest } from './theme-packs-api';
 import { themeStoreCatalogue, themeStoreEmptyMessage } from './theme-catalogue';
@@ -142,7 +142,6 @@ export function ThemePacksCatalogue({ surface = 'appearance', search = '' }: { s
             >
               <SelectTrigger id={`${id}-select`} aria-label="Theme">
                 <SelectValue placeholder="Loading themes…" />
-                <IconChevronDown size={16} aria-hidden="true" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="orbis">Default</SelectItem>

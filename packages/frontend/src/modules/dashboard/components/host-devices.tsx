@@ -106,7 +106,8 @@ export function useHostReadings() {
     queryKey: ['host-telemetry', path],
     queryFn: ({ signal }) => loadHostDevices(signal, path),
     enabled: visible,
-    refetchInterval: (query) => (query.state.data?.available === false && query.state.data.reason === 'Collecting host readings.' ? 2000 : 10_000),
+    staleTime: 800,
+    refetchInterval: 1000,
     refetchIntervalInBackground: false,
   });
 }
@@ -146,7 +147,7 @@ export const HostDevices = memo(function HostDevices() {
           Host devices
         </h2>
         <span className="host-devices-state" data-stale={Boolean(stale)}>
-          {ready ? (stale ? 'Readings delayed' : 'Updates every 10 seconds') : 'Storage, interfaces and disk activity'}
+          {ready ? (stale ? 'Readings delayed' : 'Network and disk activity · every second') : 'Storage, interfaces and disk activity'}
         </span>
       </header>
       {query.isPending ? <output>Loading host devices…</output> : null}

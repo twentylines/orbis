@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { IconChevronDown } from '@tabler/icons-react';
+import { DisclosureIndicator } from '@/components/ui/DisclosureIndicator/DisclosureIndicator';
 import { useLocation } from 'react-router';
 import { Markdown } from '@/components/markdown/markdown';
 import { includedOrbisReleases, groupOrbisReleaseNotes, orbisReleaseHistoryOptions, type OrbisRelease } from '@/desktop/orbis-release';
@@ -10,13 +10,20 @@ import { formatOrbisVersion } from '@/desktop/orbis-version';
 import './orbis-release-notes.css';
 
 function ReleaseNote({ release, expanded, children }: { release: OrbisRelease; expanded: boolean; children?: ReactNode }) {
-  const [open, setOpen] = useState(expanded);
+  const [choice, setChoice] = useState<boolean | null>(null);
+  const open = choice ?? expanded;
   return (
-    <details className="desktop-release-note" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <details
+      className="desktop-release-note"
+      open={open}
+      onToggle={(event) => {
+        if (event.currentTarget.open !== open) setChoice(event.currentTarget.open);
+      }}
+    >
       <summary>
         <span title={release.tag}>{formatOrbisVersion(release.tag)}</span>
         {release.publishedAt ? <time dateTime={release.publishedAt}>{new Date(release.publishedAt).toLocaleDateString()}</time> : null}
-        <IconChevronDown size={18} aria-hidden="true" />
+        <DisclosureIndicator />
       </summary>
       {open ? (
         <div className="desktop-release-note-content">
@@ -24,7 +31,6 @@ function ReleaseNote({ release, expanded, children }: { release: OrbisRelease; e
             <Markdown
               content={release.body.trimStart().replace(/^#\s+Orbis[^\n]*\r?\n(?:\r?\n)*/i, '')}
               className="desktop-update-markdown"
-              tabIndex={0}
               label={`${formatOrbisVersion(release.tag)} changelog`}
             />
           ) : (
@@ -59,10 +65,12 @@ export function OrbisReleaseNotes({
   latest,
   installed,
   channel,
+  compact = false,
 }: {
   latest: OrbisRelease;
   installed: string | undefined;
   channel?: OrbisReleaseChannel;
+  compact?: boolean;
 }) {
   const titleId = useId();
   const visible = useWindowVisible();
@@ -78,6 +86,8 @@ export function OrbisReleaseNotes({
   const releases = includedOrbisReleases(latest, installed, history.data?.releases);
   const groups = groupOrbisReleaseNotes(releases.filter((release) => release.tag !== latest.tag));
   const earlierUpdates = groups.filter((group) => !group.feature).flatMap((group) => group.revisions);
+  const latestBody = latest.body ?? '';
+  const showLatestNotes = !compact || (latestBody.length <= 800 && latestBody.split('\n').length <= 12);
   return (
     <section className="desktop-release-history" aria-labelledby={titleId}>
       <h3 id={titleId}>Changelog</h3>
@@ -97,12 +107,12 @@ export function OrbisReleaseNotes({
         </p>
       ) : null}
       <div className="desktop-release-history-list">
-        <ReleaseNote key={latest.tag} release={latest} expanded>
+        <ReleaseNote key={latest.tag} release={latest} expanded={showLatestNotes}>
           <IncludedNotes releases={earlierUpdates} />
         </ReleaseNote>
         {groups.map((group) =>
           group.feature ? (
-            <ReleaseNote key={`${latest.tag}:${group.feature.tag}`} release={group.feature} expanded>
+            <ReleaseNote key={`${latest.tag}:${group.feature.tag}`} release={group.feature} expanded={!compact}>
               <IncludedNotes releases={group.revisions} />
             </ReleaseNote>
           ) : null,

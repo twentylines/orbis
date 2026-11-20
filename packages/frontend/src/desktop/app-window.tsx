@@ -2,7 +2,8 @@ import {
   IconArrowsMaximize,
   IconArrowsMinimize,
   IconArrowsMove,
-  IconExternalLink,
+  IconAlertTriangle,
+  IconBrowserPlus,
   IconLayoutColumns,
   IconLayoutSidebar,
   IconLayoutSidebarRight,
@@ -558,7 +559,7 @@ export function AppWindow({
               title="Open in new tab and close this window"
               onClick={onTab}
             >
-              <IconExternalLink size={19} aria-hidden="true" />
+              <IconBrowserPlus size={19} aria-hidden="true" />
             </Button>
             <Button
               className="app-launcher-close"
@@ -717,7 +718,7 @@ const AppFrame = memo(function AppFrame({
       aria-busy={check.isFetching}
     >
       <div className={boundary ? 'app-window-compatibility-content' : 'app-window-recovery-content'}>
-        {boundary ? <IconExternalLink size={30} aria-hidden="true" /> : null}
+        {boundary ? <IconAlertTriangle size={30} aria-hidden="true" /> : null}
         <h3 ref={noticeHeading} tabIndex={-1}>
           {notice.title}
         </h3>

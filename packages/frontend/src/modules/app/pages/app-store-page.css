@@ -159,6 +159,16 @@
 .orbis-store-category-option svg {
   flex: none;
 }
+.orbis-store-category .orbis-select-value,
+.orbis-store-category-value {
+  /* Nested inline wrappers add baseline space below the icon and text. */
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.orbis-store-category-value .orbis-store-category-text {
+  translate: 0 -0.0625em;
+}
 .orbis-store-toolbar .refresh-app-stores {
   width: 100%;
   min-height: 44px;
@@ -175,17 +185,8 @@
   gap: 24px;
 }
 .orbis-store-results,
-.orbis-store-editorial,
 .orbis-store-grid-item {
   min-width: 0;
-}
-.orbis-store-editorial {
-  display: block;
-  grid-column: 1 / -1;
-  padding-block: 12px;
-}
-.orbis-store-editorial[hidden] {
-  display: none;
 }
 .orbis-store-result-heading,
 .orbis-store-section-heading {
@@ -620,7 +621,7 @@
   }
   .orbis-store-filters {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
     grid-column: 1 / -1;
     grid-row: 3;
   }

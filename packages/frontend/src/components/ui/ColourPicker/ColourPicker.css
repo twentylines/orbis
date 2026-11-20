@@ -192,3 +192,36 @@ body:has(.orbis-theme) .colour-picker-popover :is(input, button):focus-visible {
     outline-offset: -2px;
   }
 }
+
+.colour-picker-inline {
+  display: grid;
+  gap: 12px;
+  max-width: 28rem;
+}
+.colour-picker-inline .colour-picker-reset {
+  justify-self: start;
+}
+.colour-picker-inline .colour-picker-body {
+  overflow: visible;
+  padding: 0;
+}
+.colour-picker-inline .colour-picker-channel {
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 0 12px;
+}
+.colour-picker-inline .colour-picker-channel input {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+body:has(.orbis-theme) .colour-picker-inline :is(input, button):focus-visible {
+  outline: 2px solid var(--desktop-focus);
+  outline-offset: 2px;
+}
+@media (forced-colors: active) {
+  .colour-picker-inline .colour-picker-channel input {
+    appearance: auto;
+  }
+  body:has(.orbis-theme) .colour-picker-inline :is(input, button):focus-visible {
+    outline-color: Highlight;
+  }
+}

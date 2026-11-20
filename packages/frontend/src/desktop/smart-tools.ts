@@ -5,6 +5,7 @@ export type SmartToolsJob = {
   kind?: string;
   state: 'queued' | 'running' | 'complete' | 'failed' | 'interrupted';
   message?: string;
+  retryable?: boolean;
 };
 
 export class SmartToolsRequestError extends Error {

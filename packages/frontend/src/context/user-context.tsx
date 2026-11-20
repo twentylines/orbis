@@ -9,7 +9,7 @@ import { rememberAuthenticatedSession } from '@/components/startup/auth-session-
 interface UserContextValue extends UserContextDto {
   refreshUserContext: () => Promise<void>;
   setUserContext: (newUserContext: Partial<UserContextDto>) => void;
-  endSession: () => Promise<void>;
+  endSession: (publicContext?: UserContextDto) => Promise<void>;
   sessionEpoch: object;
   sessionAbortSignal: AbortSignal;
 }
@@ -59,9 +59,10 @@ export const UserContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
     sessionEpoch: session.epoch,
     sessionAbortSignal: session.signal,
     refreshUserContext: refreshUserContext,
-    endSession: () => {
+    endSession: (publicContext?: UserContextDto) => {
       changeSession(false);
-      return clearAccountQueries(queryClient, queryKey, { ...userContext, isLoggedIn: false });
+      const cached = queryClient.getQueryData<UserContextDto>(queryKey) ?? userContext;
+      return clearAccountQueries(queryClient, queryKey, { ...cached, ...publicContext, isLoggedIn: false });
     },
     setUserContext: (newUserContext: Partial<UserContextDto>) => {
       if (typeof newUserContext.isLoggedIn === 'boolean') changeSession(newUserContext.isLoggedIn);

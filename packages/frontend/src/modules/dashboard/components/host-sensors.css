@@ -166,14 +166,8 @@ body:has(.orbis-theme) .host-sensors-heading h2:focus-visible {
 .host-sensors-about summary::-webkit-details-marker {
   display: none;
 }
-.host-sensors-about summary svg {
-  flex: 0 0 16px;
-}
 .host-sensors-about summary span {
   min-width: 0;
-}
-.host-sensors-about[open] summary svg {
-  transform: rotate(90deg);
 }
 .host-sensors-about summary:hover {
   background: color-mix(in srgb, var(--desktop-preset-tint) 12%, transparent);

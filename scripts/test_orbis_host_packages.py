@@ -25,6 +25,23 @@ def package(name="service:arm64", *, security=True):
 
 
 class HostPackagesTests(unittest.TestCase):
+    def test_smart_review_rejects_untrusted_candidates_and_unrelated_apt_operations(self):
+        smart = package("smartmontools")
+        smart.is_installed = False
+        selected = {"name": "smartmontools", "installedVersion": None, "candidateVersion": "1.1"}
+        install = {**selected, "action": "install"}
+        with mock.patch.object(PACKAGES, "require_ubuntu", return_value={"VERSION_CODENAME": "noble"}), mock.patch.object(
+            PACKAGES, "apt_module", return_value=SimpleNamespace(Cache=lambda: {"smartmontools": smart})
+        ), mock.patch.object(PACKAGES, "simulate_install", return_value={"operations": [install]}) as simulate:
+            self.assertEqual(PACKAGES.simulate_smart_tools(), {"selected": [selected], "operations": [install]})
+            simulate.assert_called_once_with([selected], new_packages=True)
+            simulate.return_value = {"operations": [install, {**install, "name": "other"}]}
+            with self.assertRaisesRegex(ValueError, "outside"):
+                PACKAGES.simulate_smart_tools()
+            smart.candidate.origins[0].trusted = False
+            with self.assertRaisesRegex(ValueError, "no trusted Ubuntu candidate"):
+                PACKAGES.simulate_smart_tools()
+
     def test_inventory_reports_candidate_versions_origins_and_cache_age(self):
         cache = [package(), package("tool:arm64", security=False)]
         result = PACKAGES.inventory_from_cache(

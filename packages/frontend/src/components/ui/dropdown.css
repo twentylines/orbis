@@ -1,13 +1,14 @@
 /* A separate class keeps Bootstrap's delegated dropdown keyboard handler away from Radix menus. */
-.orbis-dropdown-menu {
+.orbis-dropdown-menu,
+.orbis-popup-surface {
   --orbis-menu-offset-y: -4px;
   min-width: 10rem;
   padding: 4px;
-  color: var(--tblr-body-color);
+  color: var(--desktop-ink, var(--tblr-body-color));
   background: var(--desktop-menu-surface, var(--tblr-bg-surface));
   backdrop-filter: var(--desktop-chrome-filter, blur(28px) saturate(1.2));
   -webkit-backdrop-filter: var(--desktop-chrome-filter, blur(28px) saturate(1.2));
-  border: 1px solid var(--tblr-border-color);
+  border: 1px solid var(--desktop-line, var(--tblr-border-color));
   border-radius: var(--orbis-control-radius, 12px);
   box-shadow: none;
   font-size: 0.875rem;
@@ -19,16 +20,19 @@
     opacity 180ms cubic-bezier(0.22, 1, 0.36, 1),
     transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.orbis-dropdown-menu[data-side="top"] {
+.orbis-dropdown-menu[data-side="top"],
+.orbis-popup-surface[data-side="top"] {
   --orbis-menu-offset-y: 4px;
 }
 @starting-style {
-  .orbis-dropdown-menu[data-state="open"] {
+  .orbis-dropdown-menu[data-state="open"],
+  .orbis-popup-surface[data-state="open"] {
     opacity: 0;
     transform: translateY(var(--orbis-menu-offset-y)) scale(0.985);
   }
 }
-.orbis-dropdown-menu[data-state="closed"] {
+.orbis-dropdown-menu[data-state="closed"],
+.orbis-popup-surface[data-state="closed"] {
   opacity: 0;
   transform: translateY(var(--orbis-menu-offset-y)) scale(0.985);
   pointer-events: none;
@@ -42,8 +46,42 @@
     visibility: visible;
   }
 }
+.orbis-select-trigger.form-select {
+  gap: 12px;
+  padding-inline-end: 12px;
+  background-image: none;
+}
+.orbis-menu-chevron,
+.orbis-menu-sub-chevron {
+  display: block;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-inline-start: auto;
+  transform-origin: center;
+  transition: rotate 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+[aria-expanded="true"] > .orbis-menu-chevron {
+  rotate: 180deg;
+}
+.orbis-menu-sub-chevron {
+  margin-inline-start: 12px;
+  transition: translate 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+[data-state="open"] > .orbis-menu-sub-chevron {
+  translate: 2px 0;
+}
+.orbis-menu-sub-chevron:dir(rtl) {
+  rotate: 180deg;
+}
+[data-state="open"] > .orbis-menu-sub-chevron:dir(rtl) {
+  translate: -2px 0;
+}
 @media (prefers-reduced-motion: reduce) {
-  .orbis-dropdown-menu {
+  .orbis-dropdown-menu,
+  .orbis-popup-surface,
+  .orbis-menu-chevron,
+  .orbis-menu-sub-chevron {
     transition: none;
     animation: none;
   }

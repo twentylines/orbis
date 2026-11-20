@@ -40,4 +40,17 @@ describe('Markdown', () => {
     expect(html).toContain('<img src="https://example.com/logo.png"/>');
     expect(html).toContain('<a>Bad link</a>');
   });
+
+  it('keeps fenced html literal inside keyboard-accessible code while inline code stays inline', () => {
+    const content = ['Use `--check`.', '', '```html', '<script>alert(1)</script>', '<img src=x onerror=alert(1)>', '```'].join('\n');
+    const html = renderToStaticMarkup(React.createElement(Markdown, { content, className: 'markdown' }));
+
+    expect(html).toContain('<code>--check</code>');
+    expect(html).toContain('aria-label="Code block"');
+    expect(html.match(/tabindex="0"/g)).toHaveLength(1);
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(html).not.toContain('<script>');
+    expect(html).not.toContain('<img src="x"');
+  });
 });

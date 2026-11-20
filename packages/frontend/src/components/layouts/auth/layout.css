@@ -13,6 +13,14 @@
   padding: 20px;
   background: #030508;
 }
+.desktop-auth-setup .desktop-auth-container {
+  display: grid;
+  gap: 20px;
+  padding: 0;
+}
+.desktop-auth-setup .desktop-auth-container > .card {
+  margin: 0;
+}
 .desktop-auth-setup .desktop-auth-identity {
   padding: 0;
   border: 0;
@@ -25,7 +33,7 @@
 .desktop-auth-setup .desktop-auth-brand {
   --desktop-ink: #edf0f3;
   --desktop-accent: color-mix(in srgb, var(--desktop-base-accent) 40%, #e0e7eb);
-  gap: 14px;
+  gap: 10px;
 }
 .orbis-setup-space {
   position: fixed;
@@ -51,4 +59,20 @@
   flex: none;
   margin: 0;
   padding: 0;
+}
+
+/* Account creation uses this layout before the setup module is loaded. */
+.desktop-auth.desktop-auth-setup[data-auth-glass="true"] .card {
+  background: color-mix(in srgb, var(--desktop-surface) var(--setup-glass-tint, 38%), transparent);
+  backdrop-filter: blur(14px) saturate(1.18);
+  -webkit-backdrop-filter: blur(14px) saturate(1.18);
+}
+.desktop-auth.desktop-auth-setup[data-auth-glass="true"] .card::before {
+  background: transparent;
+}
+.desktop-auth-setup[data-desktop-mode="light"] {
+  --setup-glass-tint: 86%;
+}
+.desktop-auth-setup .desktop-auth-brand > .orbis-logo {
+  flex: none;
 }

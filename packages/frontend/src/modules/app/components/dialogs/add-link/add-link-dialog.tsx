@@ -1,17 +1,20 @@
-import { createLinkMutation, editLinkMutation } from '@/api-client/@tanstack/react-query.gen';
+import { editLink, type GetLinksResponse } from '@/api-client';
+import { createLinkMutation, editLinkMutation, getGuestLinksQueryKey, getLinksQueryKey } from '@/api-client/@tanstack/react-query.gen';
 import { Button } from '@/components/ui/Button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
 import { useAppContext } from '@/context/app-context';
+import { AutosavedSettingSwitch } from '@/modules/settings/components/autosaved-setting-switch';
+import { useAutosavedToggle } from '@/modules/settings/hooks/use-autosaved-toggle';
 import type { CustomLink } from '@/types/app.types';
 import type { TranslatableError } from '@/types/error.types';
 import { arktypeResolver } from '@hookform/resolvers/arktype';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type } from 'arktype';
 import type React from 'react';
-import { useId } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { useId, useState } from 'react';
+import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import './add-link-dialog.css';
@@ -21,7 +24,6 @@ type FormValues = {
   url: string;
   description: string;
   iconUrl: string;
-  isVisibleOnGuestDashboard: boolean;
 };
 
 type AddLinkDialogProps = {
@@ -34,13 +36,28 @@ export const AddLinkDialog: React.FC<AddLinkDialogProps> = ({ isOpen, onClose, l
   const { t } = useTranslation();
   const { userSettings } = useAppContext();
   const { guestDashboard } = userSettings;
+  const queryClient = useQueryClient();
+  const linksKey = getLinksQueryKey();
+  const visibilityAvailable = queryClient.getQueryData<GetLinksResponse>(linksKey)?.editCapabilities?.includes('guest-visibility-patch.v1') ?? false;
+  const opening = {
+    open: isOpen,
+    linkId: link?.id,
+    autosaveVisibility: visibilityAvailable,
+    visibilityChoice: link?.isVisibleOnGuestDashboard ?? false,
+  };
+  const [editor, setEditor] = useState(opening);
+  // Keep the selected form contract for this opening, even when a refreshed
+  // server response starts advertising support while a legacy draft is open.
+  if (editor.open !== isOpen || editor.linkId !== link?.id) {
+    setEditor(opening);
+  }
+  const autosaveVisibility = Boolean(link && editor.autosaveVisibility);
 
   const schema = type({
     title: 'string > 0 & string <= 20',
     description: 'string <= 50',
     url: 'string.url',
     iconUrl: type('string.url').or(type.unit('')),
-    isVisibleOnGuestDashboard: 'boolean',
   });
 
   const formId = useId();
@@ -48,7 +65,6 @@ export const AddLinkDialog: React.FC<AddLinkDialogProps> = ({ isOpen, onClose, l
   const {
     register,
     handleSubmit,
-    control,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: arktypeResolver(schema),
@@ -56,7 +72,6 @@ export const AddLinkDialog: React.FC<AddLinkDialogProps> = ({ isOpen, onClose, l
       ...link,
       description: link?.description || '',
       iconUrl: link?.iconUrl || '',
-      isVisibleOnGuestDashboard: link?.isVisibleOnGuestDashboard || false,
     },
   });
 
@@ -71,7 +86,7 @@ export const AddLinkDialog: React.FC<AddLinkDialogProps> = ({ isOpen, onClose, l
     },
   });
 
-  const editLink = useMutation({
+  const saveLink = useMutation({
     ...editLinkMutation(),
     onError: (e: TranslatableError) => {
       toast.error(t(e.message, e.intlParams));
@@ -82,14 +97,54 @@ export const AddLinkDialog: React.FC<AddLinkDialogProps> = ({ isOpen, onClose, l
     },
   });
 
-  const mutationExecuting = addLink.isPending || editLink.isPending;
+  const mutationExecuting = addLink.isPending || saveLink.isPending;
+  const visibility = useAutosavedToggle({
+    id: `link-guest-visibility:${link?.id ?? 'new'}`,
+    scope: `link:${link?.id ?? 'new'}`,
+    saved: link?.isVisibleOnGuestDashboard ?? false,
+    disabled: !autosaveVisibility || !guestDashboard || !isOpen || mutationExecuting,
+    save: async (checked, signal) => {
+      if (!link) return;
+      try {
+        const { data } = await editLink({ path: { id: link.id }, body: { isVisibleOnGuestDashboard: checked }, signal, throwOnError: true });
+        if (
+          !data ||
+          typeof data !== 'object' ||
+          !('id' in data && data.id === link.id) ||
+          !('userId' in data && data.userId === link.userId) ||
+          !('isVisibleOnGuestDashboard' in data && data.isVisibleOnGuestDashboard === checked)
+        ) {
+          throw new Error('The server did not confirm the change.');
+        }
+        await queryClient.cancelQueries({ queryKey: linksKey });
+        signal.throwIfAborted();
+        queryClient.setQueryData<GetLinksResponse>(
+          linksKey,
+          (current) =>
+            current && {
+              ...current,
+              links: current.links.map((item) =>
+                item.id === link.id && item.userId === link.userId ? { ...item, isVisibleOnGuestDashboard: checked } : item,
+              ),
+            },
+        );
+        void queryClient.invalidateQueries({ queryKey: getGuestLinksQueryKey() });
+      } catch {
+        signal.throwIfAborted();
+        throw new Error('Guest dashboard visibility could not be saved.');
+      }
+    },
+  });
 
   const onSubmit = (data: FormValues) => {
-    const { title, url, description, iconUrl, isVisibleOnGuestDashboard } = data;
+    const { title, url, description, iconUrl } = data;
+    const metadata = { title, description, url, iconUrl };
+    const fullForm = { ...metadata, isVisibleOnGuestDashboard: editor.visibilityChoice };
     if (link) {
-      editLink.mutate({ body: { title, description, url, iconUrl, isVisibleOnGuestDashboard }, path: { id: link.id } });
+      if (autosaveVisibility && visibility.pending) return;
+      saveLink.mutate({ body: autosaveVisibility ? metadata : fullForm, path: { id: link.id } });
     } else {
-      addLink.mutate({ body: { title, description, url, iconUrl, isVisibleOnGuestDashboard } });
+      addLink.mutate({ body: fullForm });
     }
   };
 
@@ -99,7 +154,7 @@ export const AddLinkDialog: React.FC<AddLinkDialogProps> = ({ isOpen, onClose, l
         <DialogHeader>
           <DialogTitle>{link ? t('LINKS_EDIT_TITLE') : t('LINKS_ADD_TITLE')}</DialogTitle>
         </DialogHeader>
-        <DialogDescription>
+        <DialogDescription asChild>
           <form noValidate onSubmit={handleSubmit((values) => onSubmit(values))} id={formId}>
             <Input
               disabled={mutationExecuting}
@@ -136,25 +191,22 @@ export const AddLinkDialog: React.FC<AddLinkDialogProps> = ({ isOpen, onClose, l
               placeholder={t('LINKS_FORM_ICON_PLACEHOLDER')}
               error={errors.iconUrl?.message}
             />
-            {guestDashboard && (
-              <Controller
-                name="isVisibleOnGuestDashboard"
-                control={control}
-                render={({ field }) => (
-                  <Switch
-                    disabled={mutationExecuting}
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                    className="mt-3"
-                    label={t('LINKS_FORM_VISIBLE_ON_GUEST_DASHBOARD')}
-                  />
-                )}
-              />
-            )}
+            {guestDashboard &&
+              (autosaveVisibility ? (
+                <AutosavedSettingSwitch className="mt-3" label={t('LINKS_FORM_VISIBLE_ON_GUEST_DASHBOARD')} toggle={visibility} showStatus />
+              ) : (
+                <Switch
+                  disabled={mutationExecuting}
+                  checked={editor.visibilityChoice}
+                  onCheckedChange={(checked) => setEditor((current) => ({ ...current, visibilityChoice: checked }))}
+                  className="mt-3"
+                  label={t('LINKS_FORM_VISIBLE_ON_GUEST_DASHBOARD')}
+                />
+              ))}
           </form>
         </DialogDescription>
         <DialogFooter>
-          <Button type="submit" intent="success" disabled={mutationExecuting} form={formId}>
+          <Button type="submit" intent="success" disabled={mutationExecuting || (autosaveVisibility && visibility.pending)} form={formId}>
             {link ? 'Save' : 'Add'}
           </Button>
         </DialogFooter>

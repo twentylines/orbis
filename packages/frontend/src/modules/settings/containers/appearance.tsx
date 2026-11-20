@@ -9,25 +9,29 @@ import {
 import { useRef, useState } from 'react';
 import { ColourModeChoice } from '@/desktop/colour-mode-choice';
 import { WallpaperSettings } from './wallpaper-settings';
-import { MaterialSettings } from './material-settings';
+import { ColourSettings, MaterialSettings } from './material-settings';
 import { preferenceCacheLimit } from '@/desktop/appearance-cache';
 import { AppOpeningSettings } from '@/desktop/app-opening-settings';
-import { presetLabels, resolveWallpaperKey, wallpaperSources } from '@/desktop/wallpaper-presets';
+import { presetLabels, visibleThemePresets } from '@/desktop/wallpaper-presets';
 import { AppearanceRange } from './appearance-controls';
 import { Button } from '@/components/ui/Button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import './appearance.css';
-import { useSettingsSave } from '../pages/settings-save';
+import { useDebouncedPreferenceSave } from '../hooks/use-debounced-preference-save';
+import { useUserContext } from '@/context/user-context';
 import { usePreferenceNameDraft } from '@/desktop/preference-name-draft';
 
-const presets: { value: DesktopPreferences['preset']; title: string; description: string }[] = [
-  { value: 'frost', title: 'Frost', description: 'Pale green' },
-  { value: 'graphite', title: 'Graphite', description: 'Neutral grey' },
-  { value: 'forest', title: 'Forest', description: 'Sage green' },
-  { value: 'stone', title: 'Warm stone', description: 'Beige' },
-  { value: 'ocean', title: 'Ocean', description: 'Blue green' },
-  { value: 'blush', title: 'Blush', description: 'Rose' },
-];
+const presetDescriptions: Record<(typeof visibleThemePresets)[number], string> = {
+  frost: 'Pale green',
+  graphite: 'Neutral grey',
+  forest: 'Sage green',
+  stone: 'Beige',
+  ocean: 'Blue green',
+  blush: 'Petal pink',
+  burgundy: 'Wine red',
+  amber: 'Golden yellow',
+  orange: 'Tangerine',
+};
 
 export function AppearanceReset({ open, onOpenChange, onReset }: { open: boolean; onOpenChange: (open: boolean) => void; onReset: () => void }) {
   return (
@@ -38,7 +42,7 @@ export function AppearanceReset({ open, onOpenChange, onReset }: { open: boolean
           <p>Restore the default appearance and workspace settings.</p>
         </div>
         <div className="appearance-actions">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(true)}>
+          <Button type="button" variant="outline" data-setting-review="reset-appearance" onClick={() => onOpenChange(true)}>
             Reset
           </Button>
         </div>
@@ -81,52 +85,37 @@ export function AppearanceReset({ open, onOpenChange, onReset }: { open: boolean
 
 export const Appearance = () => {
   const { preferences, activeThemePack, cacheAvailable, update, commit, reset, syncState, updateAppearance } = useDesktopPreferences();
+  const { sessionAbortSignal } = useUserContext();
   const { name, setName, acknowledge: acknowledgeName } = usePreferenceNameDraft(preferences.serverName);
+  const [nameEdit, setNameEdit] = useState<{ draft: string; signal: AbortSignal } | null>(null);
+  const [nameInvalid, setNameInvalid] = useState(false);
   const [message, setMessage] = useState('');
   const [resetOpen, setResetOpen] = useState(false);
   const [wallpaperSettingsRevision, setWallpaperSettingsRevision] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const nameInput = useRef<HTMLInputElement>(null);
-  const wallpaperKey = resolveWallpaperKey(preferences);
-  const uploadedWallpaper = preferences.wallpaperMode === 'custom' && Boolean(preferences.appearance.wallpaperImage);
-  const wallpaperPreset = wallpaperKey.startsWith('theme-')
-    ? (wallpaperKey.slice(6) as DesktopPreferences['preset'])
-    : ({ sandstone: 'stone', tidal: 'ocean', canopy: 'forest' } as const)[preferences.wallpaper];
-
   const changePreset = (preset: DesktopPreferences['preset']) => {
     setMessage('');
-    update(activeThemePack ? { preset } : { preset, appearance: { ...preferences.appearance, accent: null } });
+    update(
+      activeThemePack ? { preset } : { preset, appearance: { ...preferences.appearance, themeColour: null, accent: null, wallpaperColours: false } },
+    );
   };
 
-  const saveName = () => {
-    const value = name.trim();
-    if (!value || value.length > 40) {
-      setMessage('Use a name between 1 and 40 characters.');
-      return;
-    }
-    setMessage('');
-    update({ serverName: value });
-    setName(value);
+  const finishName = () => {
+    const invalid = !name.trim() || name.trim().length > 40;
+    setNameInvalid(invalid);
+    if (!invalid) setNameEdit({ draft: name, signal: sessionAbortSignal });
   };
-  const sharedSave = useSettingsSave({
-    section: 'customise',
-    dirty: name !== preferences.serverName,
-    pending: false,
-    prepare: async () => {
+  const submittedName = nameEdit?.signal === sessionAbortSignal && nameEdit.draft === name && name !== preferences.serverName ? name : null;
+  const nameSave = useDebouncedPreferenceSave(
+    submittedName,
+    async () => {
       const serverName = name.trim();
-      if (!serverName || serverName.length > 40) {
-        setMessage('Use a name between 1 and 40 characters.');
-        nameInput.current?.focus();
-        return null;
-      }
-      setMessage('');
-      const submitted = name;
-      return async () => {
-        await commit({ serverName });
-        acknowledgeName(submitted, serverName);
-      };
+      if (serverName !== preferences.serverName) await commit({ serverName });
+      acknowledgeName(name, serverName);
+      setNameEdit((edit) => (edit?.draft === name && edit.signal === sessionAbortSignal ? null : edit));
     },
-  });
+    { delay: 0, signal: sessionAbortSignal, ready: syncState !== 'loading', unsaved: name !== preferences.serverName },
+  );
 
   const exportSettings = () => {
     setMessage('');
@@ -176,22 +165,38 @@ export const Appearance = () => {
           <div>
             <input
               id="desktop-server-name"
-              ref={nameInput}
               aria-labelledby="appearance-server-name"
+              aria-invalid={nameInvalid || undefined}
+              aria-describedby={nameInvalid ? 'appearance-server-name-error' : undefined}
               value={name}
               maxLength={40}
-              disabled={sharedSave.pending}
               onChange={(event) => {
+                setNameEdit(null);
                 setName(event.target.value);
-                setMessage('');
+                setNameInvalid(false);
+              }}
+              onBlur={finishName}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                }
               }}
             />
-            {sharedSave.shared ? null : (
-              <button type="button" onClick={saveName}>
-                Save
-              </button>
-            )}
           </div>
+          {nameInvalid ? (
+            <p id="appearance-server-name-error" role="alert">
+              Use a name between 1 and 40 characters.
+            </p>
+          ) : null}
+          {nameSave.error ? (
+            <div role="alert">
+              <p>{nameSave.error}</p>
+              <Button type="button" variant="outline" onClick={nameSave.retry}>
+                Retry
+              </Button>
+            </div>
+          ) : null}
         </div>
       </section>
       <div id="setting-theme-packs">
@@ -199,45 +204,39 @@ export const Appearance = () => {
       </div>
       <section className="appearance-section" aria-labelledby="appearance-preset">
         <div>
-          <h2 id="appearance-preset">{activeThemePack ? 'Colour preset fallback' : 'Colour preset'}</h2>
+          <h2 id="appearance-preset">{activeThemePack ? 'Fallback colour preset' : 'Colour presets'}</h2>
           <p>
             {activeThemePack
-              ? `${activeThemePack.name} supplies the palette. This preset returns when you remove or stop using the pack. Your custom accent stays in place.`
+              ? `${activeThemePack.name} supplies the palette. This preset returns when you stop using the pack. Your custom colours stay in place.`
               : 'Applies to buttons, the logo, panels, menus and notifications. Each preset has light and dark colours.'}
           </p>
         </div>
         <div className="appearance-preset-controls">
           <div className="appearance-presets">
-            {presets.map(({ value, title, description }) => (
+            {visibleThemePresets.map((value) => (
               <button
                 key={value}
                 type="button"
                 className={`appearance-preset appearance-preset-${value}`}
-                aria-pressed={preferences.preset === value}
+                aria-pressed={
+                  preferences.preset === value &&
+                  (Boolean(activeThemePack) || (preferences.appearance.themeColour === null && !preferences.appearance.wallpaperColours))
+                }
                 onClick={() => changePreset(value)}
               >
                 <span className="appearance-swatch" aria-hidden="true">
                   <span className="appearance-swatch-light" />
                   <span className="appearance-swatch-dark" />
                 </span>
-                <strong>{title}</strong>
-                <small>{description}</small>
+                <strong>{value === 'stone' ? 'Warm stone' : presetLabels[value]}</strong>
+                <small>{presetDescriptions[value]}</small>
               </button>
             ))}
           </div>
-          <div className="appearance-preset-wallpaper">
-            {uploadedWallpaper ? null : <img src={wallpaperSources[wallpaperKey].replace('.webp', '-preview.webp')} alt="" />}
-            <span>
-              {preferences.wallpaperMode === 'theme'
-                ? 'Wallpaper follows colours'
-                : uploadedWallpaper
-                  ? 'Your uploaded wallpaper stays fixed'
-                  : `Fixed wallpaper: ${presetLabels[wallpaperPreset]}`}
-            </span>
-            <a href="#appearance-wallpaper">Change</a>
-          </div>
+          <ColourSettings />
         </div>
       </section>
+      <WallpaperSettings key={`wallpaper-${wallpaperSettingsRevision}`} />
       <section className="appearance-section" aria-labelledby="appearance-mode">
         <div>
           <h2 id="appearance-mode">Colour mode</h2>
@@ -274,7 +273,6 @@ export const Appearance = () => {
         </div>
       </section>
       <MaterialSettings key={`material-${wallpaperSettingsRevision}`} />
-      <WallpaperSettings key={`wallpaper-${wallpaperSettingsRevision}`} />
       <AppOpeningSettings />
       <section className="appearance-section" aria-labelledby="appearance-density">
         <div>

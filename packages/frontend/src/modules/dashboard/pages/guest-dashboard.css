@@ -1,0 +1,106 @@
+.desktop-guest-main .page-header .container-xl {
+  padding: 10px 16px;
+  border-radius: 18px;
+  color: var(--desktop-ink);
+  background: var(--desktop-pane-surface);
+  backdrop-filter: var(--desktop-pane-filter);
+  -webkit-backdrop-filter: var(--desktop-pane-filter);
+}
+.desktop-guest-main .page-header .row {
+  gap: 12px 16px;
+  margin-inline: 0;
+}
+.desktop-guest-main .page-header .row > * {
+  margin-block-start: 0;
+  padding-inline: 0;
+}
+.desktop-guest-main .page-header .row > .col {
+  flex: 1 1 auto;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+}
+.guest-dashboard-title {
+  width: fit-content;
+  max-width: 100%;
+  color: var(--desktop-ink);
+}
+.desktop-guest-main .row-cards > :is(.guest-app-trigger, .guest-link-tile-button) {
+  display: flex;
+  align-items: stretch;
+}
+.desktop-guest-main .row-cards > :is(.guest-app-trigger, .guest-link-tile-button) > .card {
+  width: 100%;
+  min-width: 0;
+}
+.guest-dashboard-manage {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: var(--orbis-control-height, 40px);
+  padding: 0.625rem 1rem;
+  border: 1px solid var(--desktop-line);
+  border-radius: 14px;
+  color: var(--desktop-ink);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 12%, var(--desktop-surface));
+  text-decoration: none;
+}
+@media (max-width: 600px) {
+  .desktop .desktop-guest-bar {
+    flex-wrap: nowrap;
+  }
+  .desktop .desktop-guest-bar .desktop-system-actions {
+    display: flex;
+    flex: 0 0 auto;
+    margin-inline-start: auto;
+  }
+  .desktop .desktop-guest-bar .desktop-icon-button {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+  }
+}
+.guest-dashboard-manage:hover {
+  color: var(--desktop-ink);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 20%, var(--desktop-surface));
+}
+.guest-dashboard-manage:focus-visible {
+  outline: 2px solid var(--desktop-focus);
+  outline-offset: 3px;
+}
+html[data-orbis-startup-landing="true"] .desktop-guest-main {
+  animation: guest-page-arrive 420ms cubic-bezier(0.2, 0, 0.2, 1) backwards;
+}
+html[data-orbis-startup-landing="true"] .guest-dashboard-manage {
+  animation: guest-manage-arrive 320ms cubic-bezier(0.2, 0, 0.2, 1) 120ms backwards;
+}
+@keyframes guest-manage-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes guest-page-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-orbis-startup-landing="true"] :is(.desktop-guest-main, .guest-dashboard-manage) {
+    animation: none;
+  }
+}
+html:is([data-orbis-motion="reduced"], [data-orbis-effects="low"])[data-orbis-startup-landing="true"]
+  :is(.desktop-guest-main, .guest-dashboard-manage) {
+  animation: none;
+}

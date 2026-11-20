@@ -1,14 +1,13 @@
 import { type } from 'arktype';
 import { desktopAppearanceSchema, normaliseDesktopAppearance, defaultDesktopAppearance } from '@runtipi/common/schemas';
+import { desktopColourPresetSchema, desktopMaterialFields, hasDesktopMaterialOverrides } from '@runtipi/common/schemas/desktop-appearance';
 import type { DesktopPreferences } from './desktop-preferences.service';
 
 export const customisationAppearanceKeys = [
   'accent',
-  'surfaceOpacity',
-  'chromeOpacity',
-  'glassBlur',
-  'chromeBlur',
-  'glassTint',
+  'themeColour',
+  ...desktopMaterialFields,
+  'materialMode',
   'textScale',
   'timeFormat',
   'motion',
@@ -88,7 +87,7 @@ export function selectedPreferences(raw: string, defaults: DesktopPreferences): 
   const appearance = root.appearance === undefined ? {} : record(root.appearance);
   supportedVersion(appearance);
   const top = type({
-    preset: "'frost' | 'graphite' | 'forest' | 'stone' | 'ocean' | 'blush'",
+    preset: desktopColourPresetSchema,
     mode: "'light' | 'dark' | 'system'",
     density: "'comfortable' | 'compact'",
   })({
@@ -126,6 +125,14 @@ export function patchSelectedPreferences(raw: string, current: DesktopPreference
   const changedAppearance: Record<string, unknown> = {};
   for (const key of customisationAppearanceKeys)
     if (next.appearance?.[key] !== current.appearance?.[key]) changedAppearance[key] = next.appearance?.[key];
+  if (
+    !appearance?.entries.has('materialMode') &&
+    next.appearance?.materialMode !== undefined &&
+    desktopMaterialFields.some((key) => Object.hasOwn(changedAppearance, key)) &&
+    next.appearance.materialMode !== (hasDesktopMaterialOverrides(next.appearance) ? 'custom' : 'default')
+  ) {
+    changedAppearance.materialMode = next.appearance.materialMode;
+  }
   if (Object.keys(changedAppearance).length) {
     if (appearance) for (const [key, value] of Object.entries(changedAppearance)) add(appearance, key, value);
     else add(top, 'appearance', changedAppearance);

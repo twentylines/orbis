@@ -75,6 +75,11 @@ export const appInfoSchema = type({
   uid: 'number?',
   gid: 'number?',
   dynamic_config: 'boolean = false',
+  catalog_format: type.enumerated('orbis', 'umbrel').optional(),
+  catalog_revision: 'string?',
+  gallery: type('string[]').optional(),
+  release_notes: 'string?',
+  compatibility: type({ supported: 'boolean', reasons: 'string[]', requires_auth: 'boolean' }).optional(),
   min_tipi_version: 'string?',
   created_at: type('number.integer >= 0')
     .narrow((v, ctx) => (v < Date.now() ? true : ctx.mustBe('a timestamp before now')))

@@ -30,6 +30,11 @@ export class ClusterSyncController {
   save(@Req() request: Request, @Param('id') id: string, @Body() body: unknown) {
     return this.sync.savePlan(operator(request), id, body);
   }
+  @Put('plans/:id/automatic')
+  @UseGuards(AuthGuard, HostUpdatesGuard)
+  automatic(@Req() request: Request, @Param('id') id: string, @Body() body: unknown) {
+    return this.sync.setPlanAutomatic(operator(request), id, body);
+  }
   @Post('plans/:id/run')
   @UseGuards(AuthGuard, HostUpdatesGuard)
   @Throttle({ default: { limit: 12, ttl: 60_000 } })

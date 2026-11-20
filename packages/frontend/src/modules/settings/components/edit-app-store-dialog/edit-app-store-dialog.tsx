@@ -1,16 +1,18 @@
-import { updateAppStoreMutation } from '@/api-client/@tanstack/react-query.gen';
+import { getAllAppStoresQueryKey, getEnabledAppStoresQueryKey, updateAppStoreMutation } from '@/api-client/@tanstack/react-query.gen';
+import { updateAppStore, type GetAllAppStoresResponse } from '@/api-client';
 import { Button } from '@/components/ui/Button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
-import { Switch } from '@/components/ui/Switch';
+import { useAutosavedToggle } from '@/modules/settings/hooks/use-autosaved-toggle';
+import { AutosavedSettingSwitch } from '../autosaved-setting-switch';
 import { useDisclosure } from '@/lib/hooks/use-disclosure';
 import type { AppStore } from '@/types/app.types';
 import type { TranslatableError } from '@/types/error.types';
 import { arktypeResolver } from '@hookform/resolvers/arktype';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type } from 'arktype';
 import { useId } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { AppStoreError } from '../app-stores-table/app-store-error';
 import { revealTableAction } from '@/components/multi-service-form/elements/reveal-table-action';
@@ -19,16 +21,13 @@ type Props = {
   appStore: AppStore;
 };
 
+const schema = type({ name: 'string <= 16' });
+type FormValues = typeof schema.infer;
+
 export const EditAppStoreDialog = ({ appStore }: Props) => {
   const editAppStoreDisclosure = useDisclosure();
   const { t } = useTranslation();
-
-  const schema = type({
-    name: 'string <= 16',
-    enabled: 'boolean',
-  });
-
-  type FormValues = typeof schema.infer;
+  const queryClient = useQueryClient();
 
   const editAppStore = useMutation({
     ...updateAppStoreMutation(),
@@ -37,44 +36,67 @@ export const EditAppStoreDialog = ({ appStore }: Props) => {
     },
   });
 
-  const { register, control, handleSubmit, formState } = useForm<FormValues>({
-    resolver: arktypeResolver(schema),
-    values: { name: appStore.name, enabled: appStore.enabled },
+  const enabled = useAutosavedToggle({
+    id: `app-store-enabled:${appStore.slug}`,
+    scope: `app-store:${appStore.slug}`,
+    saved: appStore.enabled,
+    disabled: editAppStore.isPending,
+    save: async (checked, signal) => {
+      const allKey = getAllAppStoresQueryKey();
+      try {
+        const { data } = await updateAppStore({ path: { id: appStore.slug }, body: { enabled: checked }, signal, throwOnError: true });
+        if (data?.success !== true) throw new Error('The app store did not confirm the change.');
+        await queryClient.cancelQueries({ queryKey: allKey });
+        signal.throwIfAborted();
+        queryClient.setQueryData<GetAllAppStoresResponse>(
+          allKey,
+          (current) =>
+            current && { appStores: current.appStores.map((store) => (store.slug === appStore.slug ? { ...store, enabled: checked } : store)) },
+        );
+      } catch (error) {
+        signal.throwIfAborted();
+        if (error instanceof Error && error.message === 'APP_STORE_REFRESH_ERROR') throw new Error(t(error.message, { stores: appStore.name }));
+        throw new Error('The app store change could not be confirmed. Try again.');
+      } finally {
+        if (!signal.aborted) {
+          void queryClient.invalidateQueries({ queryKey: allKey });
+          void queryClient.invalidateQueries({ queryKey: getEnabledAppStoresQueryKey() });
+        }
+      }
+    },
   });
 
-  const validate = (values: FormValues) => {
-    editAppStore.mutate({ path: { id: appStore.slug }, body: { name: values.name, enabled: values.enabled } });
+  const { register, handleSubmit, formState, reset } = useForm<FormValues>({
+    resolver: arktypeResolver(schema),
+    defaultValues: { name: appStore.name },
+  });
+
+  const saveName = ({ name }: FormValues) => {
+    if (enabled.pending) return;
+    editAppStore.mutate({ path: { id: appStore.slug }, body: { name } });
+  };
+  const changeOpen = (open: boolean) => {
+    if (open) {
+      editAppStore.reset();
+      reset({ name: appStore.name });
+    }
+    editAppStoreDisclosure.toggle(open);
   };
 
   const formId = useId();
 
   return (
     <div>
-      <Button
-        loading={editAppStore.isPending}
-        size="sm"
-        variant="ghost"
-        onFocus={revealTableAction}
-        onClick={() => {
-          if (editAppStore.isError) editAppStore.reset();
-          editAppStoreDisclosure.open();
-        }}
-      >
+      <Button loading={editAppStore.isPending} size="sm" variant="ghost" onFocus={revealTableAction} onClick={() => changeOpen(true)}>
         {t('APP_STORE_TABLE_EDIT')}
       </Button>
-      <Dialog
-        open={editAppStoreDisclosure.isOpen}
-        onOpenChange={(open) => {
-          if (open && editAppStore.isError) editAppStore.reset();
-          editAppStoreDisclosure.toggle(open);
-        }}
-      >
+      <Dialog open={editAppStoreDisclosure.isOpen} onOpenChange={changeOpen}>
         <DialogContent size="sm" className="app-store-dialog">
           <DialogHeader>
             <DialogTitle>{t('APP_STORE_EDIT_DIALOG_TITLE')}</DialogTitle>
           </DialogHeader>
           <DialogDescription className="d-flex flex-column">
-            <form onSubmit={handleSubmit(validate)} id={formId}>
+            <form onSubmit={handleSubmit(saveName)} id={formId}>
               <Input
                 label="Name"
                 className="mb-3"
@@ -88,30 +110,12 @@ export const EditAppStoreDialog = ({ appStore }: Props) => {
                   },
                 })}
               />
-              <Controller
-                control={control}
-                name="enabled"
-                defaultValue={appStore.enabled}
-                render={({ field: { onChange, value, ref, ...rest } }) => (
-                  <Switch
-                    className="mb-3"
-                    disabled={editAppStore.isPending}
-                    ref={ref}
-                    checked={Boolean(value)}
-                    onCheckedChange={(checked) => {
-                      if (editAppStore.isError) editAppStore.reset();
-                      onChange(checked);
-                    }}
-                    {...rest}
-                    label={t('APP_STORE_EDIT_DIALOG_ENABLED')}
-                  />
-                )}
-              />
             </form>
+            <AutosavedSettingSwitch className="mb-3" toggle={enabled} label={t('APP_STORE_EDIT_DIALOG_ENABLED')} showStatus />
             <AppStoreError error={editAppStore.error as TranslatableError | null} />
           </DialogDescription>
           <DialogFooter>
-            <Button loading={editAppStore.isPending} type="submit" intent="success" form={formId}>
+            <Button disabled={enabled.pending} loading={editAppStore.isPending} type="submit" intent="success" form={formId}>
               {t('APP_STORE_EDIT_DIALOG_SUBMIT')}
             </Button>
           </DialogFooter>

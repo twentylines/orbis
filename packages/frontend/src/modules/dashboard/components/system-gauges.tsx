@@ -16,6 +16,7 @@ type Props = {
 };
 
 export function SystemGauges({ cpu, clockGHz, memoryUsed, memoryTotal, diskUsed, diskTotal, diskLabel }: Props) {
+  const reportedClock = typeof clockGHz === 'number' && Number.isFinite(clockGHz) && clockGHz > 0 ? clockGHz : null;
   const memoryPercent = usagePercent(memoryUsed, memoryTotal);
   const diskPercent = usagePercent(diskUsed, diskTotal);
   const readings = [
@@ -48,12 +49,10 @@ export function SystemGauges({ cpu, clockGHz, memoryUsed, memoryTotal, diskUsed,
         ))}
       </div>
       <dl className="system-capacities">
-        {typeof clockGHz === 'number' && Number.isFinite(clockGHz) && clockGHz > 0 ? (
-          <div title="Mean CPU clock reported by the host kernel in this sample; frequency varies with workload.">
-            <dt>CPU clock</dt>
-            <dd>{clockGHz.toFixed(2)} GHz</dd>
-          </div>
-        ) : null}
+        <div title="Mean CPU clock reported by the host kernel in this sample; frequency varies with workload.">
+          <dt>CPU clock</dt>
+          <dd>{reportedClock === null ? 'Unavailable' : `${reportedClock.toFixed(2)} GHz`}</dd>
+        </div>
         <div>
           <dt>Memory</dt>
           <dd>

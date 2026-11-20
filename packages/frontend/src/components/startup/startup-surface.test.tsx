@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { StartupSurface } from './startup-surface';
 import { waitForStartupWallpaper, waitForStartupWallpapers } from './wallpaper-ready';
 import { defaultDesktopPreferences } from '@/desktop/preferences';
+import type { SessionMorph } from './session-morph';
 
 test('the dot logo has identical path groups in the server and browser JavaScript engines', async () => {
   const child = Bun.spawn([process.execPath, new URL('../orbis-logo/orbis-logo-engine-compare.fixture.ts', import.meta.url).pathname], {
@@ -33,6 +34,40 @@ test('initial hydration keeps the server scene when a browser has cached appeara
   } finally {
     if (previous) Object.defineProperty(globalThis, 'window', previous);
     else Reflect.deleteProperty(globalThis, 'window');
+  }
+});
+
+test('login keeps the whole captured scene while a different client preference waits behind its ready reveal', () => {
+  for (const [oldPreset, oldMode, nextPreset, nextMode] of [
+    ['ocean', 'dark', 'blush', 'light'],
+    ['stone', 'light', 'frost', 'dark'],
+  ] as const) {
+    const model = {
+      appearance: {
+        choice: { ...defaultDesktopPreferences, preset: oldPreset, mode: oldMode },
+        colours: { '--desktop-accent': 'rgb(40, 90, 150)', '--desktop-surface': 'rgb(10, 20, 30)' },
+      },
+      backdrop: { src: '/captured-wallpaper.png', style: {} },
+      from: { left: 20, top: 30, width: 400, height: 300 },
+      background: 'rgb(10, 20, 30)',
+      shade: 'transparent',
+      dim: 'transparent',
+    } as unknown as SessionMorph;
+    const next = { ...defaultDesktopPreferences, preset: nextPreset, mode: nextMode };
+    for (const revealing of [false, true]) {
+      const html = renderToStaticMarkup(<StartupSurface signingIn morph={model} appearance={next} revealing={revealing} />);
+      expect(html).toContain(`data-desktop-preset="${oldPreset}"`);
+      expect(html).toContain(`data-desktop-mode="${oldMode}"`);
+      expect(html).toContain('--desktop-accent:rgb(40, 90, 150)');
+      expect(html).toContain('--desktop-surface:rgb(10, 20, 30)');
+      expect(html).toContain('src="/captured-wallpaper.png"');
+      expect(html).not.toContain(`data-desktop-preset="${nextPreset}"`);
+    }
+    const destination = renderToStaticMarkup(<StartupSurface appearance={next} />);
+    expect(destination).toContain(`data-desktop-preset="${nextPreset}"`);
+    expect(destination).toContain(`data-desktop-mode="${nextMode}"`);
+    expect(destination).not.toContain('/captured-wallpaper.png');
+    expect(destination).not.toContain('--desktop-accent:rgb(40, 90, 150)');
   }
 });
 

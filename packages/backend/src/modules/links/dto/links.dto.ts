@@ -19,16 +19,22 @@ const linkBodySchema = type({
   isVisibleOnGuestDashboard: 'boolean = false',
 });
 
+export const LINK_GUEST_VISIBILITY_PATCH = 'guest-visibility-patch.v1';
+
 const editLinkBodySchema = type({
-  title: 'string > 0 & string <= 20',
-  url: 'string.url',
+  'title?': 'string > 0 & string <= 20',
+  'url?': 'string.url',
   description: 'string <= 50?',
   iconUrl: 'string.url | ""?',
   isVisibleOnGuestDashboard: 'boolean?',
-});
+}).narrow(
+  (value) =>
+    (value.title !== undefined && value.url !== undefined) || (value.isVisibleOnGuestDashboard !== undefined && Object.keys(value).length === 1),
+);
 
 const linksSchema = type({
   links: linkSchema.array(),
+  'editCapabilities?': type.unit(LINK_GUEST_VISIBILITY_PATCH).array(),
 });
 
 export class LinkBodyDto extends createArkDto(linkBodySchema, { name: 'LinkBodyDto', input: true }) {}

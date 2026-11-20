@@ -121,9 +121,7 @@
   border-radius: 22px;
 }
 .store-split-desktop .store-preview-surface {
-  background: var(--desktop-surface);
-  backdrop-filter: var(--desktop-glass-filter);
-  -webkit-backdrop-filter: var(--desktop-glass-filter);
+  background: var(--desktop-content-fill);
 }
 .store-split-desktop .store-preview-content {
   height: 100%;

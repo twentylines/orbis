@@ -3,7 +3,8 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import * as Accordion from '@radix-ui/react-accordion';
-import { IconCheck, IconChevronRight, IconDatabase, IconRefresh, IconAlertTriangle } from '@tabler/icons-react';
+import { IconCheck, IconDatabase, IconRefresh, IconAlertTriangle } from '@tabler/icons-react';
+import { DisclosureIndicator } from '@/components/ui/DisclosureIndicator/DisclosureIndicator';
 import type { DriveHealth, DriveHealthSample, DriveHealthState } from '@runtipi/common/schemas/drive-health';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { useServerPath } from '@/desktop/cluster-data';
@@ -13,6 +14,7 @@ import { useReducedMotion } from '@/desktop/motion-preferences';
 import { useAppContext } from '@/context/app-context';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
 import { resourceBytes } from '@/components/container-resources/container-resources';
+import { SmartToolsInstaller } from './smart-tools-installer';
 import './drive-health.css';
 
 const labels: Record<DriveHealthState, string> = {
@@ -128,6 +130,15 @@ export function DriveHealthView() {
         </p>
       ) : null}
       {query.data?.available === false ? <output className="workspace-message">{query.data.reason}</output> : null}
+      {user?.operator && query.data?.available === false ? (
+        <SmartToolsInstaller
+          key={path}
+          serverId={server && !server.local ? server.id : null}
+          drivePath={path}
+          missing={!query.isError && query.data.toolsMissing === true}
+          visible={visible}
+        />
+      ) : null}
       {data ? (
         <>
           <div className="drive-health-toolbar">
@@ -191,7 +202,6 @@ export function DriveHealthView() {
                         {drive.temperature === null ? null : <span>{temperature(drive.temperature)}</span>}
                       </span>
                     </span>
-                    <IconChevronRight size={18} aria-hidden="true" />
                   </button>
                 ))}
               </section>
@@ -302,7 +312,7 @@ export function DriveHealthView() {
                                   <h5>
                                     <Accordion.Trigger className="drive-health-test-history-toggle">
                                       <span>Earlier results · {active.tests.length - 1}</span>
-                                      <IconChevronRight size={18} aria-hidden="true" />
+                                      <DisclosureIndicator />
                                     </Accordion.Trigger>
                                   </h5>
                                 </Accordion.Header>

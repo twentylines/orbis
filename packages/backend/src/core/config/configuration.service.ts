@@ -202,7 +202,9 @@ export class ConfigurationService {
     }
 
     try {
-      this.initSentry({ release: this.config.version, allowSentry: Boolean(settings.allowErrorMonitoring) });
+      if (typeof settings.allowErrorMonitoring === 'boolean') {
+        this.initSentry({ release: this.config.version, allowSentry: settings.allowErrorMonitoring });
+      }
 
       const settingsPath = path.join(DATA_DIR, 'state', 'settings.json');
 

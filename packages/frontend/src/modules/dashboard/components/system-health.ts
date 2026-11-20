@@ -1,5 +1,5 @@
 import type { HostSensors, HostTemperature } from '@runtipi/common/schemas';
-import type { Telemetry } from '@/desktop/telemetry';
+import { hostCpuPercent, type Telemetry } from '@/desktop/telemetry';
 import { usagePercent } from './system-readings';
 
 export const highUsagePercent = 90;
@@ -53,11 +53,11 @@ export function advanceSystemHealth(previous: SystemHealth, samples: HealthSampl
   const telemetry = samples.telemetry;
   const telemetryAt = telemetry && !samples.telemetryError ? validTime(telemetry.sampledAt, now, 5000) : null;
   if (telemetry && telemetryAt !== null) {
-    const cpu = telemetry.cpu.totalPercent;
-    if (cpu !== null && Number.isFinite(cpu) && cpu >= 0) {
+    const cpu = hostCpuPercent(telemetry.cpu);
+    if (cpu !== null) {
       readings.push({
         id: 'cpu',
-        label: telemetry.cpu.scope === 'runtime' ? 'Core CPU load' : 'CPU load',
+        label: 'CPU load',
         href: '/monitor#telemetry-cpu-title',
         value: cpu,
         threshold: 90,
@@ -66,7 +66,7 @@ export function advanceSystemHealth(previous: SystemHealth, samples: HealthSampl
         maxGapMs: 5000,
         freshForMs: 5000,
         at: telemetryAt,
-        source: telemetry.cpu.scope,
+        source: 'host-proc',
         unit: '%',
       });
     }

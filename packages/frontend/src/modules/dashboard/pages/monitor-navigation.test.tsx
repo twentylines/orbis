@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router';
 import * as Tabs from '@radix-ui/react-tabs';
-import { MonitorWorkspace, monitorSection, monitorSections } from './monitor-navigation';
+import { MonitorChartLink, MonitorWorkspace, monitorMetricForHash, monitorSection, monitorSections } from './monitor-navigation';
 
 describe('Monitor category navigation', () => {
   test('opens Overview by default and preserves explicitly requested categories', () => {
@@ -15,6 +16,7 @@ describe('Monitor category navigation', () => {
       '#drive-health-title': 'drives',
       '#telemetry-cpu-title': 'performance',
       '#telemetry-memory-title': 'performance',
+      '#monitor-network-history-title': 'performance',
       '#host-storage-title': 'devices',
       '#host-network-title': 'devices',
       '#host-disk-activity-title': 'devices',
@@ -30,6 +32,74 @@ describe('Monitor category navigation', () => {
     } as const;
     for (const [hash, expected] of Object.entries(links)) expect(monitorSection('overview', hash)).toBe(expected);
     expect(monitorSection('performance', '#unknown')).toBe('performance');
+  });
+
+  test('overview links preserve the server, history range and unrelated params while targeting the exact resource', async () => {
+    const overview = '/monitor?section=overview&metric=gpu&range=24h&server=nas&hostDevice=disk%3Anvme0';
+    const markup = renderToStaticMarkup(
+      <MemoryRouter initialEntries={[overview]}>
+        <dl>
+          <div>
+            <dt>
+              <MonitorChartLink resource="cpu">CPU</MonitorChartLink>
+            </dt>
+            <dd>47%</dd>
+          </div>
+          <div>
+            <dt>
+              <MonitorChartLink resource="memory">Memory</MonitorChartLink>
+            </dt>
+            <dd>63%</dd>
+          </div>
+          <div>
+            <dt>
+              <MonitorChartLink resource="network">Network</MonitorChartLink>
+            </dt>
+            <dd>12 MB/s</dd>
+          </div>
+          <div>
+            <dt>
+              <MonitorChartLink resource="storage">Storage</MonitorChartLink>
+            </dt>
+            <dd>36%</dd>
+          </div>
+          <div>
+            <dt>
+              <MonitorChartLink resource="storage" coreStorage>
+                Core storage
+              </MonitorChartLink>
+            </dt>
+            <dd>28%</dd>
+          </div>
+        </dl>
+      </MemoryRouter>,
+    );
+    const links: URL[] = [];
+    await new HTMLRewriter()
+      .on('dl > div > dt > a[href]', {
+        element(element) {
+          const href = element.getAttribute('href');
+          if (href) links.push(new URL(href.replaceAll('&amp;', '&'), 'https://monitor.example.test'));
+        },
+      })
+      .transform(new Response(markup))
+      .text();
+    expect(links.map((link) => [link.searchParams.get('section'), link.searchParams.get('metric'), link.hash])).toEqual([
+      ['performance', 'cpu', '#telemetry-cpu-title'],
+      ['performance', 'memory', '#telemetry-memory-title'],
+      ['performance', 'network', '#monitor-network-history-title'],
+      ['devices', 'gpu', '#host-storage-title'],
+      ['devices', 'gpu', '#telemetry-disks-title'],
+    ]);
+    for (const link of links) {
+      expect(link.pathname).toBe('/monitor');
+      expect(link.searchParams.get('server')).toBe('nas');
+      expect(link.searchParams.get('range')).toBe('24h');
+      expect(link.searchParams.get('hostDevice')).toBe('disk:nvme0');
+      expect(monitorSection(link.searchParams.get('section'), link.hash)).toBe(link.searchParams.get('section') as ReturnType<typeof monitorSection>);
+      if (link.searchParams.get('section') === 'performance')
+        expect(monitorMetricForHash(link.hash)).toBe(link.searchParams.get('metric') as 'cpu' | 'memory' | 'network');
+    }
   });
 
   test('sidebar tabs and compact picker share the active panel and expose a vertical keyboard model', async () => {

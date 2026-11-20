@@ -1,4 +1,3 @@
-import { Fragment, type ReactNode } from 'react';
 import { LayoutGroup, motion } from 'framer-motion';
 import { useReducedMotion } from '@/desktop/motion-preferences';
 import { sectionMotionTiming } from '@/desktop/section-motion-geometry';
@@ -18,8 +17,6 @@ export function storeCataloguePositionMotion(reduced: boolean, visible: boolean)
 
 export function StoreCatalogue({
   apps,
-  collections,
-  collectionsAfter = 8,
   canInstall = false,
   installedApps,
   pendingApps,
@@ -28,8 +25,6 @@ export function StoreCatalogue({
   lastElementRef,
 }: {
   apps: AppInfoSimple[];
-  collections?: ReactNode;
-  collectionsAfter?: number;
   canInstall?: boolean;
   installedApps?: ReadonlySet<string>;
   pendingApps?: ReadonlySet<string>;
@@ -40,29 +35,25 @@ export function StoreCatalogue({
   const reduced = Boolean(useReducedMotion());
   const visible = useWindowVisible();
   const layoutMotion = storeCataloguePositionMotion(reduced, visible);
+  const tiles = apps.map((app, index) => (
+    <motion.div key={app.urn} {...layoutMotion} ref={index === apps.length - 1 ? lastElementRef : null} className="orbis-store-grid-item">
+      <StoreTile
+        app={app}
+        isLoading={false}
+        catalogueRow
+        installed={installedApps?.has(app.urn)}
+        pending={pendingApps?.has(app.urn)}
+        quickInstall={canInstall && !installedApps?.has(app.urn) && !pendingApps?.has(app.urn)}
+        installLoading={installLoadingUrn === app.urn}
+        installDisabled={Boolean(installLoadingUrn)}
+        onInstall={onInstall}
+      />
+    </motion.div>
+  ));
 
   return (
     <LayoutGroup id="store-catalogue">
-      <div className="orbis-store-grid">
-        {apps.map((app, index) => (
-          <Fragment key={app.urn}>
-            <motion.div {...layoutMotion} ref={index === apps.length - 1 ? lastElementRef : null} className="orbis-store-grid-item">
-              <StoreTile
-                app={app}
-                isLoading={false}
-                catalogueRow
-                installed={installedApps?.has(app.urn)}
-                pending={pendingApps?.has(app.urn)}
-                quickInstall={canInstall && !installedApps?.has(app.urn) && !pendingApps?.has(app.urn)}
-                installLoading={installLoadingUrn === app.urn}
-                installDisabled={Boolean(installLoadingUrn)}
-                onInstall={onInstall}
-              />
-            </motion.div>
-            {index === collectionsAfter - 1 ? collections : null}
-          </Fragment>
-        ))}
-      </div>
+      <div className="orbis-store-grid">{tiles}</div>
     </LayoutGroup>
   );
 }

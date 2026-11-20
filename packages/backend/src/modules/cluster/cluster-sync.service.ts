@@ -22,6 +22,7 @@ import { clusterRequest, signedHeaders } from './cluster-transport';
 import { pairedClusterCertificate } from './cluster-certificate';
 import { ClusterSyncStore, syncResultSchema, type SyncPlan, type SyncStoreState } from './cluster-sync.store';
 import {
+  mergeCustomisationAppearance,
   parseSync,
   projectCustomisation,
   syncCategoryList,
@@ -43,6 +44,7 @@ const planBody = type({
   automatic: 'boolean',
   expected: syncRevisionsSchema,
 });
+const automaticBody = type({ '+': 'reject', revision: 'number.integer >= 0', automatic: 'boolean' });
 const runBody = type({ '+': 'reject', revision: 'number.integer >= 0', expected: syncRevisionsSchema });
 const peerStatusSchema = type({
   '+': 'reject',
@@ -262,6 +264,49 @@ export class ClusterSyncService implements OnModuleInit, OnModuleDestroy {
     });
     return { saved: true };
   }
+  async setPlanAutomatic(userId: number, hostId: string, raw: unknown) {
+    this.assertAvailable();
+    await this.operator(userId);
+    parseSync(syncId, hostId);
+    const body = parseSync(automaticBody, raw);
+    if (this.active.has(hostId)) throw new ConflictException('This host is already syncing settings.');
+    this.active.add(hostId);
+    try {
+      const cluster = await this.membership.read();
+      const peer = cluster.role === 'admin' ? cluster.peers.find((item) => item.id === hostId) : undefined;
+      if (!peer) throw new ForbiddenException('Only the primary admin can update this paired host.');
+      const trust = syncHash({ sourceId: cluster.id, targetId: peer.id, secret: peer.secret });
+      const validatePlan = (plan?: SyncPlan) => {
+        if (!plan || plan.revision !== body.revision || plan.sourceUserId !== userId || plan.trustRevision !== trust || !plan.categories.length)
+          throw new ConflictException('Save and review sync choices using your account before continuing.');
+        return plan;
+      };
+      const stored = await this.store.read(cluster.id);
+      const plan = validatePlan(stored.plans.find((item) => item.hostId === hostId));
+      if (body.automatic && !plan.automatic) {
+        const remote = await this.remoteStatus(cluster, peer);
+        for (const category of plan.categories)
+          if (!remote.accepted.includes(category) || !plan.expected[category] || plan.expected[category] !== remote.revisions[category])
+            throw new ConflictException('Receiving choices or target settings changed. Refresh and review this host.');
+      }
+      return await this.membership.transaction(async (current) => {
+        const paired =
+          current.id === cluster.id && current.role === 'admin' && current.peers.some((item) => item.id === hostId && item.secret === peer.secret);
+        if (!paired) throw new ConflictException('Pairing changed. Save sync choices again.');
+        return this.store.transaction(cluster.id, (latest) => {
+          const currentPlan = validatePlan(latest.plans.find((item) => item.hostId === hostId));
+          if (currentPlan.automatic !== body.automatic) {
+            currentPlan.automatic = body.automatic;
+            currentPlan.revision++;
+            latest.revision++;
+          }
+          return { saved: true, automatic: currentPlan.automatic, revision: currentPlan.revision };
+        });
+      });
+    } finally {
+      this.active.delete(hostId);
+    }
+  }
   async run(userId: number, hostId: string, raw: unknown) {
     this.assertAvailable();
     await this.operator(userId);
@@ -283,6 +328,9 @@ export class ClusterSyncService implements OnModuleInit, OnModuleDestroy {
     const nextSource = { ...plan.source };
     try {
       this.assertAvailable();
+      const current = (await this.store.read(cluster.id)).plans.find((item) => item.hostId === plan.hostId);
+      if (!current || current.revision !== plan.revision || (rebase === undefined && !current.automatic))
+        throw new ConflictException('Sync choices changed. Refresh before continuing.');
       if (plan.sourceUserId === null) throw new ConflictException('Save and review sync choices using your account before continuing.');
       const peer = cluster.peers.find((item) => item.id === plan.hostId);
       if (cluster.role !== 'admin' || !peer) throw new ForbiddenException('This host is no longer paired to this admin.');
@@ -404,7 +452,11 @@ export class ClusterSyncService implements OnModuleInit, OnModuleDestroy {
             const expected = syncHash(values.customisation);
             const changed = await this.preferences.updateSelected(userId, (current) => {
               if (syncHash(projectCustomisation(current)) !== expected) throw new ConflictException('Customisation changed locally.');
-              return { ...current, ...customisation.value, appearance: { ...current.appearance, ...customisation.value.appearance } };
+              return {
+                ...current,
+                ...customisation.value,
+                appearance: mergeCustomisationAppearance(current.appearance, customisation.value.appearance),
+              };
             });
             values.customisation = projectCustomisation(changed);
             results.push({

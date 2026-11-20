@@ -1,5 +1,6 @@
 export function waitForWorkspaceReady(surface: HTMLElement | null, ready: () => void, slow: () => void, timeoutMs = 15000) {
-  if (!surface?.querySelector('.desktop-view-home')) {
+  const guest = Boolean(surface?.classList?.contains('desktop-guest'));
+  if (!surface || (!surface.querySelector('.desktop-view-home') && !guest)) {
     ready();
     return () => undefined;
   }
@@ -8,6 +9,7 @@ export function waitForWorkspaceReady(surface: HTMLElement | null, ready: () => 
   const decoded = new Map<HTMLImageElement, string>();
   const decoding = new Map<HTMLImageElement, string>();
   const document = surface.ownerDocument;
+  const events = guest ? document : surface;
   const observer = new MutationObserver(check);
   const timeout = window.setTimeout(() => {
     stop();
@@ -17,43 +19,48 @@ export function waitForWorkspaceReady(surface: HTMLElement | null, ready: () => 
     stopped = true;
     observer.disconnect();
     window.clearTimeout(timeout);
-    surface?.removeEventListener('load', check, true);
-    surface?.removeEventListener('error', check, true);
+    events.removeEventListener('load', check, true);
+    events.removeEventListener('error', check, true);
   }
   function check() {
     if (stopped || !fontsReady) return;
-    const home = surface?.querySelector('.workspace');
+    // Suspense replaces the pending Guest shell, so observe its document and
+    // resolve the current surface rather than holding the removed fallback.
+    const home = guest ? document.querySelector('.desktop-guest') : surface?.querySelector('.workspace');
     if (!home || home.getAttribute('data-startup-ready') !== 'true' || home.querySelector('[data-startup-ready="false"]')) return;
+    let pending = false;
+    const batch: Promise<void>[] = [];
     for (const image of home.querySelectorAll<HTMLImageElement>('img')) {
-      const bounds = image.getBoundingClientRect();
-      if (image.loading === 'lazy' && (bounds.top >= innerHeight || bounds.bottom <= 0)) continue;
-      if (!image.complete) return;
-      if (!image.naturalWidth) continue;
       const source = image.currentSrc || image.src;
-      if (decoded.get(image) === source) continue;
-      if (decoding.get(image) !== source) {
-        decoding.set(image, source);
-        void image.decode().then(
-          () => {
-            decoded.set(image, source);
-            decoding.delete(image);
-            check();
-          },
-          () => {
-            decoded.set(image, source);
-            decoding.delete(image);
-            check();
-          },
-        );
+      if (image.complete && decoded.get(image) === source) continue;
+      if (image.loading === 'lazy') {
+        const { top, bottom } = image.getBoundingClientRect();
+        if (top >= innerHeight || bottom <= 0) continue;
       }
-      return;
+      if (image.complete && !image.naturalWidth) continue;
+      pending = true;
+      if (!image.complete || decoding.get(image) === source) continue;
+      decoding.set(image, source);
+      const complete = () => {
+        if (decoding.get(image) !== source) return;
+        decoded.set(image, source);
+        decoding.delete(image);
+      };
+      batch.push(image.decode().then(complete, complete));
     }
+    if (batch.length) void Promise.all(batch).then(check);
+    if (pending) return;
     stop();
     ready();
   }
-  observer.observe(surface, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-startup-ready', 'src'] });
-  surface.addEventListener('load', check, true);
-  surface.addEventListener('error', check, true);
+  observer.observe(guest ? document.body : surface, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['data-startup-ready', 'src'],
+  });
+  events.addEventListener('load', check, true);
+  events.addEventListener('error', check, true);
   void (document.fonts?.ready ?? Promise.resolve()).then(() => {
     fontsReady = true;
     check();

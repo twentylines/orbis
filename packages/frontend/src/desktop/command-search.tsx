@@ -1,17 +1,27 @@
 import { createSearchMatcher } from '@runtipi/common/search';
 import { useAppContext } from '@/context/app-context';
-import { searchSettings, settingsPath, settingsSections, resolveSettingsSection } from '@/modules/settings/helpers/settings-catalogue';
+import {
+  searchSettings,
+  settingsReviewPath,
+  settingsSections,
+  resolveSettingsSection,
+  settingsCatalogue,
+  settingAvailable,
+} from '@/modules/settings/helpers/settings-catalogue';
+import { useSettingToggles } from '@/modules/settings/hooks/use-setting-toggles';
+import { Switch } from '@/components/ui/Switch';
 import { prefersReducedMotion } from '@/desktop/motion-setting';
 import { getInstalledAppsOptions, searchAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
 import * as Dialog from '@radix-ui/react-dialog';
-import { IconArrowUpRight, IconSearch, IconSettings, IconX } from '@tabler/icons-react';
-import { useQuery } from '@tanstack/react-query';
+import { IconSearch, IconSettings, IconX } from '@tabler/icons-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -25,9 +35,14 @@ import { useAppLauncher } from './app-launcher';
 import { appDestinations } from './app-destinations';
 import { primaryAppAddress } from './app-opening';
 import { activateSearchResult, defaultSearchResult, type SearchAction } from './command-search-actions';
+import { commandSearchSuggestion } from './command-search-suggestion';
+import { calculate } from './search-calculator';
+import { inferLocalCurrency, parseCurrencyQuery } from './search-currency';
+import { SearchCalculatorResult, useSearchCalculation } from './search-calculator-result';
+import { copyText } from '@/lib/clipboard';
 import './command-search.css';
 
-type SearchResult = SearchAction & { id: string; label: string; detail: string; icon: ReactNode };
+type SearchResult = SearchAction & { id: string; label: string; detail: string; icon: ReactNode; settingId?: string; actionLabel?: string };
 const searchScopes = [
   ['all', 'All'],
   ['apps', 'Apps'],
@@ -61,17 +76,23 @@ const reducedMotion = () => prefersReducedMotion();
 export function CommandSearch() {
   const { user, userSettings } = useAppContext();
   const openApp = useAppLauncher();
-  const settingsAccess = {
-    operator: user.operator === true,
-    advanced: userSettings.advancedSettings === true,
-    http: typeof window !== 'undefined' && window.location.protocol === 'http:',
-  };
-  const [open, setOpen] = useState(false);
+  const http = typeof window !== 'undefined' && window.location.protocol === 'http:';
+  const settingsAccess = useMemo(
+    () => ({
+      operator: user.operator === true,
+      advanced: userSettings.advancedSettings === true,
+      http,
+    }),
+    [user.operator, userSettings.advancedSettings, http],
+  );
+  const [suggestion, setSuggestion] = useState<string | null>(null);
+  const open = suggestion !== null;
   const [closing, setClosing] = useState(false);
   const [glassBlurEnabled, setGlassBlurEnabled] = useState(false);
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [scope, setScope] = useState<SearchScope>('all');
+  const [copyFeedback, setCopyFeedback] = useState({ query: '', message: '' });
   const [bar, setBar] = useState({ left: 24, top: 24, width: 600, height: 64, available: 600 });
   const [panelElement, setPanelElement] = useState<HTMLDivElement | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -83,6 +104,7 @@ export function CommandSearch() {
   const backdrop = useRef<HTMLDivElement>(null);
   const motions = useRef<Animation[]>([]);
   const pendingPath = useRef<string | null>(null);
+  const openRef = useRef(false);
   const closingRef = useRef(false);
   const expandedPose = useRef<Keyframe | null>(null);
   const bindPanel = useCallback((element: HTMLDivElement | null) => {
@@ -90,11 +112,30 @@ export function CommandSearch() {
     setPanelElement(element);
   }, []);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const query = search.trim();
+  const matchedSettings = query && (scope === 'all' || scope === 'settings') ? searchSettings(query, settingsAccess) : [];
+  const toggles = useSettingToggles(
+    matchedSettings.map((entry) => entry.id),
+    open && !closing,
+  );
+  const localCurrency = inferLocalCurrency(
+    userSettings.timeZone,
+    user.locale,
+    typeof window === 'undefined' ? undefined : Intl.DateTimeFormat().resolvedOptions().timeZone,
+  );
+  const localCurrencyCode = localCurrency?.code;
+  const utilityQuery = parseCurrencyQuery(query, localCurrency) !== null || calculate(query) !== null;
+  const calculator = useSearchCalculation(query, userSettings.timeZone, user.locale, open && !closing && scope === 'all');
+  const copyCalculation = async () => {
+    if (!calculator?.copyValue) return;
+    const copied = await copyText(calculator.copyValue);
+    setCopyFeedback({ query, message: copied ? 'Result copied' : 'Copy was unavailable. Select the result to copy it manually.' });
+  };
   const installed = useQuery({ ...getInstalledAppsOptions(), enabled: open && !closing, staleTime: 15000 });
   const catalogue = useQuery({
     ...searchAppsOptions({ query: { search: debounced, pageSize: 24 } }),
-    enabled: open && !closing && debounced.length > 0 && (scope === 'all' || scope === 'store'),
+    enabled: open && !closing && !utilityQuery && debounced.length > 0 && (scope === 'all' || scope === 'store'),
     staleTime: 30000,
   });
   useEffect(() => {
@@ -120,6 +161,18 @@ export function CommandSearch() {
   }, []);
   const openSearch = useCallback(() => {
     if (!closingRef.current && !panel.current) returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!openRef.current) {
+      openRef.current = true;
+      const installedApps = queryClient.getQueryData(getInstalledAppsOptions().queryKey);
+      setSuggestion(
+        commandSearchSuggestion(
+          installedApps?.installed,
+          localCurrencyCode,
+          Math.random,
+          settingsCatalogue.filter((entry) => settingAvailable(entry, settingsAccess)).map((entry) => entry.label),
+        ),
+      );
+    }
     const glassFilter = getComputedStyle(document.documentElement).getPropertyValue('--desktop-glass-filter').trim();
     setGlassBlurEnabled(
       glassFilter !== '' &&
@@ -156,12 +209,12 @@ export function CommandSearch() {
       }
       input.current?.focus({ preventScroll: true });
     }
-    setOpen(true);
-  }, [readBar, cancelMotions]);
+  }, [readBar, cancelMotions, queryClient, localCurrencyCode, settingsAccess]);
   const finishClose = useCallback(() => {
     if (!closingRef.current) return;
     closingRef.current = false;
-    setOpen(false);
+    openRef.current = false;
+    setSuggestion(null);
     setClosing(false);
     setSearch('');
     setDebounced('');
@@ -386,7 +439,7 @@ export function CommandSearch() {
       };
     });
   const storeResults: SearchResult[] =
-    query && debounced === query
+    query && !utilityQuery && debounced === query
       ? (catalogue.data?.data ?? [])
           .filter((info) => info.available)
           .map((info) => ({
@@ -397,16 +450,15 @@ export function CommandSearch() {
             icon: <AppLogo urn={info.urn} size={32} alt="" />,
           }))
       : [];
-  const settingResults: SearchResult[] =
-    query && (scope === 'all' || scope === 'settings')
-      ? searchSettings(query, settingsAccess).map((entry) => ({
-          id: `setting-${entry.id}`,
-          path: settingsPath(entry),
-          label: entry.label,
-          detail: `Settings · ${settingsSections.find((section) => section.id === entry.section)?.label}`,
-          icon: <IconSettings size={22} aria-hidden="true" />,
-        }))
-      : [];
+  const settingResults: SearchResult[] = matchedSettings.map((entry) => ({
+    id: `setting-${entry.id}`,
+    settingId: entry.id,
+    path: settingsReviewPath(entry),
+    actionLabel: entry.review?.label,
+    label: entry.label,
+    detail: `Settings · ${settingsSections.find((section) => section.id === entry.section)?.label}`,
+    icon: <IconSettings size={22} aria-hidden="true" />,
+  }));
   const destinationGroup = { name: query ? 'Pages and tools' : scope === 'all' ? 'Quick destinations' : 'Pages and tools', items: sections };
   const settingsGroup = { name: 'Settings', items: settingResults };
   const groups = [
@@ -419,7 +471,7 @@ export function CommandSearch() {
   const firstResult = defaultSearchResult(groups.flatMap((group) => group.items));
   const activateResult = (result: SearchResult) => activateSearchResult(result, openApp, close);
   const searchingStore = scope === 'all' || scope === 'store';
-  const loadingStore = searchingStore && query.length > 0 && (debounced !== query || catalogue.isPending);
+  const loadingStore = searchingStore && !utilityQuery && query.length > 0 && (debounced !== query || catalogue.isPending);
 
   const handleResultKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
@@ -460,6 +512,7 @@ export function CommandSearch() {
           <Dialog.Content
             ref={bindPanel}
             className="desktop-search-surface"
+            aria-describedby={undefined}
             style={
               {
                 left: bar.left,
@@ -505,10 +558,15 @@ export function CommandSearch() {
                     type="search"
                     autoComplete="off"
                     onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search apps, settings and server tools"
+                    placeholder={suggestion ?? undefined}
                     aria-label="Search Orbis"
                     aria-controls="desktop-search-results"
                     onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.nativeEvent.isComposing && calculator) {
+                        event.preventDefault();
+                        void copyCalculation();
+                        return;
+                      }
                       if (event.key === 'Enter' && !event.nativeEvent.isComposing && firstResult) {
                         event.preventDefault();
                         activateResult(firstResult);
@@ -529,7 +587,6 @@ export function CommandSearch() {
               </div>
               <div ref={dropdown} className="desktop-search-dropdown" data-compact={bar.available < 340}>
                 <div className="desktop-search-discovery">
-                  <Dialog.Description>Find apps, change settings, review updates and check your server.</Dialog.Description>
                   <SelectionGroup as="fieldset" aria-label="Search in">
                     <legend className="visually-hidden">Search in</legend>
                     {searchScopes.map(([value, label]) => (
@@ -548,6 +605,14 @@ export function CommandSearch() {
                   </SelectionGroup>
                 </div>
                 <div id="desktop-search-results" className="desktop-search-results" aria-busy={loadingStore || installed.isPending}>
+                  {calculator ? (
+                    <SearchCalculatorResult
+                      result={calculator}
+                      onCopy={() => void copyCalculation()}
+                      onKeyDown={handleResultKeyDown}
+                      message={copyFeedback.query === query ? copyFeedback.message : ''}
+                    />
+                  ) : null}
                   {groups
                     .filter((group) => group.items.length)
                     .map(({ name, items }) => (
@@ -562,25 +627,62 @@ export function CommandSearch() {
                           ) : null}
                         </h3>
                         <div className="desktop-search-grid">
-                          {items.map((result) => (
-                            <button
-                              data-search-result
-                              type="button"
-                              key={result.id}
-                              aria-label={`${result.label}${result.detail ? `, ${result.detail}` : ''}`}
-                              onKeyDown={handleResultKeyDown}
-                              onClick={() => activateResult(result)}
-                            >
-                              <span className="desktop-search-result-icon">{result.icon}</span>
-                              <span className="desktop-search-result-text">
-                                <strong title={result.label}>
-                                  <WrapWords text={result.label} />
-                                </strong>
-                                {result.detail ? <small>{result.detail}</small> : null}
-                              </span>
-                              <IconArrowUpRight size={18} aria-hidden="true" />
-                            </button>
-                          ))}
+                          {items.map((result) => {
+                            const toggle = result.settingId ? toggles[result.settingId] : undefined;
+                            const feedback = toggle?.pending ? 'Saving…' : toggle?.error ? toggle.error : toggle?.saved ? 'Saved' : null;
+                            return (
+                              <div className="desktop-search-result" key={result.id}>
+                                <button
+                                  data-search-result
+                                  className="desktop-search-result-main"
+                                  type="button"
+                                  aria-label={`${result.label}${result.detail ? `, ${result.detail}` : ''}`}
+                                  onKeyDown={handleResultKeyDown}
+                                  onClick={() => activateResult(result)}
+                                >
+                                  <span className="desktop-search-result-icon">{result.icon}</span>
+                                  <span className="desktop-search-result-text">
+                                    <strong title={result.label}>
+                                      <WrapWords text={result.label} />
+                                    </strong>
+                                    {result.detail ? <small>{result.detail}</small> : null}
+                                  </span>
+                                </button>
+                                {toggle ? (
+                                  <div className="desktop-search-result-control">
+                                    <Switch
+                                      aria-label={result.label}
+                                      checked={toggle.checked}
+                                      disabled={toggle.disabled}
+                                      onCheckedChange={toggle.setChecked}
+                                    />
+                                  </div>
+                                ) : null}
+                                {result.actionLabel ? (
+                                  <div className="desktop-search-result-control">
+                                    <button
+                                      type="button"
+                                      className="desktop-search-result-action"
+                                      onKeyDown={handleResultKeyDown}
+                                      onClick={() => activateResult(result)}
+                                    >
+                                      {result.actionLabel}
+                                    </button>
+                                  </div>
+                                ) : null}
+                                {feedback ? (
+                                  <output className="desktop-search-result-feedback">
+                                    <span>{feedback}</span>
+                                    {toggle?.error && toggle.retry ? (
+                                      <button type="button" onClick={toggle.retry}>
+                                        Retry
+                                      </button>
+                                    ) : null}
+                                  </output>
+                                ) : null}
+                              </div>
+                            );
+                          })}
                         </div>
                       </section>
                     ))}
@@ -594,7 +696,7 @@ export function CommandSearch() {
                       </p>
                     ) : null}
                     {loadingStore ? <p>Searching the App Store…</p> : null}
-                    {searchingStore && query && debounced === query && catalogue.isError ? (
+                    {searchingStore && !utilityQuery && query && debounced === query && catalogue.isError ? (
                       <p>
                         The App Store could not be searched.{' '}
                         <button type="button" onClick={() => void catalogue.refetch()}>
@@ -602,13 +704,13 @@ export function CommandSearch() {
                         </button>
                       </p>
                     ) : null}
-                    {!firstResult && !loadingStore && !installed.isPending && !installed.isError && (!query || !catalogue.isError) ? (
+                    {!calculator && !firstResult && !loadingStore && !installed.isPending && !installed.isError && (!query || !catalogue.isError) ? (
                       <p>No matches for “{query}”. Try an app name or a section such as Updates.</p>
                     ) : null}
                   </div>
                 </div>
                 <footer className="desktop-search-footer">
-                  <span>↑ ↓ to move · Enter to open</span>
+                  <span>↑ ↓ to move{calculator?.copyValue ? ' · Enter to copy result' : calculator ? '' : ' · Enter to open'}</span>
                   <span>Esc to close</span>
                 </footer>
               </div>

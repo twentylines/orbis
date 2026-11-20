@@ -5,11 +5,10 @@ import type { TimeMachinePoint } from '@runtipi/common/schemas/time-machine';
 import { IconHistory, IconTrash, IconX } from '@tabler/icons-react';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox/Checkbox';
-import { Switch } from '@/components/ui/Switch/Switch';
 import { Input } from '@/components/ui/Input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { Alert, AlertDescription, AlertHeading, InlineFeedback } from '@/components/ui/Alert/Alert';
-import { useSettingsSave } from '@/modules/settings/pages/settings-save';
+import { AutosavedSettingSwitch } from '@/modules/settings/components/autosaved-setting-switch';
 import { restoreStatusSchema, type RestoreJob, formatBackupBytes } from '@/modules/system-backups/contracts';
 import {
   activateTimeMachinePoint,
@@ -19,7 +18,6 @@ import {
   captureTimeMachine,
   removeTimeMachinePoint,
   reviewTimeMachinePoint,
-  saveTimeMachinePreferences,
 } from './time-machine-api';
 import { backupRequest } from '@/modules/system-backups/backup-api';
 import { armAcceptedRestore, operationContinuityStorage } from '@/components/recovery-progress/operation-continuity';
@@ -32,7 +30,7 @@ import { TimeMachineRestoreJourney } from './restore-journey';
 import { orderedPoints, parseTimeMachine, selectedPointId, type TimeMachineSnapshot } from './contracts';
 import { pointDate, TimeMachineJourney } from './time-machine-journey';
 import { useTimeMachine } from './use-time-machine';
-import { saveTimeMachineEnabled, timeMachinePreferencesQueryKey } from './time-machine-preferences-query';
+import { useTimeMachineEnabledToggle } from './use-time-machine-enabled-toggle';
 import { timeMachineRetentionSummary, timeMachineSettingsMode } from './time-machine-settings-state';
 import { hasSeenTimeMachineNotice, markTimeMachineNoticeSeen } from './time-machine-notice';
 import './time-machine-settings-notice.css';
@@ -46,7 +44,19 @@ import './time-machine.css';
 
 type Review = Awaited<ReturnType<typeof reviewTimeMachinePoint>>;
 
-export function TimeMachineSetupView({ pending, onEnable }: { pending: boolean; onEnable: () => void }) {
+export function TimeMachineSetupView({
+  pending,
+  saved,
+  disabled,
+  error,
+  onEnable,
+}: {
+  pending: boolean;
+  saved?: boolean;
+  disabled?: boolean;
+  error?: string | null;
+  onEnable: () => void;
+}) {
   return (
     <section className="tm-disabled-setup" aria-labelledby="tm-disabled-setup-heading">
       <IconHistory className="tm-disabled-setup-icon" size={64} stroke={1.4} aria-hidden="true" />
@@ -69,12 +79,13 @@ export function TimeMachineSetupView({ pending, onEnable }: { pending: boolean; 
         </ul>
         <p>Operating system snapshots are not included.</p>
       </div>
-      <Button intent="primary" onClick={onEnable} disabled={pending}>
+      <Button intent="primary" onClick={onEnable} disabled={pending || disabled}>
         {pending ? 'Enabling…' : 'Enable Time Machine'}
       </Button>
       <output className="tm-activation-status" aria-live="polite">
-        {pending ? 'Enabling Time Machine…' : ''}
+        {pending ? 'Enabling Time Machine…' : saved ? 'Saved' : ''}
       </output>
+      {error ? <p role="alert">{error}</p> : null}
     </section>
   );
 }
@@ -195,6 +206,7 @@ function TimeMachineSettingsSession({
 }) {
   const { snapshot, busy, error, notice, visible, user } = machine;
   const queryClient = useQueryClient();
+  const preference = useTimeMachineEnabledToggle(true, machine);
   const capturePolicy = useQuery({
     queryKey: accountSecurityKey(user.id),
     queryFn: ({ signal }) => readAccountSecurity(AbortSignal.any([signal, machine.sessionAbortSignal])),
@@ -217,10 +229,8 @@ function TimeMachineSettingsSession({
     onExitTimeline?.();
   };
   const [selection, setSelection] = useState<string | null>(null);
-  const [enabledDraft, setEnabledDraft] = useState<boolean | null>(null);
   const [captureLabel, setCaptureLabel] = useState('');
   const [captureContent, setCaptureContent] = useState<CaptureChoices>({ ready: true });
-  const [activationPending, setActivationPending] = useState(false);
   const [action, setAction] = useState<{ kind: 'capture' | 'remove' | 'inspect' | 'authorize'; point?: TimeMachinePoint } | null>(null);
   const captureProofRequired = capturePolicy.data?.requireCaptureAuthentication === true;
   useEffect(() => {
@@ -244,48 +254,10 @@ function TimeMachineSettingsSession({
   const readyToAuthorize = restoreAuthorizationAvailable(actionPoint, review, snapshot?.capabilities.restore.supported === true, reviewClock);
   const acceptedRestoreId = restoreJob?.id;
   const active = points.find((item) => item.status === 'capturing');
-  const enabled = enabledDraft ?? snapshot?.preferences.enabled ?? false;
-  const dirty = snapshot !== null && enabled !== snapshot.preferences.enabled;
-  const settingsMode = timeMachineSettingsMode(snapshot?.preferences ?? null);
+  const settingsMode = timeMachineSettingsMode(
+    snapshot ? { enabled: preference.pending ? snapshot.preferences.enabled : (preference.confirmedEnabled ?? snapshot.preferences.enabled) } : null,
+  );
   const hasSnapshot = Boolean(snapshot);
-  const save = async () => {
-    if (!snapshot) throw new Error('Read Time Machine settings before saving.');
-    let savedPreferences: Awaited<ReturnType<typeof saveTimeMachinePreferences>> | undefined;
-    const accepted = await machine.perform(async (signal) => {
-      savedPreferences = await saveTimeMachinePreferences(
-        {
-          expectedRevision: snapshot.preferences.revision,
-          enabled,
-          schedule: snapshot.preferences.schedule,
-          beforeUpdate: false,
-          beforeRestart: false,
-          excludedApps: snapshot.preferences.excludedApps,
-        },
-        signal,
-      );
-      return savedPreferences;
-    }, 'Time Machine settings saved.');
-    if (!accepted) throw new Error('Time Machine settings were not confirmed.');
-    if (savedPreferences) queryClient.setQueryData(timeMachinePreferencesQueryKey(machine.user.id), savedPreferences);
-    setEnabledDraft(null);
-  };
-  const shared = useSettingsSave({ section: 'time-machine', dirty, pending: busy, prepare: async () => (snapshot && !error ? save : null) });
-  const activate = async () => {
-    if (!snapshot || snapshot.preferences.enabled || busy) return;
-    setActivationPending(true);
-    let savedPreferences: Awaited<ReturnType<typeof saveTimeMachinePreferences>> | undefined;
-    try {
-      const accepted = await machine.perform(async (signal) => {
-        savedPreferences = await saveTimeMachineEnabled(snapshot.preferences, true, signal);
-        return savedPreferences;
-      }, '');
-      if (!accepted || !savedPreferences) return;
-      queryClient.setQueryData(timeMachinePreferencesQueryKey(machine.user.id), savedPreferences);
-      setEnabledDraft(null);
-    } finally {
-      setActivationPending(false);
-    }
-  };
   useEffect(() => {
     if (hasSnapshot && openTimeline) setGallery(true);
   }, [hasSnapshot, openTimeline]);
@@ -467,8 +439,8 @@ function TimeMachineSettingsSession({
     <section id="setting-time-machine" className="tm-settings" aria-label="Time Machine">
       <TimeMachineStorageStatus visible={visible} />
       {snapshot ? null : <output>{error ? 'Time Machine status is unavailable.' : 'Reading Time Machine…'}</output>}
-      {error ? <InlineFeedback>{error}</InlineFeedback> : null}
-      {notice && notice !== 'Time Machine settings saved.' ? <output>{notice}</output> : null}
+      {error && (!snapshot || error !== preference.error) ? <InlineFeedback>{error}</InlineFeedback> : null}
+      {notice ? <output>{notice}</output> : null}
       {noticeDismissed ? null : (
         <Alert variant="warning" dismissible className="tm-first-open-notice">
           <div>
@@ -495,11 +467,21 @@ function TimeMachineSettingsSession({
             <InlineFeedback>Time Machine storage is unavailable. No point can be captured or removed.</InlineFeedback>
           )}
           {settingsMode === 'setup' ? (
-            <TimeMachineSetupView pending={busy || activationPending} onEnable={() => void activate()} />
+            <TimeMachineSetupView
+              pending={preference.pending}
+              saved={preference.saved}
+              disabled={preference.disabled}
+              error={preference.error}
+              onEnable={() => preference.setChecked(true)}
+            />
           ) : (
             <>
               <div className="tm-enabled-preference">
-                <Switch label="Enable Time Machine" checked={enabled} disabled={busy} onCheckedChange={setEnabledDraft} />
+                <AutosavedSettingSwitch
+                  label="Enable Time Machine"
+                  toggle={{ ...preference, disabled: preference.disabled || preference.pending }}
+                  showStatus
+                />
                 <p>
                   Captures save Orbis settings, its database and captured version. Docker app data is optional and selected by storage mount.
                   Operating system files are excluded.{' '}
@@ -517,10 +499,11 @@ function TimeMachineSettingsSession({
                   variant="outline"
                   disabled={
                     busy ||
+                    preference.pending ||
                     !machine.canMutate ||
                     !snapshot.capabilities.manualCapture ||
                     !snapshot.list.available ||
-                    !snapshot.preferences.enabled ||
+                    !preference.confirmedEnabled ||
                     Boolean(snapshot.list.activeCaptureId) ||
                     Boolean(error)
                   }
@@ -528,13 +511,7 @@ function TimeMachineSettingsSession({
                 >
                   Capture
                 </Button>
-                {shared.shared ? null : (
-                  <Button disabled={!dirty || busy} onClick={() => void save().catch(() => undefined)}>
-                    Save
-                  </Button>
-                )}
               </div>
-              {dirty ? <p>Save this change before starting a capture.</p> : null}
               <p>Automatic captures are not available on this server yet.</p>
               <p>{timeMachineRetentionSummary(savedPoints.length, retainedBytes, formatBackupBytes)}</p>
             </>

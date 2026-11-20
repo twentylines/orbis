@@ -1,108 +1,56 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Button } from '@/components/ui/Button';
-import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { AnimatePresence, motion } from 'framer-motion';
 import { IconLoader2 } from '@tabler/icons-react';
 import { RouteHeaderStatus } from '@/desktop/route-header-status';
 import { WindowVisibilityContext } from '@/desktop/window-visibility';
 import { useReducedMotion } from '@/desktop/motion-preferences';
 import './settings-save-status.css';
-import { saveSettingsPlan, type SettingsSaveEntry } from '../helpers/settings-save-plan';
-import type { SettingsSection } from '../helpers/settings-catalogue';
-
+type PreferenceActivity = { pending: boolean; saved: boolean; unsaved: boolean; signal?: AbortSignal };
 type SettingsSaveContextValue = {
-  register: (id: string, entry: SettingsSaveEntry) => () => void;
+  register: (id: string, activity: PreferenceActivity) => () => void;
   headerTarget: HTMLElement | null;
   setHeaderTarget: (target: HTMLElement | null) => void;
-  save: () => Promise<void>;
-  dirty: boolean;
+  signal?: AbortSignal;
   pending: boolean;
-  activity: boolean;
-  error: string | null;
+  saved: boolean;
+  unsaved: boolean;
 };
 const SettingsSaveContext = createContext<SettingsSaveContextValue | null>(null);
 
 export function SettingsSaveProvider({
   children,
-  onSection,
   signal,
   backgroundSaving = false,
 }: {
   children: ReactNode;
-  onSection: (section: SettingsSection) => void;
   signal?: AbortSignal;
   backgroundSaving?: boolean;
 }) {
-  const entries = useRef(new Map<string, SettingsSaveEntry>());
+  const entries = useRef(new Map<string, PreferenceActivity>());
   const [headerTarget, setHeaderTarget] = useState<HTMLElement | null>(null);
   const [, refresh] = useState(0);
-  const currentSignal = useRef(signal);
-  currentSignal.current = signal;
-  const [savingState, setSaving] = useState<{ signal?: AbortSignal; pending: boolean }>({ signal, pending: false });
-  const [failure, setFailure] = useState<{ signal?: AbortSignal; message: string } | null>(null);
-  const saving = savingState.signal === signal && savingState.pending;
-  const error = failure && failure.signal === signal ? failure.message : null;
-  const dirty = [...entries.current.values()].some((entry) => entry.dirty);
-  useEffect(() => {
-    if (!dirty && !saving) setFailure(null);
-  }, [dirty, saving]);
-  const running = useRef<{ signal?: AbortSignal } | null>(null);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-  const register = useCallback((id: string, entry: SettingsSaveEntry) => {
-    entries.current.set(id, entry);
+  const register = useCallback((id: string, activity: PreferenceActivity) => {
+    entries.current.set(id, activity);
     refresh((value) => value + 1);
     return () => {
-      if (entries.current.get(id) === entry) {
+      if (entries.current.get(id) === activity) {
         entries.current.delete(id);
         refresh((value) => value + 1);
       }
     };
   }, []);
-  const save = async () => {
-    if (signal?.aborted || (running.current && running.current.signal === signal)) return;
-    const attempt = { signal };
-    running.current = attempt;
-    setSaving({ signal, pending: true });
-    setFailure(null);
-    try {
-      const result = await saveSettingsPlan([...entries.current.values()], signal);
-      if (!mounted.current || currentSignal.current !== signal || signal?.aborted || result.cancelled) return;
-      if (result.failed) {
-        setFailure({
-          signal,
-          message: result.invalid
-            ? 'Check the highlighted settings before saving.'
-            : result.saved
-              ? 'Some settings were saved. Your remaining changes are still here; check the error and try again.'
-              : 'The settings could not be saved. Your changes are still here; check the error and try again.',
-        });
-        onSection(result.failed);
-      }
-    } finally {
-      if (running.current === attempt) {
-        running.current = null;
-        if (mounted.current && currentSignal.current === signal) setSaving({ signal, pending: false });
-      }
-    }
-  };
+  const active = signal?.aborted ? [] : [...entries.current.values()].filter((entry) => entry.signal === signal);
   return (
     <SettingsSaveContext.Provider
       value={{
         register,
         headerTarget,
         setHeaderTarget,
-        save,
-        dirty,
-        pending: saving || [...entries.current.values()].some((entry) => entry.pending),
-        activity: !signal?.aborted && (backgroundSaving || saving || [...entries.current.values()].some((entry) => entry.pending)),
-        error,
+        signal,
+        pending: !signal?.aborted && (backgroundSaving || active.some((entry) => entry.pending)),
+        saved: active.some((entry) => entry.saved),
+        unsaved: active.some((entry) => entry.unsaved),
       }}
     >
       {children}
@@ -110,14 +58,9 @@ export function SettingsSaveProvider({
   );
 }
 
-export function SettingsSaveActions({ children }: { children: ReactNode }) {
+export function SettingsSaveActions() {
   const context = useContext(SettingsSaveContext);
-  return (
-    <div className="settings-save-actions">
-      <span className="settings-save-secondary-actions" ref={context?.setHeaderTarget} />
-      {children}
-    </div>
-  );
+  return <div className="settings-save-secondary-actions" ref={context?.setHeaderTarget} />;
 }
 
 export function settingsHeaderActionPortal(children: ReactNode, target: HTMLElement | null, visible: boolean) {
@@ -134,25 +77,12 @@ export function useSettingsHeaderActionAvailable() {
   return useContext(SettingsSaveContext) !== null;
 }
 
-export function useSettingsSave(entry: SettingsSaveEntry) {
+export function useSettingsPreferenceActivity(pending: boolean, saved: boolean, unsaved = false) {
   const context = useContext(SettingsSaveContext);
   const id = useId();
-  const current = useRef(entry);
-  current.current = entry;
   const register = context?.register;
-  const { dirty, pending, section } = entry;
-  useEffect(() => register?.(id, { dirty, pending, section, prepare: () => current.current.prepare() }), [id, register, dirty, pending, section]);
-  return { shared: Boolean(context), pending: context?.pending ?? false, save: context?.save };
-}
-
-export function SettingsSaveButton({ hideWhenClean = false }: { hideWhenClean?: boolean } = {}) {
-  const context = useContext(SettingsSaveContext);
-  if (!context || (hideWhenClean && !context.dirty && !context.pending)) return null;
-  return (
-    <Button type="button" intent="primary" disabled={!context.dirty || context.pending} loading={context.pending} onClick={() => void context.save()}>
-      Save
-    </Button>
-  );
+  const signal = context?.signal;
+  useEffect(() => register?.(id, { pending, saved, unsaved, signal }), [id, register, pending, saved, unsaved, signal]);
 }
 
 export function SettingsSavingIndicator({ pending }: { pending: boolean }) {
@@ -168,17 +98,22 @@ export function SettingsSavingIndicator({ pending }: { pending: boolean }) {
 
 export function SettingsSaveActivity() {
   const context = useContext(SettingsSaveContext);
-  return context ? <SettingsSavingIndicator pending={context.activity} /> : null;
+  return context ? <SettingsSavingIndicator pending={context.pending} /> : null;
 }
 
-export function SettingsSaveFeedback() {
-  const context = useContext(SettingsSaveContext);
-  return context?.error ? <InlineFeedback className="settings-save-feedback">{context.error}</InlineFeedback> : null;
-}
-
-export function SettingsDirtyIndicator({ dirty, pending = false }: { dirty: boolean; pending?: boolean }) {
+export function SettingsDirtyIndicator({
+  dirty,
+  pending = false,
+  loading = false,
+  saved = false,
+}: {
+  dirty: boolean;
+  pending?: boolean;
+  loading?: boolean;
+  saved?: boolean;
+}) {
   const reduced = useReducedMotion();
-  const message = pending ? 'Saving…' : dirty ? 'Unsaved changes' : '';
+  const message = loading ? 'Loading…' : pending ? 'Saving…' : dirty ? 'Unsaved changes' : saved ? 'Saved' : '';
   return (
     <output className="settings-system-status" aria-live="polite" aria-atomic="true">
       <span className="visually-hidden">{message}</span>
@@ -196,7 +131,7 @@ export function SettingsDirtyIndicator({ dirty, pending = false }: { dirty: bool
             exit={{ opacity: 0, scale: reduced ? 1 : 0.86, y: reduced ? 0 : -3 }}
             transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 430, damping: 31, mass: 0.7 }}
           >
-            {pending ? <IconLoader2 className="settings-status-spinner" size={16} /> : null}
+            {pending || loading ? <IconLoader2 className="settings-status-spinner" size={16} /> : null}
             <span>{message}</span>
           </motion.span>
         ) : null}
@@ -210,7 +145,7 @@ export function SettingsSaveStatus() {
   const visible = useContext(WindowVisibilityContext);
   return context ? (
     <RouteHeaderStatus>
-      <SettingsDirtyIndicator dirty={visible && context.dirty} pending={visible && context.activity} />
+      <SettingsDirtyIndicator dirty={visible && context.unsaved} pending={visible && context.pending} saved={visible && context.saved} />
     </RouteHeaderStatus>
   ) : null;
 }

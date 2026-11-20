@@ -5,7 +5,6 @@ import { ChangeUsernameForm } from '../components/change-username-form/change-us
 import { OtpForm } from '../components/otp-form/otp-form';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { PasskeySettings } from '../components/passkey-settings/passkey-settings';
-import { CaptureSecurity } from '../components/capture-security';
 import './security.css';
 
 export const SecurityContainer = (props: { totpEnabled: boolean; username?: string }) => {
@@ -53,9 +52,6 @@ export const SecurityContainer = (props: { totpEnabled: boolean; username?: stri
           <OtpForm totpEnabled={totpEnabled} />
         </div>
       </section>
-      <div className="settings-group">
-        <CaptureSecurity />
-      </div>
     </div>
   );
 };

@@ -5,12 +5,12 @@ import { useReducedMotion } from '@/desktop/motion-preferences';
 import { sectionMotionTiming } from '@/desktop/section-motion-geometry';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import type { AppCategory, AppInfoSimple } from '@/types/app.types';
-import { IconArrowRight, IconX } from '@tabler/icons-react';
+import { IconX } from '@tabler/icons-react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion, useIsPresent, type HTMLMotionProps } from 'framer-motion';
 import { forwardRef, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
-import { nextStorePreviewHistory, type StorePreviewHistory } from '../../pages/store-preview-navigation';
+import { storePreviewLinkProps } from '../../pages/store-preview-navigation';
 import { useStorePreview } from '../../pages/store-preview-context';
 import {
   installationState,
@@ -56,10 +56,6 @@ export function suggestionSurfaceMotion(presentation: 'page' | 'editorial', redu
     exit: editorial ? { opacity: 0, y: -4 } : { opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0, y: -4 },
     transition: { duration, ease: [0.32, 0.08, 0.24, 1] as const },
   };
-}
-
-export function disableStoreRecommendations(update: (patch: { showStoreRecommendations: boolean }) => void) {
-  update({ showStoreRecommendations: false });
 }
 
 const RecommendationRow = forwardRef<HTMLLIElement, HTMLMotionProps<'li'>>(function RecommendationRow(props, ref) {
@@ -112,6 +108,9 @@ export function StoreDiscover({
   }, [location.pathname]);
   const hidden = new Set([...hiddenCategories, ...dismissed]);
   const active = enabled && visible && !params.appId && !preview?.selectedUrn;
+  const suggestion = preview?.suggestion;
+  const onlyRecommendation =
+    enabled && visible && preview?.split && suggestion?.kind === 'recommendation' && !hidden.has(suggestion.category) ? suggestion : null;
   const [review, setReview] = useState<{
     resolved: Partial<Record<MediaApp, AppInfoSimple>>;
     existingPlayer?: string;
@@ -142,7 +141,7 @@ export function StoreDiscover({
     queries: recommendationCategories.map(({ category }) => ({
       ...searchAppsOptions({ query: { category, pageSize: 60, storeId } }),
       staleTime: 300000,
-      enabled: known && active && !hidden.has(category),
+      enabled: (known && active && !hidden.has(category)) || onlyRecommendation?.category === category,
       refetchOnWindowFocus: false,
     })),
   });
@@ -174,17 +173,25 @@ export function StoreDiscover({
     ? [existingPlayer]
     : [resolved.jellyfin, resolved.plex, resolved.emby].filter((app): app is AppInfoSimple => Boolean(app));
   const artwork = [...availablePlayers, ...companions.map((entry) => resolved[entry.id])].filter((app): app is AppInfoSimple => Boolean(app));
-  const suggestions = recommendStoreApps(
-    categories.flatMap((query) => (query.isSuccess ? query.data.data : [])),
-    current,
-    viewSeed ?? '',
-    storeId,
-    rotation,
-    [...hidden],
-  );
+  const suggestions = active
+    ? recommendStoreApps(
+        categories.flatMap((query) => (query.isSuccess ? query.data.data : [])),
+        current,
+        viewSeed ?? '',
+        storeId,
+        rotation,
+        [...hidden],
+      )
+    : [];
   const slots = showMedia ? 1 : 2;
-  const cards = suggestions.slice(0, slots);
-  const showSurface = active && known && ready && viewSeed !== null && (showMedia || cards.length > 0);
+  const cards = onlyRecommendation
+    ? recommendationCategories.flatMap(({ category, title }, index) => {
+        if (category !== onlyRecommendation.category) return [];
+        const app = categories[index]?.data?.data.find((entry) => entry.urn === onlyRecommendation.urn);
+        return app ? [{ category, title, apps: [app] }] : [];
+      })
+    : suggestions.slice(0, slots);
+  const showSurface = onlyRecommendation ? cards.length > 0 : active && known && ready && viewSeed !== null && (showMedia || cards.length > 0);
   useEffect(() => {
     if (showSurface) hasShownSurface.current = true;
   }, [showSurface]);
@@ -266,25 +273,28 @@ export function StoreDiscover({
             role="complementary"
             aria-label="App recommendations"
             data-presentation={presentation}
+            data-selected-suggestion={Boolean(onlyRecommendation) || undefined}
           >
             <header className="orbis-store-section-heading">
               <h2>For your server</h2>
-              <div className="orbis-store-recommendation-actions">
-                {suggestions.length > slots || suggestions.some((suggestion) => suggestion.choiceCount > suggestion.apps.length) ? (
-                  <Button ref={refreshButton} type="button" variant="ghost" onClick={refreshSuggestions}>
-                    Refresh
-                  </Button>
-                ) : null}
-                {onDisableSuggestions ? (
-                  <Button type="button" variant="ghost" onClick={disableSuggestions}>
-                    Do not show suggestions
-                  </Button>
-                ) : null}
-              </div>
+              {onlyRecommendation ? null : (
+                <div className="orbis-store-recommendation-actions">
+                  {suggestions.length > slots || suggestions.some((suggestion) => suggestion.choiceCount > suggestion.apps.length) ? (
+                    <Button ref={refreshButton} type="button" variant="ghost" onClick={refreshSuggestions}>
+                      Refresh
+                    </Button>
+                  ) : null}
+                  {onDisableSuggestions ? (
+                    <Button type="button" variant="ghost" onClick={disableSuggestions}>
+                      Do not show suggestions
+                    </Button>
+                  ) : null}
+                </div>
+              )}
             </header>
             <motion.div layout className="orbis-store-collections" transition={{ duration: motionDuration, ease: [0.32, 0.08, 0.24, 1] }}>
               <AnimatePresence initial={false} mode="popLayout">
-                {showMedia
+                {showMedia && !onlyRecommendation
                   ? card(
                       'media',
                       <>
@@ -309,7 +319,7 @@ export function StoreDiscover({
                               })
                             }
                           >
-                            Continue <IconArrowRight size={18} aria-hidden="true" />
+                            Continue
                           </Button>
                           {tools('media', 'Media library')}
                         </div>
@@ -320,7 +330,13 @@ export function StoreDiscover({
                   card(
                     category,
                     <>
-                      <StoreCollectionArt apps={apps} kind={category} reduced={reduceMotion} visible={visible} />
+                      <StoreCollectionArt
+                        key={onlyRecommendation ? 'selected' : 'discover'}
+                        apps={apps}
+                        kind={category}
+                        reduced={reduceMotion}
+                        visible={visible}
+                      />
                       <div className="orbis-store-collection-content">
                         <h3>{title}</h3>
                         <ul className="orbis-store-recommendation-apps">
@@ -342,32 +358,32 @@ export function StoreDiscover({
                                   className="orbis-store-collection-link orbis-store-recommendation-preview"
                                   data-recommendation-primary
                                   aria-label={`Preview ${app.name}`}
-                                  to={`/app-store/${encodeURIComponent(app.urn.split(':')[1] ?? '')}/${encodeURIComponent(app.id)}${location.search}`}
-                                  state={nextStorePreviewHistory(
-                                    location.state as StorePreviewHistory | null,
-                                    location.search,
-                                    location.pathname.startsWith('/app-store/'),
-                                  )}
+                                  {...storePreviewLinkProps(location, app.urn, { kind: 'recommendation', urn: app.urn, category })}
                                   preventScrollReset
                                   data-store-app={app.urn}
+                                  data-store-suggestion="recommendation"
                                   aria-controls={preview?.split ? 'store-app-preview' : undefined}
                                   aria-expanded={preview?.split ? preview.selectedUrn === app.urn : undefined}
                                 >
-                                  Preview <IconArrowRight size={18} aria-hidden="true" />
+                                  Preview
                                 </Link>
                               </RecommendationRow>
                             ))}
                           </AnimatePresence>
                         </ul>
-                        <Button
-                          type="button"
-                          className="orbis-store-collection-action orbis-store-recommendation-browse"
-                          data-recommendation-primary
-                          onClick={() => onBrowse(category)}
-                        >
-                          Browse {title} <IconArrowRight size={18} aria-hidden="true" />
-                        </Button>
-                        {tools(category, title)}
+                        {onlyRecommendation ? null : (
+                          <>
+                            <Button
+                              type="button"
+                              className="orbis-store-collection-action orbis-store-recommendation-browse"
+                              data-recommendation-primary
+                              onClick={() => onBrowse(category)}
+                            >
+                              Browse {title}
+                            </Button>
+                            {tools(category, title)}
+                          </>
+                        )}
                       </div>
                     </>,
                   ),

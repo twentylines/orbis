@@ -18,6 +18,7 @@ import { HostDeviceHistoryService } from '../host-device-history.service';
 import { DriveHealthService } from '../drive-health.service';
 import { SentinelService } from '../sentinel.service';
 import { SentinelReleasesService } from '../sentinel-releases.service';
+import { InstalledSoftwareService } from '../installed-software.service';
 
 describe('SystemController certificate security', () => {
   let app: INestApplication;
@@ -49,6 +50,7 @@ describe('SystemController certificate security', () => {
         { provide: DriveHealthService, useValue: drives },
         { provide: SentinelService, useValue: sentinel },
         { provide: SentinelReleasesService, useValue: sentinelReleases },
+        { provide: InstalledSoftwareService, useValue: mock<InstalledSoftwareService>() },
         { provide: OrbisReleaseService, useValue: orbisReleases },
         { provide: OrbisReleaseChannelsService, useValue: releaseChannels },
         {

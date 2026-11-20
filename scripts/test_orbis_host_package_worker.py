@@ -51,6 +51,28 @@ class HostPackageWorkerTests(unittest.TestCase):
         self.assertEqual(WORKER.SERVICE.read_private(self.state / "package-job.json")["state"], "complete")
         self.assertTrue((self.state / f"package-job-{self.job_id}.log").is_file())
 
+    def test_smart_tools_install_uses_only_the_pinned_review_and_checks_the_host_executable(self):
+        selected = [{"name": "smartmontools", "installedVersion": None, "candidateVersion": "7.4-2build1"}]
+        simulation = {"selected": selected, "operations": [{**selected[0], "action": "install"}]}
+        WORKER.SERVICE.write_private(self.state / f"package-plan-{self.job_id}.json", {
+            "schema": "orbis.smart-tools-plan.v1", "id": self.job_id, "root": str(self.root), "createdAt": time.time(), **simulation,
+        })
+        job_path = self.state / "package-job.json"
+        job = WORKER.SERVICE.read_private(job_path)
+        job["kind"] = "smart-tools"
+        WORKER.SERVICE.write_private(job_path, job)
+        with mock.patch.object(WORKER, "STATE_DIR", self.state), mock.patch.object(
+            WORKER.PACKAGES, "simulate_smart_tools", return_value=simulation
+        ), mock.patch.object(WORKER.SERVICE.HOST, "host_lock", return_value=nullcontext()), mock.patch.object(
+            WORKER.subprocess, "run", return_value=SimpleNamespace(returncode=0)
+        ) as apt, mock.patch.object(WORKER, "smartctl_installed", return_value=False):
+            WORKER.run(self.job_id)
+        command = apt.call_args.args[0]
+        self.assertEqual(command[-3:], ["install", "--", "smartmontools=7.4-2build1"])
+        self.assertEqual(apt.call_args.kwargs["env"]["NEEDRESTART_MODE"], "l")
+        self.assertIn("--no-remove", command)
+        self.assertEqual(WORKER.SERVICE.read_private(job_path)["state"], "failed")
+
     def test_rejects_a_candidate_change_before_apt_runs(self):
         changed = {"selected": [{"name": "base-files:arm64", "candidateVersion": "later"}], "operations": []}
         with mock.patch.object(WORKER, "STATE_DIR", self.state), mock.patch.object(

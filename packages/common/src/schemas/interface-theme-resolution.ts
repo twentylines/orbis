@@ -9,6 +9,7 @@ import {
   type InterfaceThemeValue,
 } from './interface-theme.js';
 import { builtinInterfaceTheme, registeredInterfaceTheme } from './interface-theme-registry.js';
+import type { DesktopAppearance } from './desktop-appearance.js';
 
 const supportedCapabilities: readonly InterfaceThemeCapability[] = [
   'palette',
@@ -46,6 +47,17 @@ export type ResolvedInterfaceThemeSettings = {
   fallback: 'invalid-identity' | 'unavailable' | InterfaceThemeIncompatibility | null;
 };
 
+const materialKeys = ['panel-opacity', 'chrome-opacity', 'panel-blur', 'chrome-blur', 'panel-tint'] as const;
+
+export function resolveInterfaceMaterialMode(
+  overrides: ReadonlyMap<string, InterfaceThemeValue>,
+  fallback: DesktopAppearance['materialMode'] = 'default',
+): DesktopAppearance['materialMode'] {
+  const selected = overrides.get('material-mode');
+  if (selected === 'default' || selected === 'custom') return selected;
+  return materialKeys.some((key) => typeof overrides.get(key) === 'number') ? 'custom' : fallback;
+}
+
 export function resolveInterfaceThemeSettings(requested: unknown, state: unknown): ResolvedInterfaceThemeSettings {
   let fallback: ResolvedInterfaceThemeSettings['fallback'] = null;
   let descriptor = builtinInterfaceTheme;
@@ -64,13 +76,14 @@ export function resolveInterfaceThemeSettings(requested: unknown, state: unknown
     : undefined;
   const accepted = entry !== undefined && interfaceThemeSettingsEntryAllows(descriptor, entry);
   const overrides = new Map(accepted ? entry.values.map((item) => [item.key, item.value] as const) : []);
+  const materialMode = resolveInterfaceMaterialMode(overrides);
   return {
     descriptor,
     identity: { id: descriptor.id, version: descriptor.version },
     settingsNamespace: { id: descriptor.id, settingsVersion: descriptor.settingsVersion },
     values: descriptor.settings.map((setting) => ({
       key: setting.key,
-      value: overrides.has(setting.key) ? (overrides.get(setting.key) ?? null) : setting.default,
+      value: setting.key === 'material-mode' ? materialMode : overrides.has(setting.key) ? (overrides.get(setting.key) ?? null) : setting.default,
     })),
     rejectedSettings: !validState || (entry !== undefined && !accepted),
     fallback,

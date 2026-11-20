@@ -5,7 +5,7 @@ function fixture() {
   const names = ['document', 'window', 'getComputedStyle', 'MutationObserver', 'ResizeObserver', 'requestAnimationFrame', 'cancelAnimationFrame'];
   const descriptors = names.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)] as const);
   const frames = new Map<number, FrameRequestCallback>();
-  const mutations: (() => void)[] = [];
+  const mutations: ((records: MutationRecord[]) => void)[] = [];
   const resizes: (() => void)[] = [];
   const events = new Map<string, Set<() => void>>();
   const values = new Map<string, string>();
@@ -19,6 +19,8 @@ function fixture() {
     naturalHeight: 800,
     getBoundingClientRect: () => box,
   };
+  const nebula = {};
+  const nebulaImage = { ...image, src: '/nebula-dark.webp', currentSrc: '/nebula-dark.webp' };
   const title = { getBoundingClientRect: () => ({ left: 320, top: 550, width: 160, height: 40 }) };
   const shade = {};
   const dim = {};
@@ -31,6 +33,10 @@ function fixture() {
   let disconnected = 0;
   let nextFrame = 0;
   let hasImage = true;
+  let hasNebula = false;
+  let wallpaperVisible = true;
+  let surfaceColour: string | null = null;
+  let nebulaBrightness = 15;
   const addEventListener = (name: string, callback: () => void) => {
     if (!events.has(name)) events.set(name, new Set());
     events.get(name)?.add(callback);
@@ -49,6 +55,8 @@ function fixture() {
     querySelector(selector: string) {
       if (selector === '.orbis-startup-title') return title;
       if (selector === '.desktop-wallpaper-layer img:last-of-type') return hasImage ? image : null;
+      if (selector === '.orbis-interstellar') return hasNebula ? nebula : null;
+      if (selector === '.orbis-interstellar > img') return hasNebula ? nebulaImage : null;
       if (selector === '.desktop-wallpaper-shade') return shade;
       if (selector === '.desktop-wallpaper-dim') return dim;
       if (selector === '.orbis-startup-copy') return copy;
@@ -64,14 +72,18 @@ function fixture() {
         const canvas = { width: 0, height: 0, getContext: () => context };
         const context = {
           fillStyle: 'rgba(0, 0, 0, 0)',
-          drawImage() {},
+          drawnImage: null as unknown,
+          drawImage(value: unknown) {
+            this.drawnImage = value;
+          },
           fillRect() {},
           getImageData() {
             if (canvas.width === 96) {
               reads++;
               if (blocked) throw new Error('Canvas read unavailable');
               const data = new Uint8ClampedArray(96 * 96 * 4);
-              for (let index = 0; index < data.length; index += 4) data.set([photograph, photograph, photograph, 255], index);
+              const brightness = this.drawnImage === nebulaImage ? nebulaBrightness : photograph;
+              for (let index = 0; index < data.length; index += 4) data.set([brightness, brightness, brightness, 255], index);
               return { data };
             }
             const channels = this.fillStyle.match(/[\d.]+/g)?.map(Number) ?? [0, 0, 0, 0];
@@ -85,11 +97,19 @@ function fixture() {
     getComputedStyle: (element: unknown) => ({
       objectFit: 'cover',
       objectPosition: '50% 0%',
-      backgroundColor: element === shade ? shadeColour : element === dim ? dimColour : 'rgb(248, 250, 252)',
+      visibility: element === image && !wallpaperVisible ? 'hidden' : 'visible',
+      opacity: '1',
+      display: 'block',
+      backgroundColor:
+        element === shade
+          ? shadeColour
+          : element === dim
+            ? dimColour
+            : (surfaceColour ?? (surface.dataset.desktopMode === 'light' ? 'rgb(248, 250, 252)' : 'rgb(5, 8, 14)')),
       getPropertyValue: () => '',
     }),
     MutationObserver: class {
-      constructor(callback: () => void) {
+      constructor(callback: (records: MutationRecord[]) => void) {
         mutations.push(callback);
       }
       observe() {}
@@ -118,7 +138,8 @@ function fixture() {
     for (const callback of pending) callback(0);
   };
   const changed = () => {
-    for (const callback of mutations) callback();
+    for (const callback of mutations)
+      callback([{ target: surface, attributeName: 'data-desktop-mode', type: 'attributes' } as unknown as MutationRecord]);
   };
   return {
     surface: surface as unknown as HTMLDivElement,
@@ -150,6 +171,13 @@ function fixture() {
     removeImage() {
       hasImage = false;
     },
+    nebula(brightness: number) {
+      hasNebula = true;
+      nebulaBrightness = brightness;
+      nebulaImage.src = nebulaImage.currentSrc = `/nebula-${brightness}.webp`;
+      surfaceColour = 'rgb(5, 8, 14)';
+      wallpaperVisible = false;
+    },
     get reads() {
       return reads;
     },
@@ -169,6 +197,47 @@ function fixture() {
 }
 
 describe('session wallpaper ink', () => {
+  test('light mode uses white over the visible dark nebula instead of sampling its hidden bright wallpaper', () => {
+    const page = fixture();
+    let stop = () => {};
+    try {
+      page.nebula(15);
+      stop = observeSessionWallpaperInk(page.surface);
+      expect(page.values.get('--orbis-session-ink')).toBe('#ffffff');
+      for (const state of ['signing-in', 'logging-out']) {
+        page.surface.dataset.sessionState = state;
+        page.changed();
+        page.flush();
+        expect(page.values.get('--orbis-session-ink')).toBe('#ffffff');
+      }
+      expect(page.reads).toBe(1);
+    } finally {
+      stop();
+      page.restore();
+    }
+  });
+
+  test('visible nebula pixels can choose black, while the clipped setup handoff follows its dark exposed surface', () => {
+    const page = fixture();
+    let stop = () => {};
+    try {
+      page.nebula(245);
+      stop = observeSessionWallpaperInk(page.surface);
+      expect(page.values.get('--orbis-session-ink')).toBe('#000000');
+      page.surface.dataset.setupSignIn = 'true';
+      page.changed();
+      page.flush();
+      expect(page.values.get('--orbis-session-ink')).toBe('#ffffff');
+      delete page.surface.dataset.setupSignIn;
+      page.changed();
+      page.flush();
+      expect(page.values.get('--orbis-session-ink')).toBe('#000000');
+    } finally {
+      stop();
+      page.restore();
+    }
+  });
+
   test('preset changes never tint session copy, in either direction or interface mode', () => {
     const page = fixture();
     let stop = () => {};

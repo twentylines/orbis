@@ -37,6 +37,11 @@ export type Telemetry = {
 
 export const telemetryQueryKey = ['system-telemetry'] as const;
 
+export function hostCpuPercent(cpu?: Telemetry['cpu']) {
+  const value = cpu?.totalPercent;
+  return cpu?.scope === 'host-proc' && typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100 ? value : null;
+}
+
 export function telemetryOptions(visible: boolean, path = '/api/system/telemetry', serverId?: string | null) {
   return queryOptions<Telemetry>({
     queryKey:

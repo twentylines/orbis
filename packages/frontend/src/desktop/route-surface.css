@@ -1,5 +1,6 @@
 .desktop .desktop-route-page {
   --desktop-window-gutter: 30px;
+  --desktop-content-fill: transparent;
   padding: 0;
   animation: none;
   border-color: transparent;
@@ -9,6 +10,7 @@
   -webkit-backdrop-filter: none;
 }
 .desktop .desktop-view-app.desktop-route-window.desktop-route-page[data-window-navigation="page"] {
+  border: 0;
   box-shadow: none;
 }
 .desktop .desktop-route-page:has(.desktop-route-placeholder) {
@@ -25,9 +27,9 @@
   height: 100%;
   z-index: -1;
   border-radius: inherit;
-  background: var(--desktop-surface);
-  backdrop-filter: var(--orbis-glass-filter, blur(24px) saturate(1.2));
-  -webkit-backdrop-filter: var(--orbis-glass-filter, blur(24px) saturate(1.2));
+  background: var(--desktop-pane-surface);
+  backdrop-filter: var(--desktop-pane-filter);
+  -webkit-backdrop-filter: var(--desktop-pane-filter);
   pointer-events: none;
 }
 .desktop-route-page .desktop-page-heading {
@@ -70,7 +72,7 @@
 }
 .desktop-route-page .desktop-window-content {
   min-width: 0;
-  padding: 26px var(--desktop-window-gutter) 30px;
+  padding: 26px var(--desktop-window-gutter) var(--desktop-route-content-bottom, 30px);
 }
 .desktop-route-page .desktop-window-content > .card,
 .desktop-route-page .desktop-route-children > .card {
@@ -79,27 +81,50 @@
   box-shadow: none;
 }
 @media (min-width: 1100px) and (min-height: 640px) {
-  .desktop-main:has(> .desktop-route-page:is([data-route-section="apps"], [data-route-section="app-store"])) {
+  .desktop
+    .desktop-main:has(
+      > .desktop-route-page[data-window-navigation="page"]:is(
+          [data-route-section="apps"],
+          [data-route-section="app-store"],
+          [data-route-section="tasks"],
+          [data-route-section="monitor"],
+          [data-route-section="updates"],
+          [data-route-section="settings"]
+        )
+    ) {
     min-height: 0;
-    padding-bottom: calc(var(--orbis-dock-height, 78px) + 44px);
+    padding-bottom: 0;
   }
-  .desktop .desktop-route-page:is([data-route-section="apps"], [data-route-section="app-store"]) {
+  .desktop
+    .desktop-route-page[data-window-navigation="page"]:is(
+      [data-route-section="apps"],
+      [data-route-section="app-store"],
+      [data-route-section="tasks"],
+      [data-route-section="monitor"],
+      [data-route-section="updates"],
+      [data-route-section="settings"]
+    ) {
     display: flex;
     flex-direction: column;
-    height: calc(100dvh - var(--orbis-bar-bottom, 88px) - var(--orbis-dock-height, 78px) - 68px);
+    --desktop-route-content-bottom: 0px;
+    height: calc(100dvh - var(--orbis-bar-bottom, 88px) - 24px);
     min-height: 0;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
   }
-  .desktop-route-page:is([data-route-section="apps"], [data-route-section="app-store"]) .desktop-page-heading {
+  .desktop-route-page:is([data-route-section="apps"], [data-route-section="app-store"], [data-route-section="tasks"], [data-route-section="monitor"])
+    .desktop-page-heading {
     flex: none;
   }
-  .desktop-route-page:is([data-route-section="apps"], [data-route-section="app-store"])
+  .desktop-route-page:is([data-route-section="apps"], [data-route-section="app-store"], [data-route-section="tasks"], [data-route-section="monitor"])
     :is(.desktop-window-content, .desktop-route-content, .desktop-route-children) {
     display: flex;
     flex-direction: column;
     flex: 1;
     min-height: 0;
   }
-  .desktop-route-page:is([data-route-section="apps"], [data-route-section="app-store"]) :is(.store-split-desktop, .desktop-route-placeholder) {
+  .desktop-route-page:is([data-route-section="apps"], [data-route-section="app-store"], [data-route-section="tasks"], [data-route-section="monitor"])
+    :is(.store-split-desktop, .desktop-route-placeholder, .task-centre-page, .desktop-monitor) {
     flex: 1;
     height: auto;
     min-height: 0;
@@ -109,10 +134,45 @@
     overscroll-behavior: contain;
     scroll-padding-block: 24px;
   }
+  .desktop .desktop-route-page[data-route-section="updates"] .desktop-page-heading {
+    flex: none;
+  }
+  .desktop .desktop-route-page[data-route-section="updates"] .desktop-window-content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-padding-block: 24px;
+  }
   .desktop
     .desktop-route-page[data-route-section="apps"]:not(:has(.store-split-desktop, .desktop-route-placeholder))
     :is(.desktop-route-content, .desktop-route-children) {
     flex: none;
+  }
+  /* Surfaces reach behind the dock; the final controls can still scroll fully
+     above its expanded height. Folding never changes a pane's scroll extent. */
+  .desktop .desktop-route-page[data-window-navigation="page"]
+    :is(
+      .store-catalogue-pane,
+      .store-preview-content,
+      .monitor-section-panels,
+      .monitor-section-navigation,
+      .settings-category-panel,
+      .settings-sidebar,
+      .task-centre-scroll
+    ),
+  .desktop .desktop-route-page[data-route-section="apps"]:not(:has(.store-split-desktop, .desktop-route-placeholder)) .desktop-window-content,
+  .desktop .desktop-route-page[data-route-section="updates"] .desktop-window-content {
+    padding-bottom: calc(var(--orbis-dock-height, 78px) + 32px);
+    scroll-padding-bottom: calc(var(--orbis-dock-height, 78px) + 32px);
+  }
+}
+@media (max-width: 1099px), (max-height: 639px) {
+  .desktop .desktop-main:has(> .desktop-route-page) {
+    padding-bottom: 24px;
+  }
+  .desktop .desktop-route-page .desktop-window-content {
+    padding-bottom: calc(var(--orbis-dock-height, 78px) + 48px + env(safe-area-inset-bottom, 0px));
   }
 }
 @media (max-width: 760px) {

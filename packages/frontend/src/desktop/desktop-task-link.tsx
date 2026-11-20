@@ -54,7 +54,8 @@ export function DesktopTaskLink() {
     if (!open) return;
     const measure = () => {
       if (!trigger.current || !panel.current) return;
-      setPosition(taskPanelPosition(trigger.current.getBoundingClientRect(), panel.current.offsetWidth, window.innerWidth));
+      const next = taskPanelPosition(trigger.current.getBoundingClientRect(), panel.current.offsetWidth, window.innerWidth);
+      setPosition((previous) => (previous.left === next.left && previous.top === next.top ? previous : next));
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -222,19 +223,21 @@ export function DesktopTaskLink() {
         <Dialog.Content
           ref={panel}
           className="orbis-dropdown-menu desktop-task-panel"
-          style={{ ...position, maxHeight: `calc(100dvh - ${position.top}px - 16px)` }}
+          style={{ ...position, maxHeight: `min(760px, 82dvh, calc(100dvh - ${position.top}px - 16px))` }}
           aria-describedby={undefined}
+          tabIndex={-1}
+          onOpenAutoFocus={(event) => {
+            if (panel.current) {
+              event.preventDefault();
+              panel.current.focus({ preventScroll: true });
+            }
+          }}
         >
-          <Dialog.Title className="desktop-task-panel-title">Task centre</Dialog.Title>
-          {saved.isError ? (
-            <div className="desktop-task-panel-notice">
-              <p>Saved task alerts are unavailable.</p>
-              <button type="button" onClick={() => void saved.refetch()}>
-                Retry saved alerts
-              </button>
-            </div>
-          ) : null}
+          <Dialog.Title className="visually-hidden">Task centre</Dialog.Title>
           <DesktopTaskPanel
+            visibilityOwner={String(user.id)}
+            attentionUnavailable={saved.isError}
+            retryAttention={() => saved.refetch({ cancelRefetch: false })}
             tasks={centre.records}
             names={centre.names}
             dismissSetupFailure={centre.dismiss}
@@ -247,7 +250,8 @@ export function DesktopTaskLink() {
             captureFailed={user.operator === true && capture.isError}
             pendingRequests={pendingRequests}
             criticalUpdate={Boolean(criticalKey)}
-            retry={() => void tasks.refetch()}
+            retry={() => tasks.refetch({ cancelRefetch: false })}
+            retryCapture={() => capture.refetch({ cancelRefetch: false })}
             close={() => setOpen(false)}
           />
         </Dialog.Content>

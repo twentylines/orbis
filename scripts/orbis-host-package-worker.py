@@ -41,9 +41,10 @@ def run(job_id: str) -> None:
     plan = SERVICE.read_private(plan_file(job_id))
     job = SERVICE.read_private(job_file())
     refresh = bool(plan and plan.get("schema") == "orbis.package-refresh.v1")
+    smart_tools = bool(plan and plan.get("schema") == "orbis.smart-tools-plan.v1")
     if (
         not plan
-        or plan.get("schema") not in {"orbis.package-plan.v1", "orbis.package-refresh.v1"}
+        or plan.get("schema") not in {"orbis.package-plan.v1", "orbis.package-refresh.v1", "orbis.smart-tools-plan.v1"}
         or plan.get("id") != job_id
         or not job
         or job.get("schema") != "orbis.package-job.v1"
@@ -52,6 +53,7 @@ def run(job_id: str) -> None:
         or not SERVICE.plan_is_current(plan.get("createdAt"), SERVICE.PLAN_TTL_SECONDS)
         or not isinstance(plan.get("root"), str)
         or refresh != (job.get("kind") == "refresh")
+        or smart_tools != (job.get("kind") == "smart-tools")
         or (refresh and set(plan) != {"schema", "id", "root", "createdAt"})
         or (not refresh and (
             not isinstance(plan.get("selected"), list)
@@ -69,10 +71,16 @@ def run(job_id: str) -> None:
         if refresh:
             command = PACKAGES.apt_refresh_command()
         else:
-            checked = PACKAGES.simulate_upgrades([item["name"] for item in plan["selected"]])
+            if smart_tools:
+                checked = PACKAGES.simulate_smart_tools()
+            else:
+                checked = PACKAGES.simulate_upgrades([item["name"] for item in plan["selected"]])
             if checked != {"selected": plan["selected"], "operations": plan["operations"]}:
                 raise ValueError("APT package candidates changed; prepare a new plan")
-            command = PACKAGES.apt_apply_command(checked["selected"])
+            command = (
+                PACKAGES.apt_apply_command(checked["selected"], new_packages=True)
+                if smart_tools else PACKAGES.apt_apply_command(checked["selected"])
+            )
         job["state"] = "running"
         job["startedAt"] = time.time()
         SERVICE.write_private(job_file(), job)
@@ -81,7 +89,7 @@ def run(job_id: str) -> None:
             "LANG": "C.UTF-8",
             "LC_ALL": "C.UTF-8",
             "DEBIAN_FRONTEND": "noninteractive",
-            "NEEDRESTART_MODE": "a",
+            "NEEDRESTART_MODE": "l" if smart_tools else "a",
             "HOME": "/root",
         }
         log_path = STATE_DIR / f"package-job-{job_id}.log"
@@ -99,10 +107,21 @@ def run(job_id: str) -> None:
         if result.returncode:
             job["state"] = "failed"
             job["message"] = "APT stopped with an error. Inspect the host package log and dpkg state before retrying."
+        elif smart_tools and not smartctl_installed():
+            job["state"] = "failed"
+            job["message"] = "APT finished, but the host cannot use smartctl. Inspect the host package before retrying."
         else:
             job["state"] = "complete"
             job["message"] = "APT refreshed the package lists." if refresh else "APT installed the reviewed package transaction."
         SERVICE.write_private(job_file(), job)
+
+
+def smartctl_installed() -> bool:
+    try:
+        SERVICE.DRIVES.DriveHealth.executable()
+        return True
+    except SERVICE.DRIVES.SmartToolsMissing:
+        return False
 
 
 def main() -> int:
@@ -115,9 +134,14 @@ def main() -> int:
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         job = SERVICE.read_private(job_file())
         if job and job.get("id") == args.job_id and job.get("state") in {"queued", "running"}:
+            preflight_failed = job.get("kind") == "smart-tools" and job["state"] == "queued"
             job["state"] = "failed" if job["state"] == "queued" else "interrupted"
             job["finishedAt"] = time.time()
-            job["message"] = "Package transaction needs local inspection before another update."
+            if preflight_failed:
+                job["preflightFailed"] = True
+                job["message"] = "The SMART package review could not be confirmed. Review again to retry."
+            else:
+                job["message"] = "Package transaction needs local inspection before another update."
             SERVICE.write_private(job_file(), job)
         print(f"Orbis package worker stopped: {type(error).__name__}", file=sys.stderr)
         return 2

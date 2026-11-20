@@ -42,7 +42,7 @@ test('does not present stale host counters as current or disguise container rate
   const core = {
     network: [{ interface: 'eth0', rxBytesPerSecond: 5, txBytesPerSecond: null, receivedBytes: 10, transmittedBytes: 20, scope: 'runtime' }],
   } as Telemetry;
-  expect(statusNetwork(host, core)).toMatchObject({ label: 'Orbis core network', rxBytesPerSecond: 5, speedMbps: null, scope: 'runtime' });
+  expect(statusNetwork(host, core)).toMatchObject({ label: 'Network', rxBytesPerSecond: 5, speedMbps: null, scope: 'runtime' });
   expect(statusNetwork(undefined, undefined)).toBeNull();
 });
 test('rejects invalid memory and filesystem readings instead of drawing invented percentages', () => {

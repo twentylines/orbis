@@ -15,17 +15,17 @@ function markup(missing: boolean, job: object | null = null) {
 
 test('missing SMART tools offer the official package installation action', () => {
   const html = markup(true);
-  expect(html).toContain('Install SMART tools');
+  expect(html).toContain('Install smartmontools');
   expect(html).toContain('official Ubuntu package');
   expect(html).toContain('btn btn-primary');
   expect(html).not.toContain('disabled=""');
-  expect(markup(false)).not.toContain('Install SMART tools');
+  expect(markup(false)).not.toContain('Install smartmontools');
 });
 
 test('real pending package work disables repeat installation and exposes its status', () => {
   const html = markup(true, { id: 'job', kind: 'smart-tools', state: 'running' });
   expect(html).toContain('disabled=""');
-  expect(html).toContain('Installing SMART tools');
+  expect(html).toContain('Installing smartmontools');
   expect(html).toContain('Drive health will refresh when installation finishes');
   const unrelated = markup(true, { id: 'job', state: 'running' });
   expect(unrelated).toContain('disabled=""');

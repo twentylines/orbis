@@ -1,0 +1,106 @@
+.desktop-dock > .desktop-dock-main {
+  opacity: max(0, calc(1 - var(--orbis-dock-fold, 0) * 1.6));
+}
+@media (min-width: 1100px) and (min-height: 640px) {
+  .desktop-dock > .desktop-dock-main {
+    margin-inline: var(--orbis-dock-nav-margin, 0px);
+  }
+  .desktop-dock > .desktop-dock-companion[data-side="left"] {
+    margin-left: var(--orbis-dock-side-margin, 0px);
+  }
+  .desktop-dock > .desktop-dock-companion[data-side="right"] {
+    margin-right: var(--orbis-dock-side-margin, 0px);
+  }
+  .desktop-dock > .desktop-dock-companion > .desktop-dock-companion-content {
+    align-items: end;
+  }
+  .desktop-dock > .desktop-dock-companion[data-side="left"] > .desktop-dock-companion-content {
+    justify-content: flex-end;
+  }
+}
+.desktop .desktop-dock-reveal {
+  position: absolute;
+  z-index: 2;
+  bottom: 0;
+  left: var(--orbis-dock-nav-center, 50%);
+  translate: -50% 0;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--desktop-chrome-ink, #fff7ec);
+  opacity: clamp(0, calc((var(--orbis-dock-fold, 0) - 0.45) / 0.55), 1);
+  pointer-events: none;
+}
+.desktop-dock[data-scroll-collapsed] {
+  pointer-events: none;
+}
+.desktop-dock[data-scroll-collapsed] :is(.orbis-app-tray, .desktop-activity-trigger) {
+  pointer-events: auto;
+}
+.desktop-dock:is([data-scroll-collapsed], [data-scroll-revealing]) .desktop-dock-reveal {
+  pointer-events: auto;
+}
+.desktop .desktop-dock-reveal:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: -6px;
+}
+.desktop-dock-scroll-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  pointer-events: none;
+  visibility: hidden;
+  transform: rotate(-90deg) scale(clamp(0.84, var(--orbis-dock-fold, 0), 1));
+}
+.desktop-dock[data-scroll-progress] .desktop-dock-scroll-ring {
+  visibility: visible;
+}
+.desktop-dock-scroll-track {
+  opacity: 0.24;
+}
+.desktop-dock-scroll-fill {
+  stroke-dasharray: 1;
+  stroke-dashoffset: var(--orbis-dock-scroll-remaining, 1);
+  transition: stroke-dashoffset 100ms ease-out;
+}
+:root[data-orbis-motion="reduced"] .desktop-dock-scroll-fill {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-dock-scroll-fill {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .desktop-dock-scroll-ring {
+    color: ButtonText;
+  }
+}
+
+/* The dock ring supplies position feedback for the main page panes. */
+@media (forced-colors: none) {
+  .desktop:has(.desktop-dock-scroll-ring)
+    :is(
+      .desktop-window-content,
+      .settings-category-panel,
+      .settings-sidebar,
+      .store-catalogue-pane,
+      .store-preview-content,
+      .monitor-section-panels,
+      .monitor-sidebar
+    ) {
+    scrollbar-width: none;
+  }
+  .desktop:has(.desktop-dock-scroll-ring) [data-pane-scroll-enhanced] > .pane-scroll-progress {
+    display: none;
+  }
+}

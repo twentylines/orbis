@@ -8,7 +8,8 @@ import { appDockerHealth, containerHealthReason } from '@/desktop/container-heal
 import { useAppContext } from '@/context/app-context';
 import { useServerPath } from '@/desktop/cluster-data';
 import { RestartDialog } from '@/modules/app/components/dialogs/restart-dialog/restart-dialog';
-import { IconBrandDocker, IconChevronRight } from '@tabler/icons-react';
+import { IconBrandDocker, IconFileText, IconRefresh } from '@tabler/icons-react';
+import { DisclosureIndicator } from '@/components/ui/DisclosureIndicator/DisclosureIndicator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { ContainerResourceFocus } from './container-resource-focus';
 import { containerHealthFilter, withContainerHealthFilter, type ContainerHealthFilter } from './container-health-filter';
@@ -204,12 +205,12 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
       {compact ? null : (
         <details className="container-resources-note">
           <summary>
-            <IconChevronRight size={16} aria-hidden="true" />
+            <DisclosureIndicator size={16} />
             About these readings
           </summary>
           <p>
-            CPU: 100% is one core. Memory excludes reclaimable file cache. Bars compare containers within this list. Host process and container
-            readings overlap; this list covers Docker containers only.
+            CPU: 100% is one logical processor. Memory excludes reclaimable file cache. Host process and container readings overlap; this list covers
+            Docker containers only.
           </p>
           <p>Readings stay live while you use this list. Rows keep their positions until you leave it.</p>
         </details>
@@ -305,7 +306,7 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
                     <Accordion.Header className="container-resource-row-heading" aria-label={label}>
                       <Accordion.Trigger className="container-resource-toggle">
                         {reading}
-                        <IconChevronRight className="container-resource-chevron" size={18} aria-hidden="true" />
+                        <DisclosureIndicator />
                         <span className="visually-hidden">Container details</span>
                       </Accordion.Trigger>
                     </Accordion.Header>
@@ -362,12 +363,14 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
                                       className="container-resource-action"
                                       to={`/apps/${encodeURIComponent(urn.split(':')[1] ?? '')}/${encodeURIComponent(urn.split(':')[0] ?? '')}?tab=logs`}
                                     >
+                                      <IconFileText size={17} aria-hidden="true" />
                                       View logs
                                     </Link>
                                   ) : null}
                                   {canRestart ? (
                                     <button type="button" className="container-resource-action" onClick={() => setRestartUrn(urn)}>
-                                      Restart app…
+                                      <IconRefresh size={17} aria-hidden="true" />
+                                      Restart app
                                     </button>
                                   ) : null}
                                 </div>

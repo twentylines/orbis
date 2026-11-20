@@ -8,6 +8,7 @@ import type * as React from 'react';
 import { Children, createContext, forwardRef, isValidElement, useContext, useId, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '../DropdownMenu';
+import { DropdownMenuChevron } from '../DropdownMenu/DropdownMenu';
 import '../dropdown.css';
 
 type ItemProps = React.ComponentPropsWithoutRef<typeof Menu.RadioItem>;
@@ -174,7 +175,7 @@ const SelectTrigger = ({ className, error, label, children, value: _value, onCle
             undefined
           }
           aria-invalid={message ? true : undefined}
-          className={clsx('d-flex align-items-center justify-content-between form-select', !fitContent && 'w-100', {
+          className={clsx('d-flex align-items-center justify-content-between form-select orbis-select-trigger', !fitContent && 'w-100', {
             'is-invalid is-invalid-lite': message,
             'text-muted': !context.value,
           })}
@@ -183,6 +184,7 @@ const SelectTrigger = ({ className, error, label, children, value: _value, onCle
           <span id={valueId} className="orbis-select-value">
             {children}
           </span>
+          <DropdownMenuChevron />
         </DropdownMenuTrigger>
       </div>
       {message && (

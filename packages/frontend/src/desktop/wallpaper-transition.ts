@@ -11,6 +11,7 @@ export class WallpaperTransition {
   private live = false;
   private reduced = false;
   private motion: { id: number; animation: Animation } | null = null;
+  private revealed: number | null = null;
 
   constructor(
     source: string,
@@ -19,6 +20,7 @@ export class WallpaperTransition {
     private displayed: (image: HTMLImageElement) => void,
     private failed: () => void,
     private opacity: (image: HTMLImageElement) => number = (image) => Number.parseFloat(getComputedStyle(image).opacity),
+    private reveal?: (image: HTMLImageElement) => void,
   ) {
     this.frames = [{ id: 0, source, style, opacity: 0, displayed: false, ready: false }];
   }
@@ -115,6 +117,7 @@ export class WallpaperTransition {
     }
     this.freeze();
     this.frames = this.frames.filter((item) => item.id === id || item.id === this.latest || item.displayed || item.opacity > 0);
+    this.revealFrame(id, image);
     image.style.opacity = String(frame.opacity);
     this.render(this.snapshot());
     const animation = image.animate([{ opacity: frame.opacity }, { opacity: 1 }], {
@@ -136,6 +139,7 @@ export class WallpaperTransition {
     const frame = this.frames.find((frame) => frame.id === id);
     const image = this.images.get(id);
     if (!frame || !image) return;
+    this.revealFrame(id, image);
     image.style.opacity = '1';
     const motion = this.motion;
     this.motion = null;
@@ -145,5 +149,11 @@ export class WallpaperTransition {
     this.render(this.snapshot());
     this.displayed(image);
     if (pending?.ready) this.start(pending.id);
+  }
+
+  private revealFrame(id: number, image: HTMLImageElement) {
+    if (id === this.revealed) return;
+    this.revealed = id;
+    this.reveal?.(image);
   }
 }

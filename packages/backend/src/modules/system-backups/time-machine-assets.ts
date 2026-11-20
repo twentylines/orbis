@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { imageDimensionsFromData } from 'image-dimensions';
 import { timeMachineAssetLimit, type TimeMachinePreview, type TimeMachineWallpaperAsset } from '@runtipi/common/schemas/time-machine';
+import type { DesktopColourPreset } from '@runtipi/common/schemas/desktop-appearance';
 import { APP_DIR } from '@/common/constants';
 import type { LocalBackupSnapshot } from './system-backups.service';
 
@@ -13,7 +14,11 @@ export const timeMachineBuiltinPhotographs = {
   stone: 'stone-v2.webp',
   ocean: 'ocean-v4.webp',
   blush: 'blush-v4.webp',
-} as const;
+  burgundy: 'burgundy-v1.webp',
+  amber: 'amber-v1.webp',
+  rose: 'rose-v1.webp',
+  orange: 'orange-v1.webp',
+} as const satisfies Record<DesktopColourPreset, string>;
 const legacy = { sandstone: 'stone', tidal: 'ocean', canopy: 'forest' } as const;
 const mimes = { png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp' } as const;
 export type CapturedWallpaper = Omit<TimeMachineWallpaperAsset, 'available' | 'cipherSha256'> & { data: Buffer };

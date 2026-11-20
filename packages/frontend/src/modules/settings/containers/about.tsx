@@ -9,9 +9,19 @@ import { installedOrbisBuildOptions } from '@/desktop/orbis-release';
 import { loadTelemetry, telemetryQueryKey } from '@/desktop/telemetry';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { SystemResetPanel } from '@/modules/system-reset/system-reset';
+import { sentinelStatusOptions } from '@/modules/updates/sentinel-status';
 import './about.css';
 
 const entryOptions = { staleTime: 5 * 60_000, refetchOnWindowFocus: false, retry: false } as const;
+type HostSoftware = { osName: string | null; osVersion: string | null; dockerVersion: string | null };
+
+function operatingSystemLabel(software?: HostSoftware) {
+  const { osName, osVersion } = software ?? {};
+  if (osName === 'Docker Desktop') return osVersion ? `Docker Desktop (Docker host OS ${osVersion})` : 'Docker Desktop (Docker host)';
+  if (!osName || !osVersion) return osName || osVersion;
+  return osName.includes(osVersion) ? osName : `${osName} ${osVersion}`;
+}
+
 async function readHardware<T>(path: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(`/api/system/${path}`, { credentials: 'same-origin', signal });
   if (!response.ok) throw new Error('Hardware details are unavailable');
@@ -27,6 +37,13 @@ export function About() {
   const visible = useWindowVisible();
   const { version, user } = useAppContext();
   const build = useQuery({ ...installedOrbisBuildOptions(), ...entryOptions, enabled: visible });
+  const sentinel = useQuery({ ...sentinelStatusOptions(visible), refetchInterval: false });
+  const installedSoftware = useQuery({
+    queryKey: ['orbis-installed-software'],
+    queryFn: ({ signal }) => readHardware<HostSoftware>('installed-software', AbortSignal.any([signal, AbortSignal.timeout(5000)])),
+    ...entryOptions,
+    enabled: visible,
+  });
   const telemetry = useQuery({
     queryKey: [...telemetryQueryKey, '/api/system/telemetry'],
     queryFn: ({ signal }) => loadTelemetry(signal),
@@ -50,6 +67,12 @@ export function About() {
   const graphics = sensors.isError || !sensors.data?.available ? null : sensors.data;
   const gpuNames = [...new Set(graphics?.gpus.map((gpu) => [gpu.vendor, gpu.label, gpu.driver].filter(Boolean).join(' · ')))];
   const loading = 'Reading…';
+  const software = installedSoftware.isError ? undefined : installedSoftware.data;
+  const hostSoftware = {
+    sentinel: sentinel.isPending ? loading : sentinel.isError ? null : sentinel.data?.installedVersion,
+    operatingSystem: installedSoftware.isPending ? loading : operatingSystemLabel(software),
+    docker: installedSoftware.isPending ? loading : software?.dockerVersion,
+  };
   const facts = [
     [
       'CPU',
@@ -73,7 +96,11 @@ export function About() {
       <div className="settings-about-sections">
         <section className="settings-group" aria-labelledby="about-software-title">
           <h3 id="about-software-title">Installed software</h3>
-          <InstalledVersions orbis={build.isPending ? loading : build.data?.version} runtipi={build.data?.runtipiCompatibility || version.current} />
+          <InstalledVersions
+            orbis={build.isPending ? loading : build.data?.version}
+            runtipi={build.data?.runtipiCompatibility || version.current}
+            host={hostSoftware}
+          />
         </section>
         <section className="settings-group" aria-labelledby="about-hardware-title">
           <h3 id="about-hardware-title">Server</h3>

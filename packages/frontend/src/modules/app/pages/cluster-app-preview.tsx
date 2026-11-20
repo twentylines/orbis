@@ -7,7 +7,7 @@ import { clusterRequest, useCluster, type ClusterServer } from '@/desktop/cluste
 import { serverPath, type ClusterManagedApp } from '@/desktop/cluster-views';
 import { DelayedRouteLoading } from '@/desktop/route-loading';
 import { useWindowVisible } from '@/desktop/window-visibility';
-import { IconArrowLeft, IconExternalLink } from '@tabler/icons-react';
+import { IconArrowLeft } from '@tabler/icons-react';
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type { ContainerTelemetry } from '@runtipi/common/schemas';
@@ -111,7 +111,7 @@ function PairedAppPreview({ server, urn }: { server: ClusterServer; urn: string 
                     event.preventDefault();
                 }}
               >
-                Open app <IconExternalLink size={16} aria-hidden="true" />
+                Open app
               </a>
             </Button>
           ) : null}
@@ -140,7 +140,7 @@ function PairedAppPreview({ server, urn }: { server: ClusterServer; urn: string 
       {manageUrl ? (
         <Button asChild>
           <a href={manageUrl} target="_blank" rel="noopener noreferrer">
-            Manage on {server.name} <IconExternalLink size={16} aria-hidden="true" />
+            Manage on {server.name}
           </a>
         </Button>
       ) : null}

@@ -1,182 +1,275 @@
 import { Switch } from '@/components/ui/Switch';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { useReducedTransparency } from '@/desktop/motion-preferences';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { AppearanceRange } from './appearance-controls';
 import { applyAppearanceRuntime } from '@/desktop/appearance-runtime';
+import { wallpaperColourOverrides } from '@/desktop/wallpaper-presets';
 import type { DesktopAppearance } from '@runtipi/common/schemas';
 import { ColourPicker } from '@/components/ui/ColourPicker/ColourPicker';
-import { IconChevronDown } from '@tabler/icons-react';
+import { themePackAppearanceSnapshot, type ThemePackAppearance } from '@/modules/theme-packs/theme-pack-cache';
+import { themePackAppearance } from '@/modules/theme-packs/theme-pack-runtime';
+import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
+
+function effectiveOpacity(style: CSSStyleDeclaration, property: string) {
+  const rgba = style.getPropertyValue(property).match(/,\s*([\d.]+)\s*\)$/);
+  return rgba ? Math.round(Number(rgba[1]) * 100) : null;
+}
+
+const HEX_COLOUR = /^#[a-f0-9]{6}$/i;
+
+function AppearanceColourSetting({
+  appearanceKey,
+  title,
+  description,
+  presetToken,
+  fallback,
+}: {
+  appearanceKey: 'themeColour' | 'accent';
+  title: string;
+  description: string;
+  presetToken: string;
+  fallback: string;
+}) {
+  const { preferences, resolvedMode, activeThemePack, updateAppearance } = useDesktopPreferences();
+  const saved = preferences.appearance[appearanceKey];
+  const section = useRef<HTMLElement>(null);
+  const id = appearanceKey === 'accent' ? 'appearance-accent' : 'appearance-theme-colour';
+  const [presetColour, setPresetColour] = useState(fallback);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Palette and mode set the inherited preset colour.
+  useEffect(() => {
+    const inherited = section.current ? getComputedStyle(section.current).getPropertyValue(presetToken).trim() : '';
+    setPresetColour(HEX_COLOUR.test(inherited) ? inherited : fallback);
+  }, [preferences.preset, resolvedMode, activeThemePack?.id, activeThemePack?.version, presetToken, fallback]);
+  const save = (next: string | null) => {
+    if (next !== saved) updateAppearance({ [appearanceKey]: next });
+  };
+  return (
+    <section id={id} ref={section} className="appearance-custom-colour" aria-labelledby={`${id}-title`}>
+      <div>
+        <h3 id={`${id}-title`}>{title}</h3>
+        <p>{description}</p>
+      </div>
+      <ColourPicker
+        label={title}
+        value={saved ?? presetColour}
+        sourceKey={JSON.stringify([preferences.preset, resolvedMode, activeThemePack?.id, activeThemePack?.version, saved])}
+        onChange={save}
+        onReset={() => save(null)}
+      />
+    </section>
+  );
+}
+
+export function ColourSettings() {
+  const { preferences, displayedWallpaperColours, updateAppearance } = useDesktopPreferences();
+  const auto = preferences.appearance.wallpaperColours;
+  const disclosure = useRef<HTMLDetailsElement>(null);
+  const summary = useRef<HTMLElement>(null);
+
+  const takeOver = () => {
+    const style = displayedWallpaperColours?.preset && disclosure.current ? getComputedStyle(disclosure.current) : null;
+    const current = (token: string, extracted?: string) => {
+      const inherited = style?.getPropertyValue(token).trim() ?? '';
+      return HEX_COLOUR.test(inherited) ? inherited : extracted;
+    };
+    const themeColour = current('--desktop-base-preset-tint', displayedWallpaperColours?.themeColour);
+    const accent = current('--desktop-base-accent', displayedWallpaperColours?.accent);
+    updateAppearance({ wallpaperColours: false, ...(themeColour ? { themeColour } : {}), ...(accent ? { accent } : {}) });
+    summary.current?.focus();
+  };
+
+  return (
+    <>
+      <div id="appearance-colours" className="appearance-auto-colours">
+        <Switch
+          label="Auto"
+          aria-describedby="appearance-auto-description"
+          checked={auto}
+          onCheckedChange={(wallpaperColours) => updateAppearance({ wallpaperColours })}
+        />
+        <p id="appearance-auto-description">Use the wallpaper’s colours.</p>
+      </div>
+      <details ref={disclosure} id="appearance-custom-colours" className="appearance-custom-colours">
+        <summary ref={summary}>Custom colours</summary>
+        <div className="appearance-custom-colour-controls">
+          {auto ? (
+            <div className="appearance-actions">
+              <button type="button" data-colour-takeover onClick={takeOver}>
+                Use manual colours
+              </button>
+            </div>
+          ) : (
+            <>
+              <AppearanceColourSetting
+                appearanceKey="themeColour"
+                title="Theme colour"
+                description="Tint panels, bars and other surfaces."
+                presetToken="--desktop-base-preset-tint"
+                fallback="#597b73"
+              />
+              <AppearanceColourSetting
+                appearanceKey="accent"
+                title="Accent colour"
+                description="Used for buttons and links."
+                presetToken="--desktop-base-accent"
+                fallback="#914725"
+              />
+            </>
+          )}
+        </div>
+      </details>
+    </>
+  );
+}
 
 export function MaterialSettings() {
-  const { preferences, resolvedMode, updateAppearance } = useDesktopPreferences();
+  const { preferences, resolvedMode, activeThemePack, displayedWallpaperColours, updateAppearance } = useDesktopPreferences();
   const value = preferences.appearance;
   const systemSolid = useReducedTransparency();
   const systemTransparency =
     matchMedia('(prefers-reduced-transparency: reduce)').matches || matchMedia('(prefers-reduced-transparency: no-preference)').matches;
+  const customControls = useId();
+  const showCustom = value.materialMode === 'custom' && value.transparency !== 'solid';
+  const dark = resolvedMode === 'dark';
+  const oled = dark && value.oledDark;
+  const opaque = oled || value.lowEffects || value.transparency === 'solid' || (value.transparency === 'system' && systemSolid);
+  const [defaultOpacity, setDefaultOpacity] = useState<{ panel: number | null; chrome: number | null }>({ panel: null, chrome: null });
+  const previewPack = useRef<ThemePackAppearance | null>(null);
+  const packId = activeThemePack?.id;
+  const packVersion = activeThemePack?.version;
+  useEffect(() => {
+    const cachedPack = packId ? themePackAppearanceSnapshot() : null;
+    previewPack.current = cachedPack?.id === packId && cachedPack?.version === packVersion ? cachedPack : null;
+  }, [packId, packVersion]);
   const preview = (key: keyof DesktopAppearance) => (next: number) => {
-    if (key === 'glassBlur' || key === 'chromeBlur') {
-      const token = key === 'glassBlur' ? '--orbis-glass-filter' : '--orbis-chrome-filter';
-      document.documentElement.style.setProperty(token, next === 0 ? 'none' : `blur(${next}px) saturate(1.2)`);
-    } else applyAppearanceRuntime({ ...value, [key]: next }, resolvedMode);
+    const colours = wallpaperColourOverrides(value.wallpaperColours ? displayedWallpaperColours : null);
+    applyAppearanceRuntime(themePackAppearance(previewPack.current, { ...value, ...colours, [key]: next }), resolvedMode);
   };
   const section = useRef<HTMLElement>(null);
-  const [colour, setColour] = useState(value.accent ?? '#914725');
-  const [message, setMessage] = useState('');
-  const [defaults, setDefaults] = useState({ surface: 92, chrome: 82 });
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Palette and mode change the inherited CSS defaults.
+  // Read the effective glass defaults when no saved numeric request overrides them.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Appearance context reapplies tokens when the palette or material changes.
   useEffect(() => {
-    if (!section.current) return;
+    if (!section.current || !showCustom || opaque) return;
     const style = getComputedStyle(section.current);
-    const alpha = (token: string, fallback: number) => {
-      const match = style.getPropertyValue(token).match(/,\s*([\d.]+)\s*\)$/);
-      return match ? Math.round(Number(match[1]) * 100) : fallback;
-    };
-    setDefaults({ surface: alpha('--desktop-base-surface', 92), chrome: alpha('--desktop-base-chrome', 82) });
-    const inherited = style.getPropertyValue('--desktop-base-accent').trim();
-    setColour(value.accent ?? (/^#[a-f0-9]{6}$/i.test(inherited) ? inherited : '#914725'));
-    setMessage('');
-  }, [preferences.preset, resolvedMode, value.accent]);
-  const setAccent = (next: string) => {
-    setColour(next);
-    if (/^#[a-f0-9]{6}$/i.test(next)) {
-      updateAppearance({ accent: next });
-      setMessage('');
-    }
+    setDefaultOpacity({
+      panel: value.surfaceOpacity === null ? effectiveOpacity(style, '--desktop-pane-surface') : null,
+      chrome: value.chromeOpacity === null ? effectiveOpacity(style, '--desktop-chrome') : null,
+    });
+  }, [
+    showCustom,
+    opaque,
+    resolvedMode,
+    preferences.preset,
+    activeThemePack?.id,
+    activeThemePack?.version,
+    value.surfaceOpacity,
+    value.chromeOpacity,
+    value.glassTint,
+    value.themeColour,
+    displayedWallpaperColours,
+  ]);
+  const selectMaterial = (transparency: DesktopAppearance['transparency'], materialMode: DesktopAppearance['materialMode']) => {
+    if (value.transparency !== transparency || value.materialMode !== materialMode) updateAppearance({ transparency, materialMode });
   };
-  const oled = resolvedMode === 'dark' && value.oledDark;
-  const opaque = oled || value.lowEffects || value.transparency === 'solid' || (value.transparency === 'system' && systemSolid);
   return (
     <>
-      <section ref={section} className="appearance-section" aria-labelledby="appearance-accent">
-        <div>
-          <h2 id="appearance-accent">Accent colour</h2>
-          <p>Used for buttons and links. Colours are adjusted for readable text.</p>
-        </div>
-        <div className="appearance-material-controls">
-          <div className="appearance-accent-controls">
-            <ColourPicker value={/^#[a-f0-9]{6}$/i.test(colour) ? colour : '#914725'} onChange={setAccent} />
-            <input
-              type="text"
-              className="appearance-colour-value"
-              aria-label="Accent hex value"
-              aria-invalid={Boolean(message)}
-              aria-describedby={message ? 'appearance-accent-error' : undefined}
-              maxLength={7}
-              spellCheck={false}
-              autoComplete="off"
-              value={colour}
-              onChange={(event) => setAccent(event.target.value)}
-              onBlur={() => {
-                if (!/^#[a-f0-9]{6}$/i.test(colour)) setMessage('Use six hexadecimal digits, for example #4c74b8.');
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                const inherited = section.current ? getComputedStyle(section.current).getPropertyValue('--desktop-base-accent').trim() : '#914725';
-                setColour(inherited);
-                setMessage('');
-                updateAppearance({ accent: null });
-              }}
-            >
-              Use preset colour
-            </button>
-          </div>
-          {message ? (
-            <p id="appearance-accent-error" className="appearance-upload-message" role="alert">
-              {message}
-            </p>
-          ) : null}
-        </div>
-      </section>
-      <section className="appearance-section" aria-labelledby="appearance-glass">
+      <section ref={section} className="appearance-section" aria-labelledby="appearance-glass">
         <div>
           <h2 id="appearance-glass">Surfaces</h2>
           <p>Choose how much of the wallpaper shows through.</p>
         </div>
-        <div className="appearance-material-controls">
-          <div id="appearance-transparency">
-            <SelectionGroup as="fieldset" className="appearance-choice" aria-label="Transparency preference">
-              {systemTransparency ? (
-                <button type="button" aria-pressed={value.transparency === 'system'} onClick={() => updateAppearance({ transparency: 'system' })}>
-                  Use device setting
-                </button>
-              ) : null}
-              <button
-                type="button"
-                aria-pressed={value.transparency === 'glass' || (!systemTransparency && value.transparency === 'system')}
-                onClick={() => updateAppearance({ transparency: 'glass' })}
-              >
-                Transparent
+        <div className="appearance-material-controls appearance-surface-options">
+          <SelectionGroup as="fieldset" className="appearance-choice appearance-surface-choices" aria-label="Transparency preference">
+            {systemTransparency ? (
+              <button type="button" aria-pressed={!showCustom && value.transparency === 'system'} onClick={() => selectMaterial('system', 'default')}>
+                Use device setting
               </button>
-              <button type="button" aria-pressed={value.transparency === 'solid'} onClick={() => updateAppearance({ transparency: 'solid' })}>
-                Solid
-              </button>
-            </SelectionGroup>
-          </div>
-          <details className="appearance-fine-controls">
-            <summary>
-              <span>Fine controls</span>
-              <IconChevronDown size={18} aria-hidden="true" />
-            </summary>
-            <div className="appearance-range-grid">
-              <AppearanceRange
-                label="Panel opacity"
-                min={90}
-                max={100}
-                value={value.surfaceOpacity ?? defaults.surface}
-                disabled={opaque}
-                onPreview={preview('surfaceOpacity')}
-                onChange={(surfaceOpacity) => updateAppearance({ surfaceOpacity })}
-              />
-              <AppearanceRange
-                label="Bar and dock opacity"
-                min={80}
-                max={100}
-                value={value.chromeOpacity ?? defaults.chrome}
-                disabled={opaque}
-                onPreview={preview('chromeOpacity')}
-                onChange={(chromeOpacity) => updateAppearance({ chromeOpacity })}
-              />
-              <AppearanceRange
-                label="Panel blur"
-                max={40}
-                unit="px"
-                value={value.glassBlur ?? 28}
-                disabled={opaque}
-                onPreview={preview('glassBlur')}
-                onChange={(glassBlur) => updateAppearance({ glassBlur })}
-              />
-              <AppearanceRange
-                label="Bar and dock blur"
-                max={64}
-                unit="px"
-                value={value.chromeBlur ?? value.glassBlur ?? 28}
-                disabled={opaque}
-                onPreview={preview('chromeBlur')}
-                onChange={(chromeBlur) => updateAppearance({ chromeBlur })}
-              />
-              <AppearanceRange
-                label="Panel tint"
-                max={30}
-                value={value.glassTint ?? 0}
-                onPreview={preview('glassTint')}
-                onChange={(glassTint) => updateAppearance({ glassTint })}
-              />
-            </div>
-            {opaque ? (
-              <p>{oled ? 'OLED uses black panels.' : 'Solid surfaces are enabled. Opacity and blur will apply when transparency is enabled.'}</p>
             ) : null}
-            <div className="appearance-actions">
-              <button
-                type="button"
-                onClick={() => updateAppearance({ surfaceOpacity: null, chromeOpacity: null, glassBlur: null, chromeBlur: null, glassTint: null })}
-              >
-                Reset
-              </button>
+            <button
+              type="button"
+              aria-pressed={!showCustom && (value.transparency === 'glass' || (!systemTransparency && value.transparency === 'system'))}
+              onClick={() => selectMaterial('glass', 'default')}
+            >
+              Transparent
+            </button>
+            <button type="button" aria-pressed={value.transparency === 'solid'} onClick={() => selectMaterial('solid', 'default')}>
+              Solid
+            </button>
+            <button
+              type="button"
+              aria-pressed={showCustom}
+              aria-expanded={showCustom}
+              aria-controls={customControls}
+              onClick={() => selectMaterial('glass', 'custom')}
+            >
+              Custom
+            </button>
+          </SelectionGroup>
+          <div className="appearance-custom-controls" data-expanded={showCustom}>
+            <div className="appearance-custom-clip" inert={!showCustom}>
+              <section id={customControls} className="appearance-custom-content" aria-label="Custom surface controls">
+                <div className="appearance-range-grid">
+                  <AppearanceRange
+                    label="Panel opacity"
+                    max={100}
+                    value={value.surfaceOpacity ?? defaultOpacity.panel ?? (dark ? 90 : 76)}
+                    disabled={opaque}
+                    onPreview={preview('surfaceOpacity')}
+                    onChange={(surfaceOpacity) => updateAppearance({ surfaceOpacity })}
+                  />
+                  <AppearanceRange
+                    label="Bar and dock opacity"
+                    max={100}
+                    value={value.chromeOpacity ?? defaultOpacity.chrome ?? (dark ? 76 : 84)}
+                    disabled={opaque}
+                    onPreview={preview('chromeOpacity')}
+                    onChange={(chromeOpacity) => updateAppearance({ chromeOpacity })}
+                  />
+                  <AppearanceRange
+                    label="Panel blur"
+                    max={40}
+                    unit="px"
+                    value={value.glassBlur ?? 36}
+                    disabled={opaque}
+                    onPreview={preview('glassBlur')}
+                    onChange={(glassBlur) => updateAppearance({ glassBlur })}
+                  />
+                  <AppearanceRange
+                    label="Bar and dock blur"
+                    max={64}
+                    unit="px"
+                    value={value.chromeBlur ?? value.glassBlur ?? (dark ? 14 : 16)}
+                    disabled={opaque}
+                    onPreview={preview('chromeBlur')}
+                    onChange={(chromeBlur) => updateAppearance({ chromeBlur })}
+                  />
+                  <AppearanceRange
+                    label="Panel tint"
+                    max={30}
+                    value={value.glassTint ?? 0}
+                    disabled={opaque}
+                    onPreview={preview('glassTint')}
+                    onChange={(glassTint) => updateAppearance({ glassTint })}
+                  />
+                </div>
+                {opaque ? <p>{oled ? 'OLED uses black panels.' : 'Custom controls apply when transparency is enabled.'}</p> : null}
+                <div className="appearance-actions">
+                  <button
+                    type="button"
+                    disabled={[value.surfaceOpacity, value.chromeOpacity, value.glassBlur, value.chromeBlur, value.glassTint].every(
+                      (item) => item === null,
+                    )}
+                    onClick={() =>
+                      updateAppearance({ surfaceOpacity: null, chromeOpacity: null, glassBlur: null, chromeBlur: null, glassTint: null })
+                    }
+                  >
+                    Reset custom controls
+                  </button>
+                </div>
+              </section>
             </div>
-          </details>
+          </div>
         </div>
       </section>
       <section className="appearance-section" aria-labelledby="appearance-motion">
@@ -208,4 +301,3 @@ export function MaterialSettings() {
     </>
   );
 }
-import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';

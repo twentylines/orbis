@@ -58,8 +58,8 @@ const allAppStoresSchema = type({
 });
 
 const updateAppStoreBodySchema = type({
-  name: 'string',
-  enabled: 'boolean',
+  'name?': 'string',
+  'enabled?': 'boolean',
 });
 
 const createAppStoreBodySchema = type({

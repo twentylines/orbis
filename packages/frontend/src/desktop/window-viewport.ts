@@ -13,7 +13,7 @@ const snapshot = () => window.matchMedia(DESKTOP_WINDOW_QUERY).matches;
 export const useDesktopWindows = () => useSyncExternalStore(subscribe, snapshot, () => false);
 
 export function revealPageFocus(element: HTMLElement) {
-  if (!element.closest('#desktop-content')) return;
+  if (!element.closest('#desktop-content') || element.dataset.pageFocusAlign === 'managed') return;
   if (element.dataset.pageFocusAlign === 'start') {
     element.scrollIntoView({ block: 'start', inline: 'nearest', behavior: prefersReducedMotion() ? 'instant' : 'smooth' });
     return;

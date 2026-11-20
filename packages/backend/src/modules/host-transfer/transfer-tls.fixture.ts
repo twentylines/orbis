@@ -1,3 +1,4 @@
+import { createExpiredTlsLeaf } from '@/tests/expired-tls.fixture';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -51,7 +52,7 @@ export function transferTlsFixture() {
         'leaf.ext',
       );
     leaf('2', 'leaf.pem');
-    leaf('0', 'expired.pem');
+    createExpiredTlsLeaf(directory);
     run(
       'req',
       '-x509',

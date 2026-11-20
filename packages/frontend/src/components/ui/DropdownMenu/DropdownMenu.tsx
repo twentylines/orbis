@@ -1,7 +1,7 @@
 'use client';
 
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
-import { IconChevronRight } from '@tabler/icons-react';
+import { IconChevronDown, IconChevronRight } from '@tabler/icons-react';
 import clsx from 'clsx';
 import type * as React from 'react';
 import { Children, createContext, useCallback, useContext, useLayoutEffect, useRef, useState } from 'react';
@@ -40,6 +40,10 @@ const DropdownMenu = ({
 
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 
+export function DropdownMenuChevron() {
+  return <IconChevronDown className="orbis-menu-chevron" size={18} stroke={1.75} aria-hidden="true" />;
+}
+
 const DropdownMenuGroup = DropdownMenuPrimitive.Group;
 
 const DropdownMenuSubTrigger = ({
@@ -50,15 +54,20 @@ const DropdownMenuSubTrigger = ({
 }: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger> & {
   inset?: boolean;
 }) => (
-  <DropdownMenuPrimitive.SubTrigger className={clsx('', inset && 'ps-8', className)} {...props}>
+  <DropdownMenuPrimitive.SubTrigger className={clsx('dropdown-item orbis-menu-item', inset && 'ps-8', className)} {...props}>
     {children}
-    <IconChevronRight className="" />
+    <IconChevronRight className="orbis-menu-sub-chevron" size={18} stroke={1.75} aria-hidden="true" />
   </DropdownMenuPrimitive.SubTrigger>
 );
 
-const DropdownMenuSubContent = ({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) => (
-  <DropdownMenuPrimitive.SubContent className={clsx('', className)} {...props} />
-);
+const DropdownMenuSubContent = ({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) => {
+  const boundary = dropdownBoundaryOptions(useContext(MenuBoundaryContext));
+  return (
+    <DropdownMenuPrimitive.Portal {...boundary.portal}>
+      <DropdownMenuPrimitive.SubContent {...boundary.content} className={clsx('orbis-dropdown-menu', className)} {...props} />
+    </DropdownMenuPrimitive.Portal>
+  );
+};
 
 const menuTrigger = (menu: HTMLDivElement | null) => {
   const id = menu?.getAttribute('aria-labelledby');

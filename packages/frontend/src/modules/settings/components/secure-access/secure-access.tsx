@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { IconCopy, IconDownload, IconExternalLink } from '@tabler/icons-react';
+import { IconCopy, IconDownload } from '@tabler/icons-react';
 import { Button } from '@/components/ui/Button';
 import { useAppContext } from '@/context/app-context';
 import { copyText } from '@/lib/clipboard';
@@ -101,7 +101,7 @@ export function SecureAccessSetup({
           ) : (
             <p>
               {user.operator
-                ? 'Set a local hostname first. Save it and apply the requested restart before downloading its certificate.'
+                ? 'Set a local hostname first. Apply the requested restart before downloading its certificate.'
                 : 'Ask an operator to configure this server’s local hostname and certificate.'}
             </p>
           )}
@@ -131,7 +131,7 @@ export function SecureAccessSetup({
           {destination ? (
             <Button asChild intent="primary">
               <a href={destination + secureAccessEntryPath} target="_blank" rel="noopener noreferrer">
-                Open HTTPS <IconExternalLink size={18} aria-hidden="true" />
+                Open HTTPS
               </a>
             </Button>
           ) : null}

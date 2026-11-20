@@ -7,7 +7,7 @@ import type { AppDetails, AppInfo, AppMetadata } from '@/types/app.types';
 import { extractAppUrn } from '@/utils/app-helpers';
 import type { AppUrn } from '@runtipi/common/types';
 import { CURRENT_SCHEMA_VERSION } from '@runtipi/common/schemas/dynamic-compose-version';
-import { IconAlertCircle, IconAlertTriangle, IconExternalLink } from '@tabler/icons-react';
+import { IconAlertCircle, IconAlertTriangle } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
 import { Suspense, lazy } from 'react';
 import React from 'react';
@@ -202,7 +202,6 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
           <DataGridItem title={t('APP_DETAILS_SOURCE_CODE')}>
             <a target="_blank" rel="noreferrer" className="app-detail-link" href={info.source}>
               <span>{t('APP_DETAILS_LINK')}</span>
-              <IconExternalLink size={15} aria-hidden="true" />
             </a>
           </DataGridItem>
           <DataGridItem title={t('APP_DETAILS_AUTHOR')}>{info.author}</DataGridItem>
@@ -230,7 +229,6 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
             <DataGridItem title={t('APP_DETAILS_WEBSITE')}>
               <a target="_blank" rel="noreferrer" className="app-detail-link" href={info.website}>
                 <span>{info.website}</span>
-                <IconExternalLink size={15} aria-hidden="true" />
               </a>
             </DataGridItem>
           )}

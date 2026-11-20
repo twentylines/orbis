@@ -22,7 +22,7 @@ function render({ value, error, active = true }: { value?: Status; error?: Error
 
 test('shows the independently reported version and service status in a labelled definition list', () => {
   const markup = render({ value: healthy });
-  expect(markup).toContain('>Sentinel</h4>');
+  expect(markup).toContain('>Sentinel</h2>');
   expect(markup).toContain('aria-label="Sentinel status"');
   expect(markup).toContain('<dd>0.1.0-dev.11</dd>');
   expect(markup).toContain('<output>Running</output>');

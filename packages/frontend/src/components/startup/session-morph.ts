@@ -1,3 +1,6 @@
+import { readAppearanceColours } from '@/desktop/theme-motion';
+import { readCachedAppearance, type CachedAppearance } from '@/desktop/appearance-cache';
+
 export const sessionMorphDuration = 640;
 const easing = 'cubic-bezier(.22,.72,.18,1)';
 export type SessionBox = { left: number; top: number; width: number; height: number };
@@ -5,11 +8,14 @@ export type SessionMorph = {
   source: HTMLElement;
   card: HTMLElement | null;
   radius: number;
+  glass: { background: string; border: string; backdropFilter: string; webkitBackdropFilter: string } | null;
+  cardShadow: string;
+  cardOpacity: number;
   backdrop: { src: string; image: HTMLImageElement; style: { objectFit: string; objectPosition: string; filter: string; transform: string } } | null;
   background: string;
   shade: string;
   dim: string;
-  sourceBox: SessionBox;
+  appearance?: { choice: CachedAppearance; colours: Record<string, string> };
   from: SessionBox;
   orb: SessionBox;
   started: boolean;
@@ -62,10 +68,34 @@ const frame = (box: SessionBox, radius: number, opacity = 1): Keyframe => ({
   transformOrigin: '0 0',
   opacity,
 });
-const cardFrames = (from: SessionBox, to: SessionBox, radius: number): Keyframe[] =>
-  sessionExpansionSteps(to, from, radius)
-    .reverse()
-    .map(({ box, radius, offset }) => ({ ...frame(box, radius), offset: 1 - offset }));
+type ShapeStep = ReturnType<typeof sessionExpansionSteps>[number];
+
+function animateShell(shell: HTMLElement, steps: ShapeStep[], opacity: (offset: number) => number, timing: KeyframeAnimationOptions) {
+  // Keep the mark at its intrinsic size while the glass outline changes.
+  const first = steps[0]?.box;
+  const last = steps.at(-1)?.box;
+  if (!first || !last) throw new Error('Session motion requires both endpoints');
+  const width = Math.max(first.width, last.width);
+  const height = Math.max(first.height, last.height);
+  const left = first.left + (first.width - width) / 2;
+  const top = first.top + (first.height - height) / 2;
+  Object.assign(shell.style, frame({ left, top, width, height }, 0));
+  return shell.animate(
+    steps.map(({ box, radius, offset }) => {
+      const insetX = (width - box.width) / 2;
+      const insetY = (height - box.height) / 2;
+      const x = box.left - left - insetX;
+      const y = box.top - top - insetY;
+      return {
+        clipPath: `inset(${insetY}px ${insetX}px round ${radius}px)`,
+        transform: `translate(${x}px, ${y}px)`,
+        opacity: opacity(offset),
+        offset,
+      };
+    }),
+    timing,
+  );
+}
 export function sessionExpansionSteps(orb: SessionBox, card: SessionBox, radius: number) {
   const growth = Math.max(card.width - orb.width, card.height - orb.height, 0);
   return Array.from({ length: 21 }, (_, index) => {
@@ -82,7 +112,7 @@ export function sessionExpansionSteps(orb: SessionBox, card: SessionBox, radius:
     };
   });
 }
-function prepareCard(card: HTMLElement | null, holdBox = false) {
+function prepareCard(card: HTMLElement | null, bounds?: SessionBox) {
   if (!card) return () => undefined;
   const saved = {
     transformOrigin: card.style.transformOrigin,
@@ -104,9 +134,10 @@ function prepareCard(card: HTMLElement | null, holdBox = false) {
     boxSizing: card.style.boxSizing,
     contain: card.style.contain,
   };
-  const children = holdBox
-    ? Array.from(card.children).map((child) => {
+  const children = bounds
+    ? Array.from(card.children, (child) => {
         const element = child as HTMLElement;
+        const width = `${element.getBoundingClientRect().width}px`;
         const saved = {
           width: element.style.width,
           minWidth: element.style.minWidth,
@@ -114,13 +145,11 @@ function prepareCard(card: HTMLElement | null, holdBox = false) {
           boxSizing: element.style.boxSizing,
           opacity: element.style.opacity,
         };
-        const width = `${element.getBoundingClientRect().width}px`;
-        Object.assign(element.style, { width, minWidth: width, maxWidth: width, boxSizing: 'border-box' });
-        return { element, saved };
+        return { element, saved, width };
       })
     : [];
-  if (holdBox) {
-    const bounds = card.getBoundingClientRect();
+  if (bounds) {
+    for (const { element, width } of children) Object.assign(element.style, { width, minWidth: width, maxWidth: width, boxSizing: 'border-box' });
     Object.assign(card.style, {
       position: 'fixed',
       left: `${bounds.left}px`,
@@ -165,16 +194,44 @@ export function beginSessionMorph(kind: 'signing-in' | 'logging-out'): SessionMo
   current?.cancel();
   const source = document.querySelector<HTMLElement>(kind === 'signing-in' ? '.desktop-auth:not(.desktop-auth-setup)' : '.desktop');
   if (!source) return null;
-  const entrance = (source.getAnimations?.({ subtree: true }) ?? []).filter(
+  const entrance = (kind === 'signing-in' ? (source.getAnimations?.({ subtree: true }) ?? []) : []).filter(
     (animation) => animation.id === 'orbis-auth-enter' && animation.playState === 'running',
   );
   for (const animation of entrance) animation.pause();
-  const card = source.querySelector<HTMLElement>('.card');
-  const from = kind === 'signing-in' && card ? card.getBoundingClientRect() : viewport();
-  const sourceBox = source.getBoundingClientRect();
+  const card = kind === 'signing-in' ? source.querySelector<HTMLElement>('.card') : null;
+  const from = card?.getBoundingClientRect() ?? viewport();
+  const cardStyle = card ? getComputedStyle(card) : null;
+  const radius = Number.parseFloat(cardStyle?.borderTopLeftRadius ?? '') || 24;
+  const glass = cardStyle
+    ? {
+        background: cardStyle.background,
+        border: cardStyle.border,
+        backdropFilter: cardStyle.backdropFilter,
+        webkitBackdropFilter: cardStyle.getPropertyValue('-webkit-backdrop-filter') || cardStyle.backdropFilter,
+      }
+    : null;
   const sourceStyle = getComputedStyle(source);
-  const image = source.querySelector<HTMLImageElement>('.desktop-wallpaper-layer img:last-of-type');
-  const imageStyle = image?.complete && image.naturalWidth > 0 ? getComputedStyle(image) : null;
+  const cached = readCachedAppearance();
+  const appearance = {
+    choice: {
+      ...cached,
+      preset: (source.dataset.desktopPreset ?? document.documentElement.dataset.desktopPreset ?? cached.preset) as CachedAppearance['preset'],
+      mode: (source.dataset.desktopMode ?? document.documentElement.dataset.desktopMode ?? cached.mode) as CachedAppearance['mode'],
+    },
+    colours: readAppearanceColours(source),
+  };
+  const visibleImage = (image: HTMLImageElement | null) => {
+    if (!image?.complete || !image.naturalWidth) return null;
+    const style = getComputedStyle(image);
+    return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' ? image : null;
+  };
+  const image =
+    visibleImage(source.querySelector<HTMLImageElement>('.desktop-wallpaper-layer img[data-wallpaper-displayed="true"]')) ??
+    Array.from(source.querySelectorAll<HTMLImageElement>('.desktop-wallpaper-layer img'))
+      .reverse()
+      .find((image) => visibleImage(image)) ??
+    null;
+  const imageStyle = image ? getComputedStyle(image) : null;
   const shade = source.querySelector<HTMLElement>('.desktop-wallpaper-shade');
   const dim = source.querySelector<HTMLElement>('.desktop-wallpaper-dim');
   const saved = {
@@ -184,15 +241,17 @@ export function beginSessionMorph(kind: 'signing-in' | 'logging-out'): SessionMo
     opacity: source.style.opacity,
     inert: source.inert,
   };
-  const restoreCard = prepareCard(kind === 'signing-in' ? card : null, kind === 'signing-in');
   let resolve: () => void = () => undefined;
   const finished = new Promise<void>((done) => {
     resolve = done;
   });
   const model: SessionMorph = {
     source,
-    card: kind === 'signing-in' ? card : null,
-    radius: kind === 'signing-in' && card ? Number.parseFloat(getComputedStyle(card).borderTopLeftRadius) || 24 : 0,
+    card,
+    radius: card ? radius : 0,
+    glass,
+    cardShadow: cardStyle?.boxShadow ?? 'none',
+    cardOpacity: Number(cardStyle?.opacity ?? '1'),
     backdrop:
       image && imageStyle
         ? {
@@ -209,7 +268,7 @@ export function beginSessionMorph(kind: 'signing-in' | 'logging-out'): SessionMo
     background: sourceStyle.backgroundColor || '#030508',
     shade: shade ? getComputedStyle(shade).background : 'transparent',
     dim: dim ? getComputedStyle(dim).background : 'transparent',
-    sourceBox,
+    appearance,
     from,
     orb: currentOrb(),
     started: false,
@@ -228,6 +287,7 @@ export function beginSessionMorph(kind: 'signing-in' | 'logging-out'): SessionMo
       resolve();
     },
     cancel: () => {
+      if (model.cancelled) return;
       model.cancelled = true;
       for (const animation of model.animations.splice(0)) animation.cancel();
       source.style.position = saved.position;
@@ -245,7 +305,9 @@ export function beginSessionMorph(kind: 'signing-in' | 'logging-out'): SessionMo
       }
     },
   };
-  if (sourceStyle.position === 'static') source.style.position = 'relative';
+  const position = sourceStyle.position;
+  const restoreCard = prepareCard(card, from);
+  if (position === 'static') source.style.position = 'relative';
   source.style.zIndex = kind === 'signing-in' && card ? '99' : '101';
   source.inert = true;
   current = model;
@@ -275,27 +337,17 @@ export function contractSessionMorph(model: SessionMorph, shell: HTMLElement, re
     if (backdropReady) void backdropReady.then(finish);
     else finish();
   };
-  model.sourceBox = model.source.getBoundingClientRect();
   model.from = model.card?.getBoundingClientRect() ?? viewport();
   model.orb = currentOrb();
   placeStatus(shell, model.orb);
   const to = frame(model.orb, model.orb.width / 2);
   const timing = { duration: reduced ? 0 : sessionMorphDuration, easing, fill: 'both' as const };
-  if (model.card) {
-    const appearance = getComputedStyle(model.card);
-    const surface = {
-      background: appearance.background,
-      border: appearance.border,
-      boxShadow: 'none',
-      backdropFilter: appearance.backdropFilter,
-      boxSizing: 'border-box',
-    };
-    Object.assign(shell.style, { background: 'transparent', border: '0', boxShadow: 'none', backdropFilter: 'none' });
-    model.settleSurface = () => {
-      Object.assign(shell.style, surface, frame(model.orb, model.orb.width / 2));
-      model.source.style.opacity = '0';
-    };
-  }
+  if (model.glass) Object.assign(shell.style, model.glass, { boxShadow: 'none', boxSizing: 'border-box' });
+  let shellMotion: Animation | undefined;
+  model.settleSurface = () => {
+    Object.assign(shell.style, frame(model.orb, model.orb.width / 2), { clipPath: 'none' });
+    shellMotion?.cancel();
+  };
   if (
     typeof shell.animate !== 'function' ||
     typeof model.source.animate !== 'function' ||
@@ -306,39 +358,37 @@ export function contractSessionMorph(model: SessionMorph, shell: HTMLElement, re
     model.finishContraction();
     return;
   }
-  Object.assign(shell.style, to);
-  const shellMotion = shell.animate(
-    model.card
-      ? cardFrames(model.from, model.orb, model.radius).map((keyframe) => ({
-          ...keyframe,
-          opacity: Math.min(1, Math.max(0, (Number(keyframe.offset) - 0.12) / 0.43)),
-        }))
-      : [
-          { transform: 'scale(.94)', transformOrigin: '50% 50%', opacity: 0 },
-          { transform: 'none', transformOrigin: '50% 50%', opacity: 1 },
-        ],
-    timing,
-  );
-  const sourceMotion = model.source.animate(model.card ? [{ opacity: 1 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0 }], timing);
-  model.animations.push(shellMotion, sourceMotion);
   if (model.card) {
-    const shadow = getComputedStyle(model.card).boxShadow;
+    const steps = sessionExpansionSteps(model.orb, model.from, model.radius)
+      .reverse()
+      .map((step) => ({ ...step, offset: 1 - step.offset }));
+    shellMotion = animateShell(shell, steps, (offset) => Math.min(1, Math.max(0, (offset - 0.12) / 0.43)), timing);
+    model.animations.push(shellMotion);
     const origin = {
       left: model.from.left - Number.parseFloat(model.card.style.left || '0'),
       top: model.from.top - Number.parseFloat(model.card.style.top || '0'),
     };
     model.animations.push(
       model.card.animate(
-        cardFrames(model.from, model.orb, model.radius).map((keyframe) => ({
-          ...keyframe,
-          ...(Number(keyframe.offset) === 0 ? { boxShadow: shadow } : Number(keyframe.offset) >= 0.5 ? { boxShadow: 'none' } : {}),
-          left: `${Number.parseFloat(String(keyframe.left)) - origin.left}px`,
-          top: `${Number.parseFloat(String(keyframe.top)) - origin.top}px`,
+        steps.map(({ box, radius, offset }) => ({
+          ...frame({ ...box, left: box.left - origin.left, top: box.top - origin.top }, radius, Math.min(1, model.cardOpacity + offset * 4)),
+          offset,
+          ...(offset === 0 ? { boxShadow: model.cardShadow } : offset >= 0.5 ? { boxShadow: 'none' } : {}),
         })),
         timing,
       ),
     );
     model.animations.push(...fadeCardContent(model.card, false, timing));
+  } else {
+    Object.assign(shell.style, to);
+    shellMotion = shell.animate(
+      [
+        { transform: 'scale(.94)', transformOrigin: '50% 50%', opacity: 0 },
+        { transform: 'none', transformOrigin: '50% 50%', opacity: 1 },
+      ],
+      timing,
+    );
+    model.animations.push(shellMotion, model.source.animate([{ opacity: 1 }, { opacity: 0 }], timing));
   }
   const start = document.timeline?.currentTime;
   if (typeof start === 'number') for (const animation of model.animations) animation.startTime = start;
@@ -371,8 +421,8 @@ export function settleSessionMorphViewport(model: SessionMorph, shell: HTMLEleme
   if (!model.started || model.cancelled) return;
   for (const animation of model.animations.splice(0)) animation.cancel();
   model.orb = currentOrb();
-  Object.assign(shell.style, frame(model.orb, model.orb.width / 2));
-  if (model.card) {
+  Object.assign(shell.style, frame(model.orb, model.orb.width / 2), { clipPath: 'none' });
+  if (model.card && !model.contracted) {
     const bounds = model.card.getBoundingClientRect();
     const left = bounds.left - Number.parseFloat(model.card.style.left || '0');
     const top = bounds.top - Number.parseFloat(model.card.style.top || '0');
@@ -409,9 +459,17 @@ export async function expandSessionMorph(shell: HTMLElement, target: HTMLElement
   target.style.zIndex = '101';
   target.inert = true;
   const animations: Animation[] = [];
+  const shellBox = {
+    left: shell.style.left,
+    top: shell.style.top,
+    width: shell.style.width,
+    height: shell.style.height,
+    borderRadius: shell.style.borderRadius,
+  };
   let aborted = false;
   const abort = () => {
     aborted = true;
+    Object.assign(shell.style, shellBox);
     for (const animation of animations) animation.cancel();
     window.removeEventListener('resize', resized);
     window.visualViewport?.removeEventListener('resize', resized);
@@ -428,13 +486,7 @@ export async function expandSessionMorph(shell: HTMLElement, target: HTMLElement
       const timing = { duration: sessionMorphDuration, easing, fill: 'both' as const };
       const radius = Number.parseFloat(getComputedStyle(card).borderTopLeftRadius) || 24;
       const steps = sessionExpansionSteps(orb, to, radius);
-      Object.assign(shell.style, frame(orb, orb.width / 2));
-      animations.push(
-        shell.animate(
-          steps.map(({ box, radius, offset }) => ({ ...frame(box, radius, Math.max(0, 1 - offset / 0.7)), offset })),
-          timing,
-        ),
-      );
+      animations.push(animateShell(shell, steps, (offset) => Math.max(0, 1 - offset / 0.7), timing));
       animations.push(...fadeCardContent(card, true, timing));
       animations.push(
         target.animate(

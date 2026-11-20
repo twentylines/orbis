@@ -36,6 +36,15 @@ export type AppContextDto = {
         short_desc: string;
         supported_architectures: Array<'amd64' | 'arm64'>;
         urn: string;
+        catalog_format?: 'orbis' | 'umbrel';
+        catalog_revision?: string;
+        gallery?: Array<string>;
+        release_notes?: string;
+        compatibility?: {
+            supported: boolean;
+            reasons: Array<string>;
+            requires_auth: boolean;
+        };
     }>;
     updatesAvailable: number;
     user: {
@@ -261,6 +270,15 @@ export type MyAppsDto = {
             uid?: number;
             url_suffix?: string;
             website?: string;
+            catalog_format?: 'orbis' | 'umbrel';
+            catalog_revision?: string;
+            gallery?: Array<string>;
+            release_notes?: string;
+            compatibility?: {
+                supported: boolean;
+                reasons: Array<string>;
+                requires_auth: boolean;
+            };
         };
         metadata: {
             latestVersion: number;
@@ -340,6 +358,15 @@ export type GuestAppsDto = {
             uid?: number;
             url_suffix?: string;
             website?: string;
+            catalog_format?: 'orbis' | 'umbrel';
+            catalog_revision?: string;
+            gallery?: Array<string>;
+            release_notes?: string;
+            compatibility?: {
+                supported: boolean;
+                reasons: Array<string>;
+                requires_auth: boolean;
+            };
         };
         metadata: {
             latestVersion: number;
@@ -404,6 +431,15 @@ export type GetAppDto = {
         uid?: number;
         url_suffix?: string;
         website?: string;
+        catalog_format?: 'orbis' | 'umbrel';
+        catalog_revision?: string;
+        gallery?: Array<string>;
+        release_notes?: string;
+        compatibility?: {
+            supported: boolean;
+            reasons: Array<string>;
+            requires_auth: boolean;
+        };
     };
     metadata: {
         latestVersion: number;
@@ -457,6 +493,15 @@ export type SearchAppsDto = {
         short_desc: string;
         supported_architectures: Array<'amd64' | 'arm64'>;
         urn: string;
+        catalog_format?: 'orbis' | 'umbrel';
+        catalog_revision?: string;
+        gallery?: Array<string>;
+        release_notes?: string;
+        compatibility?: {
+            supported: boolean;
+            reasons: Array<string>;
+            requires_auth: boolean;
+        };
     }>;
     total: number;
     nextCursor?: string | null;
@@ -488,8 +533,8 @@ export type AllAppStoresDto = {
 };
 
 export type UpdateAppStoreBodyDto = {
-    enabled: boolean;
-    name: string;
+    enabled?: boolean;
+    name?: string;
 };
 
 export type UpdateAppStoreDto = {
@@ -554,6 +599,7 @@ export type DeleteAppBackupBodyDto = {
 };
 
 export type LinksDto = {
+    editCapabilities?: Array<'guest-visibility-patch.v1'>;
     links: Array<{
         description: string | null;
         iconUrl: string | '' | null;
@@ -579,6 +625,8 @@ export type EditLinkBodyDto = {
     description?: string;
     iconUrl?: string | '';
     isVisibleOnGuestDashboard?: boolean;
+} | {
+    isVisibleOnGuestDashboard: boolean;
 };
 
 export type GetUserConfigDto = {

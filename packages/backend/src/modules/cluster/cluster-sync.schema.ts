@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { BadRequestException } from '@nestjs/common';
 import { type } from 'arktype';
 import { desktopAppearanceSchema } from '@runtipi/common/schemas';
+import { desktopColourPresetSchema, desktopMaterialFields, hasDesktopMaterialOverrides } from '@runtipi/common/schemas/desktop-appearance';
 import type { DesktopPreferences } from '../desktop-preferences/desktop-preferences.service';
 import { customisationAppearanceKeys } from '../desktop-preferences/desktop-preferences-sync';
 
@@ -19,7 +20,7 @@ const urn = type('string <= 180').narrow((value) => /^[a-zA-Z0-9_-]+:[a-zA-Z0-9_
 export const syncAppearanceKeys = customisationAppearanceKeys;
 export const customisationSchema = type({
   '+': 'reject',
-  preset: "'frost' | 'graphite' | 'forest' | 'stone' | 'ocean' | 'blush'",
+  preset: desktopColourPresetSchema,
   mode: "'light' | 'dark' | 'system'",
   density: "'comfortable' | 'compact'",
   appearance: desktopAppearanceSchema.narrow((value) => Object.keys(value).every((key) => (syncAppearanceKeys as readonly string[]).includes(key))),
@@ -86,12 +87,31 @@ export function syncHash(value: unknown): string {
     .digest('hex');
 }
 export function projectCustomisation(value: DesktopPreferences): SyncValues['customisation'] {
+  const appearance = value.appearance ?? {};
+  const legacyMaterialMode = hasDesktopMaterialOverrides(appearance) ? 'custom' : 'default';
+  const selected = syncAppearanceKeys.filter(
+    (key) =>
+      appearance[key] !== undefined &&
+      (key !== 'materialMode' || appearance.materialMode !== legacyMaterialMode) &&
+      (key !== 'themeColour' || appearance.themeColour !== null),
+  );
   return parseSync(customisationSchema, {
     preset: value.preset,
     mode: value.mode ?? 'light',
     density: value.density,
-    appearance: Object.fromEntries(
-      syncAppearanceKeys.filter((key) => value.appearance?.[key] !== undefined).map((key) => [key, value.appearance?.[key]]),
-    ),
+    appearance: Object.fromEntries(selected.map((key) => [key, appearance[key]])),
   });
+}
+
+export function mergeCustomisationAppearance(
+  current: DesktopPreferences['appearance'],
+  incoming: SyncValues['customisation']['appearance'],
+): NonNullable<DesktopPreferences['appearance']> {
+  const appearance = { ...current, ...incoming };
+  // A complete legacy sender supplies all five values, including null resets.
+  if (desktopMaterialFields.every((key) => Object.hasOwn(incoming, key))) {
+    appearance.materialMode = incoming.materialMode ?? (hasDesktopMaterialOverrides(incoming) ? 'custom' : 'default');
+    appearance.themeColour = incoming.themeColour ?? null;
+  }
+  return appearance;
 }

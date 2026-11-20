@@ -332,6 +332,15 @@ export class ClusterService {
         return this.updates.plan(payload.tag);
       case 'apply-orbis':
         return this.updates.apply(payload.planId);
+      case 'smart-tools-plan':
+      case 'smart-tools-status':
+        if (Object.keys(payload).length) throw new BadRequestException('SMART tools requests do not accept options.');
+        return action === 'smart-tools-plan' ? this.updates.smartToolsPlan() : this.updates.packageJob();
+      case 'smart-tools-apply':
+        if (Object.keys(payload).length !== 1 || !Object.hasOwn(payload, 'planId')) {
+          throw new BadRequestException('Confirm one reviewed smartmontools installation.');
+        }
+        return this.updates.smartToolsApply(payload.planId);
       case 'drive-self-test':
         if (Object.keys(payload).length !== 2 || !Object.hasOwn(payload, 'id') || !Object.hasOwn(payload, 'kind')) {
           throw new BadRequestException('Choose one drive and a supported self-test.');

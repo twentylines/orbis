@@ -4,7 +4,7 @@ import { useRestoreRequests } from './receiver-request-context';
 import { restoreRequestStopped, restoreExportStage, cancelSourceRestoreRequest } from './receiver-request-api';
 import { useRef, useState, useLayoutEffect } from 'react';
 
-export function SourceRestoreRequests() {
+export function SourceRestoreRequests({ requestId }: { requestId?: string } = {}) {
   const requests = useRestoreRequests();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -18,7 +18,10 @@ export function SourceRestoreRequests() {
       generation.current++;
     };
   }, [requests?.authority]);
-  const records = requests?.snapshot.incoming.filter((value) => !restoreRequestStopped.has(value.status) && value.expiresAt > Date.now()) ?? [];
+  const records =
+    requests?.snapshot.incoming.filter(
+      (value) => (!requestId || value.id === requestId) && !restoreRequestStopped.has(value.status) && value.expiresAt > Date.now(),
+    ) ?? [];
   if (!requests || !records.length) return null;
   return (
     <section className="receiver-request-card" aria-label="Incoming restore requests">

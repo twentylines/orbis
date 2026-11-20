@@ -306,7 +306,7 @@ export function SystemResetPanel() {
         <h3>Reset Orbis</h3>
         <p>Return to setup while keeping installed applications and their data.</p>
       </div>
-      <Button type="button" intent="danger" onClick={() => setOpen(true)}>
+      <Button type="button" intent="danger" data-setting-review="reset-orbis" onClick={() => setOpen(true)}>
         Reset
       </Button>
       <SystemResetWizard open={open} onClose={() => setOpen(false)} />

@@ -1,6 +1,20 @@
 import { useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { IconArrowUpRight, IconSearch, IconX } from '@tabler/icons-react';
+import {
+  IconArchive,
+  IconBrush,
+  IconBuildingStore,
+  IconFileText,
+  IconHistory,
+  IconInfoCircle,
+  IconLock,
+  IconNetwork,
+  IconRefresh,
+  IconSearch,
+  IconSettings,
+  IconShieldLock,
+  IconX,
+} from '@tabler/icons-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { DialogVisibilityContext } from '@/components/ui/Dialog/Dialog';
@@ -17,7 +31,21 @@ import {
   type SettingsSection,
 } from '../helpers/settings-catalogue';
 import './settings-page.css';
-import { SettingsSaveActions, SettingsSaveButton, SettingsSaveFeedback, SettingsSaveStatus } from './settings-save';
+import { SettingsSaveActions, SettingsSaveStatus } from './settings-save';
+
+const sectionIcons: Record<SettingsSection, typeof IconSettings> = {
+  general: IconSettings,
+  customise: IconBrush,
+  store: IconBuildingStore,
+  updates: IconRefresh,
+  backups: IconArchive,
+  'time-machine': IconHistory,
+  security: IconShieldLock,
+  https: IconLock,
+  cluster: IconNetwork,
+  logs: IconFileText,
+  about: IconInfoCircle,
+};
 
 export function SettingsPanel({ active, children, id, label }: { active: boolean; children: ReactNode; id: string; label: string }) {
   const parentVisible = useContext(WindowVisibilityContext);
@@ -150,7 +178,6 @@ export function SettingsSearch({ access, onSetting }: { access: SettingsAccess; 
                     <strong>{entry.label}</strong>
                     <small>{settingsSections.find((item) => item.id === entry.section)?.label}</small>
                   </span>
-                  <IconArrowUpRight size={18} aria-hidden="true" />
                 </button>
               </li>
             ))}
@@ -196,11 +223,15 @@ export function SettingsWorkspace({
       <div className="settings-layout">
         <nav className="settings-sidebar" aria-label="Settings categories">
           <SelectionGroup className="settings-category-list">
-            {sections.map((entry) => (
-              <button key={entry.id} type="button" aria-pressed={active === entry.id} onClick={() => onSection(entry.id)}>
-                <strong>{entry.label}</strong>
-              </button>
-            ))}
+            {sections.map((entry) => {
+              const Icon = sectionIcons[entry.id];
+              return (
+                <button key={entry.id} type="button" aria-pressed={active === entry.id} onClick={() => onSection(entry.id)}>
+                  <Icon size={20} stroke={1.75} aria-hidden="true" />
+                  <strong>{entry.label}</strong>
+                </button>
+              );
+            })}
           </SelectionGroup>
         </nav>
         <div className="settings-mobile-navigation">
@@ -215,11 +246,17 @@ export function SettingsWorkspace({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {sections.map((entry) => (
-                <SelectItem key={entry.id} value={entry.id}>
-                  {entry.label}
-                </SelectItem>
-              ))}
+              {sections.map((entry) => {
+                const Icon = sectionIcons[entry.id];
+                return (
+                  <SelectItem key={entry.id} value={entry.id} textValue={entry.label}>
+                    <span className="settings-category-choice">
+                      <Icon size={20} stroke={1.75} aria-hidden="true" />
+                      <span>{entry.label}</span>
+                    </span>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>
@@ -227,12 +264,9 @@ export function SettingsWorkspace({
           <div className="settings-heading-container">
             <header className="settings-content-heading">
               <h2>{pending && active === 'updates' ? <output>Loading Updates…</output> : section.label}</h2>
-              <SettingsSaveActions>
-                <SettingsSaveButton hideWhenClean={active === 'about'} />
-              </SettingsSaveActions>
+              <SettingsSaveActions />
             </header>
           </div>
-          <SettingsSaveFeedback />
           {settingsSections
             .filter((entry) => visited.has(entry.id) || entry.id === active)
             .map((entry) => (

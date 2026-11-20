@@ -337,13 +337,6 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.drive-health-test-history-toggle > svg {
-  flex: none;
-  transition: transform 180ms ease;
-}
-.drive-health-test-history-toggle[data-state="open"] > svg {
-  transform: rotate(90deg);
-}
 .drive-health-test-history-content {
   overflow: hidden;
 }

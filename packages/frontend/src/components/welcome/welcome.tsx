@@ -1,3 +1,4 @@
+import { PaneScrollProgress } from '@/components/pane-scroll-progress';
 import { InterstellarBackdrop } from '@/components/startup/interstellar-backdrop';
 import { useStartupSession } from '@/components/startup/startup-boundary';
 import { acknowledgeWelcome } from '@/api-client';
@@ -25,10 +26,22 @@ import { ColourModeChoice } from '@/desktop/colour-mode-choice';
 import { useResolvedColourMode } from '@/desktop/colour-mode';
 import { AppLaunchModeChoice } from '@/desktop/app-launch-mode-choice';
 import { useReducedMotion, useReducedTransparency } from '@/desktop/motion-preferences';
-import { themePresets, presetLabels } from '@/desktop/wallpaper-presets';
-import { IconArrowLeft, IconArrowRight, IconCheck, IconDeviceDesktop, IconHistory, IconLeaf, IconSparkles } from '@tabler/icons-react';
+import { visibleThemePresets, presetLabels, presetWallpaperColours } from '@/desktop/wallpaper-presets';
+import { IconArrowLeft, IconCheck, IconDeviceDesktop, IconHistory, IconLeaf, IconSparkles } from '@tabler/icons-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  lazy,
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import { AnimatePresence, motion, useIsPresent } from 'framer-motion';
 import { useNavigate } from 'react-router';
 import { finishSetup, prepareSetupHome, setupAppUpdateSteps, setupScheduleAllowsNext, type SetupAppChoices, type SetupSaveStep } from './setup-save';
@@ -68,12 +81,18 @@ export function SetupCustomisation({ draft, onChange }: { draft: DesktopPreferen
       <fieldset className="orbis-setup-choice-group">
         <legend>Colour</legend>
         <div className="orbis-setup-palettes">
-          {themePresets.map((preset) => (
+          {visibleThemePresets.map((preset) => (
             <button
               key={preset}
               type="button"
               className="orbis-setup-palette"
               data-palette={preset}
+              style={
+                {
+                  '--swatch': presetWallpaperColours[preset].themeColour,
+                  '--swatch-surface': `color-mix(in srgb, ${presetWallpaperColours[preset].themeColour} 15%, white)`,
+                } as CSSProperties
+              }
               aria-pressed={draft.preset === preset}
               onClick={() => onChange({ ...draft, preset, appearance: { ...draft.appearance, accent: null } })}
             >
@@ -545,6 +564,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
       >
         <section className="orbis-setup" aria-labelledby={headingId} aria-busy={saving || transitioning} data-reduced={reduceSetupMotion}>
           <SetupStage stageRef={stage} stepElement={stepElement} reduced={reduceSetupMotion} pending={stepLayoutPending}>
+            <PaneScrollProgress label="Setup choices scroll position" />
             <AnimatePresence initial={false} mode="sync" custom={direction}>
               <SetupStepPanel
                 key={step}
@@ -951,7 +971,6 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                 }
               >
                 {saving ? 'Saving…' : step === 'ready' ? 'Finish' : 'Continue'}
-                {saving || step === 'ready' ? null : <IconArrowRight size={18} aria-hidden="true" />}
               </Button>
             )}
           </footer>

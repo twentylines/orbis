@@ -192,7 +192,7 @@ describe('theme drafts and global Save preparation', () => {
     );
     await store.load();
     expect(store.setColourText(alpine, 'accent', '#12')).toBe(true);
-    expect(store.setNumberText(alpine, 'panel-opacity', '9')).toBe(true);
+    expect(store.setNumberText(alpine, 'panel-opacity', '101')).toBe(true);
     expect(store.binding(alpine)?.values.find((item) => item.key === 'accent')?.value).toBe('#12');
     expect(store.preview(alpine)?.values.find((item) => item.key === 'accent')?.value).toBe('#445566');
     expect(store.preview(alpine)?.values.find((item) => item.key === 'panel-opacity')?.value).toBe(97);

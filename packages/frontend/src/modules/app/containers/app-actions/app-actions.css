@@ -22,6 +22,22 @@
   flex: 1 1 120px;
   min-width: 120px;
 }
+.app-launch-actions {
+  display: flex;
+  flex: 1 1 176px;
+  min-width: 0;
+  gap: 4px;
+}
+.app-launch-actions > .app-launch-button {
+  flex: 1;
+  min-width: 0;
+}
+.app-launch-actions > .app-address-button {
+  flex: none;
+  width: var(--app-action-size);
+  min-width: var(--app-action-size);
+  padding: 0;
+}
 .desktop .app-actions .more-button {
   position: relative;
   width: var(--app-action-size);

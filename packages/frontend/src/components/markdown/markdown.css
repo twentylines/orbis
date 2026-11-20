@@ -2,8 +2,23 @@
   max-width: 100%;
   overflow-x: auto;
   margin-block: 4px;
+  scroll-margin-block: 16px;
 }
-.orbis-markdown-table:focus-visible {
+.orbis-markdown-code {
+  max-width: 100%;
+  overflow: auto;
+  margin-block: 1em;
+  scroll-margin-block: 16px;
+}
+.orbis-markdown-code > pre {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  margin: 0;
+  overflow: visible;
+}
+.orbis-markdown-table:focus-visible,
+.orbis-markdown-code:focus-visible {
   outline: 3px solid var(--desktop-focus, #99c2ff);
   outline-offset: 2px;
 }

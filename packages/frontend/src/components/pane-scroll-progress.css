@@ -1,0 +1,51 @@
+.pane-scroll-progress {
+  display: none;
+}
+@media (forced-colors: none) and (any-pointer: fine) {
+  [data-pane-scroll-enhanced] {
+    scrollbar-width: none;
+  }
+  [data-pane-scroll-enhanced] > .pane-scroll-progress {
+    position: sticky;
+    z-index: 2;
+    display: block;
+    inline-size: 0;
+    block-size: 0;
+    margin-inline-start: auto;
+  }
+}
+.pane-scroll-progress-control {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  inline-size: 12px;
+  display: grid;
+  justify-items: center;
+  touch-action: none;
+  cursor: ns-resize;
+  border-radius: 6px;
+}
+.pane-scroll-progress-control::before,
+.pane-scroll-progress-control > span {
+  grid-area: 1 / 1;
+  inline-size: 3px;
+  block-size: 100%;
+  border-radius: 3px;
+}
+.pane-scroll-progress-control::before {
+  content: "";
+  background: color-mix(in srgb, var(--desktop-muted) 42%, transparent);
+}
+.pane-scroll-progress-control > span {
+  background: var(--desktop-accent);
+  transform-origin: top;
+}
+.pane-scroll-progress-control:focus-visible {
+  outline: 2px solid var(--desktop-focus);
+  outline-offset: -4px;
+}
+@media (forced-colors: none) and (any-pointer: fine) {
+  [data-dock-scroll-ring] > .pane-scroll-progress:not(:hover, :focus-within) {
+    opacity: 0;
+  }
+}

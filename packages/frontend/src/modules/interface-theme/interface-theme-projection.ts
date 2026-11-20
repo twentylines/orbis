@@ -26,11 +26,14 @@ export function projectInterfaceThemePreferences<T extends { preset: string; app
       const value = values.get(key);
       return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max ? value : null;
     };
-    appearance.surfaceOpacity = number('panel-opacity', 90, 100);
-    appearance.chromeOpacity = number('chrome-opacity', 80, 100);
+    appearance.surfaceOpacity = number('panel-opacity', 0, 100);
+    appearance.chromeOpacity = number('chrome-opacity', 0, 100);
     appearance.glassBlur = number('panel-blur', 0, 40);
     appearance.chromeBlur = number('chrome-blur', 0, 64);
     appearance.glassTint = number('panel-tint', 0, 30);
+    appearance.materialMode = values.get('material-mode') === 'custom' ? 'custom' : 'default';
+    const themeColour = values.get('theme-colour');
+    appearance.themeColour = typeof themeColour === 'string' && /^#[a-f0-9]{6}$/i.test(themeColour) ? themeColour : null;
     const transparency = values.get('transparency');
     appearance.transparency = transparency === 'glass' || transparency === 'solid' ? transparency : 'system';
     appearance.motion = values.get('motion') === 'reduced' ? 'reduced' : 'system';
@@ -39,7 +42,7 @@ export function projectInterfaceThemePreferences<T extends { preset: string; app
     if (
       theme.descriptor.kind === 'builtin' &&
       typeof palette === 'string' &&
-      ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'].includes(palette)
+      ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush', 'burgundy', 'amber', 'rose', 'orange'].includes(palette)
     )
       preset = palette;
   }
@@ -71,6 +74,8 @@ export function interfaceThemeValuesFromLegacy(
 ): InterfaceThemeSettingsEntry['values'] {
   const mapping = {
     accent: base.appearance.accent,
+    'theme-colour': base.appearance.themeColour,
+    'material-mode': base.appearance.materialMode,
     'panel-opacity': base.appearance.surfaceOpacity,
     'chrome-opacity': base.appearance.chromeOpacity,
     'panel-blur': base.appearance.glassBlur,

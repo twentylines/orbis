@@ -33,7 +33,7 @@ export function SmartToolsInstaller({
   });
   const job = status.data?.job;
   const installing = job?.kind === 'smart-tools' && ['queued', 'running'].includes(job.state);
-  const blocked = job && ['queued', 'running', 'failed', 'interrupted'].includes(job.state);
+  const blocked = job && !job.retryable && ['queued', 'running', 'failed', 'interrupted'].includes(job.state);
   const install = useMutation({
     mutationFn: async () => {
       if (!plan || Date.now() >= plan.expiresAt * 1000) throw new Error('This installation review expired. Cancel and review it again.');
@@ -56,11 +56,18 @@ export function SmartToolsInstaller({
   useEffect(() => {
     if (job?.kind !== 'smart-tools' || !['complete', 'failed', 'interrupted'].includes(job.state)) return;
     if (requested === job.id) setRequested(null);
-    if (job.state === 'complete') {
+    if (job.state === 'complete' && missing) {
       setOpen(false);
       void client.invalidateQueries({ queryKey: ['drive-health', drivePath] });
     }
-  }, [job?.id, job?.kind, job?.state, requested, client, drivePath]);
+  }, [job?.id, job?.kind, job?.state, requested, client, drivePath, missing]);
+  const refreshRequest = async () => {
+    const current = await status.refetch();
+    if (current.isSuccess && current.data.available && current.data.job?.id !== requested) {
+      setRequested(null);
+      setPlan(null);
+    }
+  };
   const waiting = review.isPending || install.isPending;
   return (
     <div className="drive-health-smart-tools">
@@ -79,13 +86,13 @@ export function SmartToolsInstaller({
                 review.mutate();
               }}
             >
-              {installing ? 'Installing SMART tools…' : 'Install SMART tools'}
+              {installing ? 'Installing smartmontools…' : 'Install smartmontools'}
             </button>
           </div>
         </>
       ) : null}
       {installing ? (
-        <output className="workspace-message">Installing SMART tools. Drive health will refresh when installation finishes.</output>
+        <output className="workspace-message">Installing smartmontools. Drive health will refresh when installation finishes.</output>
       ) : null}
       {job?.kind === 'smart-tools' && ['failed', 'interrupted'].includes(job.state) ? (
         <p role="alert">{job.message || 'Installation stopped. Inspect the host package transaction before retrying.'}</p>
@@ -93,7 +100,16 @@ export function SmartToolsInstaller({
       {blocked && !installing && job?.kind !== 'smart-tools' ? (
         <p>Finish the current host package transaction before installing SMART tools.</p>
       ) : null}
-      {requested && !installing ? <output>Checking the installation request. Refresh task status before retrying.</output> : null}
+      {requested && !installing ? (
+        <div>
+          <output>Checking the installation request.</output>
+          {open ? null : (
+            <button className="btn" type="button" disabled={waiting || status.isFetching} onClick={() => void refreshRequest()}>
+              Refresh status
+            </button>
+          )}
+        </div>
+      ) : null}
       <Dialog
         open={open}
         onOpenChange={(value) => {
@@ -102,12 +118,11 @@ export function SmartToolsInstaller({
       >
         <DialogContent size="sm" closeDisabled={waiting} className="drive-health-confirmation-dialog">
           <DialogHeader>
-            <DialogTitle>Install SMART tools?</DialogTitle>
+            <DialogTitle>Install smartmontools?</DialogTitle>
           </DialogHeader>
           <DialogDescription>
             <p>
-              Install smartmontools from Ubuntu’s trusted package repository. Background monitoring stays as configured; this action does not enable
-              it or start a disk test.
+              Install smartmontools and its required dependencies from Ubuntu’s trusted package repositories. Ubuntu applies its package defaults.
             </p>
             {review.isPending ? <output>Reviewing the host package requirements…</output> : null}
             {plan ? (
@@ -128,8 +143,21 @@ export function SmartToolsInstaller({
               Cancel
             </button>
             {requested ? (
-              <button className="btn btn-primary" type="button" disabled={status.isFetching} onClick={() => void status.refetch()}>
+              <button className="btn btn-primary" type="button" disabled={waiting || status.isFetching} onClick={() => void refreshRequest()}>
                 Refresh status
+              </button>
+            ) : (review.isError || install.isError || !plan) && !waiting ? (
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={Boolean(blocked)}
+                onClick={() => {
+                  setPlan(null);
+                  install.reset();
+                  review.mutate();
+                }}
+              >
+                Review again
               </button>
             ) : (
               <button className="btn btn-primary" type="button" disabled={waiting || !plan || Boolean(blocked)} onClick={() => install.mutate()}>

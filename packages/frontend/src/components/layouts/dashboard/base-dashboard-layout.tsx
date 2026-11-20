@@ -8,13 +8,22 @@ type BaseDashboardLayoutProps = PropsWithChildren<{
   pageTitle?: ReactNode;
   layoutActions?: ReactNode;
   showPageHeader?: boolean;
+  startupReady?: boolean;
 }>;
 
-export const BaseDashboardLayout = ({ header, pageTitle, layoutActions, showPageHeader = true, children }: BaseDashboardLayoutProps) => {
+export const BaseDashboardLayout = ({
+  header,
+  pageTitle,
+  layoutActions,
+  showPageHeader = true,
+  startupReady = true,
+  children,
+}: BaseDashboardLayoutProps) => {
   const { preferences, resolvedMode } = useDesktopPreferences();
   return (
     <div
       className="desktop desktop-guest orbis-theme"
+      data-startup-ready={startupReady}
       data-desktop-mode={resolvedMode}
       data-desktop-preset={preferences.preset}
       data-desktop-wallpaper={preferences.wallpaper}

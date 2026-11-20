@@ -4,6 +4,20 @@ import {
   type InterfaceThemeDescriptor,
   type InterfaceThemeSetting,
 } from './interface-theme.js';
+import { desktopColourPresets, type DesktopColourPreset } from './desktop-appearance.js';
+
+const paletteLabels: Record<DesktopColourPreset, string> = {
+  frost: 'Frost',
+  graphite: 'Graphite',
+  forest: 'Forest',
+  stone: 'Warm stone',
+  ocean: 'Ocean',
+  blush: 'Blush',
+  burgundy: 'Burgundy',
+  amber: 'Amber',
+  rose: 'Rose',
+  orange: 'Orange',
+};
 
 function freeze<T>(value: T): T {
   if (value && typeof value === 'object') {
@@ -40,20 +54,25 @@ export function orbisThemeSettings(includePalette: boolean): InterfaceThemeSetti
             group: 'colour',
             kind: 'enum',
             default: 'frost',
-            options: [
-              { value: 'frost', label: 'Frost' },
-              { value: 'graphite', label: 'Graphite' },
-              { value: 'forest', label: 'Forest' },
-              { value: 'stone', label: 'Warm stone' },
-              { value: 'ocean', label: 'Ocean' },
-              { value: 'blush', label: 'Blush' },
-            ],
+            options: desktopColourPresets.map((value) => ({ value, label: paletteLabels[value] })),
           },
         ] satisfies InterfaceThemeSetting[])
       : []),
     { key: 'accent', label: 'Accent colour', group: 'colour', kind: 'colour', default: null },
-    integer('panel-opacity', 'Panel opacity', 90, 100),
-    integer('chrome-opacity', 'Bar and dock opacity', 80, 100),
+    { key: 'theme-colour', label: 'Theme colour', group: 'colour', kind: 'colour', default: null },
+    {
+      key: 'material-mode',
+      label: 'Surface controls',
+      group: 'material',
+      kind: 'enum',
+      default: 'default',
+      options: [
+        { value: 'default', label: 'Default' },
+        { value: 'custom', label: 'Custom' },
+      ],
+    },
+    integer('panel-opacity', 'Panel opacity', 0, 100),
+    integer('chrome-opacity', 'Bar and dock opacity', 0, 100),
     integer('panel-blur', 'Panel blur', 0, 40),
     integer('chrome-blur', 'Bar and dock blur', 0, 64),
     integer('panel-tint', 'Panel tint', 0, 30),

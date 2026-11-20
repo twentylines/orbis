@@ -1,6 +1,6 @@
 import { useTasks, taskLabels, taskStates } from '@/desktop/tasks';
-import { IconArrowUpRight } from '@tabler/icons-react';
 import { Link } from 'react-router';
+import { taskProgressLabel } from '@/desktop/task-progress';
 
 export function AppOperations({ appUrn }: { appUrn: string }) {
   const history = useTasks();
@@ -9,9 +9,7 @@ export function AppOperations({ appUrn }: { appUrn: string }) {
     <section className="app-operations" aria-label="Application operations">
       <header>
         <h3>Recent operations</h3>
-        <Link to={`/tasks?app=${encodeURIComponent(appUrn)}`}>
-          Task centre <IconArrowUpRight size={16} aria-hidden="true" />
-        </Link>
+        <Link to={`/tasks?app=${encodeURIComponent(appUrn)}`}>Task centre</Link>
       </header>
       {history.isPending ? <p>Reading operation history…</p> : null}
       {history.isError ? (
@@ -31,7 +29,7 @@ export function AppOperations({ appUrn }: { appUrn: string }) {
               <summary>
                 <strong>{taskLabels[task.action]}</strong>
                 <time dateTime={task.createdAt}>{new Date(task.createdAt).toLocaleString()}</time>
-                <span>{taskStates[task.status]}</span>
+                <span>{taskProgressLabel(task) ?? taskStates[task.status]}</span>
               </summary>
               <dl>
                 <div>

@@ -2,6 +2,9 @@ import { prefersReducedMotion } from './motion-setting';
 
 const colours = [
   '--desktop-surface',
+  '--desktop-pane-surface',
+  '--desktop-menu-surface',
+  '--desktop-menu-muted',
   '--desktop-chrome',
   '--desktop-chrome-opaque',
   '--desktop-ink',
@@ -30,7 +33,7 @@ const colours = [
   '--workspace-heading-ink',
   '--workspace-heading-shadow',
   '--desktop-action-rgb',
-  '--desktop-base-chrome-rgb',
+  '--desktop-chrome-rgb',
   '--desktop-wallpaper-shade-start-alpha',
   '--desktop-wallpaper-shade-end-alpha',
 ];
@@ -39,6 +42,20 @@ let motion: Animation | null = null;
 let paletteRevision = 0;
 let snapshotTransition: ViewTransition | null = null;
 let paletteIdentity: string | undefined;
+
+export function readAppearanceColours(element: Element) {
+  const style = getComputedStyle(element);
+  const scene = [
+    ...colours,
+    '--desktop-pane-filter',
+    '--desktop-glass-filter',
+    '--desktop-chrome-filter',
+    '--desktop-pane-status-background',
+    '--desktop-status-background',
+    '--desktop-wallpaper-tint',
+  ];
+  return Object.fromEntries(scene.map((name) => [name, style.getPropertyValue(name).trim()]).filter(([, value]) => value));
+}
 
 export function transitionAppearance(apply: () => void, animate: boolean, identity?: string) {
   if (identity !== undefined && identity === paletteIdentity) return;
@@ -95,11 +112,7 @@ export function transitionAppearance(apply: () => void, animate: boolean, identi
     });
     registered.add(name);
   }
-  const read = () => {
-    const style = getComputedStyle(root);
-    return Object.fromEntries(colours.map((name) => [name, style.getPropertyValue(name).trim()]));
-  };
-  const before = read();
+  const before = readAppearanceColours(root);
   motion?.cancel();
   motion = null;
   apply();
@@ -107,7 +120,7 @@ export function transitionAppearance(apply: () => void, animate: boolean, identi
     delete root.dataset.orbisPaletteMotion;
     return;
   }
-  const after = read();
+  const after = readAppearanceColours(root);
   if (colours.every((name) => before[name] === after[name])) {
     delete root.dataset.orbisPaletteMotion;
     return;

@@ -10,6 +10,9 @@ export type SystemActivityRecord = {
   feed: 'exports' | 'imports' | 'restore' | 'core' | 'points';
   title: string;
   status: string;
+  state?: string;
+  phase?: string;
+  message?: string;
   bucket: SystemActivityBucket;
   time?: number;
   completed?: number;
@@ -18,22 +21,18 @@ export type SystemActivityRecord = {
   action: string;
   stale?: boolean;
 };
-export type SystemActivitySnapshot = { records: SystemActivityRecord[]; notices: string[]; loading: boolean; incomplete: boolean };
+export type ActivitySourceIssue = { message: string; retry?: () => unknown };
+export type SystemActivitySnapshot = {
+  records: SystemActivityRecord[];
+  notices: ActivitySourceIssue[];
+  loading: boolean;
+  incomplete: boolean;
+};
 const backups = '/settings?tab=backups#setting-server-backups';
 export const systemActivitySort = (a: { time?: number }, b: { time?: number }) => (b.time ?? 0) - (a.time ?? 0);
 export const settingsExportActive = (job: SettingsBackupJob) => job.status === 'queued' || job.status === 'running';
 export const settingsImportActive = (job: SettingsBackupImportJob) => job.status === 'uploading' || job.status === 'reviewing';
 export const systemActivityPollInterval = (enabled: boolean, failed: boolean, active: boolean) => (enabled && !failed && active ? 1500 : false);
-
-export function boundedSystemActivity(records: SystemActivityRecord[]) {
-  const counts = new Map<string, number>();
-  return [...records].sort(systemActivitySort).filter((record) => {
-    const key = `${record.feed}:${record.bucket}`;
-    const count = counts.get(key) ?? 0;
-    counts.set(key, count + 1);
-    return count < 3;
-  });
-}
 
 export function systemActivityRecords(input: {
   exports?: SettingsBackupJob[];
@@ -48,6 +47,8 @@ export function systemActivityRecords(input: {
     records.push({
       key: `export:${job.id}`,
       feed: 'exports',
+      state: job.status,
+      phase: job.stage,
       title: 'Settings backup',
       status: {
         queued: 'Queued',
@@ -69,6 +70,8 @@ export function systemActivityRecords(input: {
     records.push({
       key: `import:${job.id}`,
       feed: 'imports',
+      state: job.status,
+      message: job.message,
       title: 'Settings backup import',
       status: {
         'awaiting-upload': 'Waiting for a file',
@@ -92,6 +95,8 @@ export function systemActivityRecords(input: {
     records.push({
       key: `restore:${job.id}`,
       feed: 'restore',
+      state: job.status,
+      phase: job.stage,
       title: 'Latest settings restore',
       status: {
         running: 'Restoring settings',
@@ -120,6 +125,9 @@ export function systemActivityRecords(input: {
     records.push({
       key: `core:${core.id}`,
       feed: 'core',
+      state: core.state,
+      phase: core.phase ?? undefined,
+      message: core.message,
       title: `Orbis ${core.targetTag}`,
       status: states[core.state] ?? 'Status not confirmed',
       bucket: coreJobIsActive(core) ? 'active' : ['complete', 'succeeded', 'rolled-back'].includes(core.state) ? 'recent' : 'review',
@@ -131,13 +139,22 @@ export function systemActivityRecords(input: {
     });
   }
   for (const point of input.points?.available ? input.points.points : []) {
-    if (point.status === 'capturing') continue;
     records.push({
       key: `point:${point.id}`,
       feed: 'points',
+      state: point.status,
+      phase: point.stage,
+      message: point.issue?.message,
       title: 'Time Machine capture',
-      status: point.status === 'sealed' ? 'Capture saved' : point.status === 'failed' ? 'Capture failed' : 'Capture interrupted',
-      bucket: point.status === 'sealed' ? 'recent' : 'review',
+      status:
+        point.status === 'capturing'
+          ? 'Capturing'
+          : point.status === 'sealed'
+            ? 'Capture saved'
+            : point.status === 'failed'
+              ? 'Capture failed'
+              : 'Capture interrupted',
+      bucket: point.status === 'capturing' ? 'active' : point.status === 'sealed' ? 'recent' : 'review',
       time: point.createdAt,
       completed: point.completedBytes,
       total: point.totalBytes,
@@ -145,5 +162,5 @@ export function systemActivityRecords(input: {
       action: 'View Time Machine',
     });
   }
-  return boundedSystemActivity(records);
+  return records.sort(systemActivitySort);
 }

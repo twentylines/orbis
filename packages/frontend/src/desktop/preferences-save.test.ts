@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import { PreferenceSaveQueue, PreferenceSession } from './preference-save-queue';
 
 const scenarios = [
+  'appearance-search-autosave',
+  'colour-slider-autosave',
   'workspace-sort-keyboard',
   'workspace-sort-reparent-focus',
   'workspace-sort-swap',
@@ -11,9 +13,12 @@ const scenarios = [
   'workspace-capability-downgrade',
   'workspace-old-backend',
   'workspace-capable-backend',
+  'logical-processors-save',
+  'logical-processors-old-backend',
   'provider-composition',
   'hmr-context-identity',
   'batched-edit-commit',
+  'retired-wallpaper-readback',
   'newer-edit-during-save',
   'queued-account-switch',
   'autosave-account-switch',

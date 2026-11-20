@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router';
 import { useAppContext } from '@/context/app-context';
 import { useUserContext } from '@/context/user-context';
@@ -12,6 +12,7 @@ import {
   settingsImportActive,
   systemActivityRecords,
   systemActivityPollInterval,
+  type ActivitySourceIssue,
   type SystemActivitySnapshot,
 } from './system-task-activity';
 
@@ -33,6 +34,7 @@ export function systemActivityPollingOwner(surface: 'popup' | 'page', pathname: 
 }
 
 export function useSystemTaskActivity(open: boolean, surface: 'popup' | 'page' = 'popup'): SystemActivitySnapshot {
+  const queryClient = useQueryClient();
   const { user } = useAppContext();
   const { sessionAbortSignal } = useUserContext();
   const visible = useWindowVisible();
@@ -73,48 +75,76 @@ export function useSystemTaskActivity(open: boolean, surface: 'popup' | 'page' =
     refetchIntervalInBackground: false,
     refetchInterval: (query) => systemActivityPollInterval(poll, Boolean(query.state.error), query.state.data?.job?.status === 'running'),
   });
-  const points = useQuery({ queryKey: ['time-machine-points', user.id], queryFn: ({ signal }) => readTimeMachinePoints(signal), enabled: false });
+  const points = useQuery({
+    queryKey: ['time-machine-points', user.id],
+    queryFn: ({ signal }) => readTimeMachinePoints(AbortSignal.any([signal, sessionAbortSignal])),
+    enabled,
+    staleTime: 10_000,
+    retry: false,
+  });
   const host = useHostUpdateWatch();
   if (user.operator !== true || sessionAbortSignal.aborted)
-    return { records: [], notices: ['System activity is restricted to an authorized operator session.'], loading: false, incomplete: true };
-  const notices: string[] = [];
-  let incomplete = false;
+    return {
+      records: [],
+      notices: [{ message: 'System activity is restricted to an authorized operator session.' }],
+      loading: false,
+      incomplete: true,
+    };
+  const notices: ActivitySourceIssue[] = [];
+  const retryRead = (refetch: (options: { cancelRefetch: boolean }) => unknown) => () => {
+    if (enabled && !sessionAbortSignal.aborted) return refetch({ cancelRefetch: false });
+  };
   for (const [label, query] of [
     ['Settings backups', exports],
     ['Settings imports', imports],
     ['Settings restore', restore],
   ] as const) {
     if (query.isError) {
-      notices.push(systemActivityReadIssue(label, query.error));
-      incomplete = true;
+      const unsupported = query.error instanceof SettingsBundleApiError && [401, 403, 404].includes(query.error.status);
+      notices.push({ message: systemActivityReadIssue(label, query.error), retry: unsupported ? undefined : retryRead(query.refetch) });
     }
   }
-  if (imports.data?.available === false) {
-    notices.push('Settings imports are unavailable on this server.');
-    incomplete = true;
+  if (imports.data?.available === false && !imports.isError) {
+    notices.push({ message: 'Settings imports are unavailable on this server.', retry: retryRead(imports.refetch) });
   }
-  if (host.unavailable || host.core?.available === false) {
-    notices.push('Orbis update status is unavailable. Any shown update is the last reported state.');
-    incomplete = true;
+  const updateStatusUnavailable = host.unavailable || host.core?.available === false;
+  if (updateStatusUnavailable) {
+    notices.push({
+      message: 'Orbis update status is unavailable. Any shown update is the last reported state.',
+      retry: () => {
+        if (enabled && !sessionAbortSignal.aborted)
+          return queryClient.refetchQueries({ queryKey: ['orbis-host-update-status'], exact: true, type: 'active' }, { cancelRefetch: false });
+      },
+    });
   }
-  if (!host.core) {
-    notices.push('Orbis update activity has not been reported.');
-    incomplete = true;
-  }
-  if (!points.data) {
-    notices.push('Saved-point history has not been loaded. Open Time Machine to review saved captures.');
-    incomplete = true;
-  } else if (points.isError || !points.data.available) {
-    notices.push('Saved-point history could not be refreshed. Open Time Machine to check it.');
-    incomplete = true;
+  if (points.isError || (points.data && !points.data.available)) {
+    notices.push({ message: 'Saved-point history could not be refreshed. Open Time Machine to check it.', retry: retryRead(points.refetch) });
   }
   const records = systemActivityRecords({
-    exports: exports.isError ? undefined : exports.data?.jobs,
-    imports: imports.isError || imports.data?.available === false ? undefined : imports.data?.jobs,
-    restore: restore.isError ? undefined : restore.data?.job,
+    exports: exports.data?.jobs,
+    imports: imports.data?.available === false ? undefined : imports.data?.jobs,
+    restore: restore.data?.job,
     core: host.core,
-    coreStale: host.unavailable || host.core?.available === false,
-    points: points.isError ? undefined : points.data,
+    coreStale: updateStatusUnavailable,
+    points: points.data,
   });
-  return { records, notices, loading: exports.isPending || imports.isPending || restore.isPending, incomplete };
+  return {
+    records: records.map((record) => ({
+      ...record,
+      stale:
+        record.stale ||
+        (record.feed === 'exports'
+          ? exports.isError
+          : record.feed === 'imports'
+            ? imports.isError
+            : record.feed === 'restore'
+              ? restore.isError
+              : record.feed === 'points'
+                ? points.isError
+                : false),
+    })),
+    notices,
+    loading: enabled && (exports.isPending || imports.isPending || restore.isPending || points.isPending || (!host.core && !host.unavailable)),
+    incomplete: notices.length > 0 || (!host.core && !enabled),
+  };
 }

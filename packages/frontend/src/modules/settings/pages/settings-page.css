@@ -93,8 +93,6 @@
 .settings-search-results button {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
   width: 100%;
   min-height: 52px;
   padding: 10px 12px;
@@ -116,10 +114,6 @@
   margin-top: 3px;
   color: var(--desktop-muted);
   font-size: 0.8125rem;
-}
-.settings-search-results svg {
-  flex: none;
-  color: var(--desktop-muted);
 }
 .settings-search-empty {
   padding: 14px 12px;
@@ -174,6 +168,9 @@
   border-radius: 12px;
 }
 .settings-category-list > button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   min-width: 0;
   min-height: 56px;
   padding: 10px 12px;
@@ -184,6 +181,17 @@
   font: inherit;
   text-align: start;
   line-height: 1.35;
+}
+.settings-category-list > button > svg,
+.settings-category-choice > svg {
+  flex: none;
+  color: var(--desktop-accent);
+}
+.settings-category-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 .settings-category-list strong {
   display: block;
@@ -221,14 +229,6 @@
   letter-spacing: -0.025em;
   margin: 0;
 }
-.settings-save-actions > .btn {
-  min-width: 5.5rem;
-  min-height: 44px;
-  flex: none;
-}
-.settings-save-secondary-actions {
-  display: contents;
-}
 .settings-save-secondary-actions > .btn {
   min-width: 5.5rem;
   min-height: 44px;
@@ -241,9 +241,6 @@
   margin: 0;
   padding: 0;
   border: 0;
-}
-.settings-save-feedback {
-  margin-bottom: 20px;
 }
 .settings-content-heading p {
   margin: 0;
@@ -408,16 +405,6 @@
 }
 
 @media (min-width: 1100px) and (min-height: 640px) {
-  .desktop-main:has(> .desktop-route-page[data-route-section="settings"]:not([hidden])) {
-    min-height: 0;
-    padding-bottom: calc(var(--orbis-dock-height, 78px) + 44px);
-  }
-  .desktop .desktop-route-page[data-route-section="settings"] {
-    display: flex;
-    flex-direction: column;
-    height: calc(100dvh - var(--orbis-bar-bottom, 88px) - var(--orbis-dock-height, 78px) - 68px);
-    min-height: 0;
-  }
   .desktop .desktop-route-page[data-route-section="settings"][hidden] {
     display: none;
   }
@@ -480,7 +467,7 @@
   min-width: 0;
   container: settings-save-header / inline-size;
 }
-.settings-save-actions {
+.settings-save-secondary-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -489,6 +476,9 @@
   flex: none;
   min-width: 0;
   max-width: 100%;
+}
+.settings-save-secondary-actions:empty {
+  display: none;
 }
 .settings-save-activity {
   color: var(--desktop-muted);
@@ -531,7 +521,7 @@
   padding: clamp(16px, 2.5cqi, 24px);
   border: 1px solid color-mix(in srgb, var(--desktop-line) 75%, transparent);
   border-radius: 18px;
-  background: color-mix(in srgb, var(--desktop-ink) 4%, var(--desktop-surface));
+  background: color-mix(in srgb, var(--desktop-preset-tint) 5%, var(--desktop-content-fill));
 }
 .settings-category-panel .appearance > .appearance-section:first-child,
 .settings-category-panel .settings-store-groups > .appearance-section:first-child,

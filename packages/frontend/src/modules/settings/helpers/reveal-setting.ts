@@ -1,12 +1,25 @@
 import type { SettingEntry } from './settings-catalogue';
 
 const controls = 'input:not([type="hidden"]):not([disabled]), button:not([disabled]), textarea:not([disabled]), [tabindex="0"]';
+
+export function openSettingReview(root: HTMLElement, entry: SettingEntry, action: string): boolean {
+  if (entry.review?.id !== action) return false;
+  const target = root.querySelector<HTMLElement>(`[id="${entry.anchor}"]`);
+  if (!target || target.closest('[hidden]')) return false;
+  const section = target.matches('h1,h2,h3') ? (target.closest('section') ?? target.parentElement ?? target) : target;
+  const button = section.querySelector<HTMLButtonElement>(`button[data-setting-review="${entry.review.id}"]`);
+  if (!button || button.disabled || button.closest('[hidden]')) return false;
+  button.click();
+  return true;
+}
+
 export function revealSetting(root: HTMLElement, entry: SettingEntry, reduced: boolean): boolean {
   const target = root.querySelector<HTMLElement>(`[id="${entry.anchor}"]`);
   if (!target || target.closest('[hidden]')) return false;
   const section = target.matches('h1,h2,h3') ? (target.closest('section') ?? target.parentElement ?? target) : target;
+  const findLabel = (text: string) => [...section.querySelectorAll('label')].find((label) => label.textContent?.trim().startsWith(text))?.control;
   const labelled = entry.controlLabel
-    ? [...section.querySelectorAll('label')].find((label) => label.textContent?.trim().startsWith(entry.controlLabel ?? ''))?.control
+    ? (findLabel(entry.controlLabel) ?? (entry.fallbackControlLabel ? findLabel(entry.fallbackControlLabel) : null))
     : null;
   if (entry.controlLabel && !labelled) return false;
   const focus =

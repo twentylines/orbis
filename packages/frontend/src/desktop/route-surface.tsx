@@ -1,3 +1,4 @@
+import { PaneScrollProgress } from '@/components/pane-scroll-progress';
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PropsWithChildren, type ReactNode } from 'react';
 import { revealPageFocus, useDesktopWindows } from './window-viewport';
 import { prefersReducedMotion } from './motion-setting';
@@ -19,13 +20,14 @@ export function RouteSurface({ label, icon, section, children }: PropsWithChildr
   const reveal = useRef<{ animation: Animation; target: number } | null>(null);
   const { preferences } = useDesktopPreferences();
   const desktop = useDesktopWindows();
-  const fixedCatalogue = desktop && /^\/(?:apps|app-store|settings)(?:\/|$)/.test(section);
+  const routeSection = section.split('/')[1];
+  const fixedViewport = desktop && /^\/(?:apps|app-store|settings|tasks|monitor|updates)(?:\/|$)/.test(section);
   const sizeKey = `${section}:${window.innerWidth}:${preferences.appearance.textScale}`;
   const reserve = useMemo(() => sizes.get(sizeKey) ?? Math.max(280, window.innerHeight - 210), [sizeKey]);
   useLayoutEffect(() => {
     const view = surface.current;
     // These pages size their scrolling panes from the viewport, not their contents.
-    if (!view || fixedCatalogue) return;
+    if (!view || fixedViewport) return;
     const animateTo = (from: number, height: number, duration = sectionMotionTiming.surface as number) => {
       reveal.current?.animation.cancel();
       view.dataset.cardRevealing = 'true';
@@ -110,7 +112,7 @@ export function RouteSurface({ label, icon, section, children }: PropsWithChildr
       reveal.current = null;
       delete view.dataset.cardRevealing;
     };
-  }, [fixedCatalogue, sizeKey]);
+  }, [fixedViewport, sizeKey]);
   useLayoutEffect(
     () => () => {
       if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
@@ -125,7 +127,7 @@ export function RouteSurface({ label, icon, section, children }: PropsWithChildr
           ref={surface}
           className="desktop-view desktop-view-app desktop-route-window desktop-route-page"
           data-window-navigation="page"
-          data-route-section={section.split('/')[1]}
+          data-route-section={routeSection}
           style={{ '--orbis-route-reserve': `${reserve}px` } as CSSProperties}
           aria-label={label}
         >
@@ -152,6 +154,7 @@ export function RouteSurface({ label, icon, section, children }: PropsWithChildr
               });
             }}
           >
+            {desktop && (routeSection === 'apps' || routeSection === 'updates') ? <PaneScrollProgress label={`${label} scroll position`} /> : null}
             {children}
           </div>
         </section>

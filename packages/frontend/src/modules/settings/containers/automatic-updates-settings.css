@@ -58,25 +58,8 @@
 .automatic-updates-server-time time {
   font-variant-numeric: tabular-nums;
 }
-.automatic-updates-save {
-  justify-self: start;
-  min-height: 44px;
-  max-width: 100%;
-  padding: 11px 18px;
-  border: 0;
-  border-radius: 9px;
-  color: var(--desktop-action-ink);
-  background: var(--desktop-action);
-  font: inherit;
-  font-weight: 650;
-  line-height: 1.45;
-  cursor: pointer;
-}
 .automatic-updates-settings :disabled {
   cursor: not-allowed;
-}
-.automatic-updates-save:disabled {
-  opacity: 0.6;
 }
 
 .automatic-updates-settings .settings-save-fields {

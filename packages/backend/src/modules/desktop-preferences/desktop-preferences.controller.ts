@@ -94,8 +94,13 @@ export class DesktopPreferencesController {
 
   @Put()
   @ApiResponse({ type: DesktopPreferencesDto })
-  put(@Req() request: Request, @Body() body: DesktopPreferencesDto, @Headers('x-orbis-reset-generation') generation?: string) {
+  put(
+    @Req() request: Request,
+    @Body() body: DesktopPreferencesDto,
+    @Headers('x-orbis-reset-generation') generation?: string,
+    @Headers('x-orbis-unsplash-selection') expectedSelection?: string,
+  ) {
     if (!request.user?.id) throw new UnauthorizedException();
-    return this.preferences.write(request.user.id, body, generation ?? null);
+    return this.preferences.write(request.user.id, body, generation ?? null, expectedSelection);
   }
 }

@@ -14,7 +14,7 @@ import { TimeMachineCaptureRuntime } from './time-machine-capture-runtime';
 it('recovers durable Node capture credentials through the actual Python root fence after both clients and host service restart', async () => {
   const data = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-fence-bridge-')));
   const { point } = await new TimeMachineStore(data).create(1, 2);
-  const fixtureTemp = await fs.mkdtemp(path.join(os.homedir(), '.orbis-fence-bridge-'));
+  const fixtureTemp = await fs.mkdtemp(path.join(os.tmpdir(), 'f-'));
   const child = spawn('python3', [path.resolve('../../scripts/test_orbis_host_capture_fence.py'), '--serve-journal-fixture', point.id], {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, TMPDIR: fixtureTemp },

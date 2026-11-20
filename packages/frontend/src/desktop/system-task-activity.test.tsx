@@ -4,8 +4,8 @@ import { MemoryRouter } from 'react-router';
 import { defaultSettingsBackupSelection, settingsBackupJobSchema } from '@runtipi/common/schemas/settings-backup';
 import { settingsBackupImportJobSchema, settingsBackupRestoreJobSchema } from '@runtipi/common/schemas/settings-backup-import';
 import { readSettingsExports, SettingsBundleApiError } from '@/modules/system-backups/settings-bundle-api';
-import { DesktopTaskPanel } from './desktop-task-panel';
-import { SystemActivityRow, SystemTaskActivitySection } from './system-task-activity-view';
+import { groupTaskCentreAttempts, taskCentreRecords } from './task-centre-model';
+import { DesktopTaskPanel, TaskDetails } from './desktop-task-panel';
 import { systemActivityRecords, systemActivityPollInterval, settingsExportActive, settingsImportActive } from './system-task-activity';
 import { systemActivityReadIssue, systemActivityPollingOwner } from './use-system-task-activity';
 
@@ -55,14 +55,14 @@ test('a ready backup read through the existing bounded API appears as recent act
     </MemoryRouter>,
   );
   expect(markup).toContain('Backup ready');
-  expect(markup).toContain('1 KiB of 1 KiB reported');
-  expect(markup).toContain('/settings?tab=backups#setting-server-backups');
+  expect(markup).not.toContain('0 B');
+  expect(markup).toContain('data-task-key="export:');
   expect(markup).not.toContain('No recent activity');
   expect(markup).not.toContain('Download');
   expect(markup).not.toContain('Password');
 });
 
-test('activity is sorted and bounded to three records per feed and bucket without mutating server data', () => {
+test('activity preserves every available record while sorting without mutating server data', () => {
   const jobs = [1, 5, 2, 4, 3].map((index) => backup(index));
   const original = jobs.map((job) => job.id);
   const records = systemActivityRecords({ exports: [...jobs, backup(6, 'failed'), backup(7, 'running')] });
@@ -70,6 +70,8 @@ test('activity is sorted and bounded to three records per feed and bucket withou
     `export:${id(5)}`,
     `export:${id(4)}`,
     `export:${id(3)}`,
+    `export:${id(2)}`,
+    `export:${id(1)}`,
   ]);
   expect(records[0]?.bucket).toBe('active');
   expect(records[1]?.bucket).toBe('review');
@@ -92,7 +94,7 @@ test('imports retain server statuses and processed bytes without inventing a com
   expect(settingsImportActive(job)).toBe(false);
 });
 
-test('latest restore has no invented timestamp and renders separately from chronologically sorted history', () => {
+test('latest restore retains its actual result without an invented timestamp', () => {
   const restore = settingsBackupRestoreJobSchema.assert({
     id: id(1),
     status: 'succeeded',
@@ -102,14 +104,16 @@ test('latest restore has no invented timestamp and renders separately from chron
   });
   const records = systemActivityRecords({ restore });
   expect(records[0]?.time).toBeUndefined();
+  const record = groupTaskCentreAttempts(taskCentreRecords({ tasks: [], system: records }))[0];
+  if (!record) throw new Error('Missing restore fixture');
   const markup = renderToStaticMarkup(
     <MemoryRouter>
-      <SystemTaskActivitySection activity={{ records, notices: [], loading: false, incomplete: false }} />
+      <TaskDetails record={record} close={mock()} />
     </MemoryRouter>,
   );
-  expect(markup).toContain('aria-label="Latest settings restore"');
+  expect(markup).toContain('Latest settings restore');
   expect(markup).toContain('Restore completed');
-  expect(markup).toContain('time not provided');
+  expect(markup).not.toContain('<dt>Reported</dt>');
   expect(markup).not.toContain('<time');
   expect(markup).not.toContain('No system activity');
 });
@@ -143,9 +147,11 @@ test('stale core status retains a last-reported label and suppresses progress an
   });
   const record = records[0];
   if (!record) throw new Error('Expected the existing core job');
+  const projected = groupTaskCentreAttempts(taskCentreRecords({ tasks: [], system: [record] }))[0];
+  if (!projected) throw new Error('Missing projected core fixture');
   const markup = renderToStaticMarkup(
     <MemoryRouter>
-      <SystemActivityRow record={record} />
+      <TaskDetails record={projected} close={mock()} />
     </MemoryRouter>,
   );
   expect(markup).toContain('last reported');
@@ -157,8 +163,8 @@ test('additional feeds are operator/session/visibility gated and reuse cache key
   const source = await Bun.file(new URL('./use-system-task-activity.ts', import.meta.url)).text();
   expect(source).toContain('open && visible && user.operator === true && !sessionAbortSignal.aborted');
   expect(source).toContain("['orbis-settings-bundles', user.id]");
-  expect(source.match(/AbortSignal.any\(\[signal, sessionAbortSignal\]\)/g)?.length).toBe(3);
-  expect(source).toMatch(/queryKey: \['time-machine-points', user.id\][\s\S]*?enabled: false/);
+  expect(source.match(/AbortSignal.any\(\[signal, sessionAbortSignal\]\)/g)?.length).toBe(4);
+  expect(source).toMatch(/queryKey: \['time-machine-points', user.id\][\s\S]*?enabled,/);
   expect(source).toContain('const host = useHostUpdateWatch()');
   expect(source).not.toContain('/api/host-updates');
   const page = await Bun.file(new URL('../modules/tasks/pages/tasks.tsx', import.meta.url)).text();

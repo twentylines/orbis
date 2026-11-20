@@ -111,6 +111,7 @@ export class AppStoreService {
    * @param body The new data to update the app store with
    */
   public async updateAppStore(slug: string, body: UpdateAppStoreBodyDto) {
+    if (body.name === undefined && body.enabled === undefined) throw new BadRequestException('Provide a store name or enabled state.');
     return this.withLock(appStoreLockKey(slug), async () => {
       const current = await this.appStoreRepository.getAppStoreBySlug(slug);
       if (!current) throw new NotFoundException(`App store ${slug} not found`);

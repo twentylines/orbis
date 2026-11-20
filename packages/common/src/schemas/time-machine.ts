@@ -1,7 +1,7 @@
 import { workspaceLayoutSchema, toolbarOrderSchema } from './workspace-layout.js';
 import { historicalIconsAssetSchema } from './time-machine-icons.js';
 import { type } from 'arktype';
-import { desktopAppearanceSchema } from './desktop-appearance.js';
+import { desktopAppearanceSchema, desktopColourPresetSchema, desktopWallpaperPresetSchema } from './desktop-appearance.js';
 import { themePackManifestSchema } from './theme-pack.js';
 
 export const timeMachineLimits = { points: 16, bytes: 128 * 1024 ** 3, metadataBytes: 512 * 1024, apps: 512 } as const;
@@ -150,12 +150,12 @@ export const timeMachinePreviewSchema = type({
   capturedAt: timestamp,
   desktop: type({
     serverName: 'string > 0 & string <= 40',
-    preset: type.enumerated('frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'),
+    preset: desktopColourPresetSchema,
     mode: type.enumerated('light', 'dark', 'system'),
     density: type.enumerated('comfortable', 'compact'),
     wallpaper: type.enumerated('sandstone', 'tidal', 'canopy'),
     wallpaperMode: type.enumerated('theme', 'custom'),
-    wallpaperPreset: type.enumerated('frost', 'graphite', 'forest', 'stone', 'ocean', 'blush', null),
+    wallpaperPreset: desktopWallpaperPresetSchema,
     appearance: desktopAppearanceSchema,
     'toolbarOrder?': toolbarOrderSchema,
     workspace: type({

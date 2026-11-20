@@ -129,7 +129,10 @@ export function StartupSurface({
   }, []);
   const serverAppearance = useSyncExternalStore(subscribeServerAppearance, readServerAppearance, serverAppearanceSnapshot);
   const fresh = freshAppearance || (typeof document !== 'undefined' && document.documentElement.dataset.orbisFreshAppearance === 'restore');
-  const current = appearance ?? (fresh || setupSpace || setupSigningIn ? (serverAppearance ?? cached) : cached);
+  // The card, circle and wallpaper are one captured scene. Keep its palette
+  // with it until the ready destination is revealed by the same crossfade.
+  const captured = signingIn ? morph?.appearance : undefined;
+  const current = captured?.choice ?? appearance ?? (fresh || setupSpace || setupSigningIn ? (serverAppearance ?? cached) : cached);
   const mode = useResolvedColourMode(current?.mode ?? 'system');
   useSessionWallpaperInk(surface, Boolean(morph || signingIn || setupSigningIn || loggingOff || resumingLogout));
   useLayoutEffect(() => {
@@ -205,6 +208,7 @@ export function StartupSurface({
       style={
         morph
           ? ({
+              ...captured?.colours,
               '--orbis-session-background': morph.background,
               '--orbis-session-shade': morph.shade,
               '--orbis-session-dim': morph.dim,

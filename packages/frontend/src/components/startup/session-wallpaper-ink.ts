@@ -44,20 +44,31 @@ function readPixels(image: HTMLImageElement) {
 export function observeSessionWallpaperInk(element: HTMLDivElement) {
   let frame: number | null = null;
   let active = true;
+  let sampledStyle: string | undefined;
+  const inkInputs = '.orbis-startup-copy, .orbis-startup-title, .orbis-interstellar, .desktop-wallpaper-layer';
   const update = () => {
     frame = null;
     if (!active) return;
     const title = element.querySelector<HTMLElement>('.orbis-startup-title');
-    const image = element.querySelector<HTMLImageElement>('.desktop-wallpaper-layer img:last-of-type');
     if (!title) return;
-    const fallback = element.dataset.desktopMode === 'light' ? '#000000' : '#ffffff';
+    const visible = (node: Element | null) => {
+      if (!node) return false;
+      const style = getComputedStyle(node);
+      return style.visibility !== 'hidden' && style.display !== 'none' && style.opacity !== '0';
+    };
+    const nebula = element.querySelector('.orbis-interstellar');
+    // During setup handoff the nebula is clipped to the logo, above this copy.
+    const nebulaBehindCopy = element.dataset.setupSignIn === undefined && visible(nebula);
+    const nebulaImage = nebulaBehindCopy ? element.querySelector<HTMLImageElement>('.orbis-interstellar > img') : null;
+    const wallpaper =
+      element.querySelector<HTMLImageElement>('.desktop-wallpaper-layer img[data-wallpaper-displayed="true"]') ??
+      element.querySelector<HTMLImageElement>('.desktop-wallpaper-layer img:last-of-type');
+    const image = nebulaBehindCopy ? nebulaImage : visible(wallpaper) ? wallpaper : null;
     const apply = (colour: string) => {
       if (element.style.getPropertyValue('--orbis-session-ink') !== colour) element.style.setProperty('--orbis-session-ink', colour);
+      sampledStyle = element.style.cssText;
     };
-    if (image && (!image.complete || !image.naturalWidth)) {
-      apply(fallback);
-      return;
-    }
+    let fallback = '#ffffff';
     try {
       const surfaceStyle = getComputedStyle(element);
       const background = readColour(surfaceStyle.getPropertyValue('--orbis-session-background') || surfaceStyle.backgroundColor);
@@ -67,11 +78,21 @@ export function observeSessionWallpaperInk(element: HTMLDivElement) {
         number,
         number,
       ];
-      const shade = element.querySelector('.desktop-wallpaper-shade');
+      const backgroundPixels = { width: 1, height: 1, sourceWidth: 1, sourceHeight: 1, data: new Uint8ClampedArray([...base, 255]) };
+      fallback =
+        wallpaperTextColour(
+          { pixels: backgroundPixels, fit: 'cover', x: 50, y: 50, dim: 0 },
+          { width: 1, height: 1 },
+          { left: 0, top: 0, width: 1, height: 1 },
+          base,
+          false,
+        ) ?? fallback;
+      if (image && (!image.complete || !image.naturalWidth)) return apply(fallback);
+      const shade = image && image === wallpaper ? element.querySelector('.desktop-wallpaper-shade') : null;
       const tint = shade ? readColour(getComputedStyle(shade).backgroundColor) : undefined;
-      const dim = element.querySelector('.desktop-wallpaper-dim');
+      const dim = image && image === wallpaper ? element.querySelector('.desktop-wallpaper-dim') : null;
       const opacity = dim ? readColour(getComputedStyle(dim).backgroundColor)[3] : 0;
-      const value = image ? readPixels(image) : { width: 1, height: 1, sourceWidth: 1, sourceHeight: 1, data: new Uint8ClampedArray([...base, 255]) };
+      const value = image ? readPixels(image) : backgroundPixels;
       if (!value) return apply(fallback);
       const imageStyle = image ? getComputedStyle(image) : null;
       const position = imageStyle?.objectPosition.split(/\s+/) ?? [];
@@ -93,20 +114,44 @@ export function observeSessionWallpaperInk(element: HTMLDivElement) {
       );
       if (colour) apply(colour);
     } catch {
-      // Cross-origin artwork may forbid canvas reads; the plain mode fallback remains available.
+      // Restricted image reads fall back to the visible surface, never the selected theme mode.
       apply(fallback);
     }
   };
   const schedule = () => {
     if (frame === null) frame = requestAnimationFrame(update);
   };
-  const observer = new MutationObserver(schedule);
+  const observer = new MutationObserver((records) => {
+    if (
+      records.some(({ target, attributeName, type }) => {
+        if (target === document.documentElement) return true;
+        if (target === element) return attributeName !== 'style' || element.style.cssText !== sampledStyle;
+        if (!(target instanceof Element)) return false;
+        if (target.closest(inkInputs)) return true;
+        // React can replace the copy or the scene under their nearest parent.
+        return type === 'childList' && (target.matches('.orbis-startup-content') || target.parentElement === element);
+      })
+    ) {
+      schedule();
+    }
+  });
   observer.observe(element, {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['src', 'srcset', 'style', 'class', 'data-desktop-mode', 'data-desktop-preset'],
+    attributeFilter: [
+      'src',
+      'srcset',
+      'style',
+      'class',
+      'data-desktop-mode',
+      'data-desktop-preset',
+      'data-wallpaper-displayed',
+      'data-setup-sign-in',
+      'data-session-state',
+    ],
   });
+  if (document.documentElement) observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-orbis-session-morph'] });
   const size = new ResizeObserver(schedule);
   const copy = element.querySelector('.orbis-startup-copy');
   if (copy) size.observe(copy);

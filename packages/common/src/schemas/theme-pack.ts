@@ -1,4 +1,5 @@
 import { type } from 'arktype';
+import { desktopColourPresetSchema } from './desktop-appearance.js';
 
 const text = type('string > 0 & string <= 240').narrow(
   (value) => ![...value].some((character) => character.charCodeAt(0) < 32 || '<>'.includes(character)),
@@ -50,7 +51,7 @@ export const themePackManifestSchema = type({
   author: text,
   source,
   license: type({ name: text, url: source }).onUndeclaredKey('reject'),
-  fallbackPreset: type.enumerated('frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'),
+  fallbackPreset: desktopColourPresetSchema,
   light: themePackPaletteSchema,
   dark: themePackPaletteSchema,
   wallpaper: hash,

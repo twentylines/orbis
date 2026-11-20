@@ -15,6 +15,7 @@ import { MonitoringActivityModule } from '@/core/monitoring/monitoring-activity.
 import { OrbisReleaseChannelsService } from './orbis-release-channels.service';
 import { SentinelService } from './sentinel.service';
 import { SentinelReleasesService } from './sentinel-releases.service';
+import { InstalledSoftwareService } from './installed-software.service';
 
 @Module({
   imports: [DockerModule, AppsModule, MonitoringActivityModule],
@@ -23,6 +24,7 @@ import { SentinelReleasesService } from './sentinel-releases.service';
     SystemService,
     SentinelService,
     SentinelReleasesService,
+    InstalledSoftwareService,
     OrbisReleaseService,
     OrbisReleaseChannelsService,
     ContainerTelemetryService,

@@ -14,6 +14,7 @@ import { DesktopPreferencesController } from './desktop-preferences.controller';
 import { DEFAULT_DESKTOP_PREFERENCES, DesktopPreferencesService } from './desktop-preferences.service';
 import { DesktopWallpaperService } from './desktop-wallpaper.service';
 import { ResetState } from '../system-reset/reset-state';
+import { mergeSettingsPreferences, splitSettingsPreferences } from '../system-backups/settings-backup-preferences';
 import { randomUUID } from 'node:crypto';
 
 describe('desktop preferences', () => {
@@ -59,6 +60,34 @@ describe('desktop preferences', () => {
   it('new and reset preferences follow System without changing an explicit user mode', async () => {
     expect(DEFAULT_DESKTOP_PREFERENCES.mode).toBe('system');
     expect((await app.get(DesktopPreferencesService).read(9876)).mode).toBe('system');
+  });
+
+  it('defaults logical processors on and persists an explicit off choice through authenticated PUT, disk and GET', async () => {
+    const file = path.join(directory, 'state', 'desktop', '7.json');
+    const authorization = 'Bearer test';
+    const service = app.get(DesktopPreferencesService);
+    const { showLogicalProcessors: _monitor, ...legacy } = DEFAULT_DESKTOP_PREFERENCES;
+    const get = () => request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', authorization);
+    const put = (body: object) => request(app.getHttpServer()).put('/desktop-preferences').set('Authorization', authorization).send(body);
+    try {
+      expect((await get().expect(200)).body.showLogicalProcessors).toBe(true);
+      await fs.mkdir(path.dirname(file), { recursive: true });
+      await fs.writeFile(file, JSON.stringify(legacy), { mode: 0o600 });
+      expect((await get().expect(200)).body.showLogicalProcessors).toBe(true);
+      expect((await put({ ...legacy, showLogicalProcessors: false }).expect(200)).body.showLogicalProcessors).toBe(false);
+      expect(JSON.parse(await fs.readFile(file, 'utf8')).showLogicalProcessors).toBe(false);
+      expect((await new DesktopPreferencesService(app.get(ConfigurationService)).read(7)).showLogicalProcessors).toBe(false);
+      expect((await get().expect(200)).body.showLogicalProcessors).toBe(false);
+      const sections = splitSettingsPreferences(await service.backupSnapshot(7));
+      expect(sections.settings.showLogicalProcessors).toBe(false);
+      expect(mergeSettingsPreferences(DEFAULT_DESKTOP_PREFERENCES, sections).showLogicalProcessors).toBe(false);
+      expect((await put({ ...legacy, preset: 'forest' }).expect(200)).body).toMatchObject({ showLogicalProcessors: false, preset: 'forest' });
+      await put({ ...legacy, showLogicalProcessors: 'false' }).expect(400);
+      expect((await service.read(7)).showLogicalProcessors).toBe(false);
+      expect((await service.read(8)).showLogicalProcessors).toBe(true);
+    } finally {
+      await fs.rm(file, { force: true });
+    }
   });
 
   it('announces onboarding completion to both connected clients of its account', async () => {
@@ -505,12 +534,15 @@ describe('desktop preferences', () => {
       appearance: {
         ...DEFAULT_DESKTOP_PREFERENCES.appearance,
         accent: '#ffff00',
+        themeColour: '#a82444',
+        wallpaperColours: true,
         textScale: 150,
-        surfaceOpacity: 90,
-        chromeOpacity: 80,
+        surfaceOpacity: 37,
+        chromeOpacity: 0,
         glassBlur: 40,
         chromeBlur: 64,
         glassTint: 30,
+        materialMode: 'custom',
         motion: 'reduced',
         transparency: 'solid',
         lowEffects: true,
@@ -523,14 +555,28 @@ describe('desktop preferences', () => {
         .send({ ...value, appearance });
     await put(value.appearance).expect(200);
     await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer other').expect(200, value);
+    const file = path.join(directory, 'state', 'desktop', '8.json');
+    expect(JSON.parse(await fs.readFile(file, 'utf8')).appearance).toEqual(value.appearance);
+    const reloaded = new DesktopPreferencesService(app.get(ConfigurationService));
+    expect(await reloaded.read(8)).toEqual(value);
     for (const invalid of [
       { accent: 'red' },
+      { themeColour: 'red' },
+      { materialMode: 'automatic' },
+      { wallpaperColours: 'true' },
+      { wallpaperUnsplash: 'https://images.example/not-an-id' },
       { textScale: 84 },
       { textScale: 151 },
       { textScale: 125.5 },
       { textScale: '150' },
-      { chromeOpacity: 79 },
-      { surfaceOpacity: 89 },
+      { chromeOpacity: -1 },
+      { chromeOpacity: 101 },
+      { chromeOpacity: 0.5 },
+      { chromeOpacity: '37' },
+      { surfaceOpacity: -1 },
+      { surfaceOpacity: 101 },
+      { surfaceOpacity: 0.5 },
+      { surfaceOpacity: '37' },
       { glassBlur: 41 },
       { chromeBlur: 65 },
       { chromeBlur: -1 },
@@ -542,5 +588,39 @@ describe('desktop preferences', () => {
       await put({ ...value.appearance, ...invalid }).expect(400);
     }
     await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer other').expect(200, value);
+    const transparent = { ...value.appearance, materialMode: 'default', transparency: 'glass' };
+    await put(transparent).expect(200, { ...value, appearance: transparent });
+    expect((await reloaded.read(8)).appearance).toEqual(transparent);
+    const reset = { ...transparent, surfaceOpacity: null, chromeOpacity: null, themeColour: null };
+    await put(reset).expect(200, { ...value, appearance: reset });
+    expect((await reloaded.read(8)).appearance).toEqual(reset);
+  });
+
+  it('loads legacy opacity overrides without rewriting disk and accepts the new desktop and wallpaper presets', async () => {
+    const file = path.join(directory, 'state', 'desktop', '7.json');
+    const appearance = JSON.stringify({ transparency: 'system', surfaceOpacity: 94, chromeOpacity: 82 });
+    const saved = { ...DEFAULT_DESKTOP_PREFERENCES, appearance: JSON.parse(appearance) };
+    const legacy = JSON.stringify(saved);
+    const auth = { Authorization: 'Bearer test' };
+    try {
+      await fs.mkdir(path.dirname(file), { recursive: true });
+      await fs.writeFile(file, legacy, { mode: 0o600 });
+      const get = () => request(app.getHttpServer()).get('/desktop-preferences').set(auth);
+      expect((await get().expect(200)).body.appearance).toMatchObject({
+        materialMode: 'custom',
+        transparency: 'system',
+        surfaceOpacity: 94,
+        chromeOpacity: 82,
+        themeColour: null,
+      });
+      expect(await fs.readFile(file, 'utf8')).toBe(legacy);
+      for (const preset of ['burgundy', 'amber', 'rose', 'orange'] as const) {
+        const next = { ...saved, preset, wallpaperMode: 'custom', wallpaperPreset: preset };
+        await request(app.getHttpServer()).put('/desktop-preferences').set(auth).send(next).expect(200);
+        expect((await get().expect(200)).body).toMatchObject({ preset, wallpaperPreset: preset });
+      }
+    } finally {
+      await fs.rm(file, { force: true });
+    }
   });
 });

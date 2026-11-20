@@ -1,7 +1,6 @@
 import { Button } from '@/components/ui/Button';
-import { Switch } from '@/components/ui/Switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useMutation, useSuspenseQuery } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { CodeEditor } from '@/components/code-editor/code-editor';
 import { yaml } from '@codemirror/lang-yaml';
 import { Alert, AlertDescription, AlertHeading, AlertIcon } from '@/components/ui/Alert/Alert';
@@ -9,12 +8,10 @@ import type { AppInfo } from '@/types/app.types';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
-import {
-  disableUserConfigMutation,
-  enableUserConfigMutation,
-  getUserConfigOptions,
-  updateUserConfigMutation,
-} from '@/api-client/@tanstack/react-query.gen';
+import { disableUserConfig, enableUserConfig, getUserConfig } from '@/api-client';
+import { getUserConfigOptions, getUserConfigQueryKey, updateUserConfigMutation } from '@/api-client/@tanstack/react-query.gen';
+import { AutosavedSettingSwitch } from '@/modules/settings/components/autosaved-setting-switch';
+import { useAutosavedToggle } from '@/modules/settings/hooks/use-autosaved-toggle';
 import toast from 'react-hot-toast';
 import type { TranslatableError } from '@/types/error.types';
 import './app-user-config.css';
@@ -48,6 +45,7 @@ export const AppUserConfig = (props: AppUserConfigProps) => {
 
 export const AppUserConfigEditors = ({ info, initialAppEnv, initialDockerCompose, initialSourceCompose, initialIsEnabled }: AppUserConfigProps) => {
   const { t } = useTranslation();
+  const client = useQueryClient();
   const [activeTab, setActiveTab] = useState('docker-compose');
 
   const [dockerCompose, setDockerCompose] = useState(initialDockerCompose ?? '');
@@ -64,7 +62,6 @@ export const AppUserConfigEditors = ({ info, initialAppEnv, initialDockerCompose
 `;
 
   const appEnv = initialAppEnv ?? '';
-  const [isEnabled, setIsEnabled] = useState(initialIsEnabled ?? true);
 
   const updateMutation = useMutation({
     ...updateUserConfigMutation(),
@@ -76,27 +73,28 @@ export const AppUserConfigEditors = ({ info, initialAppEnv, initialDockerCompose
     },
   });
 
-  const enableMutation = useMutation({
-    ...enableUserConfigMutation(),
-    onSuccess: () => {
-      setIsEnabled(true);
+  const overrides = useAutosavedToggle({
+    id: `compose-overrides:${info.urn}`,
+    scope: `compose-overrides:${info.urn}`,
+    saved: initialIsEnabled ?? true,
+    save: async (checked, signal) => {
+      const path = { urn: info.urn };
+      const change = checked ? enableUserConfig : disableUserConfig;
+      try {
+        await change({ path, signal, throwOnError: true });
+        const { data } = await getUserConfig({ path, signal, cache: 'no-store', throwOnError: true });
+        if (data?.isEnabled !== checked) throw new Error('The server did not confirm the compose override setting.');
+        const queryKey = getUserConfigQueryKey({ path });
+        await client.cancelQueries({ queryKey, exact: true });
+        signal.throwIfAborted();
+        client.setQueryData(queryKey, data);
+      } catch (error) {
+        signal.throwIfAborted();
+        if (error instanceof Error && error.message === 'APP_ERROR_APP_NOT_FOUND') throw new Error(t(error.message, { id: info.urn }));
+        throw new Error('The compose override setting could not be confirmed. Try again.');
+      }
     },
   });
-
-  const disableMutation = useMutation({
-    ...disableUserConfigMutation(),
-    onSuccess: () => {
-      setIsEnabled(false);
-    },
-  });
-
-  const handleToggleEnabled = (checked: boolean) => {
-    if (checked) {
-      enableMutation.mutate({ path: { urn: info.urn } });
-    } else {
-      disableMutation.mutate({ path: { urn: info.urn } });
-    }
-  };
 
   const handleSave = () => {
     updateMutation.mutate({ path: { urn: info.urn }, body: { dockerCompose: dockerCompose.trimEnd(), appEnv: appEnv.trimEnd() } });
@@ -125,13 +123,13 @@ export const AppUserConfigEditors = ({ info, initialAppEnv, initialDockerCompose
           </TabsContent>
           <TabsContent value="overrides">
             <div className="app-user-config-actions">
-              <Switch label={t('USER_CONFIG_ENABLE')} checked={isEnabled} onCheckedChange={handleToggleEnabled} />
+              <AutosavedSettingSwitch label={t('USER_CONFIG_ENABLE')} toggle={overrides} showStatus />
               <Button onClick={handleSave}>{t('SAVE')}</Button>
             </div>
             <CodeEditor
               label="Compose overrides"
-              readOnly={!isEnabled}
-              value={dockerCompose || (isEnabled ? placeholder : '')}
+              readOnly={!overrides.checked}
+              value={dockerCompose || (overrides.checked ? placeholder : '')}
               height="400px"
               extensions={yamlExtensions}
               onChange={setDockerCompose}

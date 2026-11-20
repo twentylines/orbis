@@ -1,5 +1,5 @@
 import { ConfigurationService } from '@/core/config/configuration.service';
-import { ConflictException, Injectable, type MessageEvent } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, type MessageEvent } from '@nestjs/common';
 import { filter, map, Subject } from 'rxjs';
 import { type } from 'arktype';
 import { randomUUID } from 'node:crypto';
@@ -10,6 +10,7 @@ import { defaultAppLaunch, defaultDesktopAppearance, normaliseDesktopAppearance 
 import { ResetState } from '../system-reset/reset-state';
 import { patchSelectedPreferences, selectedPreferences, UnsupportedDesktopPreferencesError } from './desktop-preferences-sync';
 import { notifyClientStatusChanged } from '@/common/restoration-status';
+import { record, unsplashLibrarySchema } from './desktop-unsplash-state';
 
 export type DesktopPreferences = typeof desktopPreferencesSchema.infer;
 export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences & { workspace: NonNullable<DesktopPreferences['workspace']> } = {
@@ -22,6 +23,7 @@ export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences & { workspace: NonN
   wallpaperPreset: null,
   windows: {},
   appLaunch: defaultAppLaunch,
+  showLogicalProcessors: true,
   showStoreRecommendations: true,
   hiddenStoreRecommendationCategories: [],
   appearance: normaliseDesktopAppearance(),
@@ -128,30 +130,42 @@ export class DesktopPreferencesService {
     return path.join(dataDir, 'state', 'desktop', `${userId}.json`);
   }
 
-  async read(userId: number): Promise<DesktopPreferences> {
+  private async readStored(userId: number): Promise<unknown> {
     try {
-      const raw = await fs.readFile(this.fileFor(userId), 'utf8');
-      const parsed: unknown = JSON.parse(raw);
-      const appearance = parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'appearance' in parsed ? parsed.appearance : undefined;
-      const supported =
-        parsed && typeof parsed === 'object' && !Array.isArray(parsed) && appearance && typeof appearance === 'object' && !Array.isArray(appearance)
-          ? { ...parsed, appearance: Object.fromEntries(Object.entries(appearance).filter(([key]) => Object.hasOwn(defaultDesktopAppearance, key))) }
-          : parsed;
-      const result = desktopPreferencesSchema(supported);
-      return result instanceof type.errors
-        ? DEFAULT_DESKTOP_PREFERENCES
-        : {
-            ...DEFAULT_DESKTOP_PREFERENCES,
-            ...result,
-            wallpaperMode: result.wallpaperMode ?? (result.wallpaperPreset || result.appearance?.wallpaperImage ? 'custom' : 'theme'),
-            mode: result.mode ?? (result.preset === 'graphite' ? 'dark' : 'system'),
-            workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, ...result.workspace },
-            appearance: normaliseDesktopAppearance(result.appearance),
-          };
+      return JSON.parse(await fs.readFile(this.fileFor(userId), 'utf8')) as unknown;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return DEFAULT_DESKTOP_PREFERENCES;
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw error;
     }
+  }
+
+  private clientPreferences(parsed: unknown): DesktopPreferences {
+    const value = record(parsed);
+    const appearance = record(value?.appearance);
+    const supported = appearance
+      ? { ...value, appearance: Object.fromEntries(Object.entries(appearance).filter(([key]) => Object.hasOwn(defaultDesktopAppearance, key))) }
+      : parsed;
+    const result = desktopPreferencesSchema(supported);
+    if (result instanceof type.errors) return DEFAULT_DESKTOP_PREFERENCES;
+    const currentAppearance = normaliseDesktopAppearance(result.appearance);
+    if (currentAppearance.wallpaperUnsplash) {
+      const library = unsplashLibrarySchema(value?.unsplashLibrary);
+      if (library instanceof type.errors || !library.photos.some(({ id }) => id === currentAppearance.wallpaperUnsplash)) {
+        currentAppearance.wallpaperUnsplash = null;
+      }
+    }
+    return {
+      ...DEFAULT_DESKTOP_PREFERENCES,
+      ...result,
+      wallpaperMode: result.wallpaperMode ?? (result.wallpaperPreset || result.appearance?.wallpaperImage ? 'custom' : 'theme'),
+      mode: result.mode ?? (result.preset === 'graphite' ? 'dark' : 'system'),
+      workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, ...result.workspace },
+      appearance: currentAppearance,
+    };
+  }
+
+  async read(userId: number): Promise<DesktopPreferences> {
+    return this.clientPreferences(await this.readStored(userId));
   }
 
   async clientSnapshot(userId: number) {
@@ -162,10 +176,10 @@ export class DesktopPreferencesService {
     });
   }
 
-  async write(userId: number, preferences: DesktopPreferences, generation?: string | null): Promise<DesktopPreferences> {
+  async write(userId: number, preferences: DesktopPreferences, generation?: string | null, expectedSelection?: string): Promise<DesktopPreferences> {
     return this.serialize(userId, async () => {
       await this.assertClientGeneration(generation);
-      return this.writePreferences(userId, preferences);
+      return this.writePreferences(userId, preferences, generation !== undefined, expectedSelection);
     });
   }
 
@@ -188,7 +202,10 @@ export class DesktopPreferencesService {
 
   backupSnapshot(userId: number): Promise<DesktopPreferences> {
     return this.serialize(userId, async () => {
-      const value = desktopPreferencesSchema.onDeepUndeclaredKey('reject').assert(JSON.parse(await this.readSelectedRaw(userId)));
+      const raw: unknown = JSON.parse(await this.readSelectedRaw(userId));
+      const stored = record(raw);
+      const { unsplashLibrary: _serverOnlyLibrary, ...portable } = stored ?? {};
+      const value = desktopPreferencesSchema.onDeepUndeclaredKey('reject').assert(stored ? portable : raw);
       return {
         ...DEFAULT_DESKTOP_PREFERENCES,
         ...value,
@@ -228,17 +245,41 @@ export class DesktopPreferencesService {
     return pending;
   }
 
-  private async writePreferences(userId: number, preferences: DesktopPreferences): Promise<DesktopPreferences> {
+  private async writePreferences(
+    userId: number,
+    preferences: DesktopPreferences,
+    clientWrite: boolean,
+    expectedSelection?: string,
+  ): Promise<DesktopPreferences> {
     const file = this.fileFor(userId);
+    const stored = await this.readStored(userId);
+    const library = record(stored)?.unsplashLibrary;
+    const previous = this.clientPreferences(stored);
+    const showLogicalProcessors = preferences.showLogicalProcessors ?? previous.showLogicalProcessors ?? true;
+    const previousSelection = previous.appearance?.wallpaperUnsplash ?? null;
+    const requestedSelection = preferences.appearance?.wallpaperUnsplash;
+    if (requestedSelection && requestedSelection !== previousSelection) {
+      throw new BadRequestException('Online wallpaper selection is no longer available.');
+    }
+    if (
+      clientWrite &&
+      requestedSelection === null &&
+      (previousSelection !== null || expectedSelection !== undefined) &&
+      expectedSelection !== (previousSelection ?? 'none')
+    ) {
+      throw new ConflictException('The selected wallpaper changed. Reload the selection and try again.');
+    }
     const value = {
       ...DEFAULT_DESKTOP_PREFERENCES,
       ...preferences,
+      showLogicalProcessors,
       wallpaperMode: preferences.wallpaperMode ?? (preferences.wallpaperPreset || preferences.appearance?.wallpaperImage ? 'custom' : 'theme'),
       mode: preferences.mode ?? (preferences.preset === 'graphite' ? 'dark' : 'system'),
       workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, ...preferences.workspace },
       appearance: normaliseDesktopAppearance(preferences.appearance),
     };
-    await this.writeState(file, value);
+    value.appearance.wallpaperUnsplash = requestedSelection === null ? null : previousSelection;
+    await this.writeState(file, library === undefined ? value : { ...value, unsplashLibrary: library });
     this.changes.next(userId);
     return value;
   }

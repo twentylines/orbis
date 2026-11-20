@@ -102,6 +102,24 @@ export class HostUpdatesController {
     return this.hostUpdates.packages();
   }
 
+  @Post('drives/tools/plan')
+  @HttpCode(200)
+  smartToolsPlan(@Body() body: Record<string, unknown>) {
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length) {
+      throw new BadRequestException('Review smartmontools installation without additional options.');
+    }
+    return this.hostUpdates.smartToolsPlan();
+  }
+
+  @Post('drives/tools/apply')
+  @HttpCode(202)
+  smartToolsApply(@Body() body: Record<string, unknown>) {
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 1 || !Object.hasOwn(body, 'planId')) {
+      throw new BadRequestException('Confirm one reviewed smartmontools installation.');
+    }
+    return this.hostUpdates.smartToolsApply(body.planId);
+  }
+
   @Post('drives/test')
   @HttpCode(202)
   driveTest(@Body() body: Record<string, unknown>) {

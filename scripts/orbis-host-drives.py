@@ -182,6 +182,10 @@ def parse_drive(data, device, sampled_at):
     }
 
 
+class SmartToolsMissing(ValueError):
+    pass
+
+
 class DriveHealth:
     def __init__(self, state_dir, clock=time.monotonic):
         self.state_dir, self.clock = Path(state_dir), clock
@@ -202,7 +206,7 @@ class DriveHealth:
                     return path
             except OSError:
                 pass
-        raise ValueError("Install smartmontools on the host to read drive health.")
+        raise SmartToolsMissing("Install smartmontools on the host to read drive health.")
 
     def command(self, arguments):
         with tempfile.TemporaryFile() as output:
@@ -341,6 +345,14 @@ class DriveHealth:
 
     def read(self):
         with self.lock:
+            try:
+                self.executable()
+            except SmartToolsMissing as error:
+                self.sample = {"available": False, "reason": str(error), "toolsMissing": True}
+                return self.sample.copy()
+            if self.sample and self.sample.get("toolsMissing") is True:
+                self.sample = None
+                self.last_attempt = float("-inf")
             if not self.running and self.clock() - self.last_attempt >= 60:
                 self.running = True
                 self.last_attempt = self.clock()

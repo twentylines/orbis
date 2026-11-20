@@ -29,6 +29,14 @@ export const SSEProvider = ({ children }: PropsWithChildren) => {
     reconnect: false,
     timer: undefined as ReturnType<typeof setTimeout> | undefined,
   });
+  const taskRefresh = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const refreshTasks = () => {
+    if (taskRefresh.current !== undefined) return;
+    taskRefresh.current = setTimeout(() => {
+      taskRefresh.current = undefined;
+      void queryClient.invalidateQueries({ queryKey: ['tasks'], exact: true });
+    }, 100);
+  };
   const refresh = (urn?: string, catalogue = false, reconnect = false) => {
     const batch = pending.current;
     if (urn) batch.urns.add(urn);
@@ -46,7 +54,13 @@ export const SSEProvider = ({ children }: PropsWithChildren) => {
       void queryClient.invalidateQueries({ predicate: (query) => appEventAffectsQuery(query.queryKey, urns, refreshCatalogue, refreshDetails) });
     }, 100);
   };
-  useEffect(() => () => clearTimeout(pending.current.timer), []);
+  useEffect(
+    () => () => {
+      clearTimeout(pending.current.timer);
+      clearTimeout(taskRefresh.current);
+    },
+    [],
+  );
 
   const streamStatus = useSSE({
     topic: 'app',
@@ -58,6 +72,7 @@ export const SSEProvider = ({ children }: PropsWithChildren) => {
       refresh(undefined, true, true);
     },
     onPreferencesChanged: announcePreferences,
+    onTasksChanged: refreshTasks,
     onClientStatusChanged: () => {
       announcePreferences();
       void refreshAppContext();

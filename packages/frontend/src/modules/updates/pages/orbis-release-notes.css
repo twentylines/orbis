@@ -55,12 +55,6 @@
   font-size: 0.75rem;
   font-weight: 400;
 }
-.desktop-release-note > summary > svg {
-  transition: transform 180ms ease;
-}
-.desktop-release-note[open] > summary > svg {
-  transform: rotate(180deg);
-}
 .desktop-release-note > summary:focus-visible {
   border-radius: 11px;
   outline: 3px solid var(--desktop-focus);
@@ -89,12 +83,6 @@
     grid-row: 2;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .desktop-release-note > summary > svg {
-    transition: none;
-  }
-}
-
 .desktop-release-revisions {
   display: grid;
   gap: 10px;
@@ -123,11 +111,37 @@
 }
 
 .desktop-release-note .desktop-update-markdown {
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.desktop-release-note .desktop-update-markdown :is(img, video) {
+  max-width: 100%;
+  height: auto;
+}
+.desktop-release-note .desktop-update-markdown .orbis-markdown-code {
+  max-block-size: min(24rem, 55dvh);
+}
+.desktop-release-note .desktop-update-markdown pre {
+  overflow-wrap: normal;
+  white-space: pre;
+}
+.desktop-release-note .desktop-update-markdown pre code {
+  white-space: inherit;
+}
+@container (max-width: 24rem) {
+  .desktop-release-note .desktop-update-markdown :is(ul, ol) :is(ul, ol) {
+    padding-inline-start: 0.8em;
+  }
+  .desktop-release-note .desktop-update-markdown :is(ul, ol) :is(ul, ol) :is(ul, ol) {
+    padding-inline-start: 0.5em;
+  }
 }
 .desktop-release-note .desktop-update-markdown > :last-child {
   margin-bottom: 0;

@@ -6,7 +6,7 @@ import {
   type InterfaceThemeSettingsEntry,
 } from '@runtipi/common/schemas/interface-theme';
 import { builtinInterfaceTheme, registeredInterfaceTheme, legacyThemeVersions } from '@runtipi/common/schemas/interface-theme-registry';
-import { resolveInterfaceThemeSettings } from '@runtipi/common/schemas/interface-theme-resolution';
+import { resolveInterfaceMaterialMode, resolveInterfaceThemeSettings } from '@runtipi/common/schemas/interface-theme-resolution';
 import {
   themeSettingsDocumentSchema,
   themeSettingsMigrationSchema,
@@ -139,6 +139,7 @@ export class ThemeSettingsService {
       });
       const mapping = [
         ['accent', 'accent'],
+        ['themeColour', 'theme-colour'],
         ['surfaceOpacity', 'panel-opacity'],
         ['chromeOpacity', 'chrome-opacity'],
         ['glassBlur', 'panel-blur'],
@@ -155,6 +156,8 @@ export class ThemeSettingsService {
         const values = new Map(mapping.map(([oldKey, key]) => [key as string, legacy.appearance?.[oldKey] ?? null]));
         if (descriptor.kind === 'builtin') values.set('palette', legacy.preset);
         for (const item of current?.values ?? []) values.set(item.key, item.value);
+        const stored = new Map(current?.values.map(({ key, value }) => [key, value]));
+        values.set('material-mode', resolveInterfaceMaterialMode(stored, legacy.appearance?.materialMode));
         const entry = { id: descriptor.id, settingsVersion: descriptor.settingsVersion, values: [...values].map(([key, value]) => ({ key, value })) };
         if (!interfaceThemeSettingsEntryAllows(descriptor, entry))
           throw new ConflictException('Legacy appearance needs a compatibility review before migration.');

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { IconChevronDown, IconUpload, IconTrash } from '@tabler/icons-react';
+import { IconUpload, IconTrash } from '@tabler/icons-react';
+import { DisclosureIndicator } from '@/components/ui/DisclosureIndicator/DisclosureIndicator';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox/Checkbox';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
@@ -43,7 +44,7 @@ export function SourceCertificatePicker({ disabled, value, onChange }: Props) {
           setOpen(!open);
         }}
       >
-        Local certificate <IconChevronDown size={17} aria-hidden="true" />
+        Local certificate <DisclosureIndicator size={17} />
       </Button>
       <AnimatePresence initial={false}>
         {open ? (

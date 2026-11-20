@@ -2,10 +2,10 @@ import { themePackCacheBootstrap } from '@/modules/theme-packs/theme-pack-cache'
 import { applyThemePackAppearanceRuntime, themePackAppearance } from '@/modules/theme-packs/theme-pack-runtime';
 import { applyAppearanceRuntime } from './appearance-runtime';
 import { resolveColourMode } from './colour-mode';
-import { resolveWallpaperKey, type ThemePreset } from './wallpaper-presets';
+import { resolveWallpaperKey, themePresets, type ThemePreset } from './wallpaper-presets';
 
 const appearanceOptions = {
-  presets: ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'],
+  presets: themePresets,
   modes: ['light', 'dark', 'system'],
   wallpapers: ['sandstone', 'tidal', 'canopy'],
 } as const;

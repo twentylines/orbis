@@ -70,10 +70,13 @@ mock.module('@radix-ui/react-dialog', () => ({
   },
   Portal: () => null,
 }));
+const motionLibrary = await import('framer-motion');
 mock.module('framer-motion', () => ({
+  ...motionLibrary,
   animate: () => ({ stop: () => undefined }),
   AnimatePresence: ({ children }: { children: ReactNode }) => children,
   motion: {
+    ...motionLibrary.motion,
     span: (props: { children: number; 'data-alert'?: boolean }) => {
       useLayoutEffect(() => {
         badge = { count: props.children, alert: Boolean(props['data-alert']) };

@@ -44,23 +44,26 @@ export const AuthLayout = ({
   const morphing = useSyncExternalStore(subscribeSessionMorph, hasActiveSessionMorph, noSessionMorph);
   const wasMorphing = useRef(morphing);
   useLayoutEffect(() => {
-    let animation: Animation | undefined;
+    const animations: Animation[] = [];
     const enter = () => {
-      if (prefersReducedMotion() || document.documentElement.dataset.orbisSessionMorph || typeof container.current?.animate !== 'function') return;
-      animation = container.current?.animate(
-        [
-          { opacity: 0, transform: 'translateY(14px)' },
-          { opacity: 1, transform: 'none' },
-        ],
-        { duration: 460, easing: 'cubic-bezier(.2, .7, .2, 1)' },
-      );
-      if (animation) animation.id = 'orbis-auth-enter';
+      const content = container.current;
+      if (!content?.animate || prefersReducedMotion() || document.documentElement.dataset.orbisEffects === 'low' || hasActiveSessionMorph()) return;
+      const timing = { duration: 460, easing: 'cubic-bezier(.2, .7, .2, 1)' };
+      animations.push(content.animate([{ transform: 'translateY(14px)' }, { transform: 'none' }], timing));
+      // An opacity animation on the container makes it a backdrop root and
+      // prevents the card from blurring the wallpaper behind the container.
+      for (const child of content.children) animations.push(child.animate([{ opacity: 0 }, { opacity: 1 }], timing));
+      const start = document.timeline.currentTime;
+      for (const animation of animations) {
+        animation.id = 'orbis-auth-enter';
+        if (typeof start === 'number') animation.startTime = start;
+      }
     };
     if (document.querySelector('.orbis-startup-overlay')) window.addEventListener('orbis-startup-reveal', enter, { once: true });
     else enter();
     return () => {
       window.removeEventListener('orbis-startup-reveal', enter);
-      animation?.cancel();
+      for (const animation of animations) animation.cancel();
     };
   }, []);
   useLayoutEffect(() => {
@@ -88,6 +91,7 @@ export const AuthLayout = ({
       data-desktop-preset={preferences.preset}
       data-desktop-mode={resolvedMode}
       data-desktop-wallpaper={resolveWallpaperKey(preferences)}
+      data-auth-glass={glass || undefined}
       data-setup-saving={(setup && busy) || undefined}
       inert={!setup && morphing}
       onFocusCapture={(event) => revealAuthFocus(event.target)}

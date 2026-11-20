@@ -1657,12 +1657,15 @@ class HostService:
 
     def require_package_clear(self) -> None:
         job = read_private(self.package_job_file)
-        if job and job.get("state") in {"queued", "running", "failed", "interrupted"} and not self.refresh_retryable(job):
+        if job and job.get("state") in {"queued", "running", "failed", "interrupted"} and not (self.refresh_retryable(job) or self.smart_tools_retryable(job)):
             raise ValueError("resolve the host package transaction before changing the Orbis core")
 
     def refresh_retryable(self, job: dict) -> bool:
         if job.get("kind") != "refresh" or job.get("state") not in {"failed", "interrupted"}:
             return False
+        return self.package_worker_inactive(job)
+
+    def package_worker_inactive(self, job: dict) -> bool:
         identifier = job.get("id")
         try:
             uuid.UUID(identifier)
@@ -1727,9 +1730,18 @@ class HostService:
         uuid.UUID(identifier)
         return {
             **{key: job.get(key) for key in ("id", "state", "createdAt", "startedAt", "finishedAt", "message", "exitCode", "rebootRequired", "operationCount")},
-            **({"kind": "refresh"} if job.get("kind") == "refresh" else {}),
+            **({"kind": job["kind"]} if job.get("kind") in {"refresh", "smart-tools"} else {}),
+            **({"retryable": True} if self.smart_tools_retryable(job) else {}),
             "output": terminal_tail(self.state_dir / f"package-job-{identifier}.log"),
         }
+
+    def smart_tools_retryable(self, job: dict) -> bool:
+        return (
+            job.get("kind") == "smart-tools"
+            and job.get("state") == "failed"
+            and job.get("preflightFailed") is True
+            and self.package_worker_inactive(job)
+        )
 
     def require_package_ready(self, allow_refresh_retry: bool = False) -> dict | None:
         self.require_restart_clear()
@@ -1742,9 +1754,54 @@ class HostService:
         if core_job and core_job.get("state") in {"running", "recovering", "interrupted"}:
             raise ValueError("resolve the Orbis core update before changing host packages")
         package_job = self.package_job_status()["job"]
-        if package_job and package_job.get("state") in {"queued", "running", "failed", "interrupted"} and not (allow_refresh_retry and self.refresh_retryable(package_job)):
+        if package_job and package_job.get("state") in {"queued", "running", "failed", "interrupted"} and not (
+            (allow_refresh_retry and self.refresh_retryable(package_job)) or package_job.get("retryable") is True
+        ):
             raise ValueError("resolve the previous host package transaction first")
         return package_job
+
+    def require_smart_tools_ready(self) -> dict | None:
+        job = self.require_package_ready()
+        self.require_core_overlay_clear(read_private(self.job_file))
+        try:
+            self.drives.executable()
+        except DRIVES.SmartToolsMissing:
+            return job
+        raise ValueError("smartmontools is already available. Refresh drive health.")
+
+    def smart_tools_plan(self) -> dict:
+        with self.lock, HOST.host_lock(self.root):
+            self.require_smart_tools_ready()
+            simulation = PACKAGES.simulate_smart_tools()
+            plan_id = str(uuid.uuid4())
+            created = time.time()
+            write_private(self.state_dir / f"package-plan-{plan_id}.json", {
+                "schema": "orbis.smart-tools-plan.v1", "id": plan_id, "root": str(self.root),
+                "createdAt": created, **simulation,
+            })
+            return {"planId": plan_id, "createdAt": created, "expiresAt": created + PLAN_TTL_SECONDS, **simulation}
+
+    def smart_tools_apply(self, plan_id: str) -> dict:
+        if not isinstance(plan_id, str) or not re.fullmatch(r"[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}", plan_id):
+            raise ValueError("Confirm one reviewed smartmontools installation.")
+        with self.lock:
+            with HOST.host_lock(self.root):
+                previous = self.require_smart_tools_ready()
+                plan = read_private(self.state_dir / f"package-plan-{plan_id}.json")
+                if (
+                    not plan
+                    or plan.get("schema") != "orbis.smart-tools-plan.v1"
+                    or plan.get("id") != plan_id
+                    or plan.get("root") != str(self.root)
+                    or not plan_is_current(plan.get("createdAt"), PLAN_TTL_SECONDS)
+                    or (previous and previous.get("id") == plan_id)
+                ):
+                    raise ValueError("Review smartmontools again. The previous review is no longer valid.")
+                write_private(self.package_job_file, {
+                    "schema": "orbis.package-job.v1", "id": plan_id, "kind": "smart-tools",
+                    "state": "queued", "createdAt": time.time(), "message": "Installing smartmontools.",
+                })
+            return self.launch_package_worker(plan_id)
 
     def package_refresh(self) -> dict:
         with self.lock:
@@ -1813,6 +1870,9 @@ class HostService:
     def start_package_worker(self, job: dict) -> dict:
         identifier = job["id"]
         write_private(self.package_job_file, job)
+        return self.launch_package_worker(identifier)
+
+    def launch_package_worker(self, identifier: str) -> dict:
         command = [
             "/usr/bin/systemd-run", f"--unit=orbis-package-{identifier}", "--collect", "--property=Type=exec",
             "/usr/bin/python3", str(Path(__file__).with_name("orbis-host-package-worker.py")), identifier,
@@ -1963,6 +2023,7 @@ class HostService:
         return module.CaptureProgress(self, reader).progress(point)
 
     def status(self) -> dict:
+        smart_capabilities = ["drives.tools-install.v1"] if PACKAGES.smart_tools_supported() else []
         saved = HOST.saved_state(self.root)
         enrolled = self.state_matches(saved)
         core = HOST.current_core(self.root, self.context)
@@ -2003,7 +2064,7 @@ class HostService:
                         job["message"] = "Stable is installed, but its channel change needs recovery. Refresh status to retry."
                         write_private(self.job_file, job)
                         return {
-                            "available": True, "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1", "controller-config.v1"],
+                            "available": True, "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1", "controller-config.v1", *smart_capabilities],
                             "enrolled": enrolled, "currentTag": saved.get("tag"), "currentDigest": saved.get("digest"),
                             "coreState": core.get("state"), "coreHealth": core.get("health"), "imageMatches": True,
                             "job": {key: job.get(key) for key in ("id", "state", "targetTag", "startedAt", "finishedAt", "message")},
@@ -2023,7 +2084,7 @@ class HostService:
             phase = self.aborted_update_phase(job)
         return {
             "available": True,
-            "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1", "controller-config.v1"],
+            "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1", "controller-config.v1", *smart_capabilities],
             "enrolled": enrolled,
             "currentTag": publication.get("tag"),
             "currentDigest": publication.get("digest"),
@@ -3351,6 +3412,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_json(200, result)
             except (ValueError, OSError, RuntimeError, subprocess.SubprocessError):
                 self.send_json(200, {"available": False, "reason": "Nearby discovery is unavailable; enter an address manually"})
+            return
+        if self.path in {"/v1/drives/tools/plan", "/v1/drives/tools/apply"}:
+            if not trusted_capture_peer(self.connection):
+                self.send_json(403, {"error": "A trusted Orbis host connection is required."})
+                return
+            try:
+                data = self.body(1024)
+                if self.path.endswith("/plan"):
+                    if data:
+                        raise ValueError("The smartmontools review does not accept options.")
+                    self.send_json(200, self.server.service.smart_tools_plan())
+                else:
+                    if set(data) != {"planId"}:
+                        raise ValueError("Confirm one reviewed smartmontools installation.")
+                    self.send_json(202, self.server.service.smart_tools_apply(data["planId"]))
+            except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+                self.send_json(409, {"error": str(error) if isinstance(error, ValueError) else "Could not prepare the smartmontools installation."})
             return
         if self.path not in {"/v1/channel", "/v1/plan", "/v1/apply", "/v1/recover", "/v1/packages/plan", "/v1/packages/apply", "/v1/packages/refresh", "/v1/restart/plan", "/v1/restart/apply", "/v1/drives/test"}:
             self.send_json(404, {"error": "not found"})
