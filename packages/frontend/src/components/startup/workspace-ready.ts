@@ -31,6 +31,7 @@ export function waitForWorkspaceReady(surface: HTMLElement | null, ready: () => 
     let pending = false;
     const batch: Promise<void>[] = [];
     for (const image of home.querySelectorAll<HTMLImageElement>('img')) {
+      if (image.dataset?.startupOptional === 'true') continue;
       const source = image.currentSrc || image.src;
       if (image.complete && decoded.get(image) === source) continue;
       if (image.loading === 'lazy') {

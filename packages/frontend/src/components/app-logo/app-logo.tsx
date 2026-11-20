@@ -9,8 +9,10 @@ type AppLogoProps = {
   className?: string;
   alt?: string;
   placeholder?: boolean;
+  loading?: 'eager' | 'lazy';
+  startupOptional?: boolean;
 };
-export const AppLogo = memo(function AppLogo({ urn, url, size = 80, className = '', alt = '' }: AppLogoProps) {
+export const AppLogo = memo(function AppLogo({ urn, url, size = 80, className = '', alt = '', loading, startupOptional = false }: AppLogoProps) {
   const logoUrl = url || (urn ? `/api/marketplace/apps/${encodeURIComponent(urn)}/image` : '/app-not-found.jpg');
   const [failed, setFailed] = useState<string | null>(null);
 
@@ -22,6 +24,8 @@ export const AppLogo = memo(function AppLogo({ urn, url, size = 80, className = 
       height={size}
       alt={alt}
       decoding="async"
+      loading={loading}
+      data-startup-optional={startupOptional || undefined}
       draggable={false}
       style={{ width: `var(--app-logo-size, ${size}px)`, height: `var(--app-logo-size, ${size}px)`, minWidth: `var(--app-logo-size, ${size}px)` }}
       onError={() => setFailed(logoUrl)}

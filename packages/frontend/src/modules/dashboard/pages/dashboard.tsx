@@ -29,7 +29,7 @@ import { ApplicationResize } from './application-resize';
 const DashboardEditing = lazy(() => import('./dashboard-editing'));
 
 import { HomeSystemStatus } from '../components/home-system-status';
-import { SystemHealthAttention } from '../components/system-health-attention';
+import { HomeAttention } from '../components/home-attention';
 import { HomeGreeting } from './home-greeting';
 import './home-heading.css';
 
@@ -243,8 +243,11 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
       // Installed apps and task history still suppress the first-run card when storage is unavailable.
     }
   }, [usedHome, hasStarted, startedKey]);
-  const attention = attentionApps.length;
-  const unhealthy = new Set(containers.data?.containers.filter((item) => item.health === 'unhealthy' && item.appUrn).map((item) => item.appUrn)).size;
+  const unhealthy = new Set(
+    (containers.data?.available && !containers.isError ? containers.data.containers : [])
+      .filter((item) => item.health === 'unhealthy' && item.appUrn)
+      .map((item) => item.appUrn),
+  ).size;
   const activeTasks = tasks.data?.tasks.filter(taskIsActive) ?? [];
 
   const saveWorkspace = (next: WorkspacePreferences) => update({ workspace: next });
@@ -501,40 +504,14 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
       </section>
     ),
     attention: (
-      <section className="workspace-attention" aria-labelledby="workspace-attention-title">
-        <h2 id="workspace-attention-title">Needs attention</h2>
-        <SystemHealthAttention />
-        {unhealthy > 0 ? (
-          <p>
-            {unhealthy} application{unhealthy === 1 ? '' : 's'} with an unhealthy Docker check.{' '}
-            <Link to="/monitor?section=usage&health=attention#containers">Inspect containers</Link>
-          </p>
-        ) : null}
-        {apps.data ? (
-          <p className={attention || unhealthy ? undefined : 'workspace-attention-empty'}>
-            {attention
-              ? `${attention} installed application${attention === 1 ? '' : 's'} stopped or ready to update.`
-              : 'No stopped apps or available updates.'}
-          </p>
-        ) : (
-          <p>Waiting for application status.</p>
-        )}
-        {attention > 0 ? (
-          <>
-            <ul className="workspace-attention-apps">
-              {attentionApps.slice(0, 6).map(({ info, app }) => (
-                <li key={info.urn}>
-                  <Link to={`/apps/${encodeURIComponent(info.urn.split(':')[1] ?? '')}/${encodeURIComponent(info.id)}`}>
-                    <span title={info.name}>{info.name}</span>
-                    <small>{app.status === 'stopped' ? 'Stopped' : 'Update available'}</small>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            <Link to="/apps">View applications</Link>
-          </>
-        ) : null}
-      </section>
+      <HomeAttention
+        apps={attentionApps.map(({ info, app }) => ({ urn: info.urn, id: info.id, name: info.name, stopped: app.status === 'stopped' }))}
+        unhealthy={unhealthy}
+        loading={apps.isPending}
+        unavailable={apps.isError}
+        healthUnavailable={containers.isError || containers.data?.available === false}
+        healthPending={containers.isPending}
+      />
     ),
   };
 
@@ -596,7 +573,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   return (
     <div
       className="workspace"
-      data-startup-ready={!apps.isPending && !tasks.isPending && !containers.isPending}
+      data-startup-ready={!apps.isPending}
       data-editing={editing || undefined}
       data-arranged={hasEdited.current || undefined}
       data-app-view={layout.appView}

@@ -1,11 +1,16 @@
 import { expect, test } from 'bun:test';
 
-test('both directions retain the same mounted top-bar material while controls stay masked until the morph ends', async () => {
+test('top-bar controls stay masked during the morph and return through a blur transition', async () => {
   const css = await Bun.file(new URL('./command-search.css', import.meta.url)).text();
-  expect(css).toMatch(/\.desktop-search-trigger\[data-search-open="true"\]\s*\{\s*opacity:\s*0;/);
-  expect(css).toMatch(/:has\(\.desktop-search-trigger\[data-search-open="true"\]\) > \*\s*\{\s*visibility:\s*hidden;/);
-  expect(css).not.toMatch(/visibility:\s*visible/);
-  expect(css).not.toMatch(/\.desktop-system-bar > \*\s*\{[^}]*transition:\s*opacity/s);
+  const open = css.match(/:has\(\.desktop-search-trigger\[data-search-open="true"\]\) > \*\s*\{([^}]*)\}/)?.[1] ?? '';
+  const resting = css.match(/\.desktop-system-bar > \*\s*\{([^}]*)\}/)?.[1] ?? '';
+  expect(open).toContain('visibility: hidden');
+  expect(open).toContain('pointer-events: none');
+  expect(open).toContain('opacity: 0');
+  expect(open).toMatch(/filter:\s*blur\(\d+px\)/);
+  expect(resting).toContain('opacity: 1');
+  expect(resting).toContain('filter: none');
+  expect(resting).toMatch(/transition:\s*opacity[^,]*,\s*filter/);
 });
 
 test('the original bounds morph retains its opening and closing durations without fading the header', async () => {

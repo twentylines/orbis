@@ -6,10 +6,10 @@ import { telemetryOptions } from '@/desktop/telemetry';
 import { formatUptime } from '@/desktop/uptime';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { useHostReadings } from './host-devices';
-import { GpuReadings } from './gpu-readings';
 import { SystemGauges } from './system-gauges';
 import { statusBytes, statusNetwork } from './system-readings';
 import { useNetworkWarmup } from './network-rate-warmup';
+import { previewGpu } from './home-gpu-preview';
 import { sensorOptions, useObserveSystemHealth } from './use-system-health';
 
 const rate = (value: number | null) => {
@@ -77,12 +77,16 @@ export function HomeSystemStatus() {
   const memoryUsed = memoryAvailable ? memoryTotal - memoryFree : null;
   const cpuPercent = system.data?.cpu.scope === 'host-proc' ? system.data.cpu.totalPercent : null;
   const network = statusNetwork(host.isError ? undefined : host.data, system.data);
+  const reportedGpus = (sensors.data?.available && !sensors.data.stale && !sensors.isError ? sensors.data.gpus : []).filter(
+    (gpu) =>
+      typeof gpu.utilizationPercent === 'number' &&
+      Number.isFinite(gpu.utilizationPercent) &&
+      gpu.utilizationPercent >= 0 &&
+      gpu.utilizationPercent <= 100,
+  );
+  const demoGpu = previewGpu(import.meta.env.VITE_ORBIS_SNAPSHOT_NAME, import.meta.env.VITE_ORBIS_PREVIEW_GPU, system.data?.sampledAt);
   return (
-    <section
-      className="workspace-activity"
-      aria-labelledby="workspace-activity-title"
-      data-startup-ready={!system.isPending && !host.isPending && !sensors.isPending}
-    >
+    <section className="workspace-activity" aria-labelledby="workspace-activity-title">
       <div className="workspace-section-heading">
         <div>
           <h2 id="workspace-activity-title">System status</h2>
@@ -108,6 +112,7 @@ export function HomeSystemStatus() {
             diskUsed={disk?.usedBytes ?? null}
             diskTotal={disk?.sizeBytes ?? null}
             diskLabel={diskLabel}
+            gpus={reportedGpus.length ? reportedGpus : (demoGpu ?? [])}
           />
           <div className="workspace-uptime">
             <span>
@@ -116,7 +121,6 @@ export function HomeSystemStatus() {
             <strong>{system.data ? formatUptime(system.data.cpu.uptimeSeconds) : '—'}</strong>
           </div>
           <NetworkSummary network={network} visible={visible} />
-          <GpuReadings data={sensors.data} stale={sensors.isError || Boolean(sensors.data?.available && sensors.data.stale)} compact />
         </div>
       )}
       <ContainerResources compact />

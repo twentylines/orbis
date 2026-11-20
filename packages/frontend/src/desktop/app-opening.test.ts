@@ -5,6 +5,7 @@ import {
   appEmbeddingBoundary,
   appEmbeddingWarning,
   appOpeningMode,
+  appRestorePlan,
   initialAppBounds,
   primaryAppAddress,
   restoreAppBounds,
@@ -33,6 +34,28 @@ describe('actual app opening', () => {
     expect(appOpeningMode(preferences, 'notes:store', 'http://notes.local', 'https://orbis.local', true)).toBe('tab');
     expect(appOpeningMode(preferences, 'notes:store', 'https://orbis.local/apps', 'https://orbis.local', true)).toBe('tab');
     expect(appOpeningMode(preferences, 'notes:store', 'https://notes.local', 'https://orbis.local', false)).toBe('tab');
+  });
+  test('uses one plan for a complete split restore and individual fallback', () => {
+    const first = { urn: 'notes:store', name: 'Notes', launchUrl: 'https://notes.local' };
+    const second = { urn: 'audio:store', name: 'Audio', launchUrl: 'https://audio.local' };
+    const members = [first, second];
+    expect(appRestorePlan(defaultAppLaunch, first, members, 'https://orbis.local', true)).toMatchObject({
+      mode: 'window',
+      restorePair: true,
+      requests: members,
+    });
+    const preferredTab = { ...defaultAppLaunch, apps: { [second.urn]: { mode: 'tab' as const } } };
+    expect(appRestorePlan(preferredTab, first, members, 'https://orbis.local', true)).toMatchObject({
+      mode: 'window',
+      restorePair: false,
+      requests: [first],
+    });
+    expect(
+      appRestorePlan(defaultAppLaunch, { ...first, preferredUrl: 'https://orbis.local/embed' }, members, 'https://orbis.local', true),
+    ).toMatchObject({
+      mode: 'tab',
+      restorePair: false,
+    });
   });
   test('prefers an available secure address on secure Orbis pages', () => {
     const destinations = [{ url: 'http://server.local:8080/' }, { url: 'https://notes.local/' }];

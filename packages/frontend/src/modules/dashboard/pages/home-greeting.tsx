@@ -1,3 +1,4 @@
+import { greetingForHour } from './home-greeting-time';
 import { useWallpaperText } from '@/desktop/wallpaper-text';
 import { useEffect, useState, type Ref } from 'react';
 
@@ -27,7 +28,7 @@ export function HomeGreeting({ headingRef, focusable }: { headingRef: Ref<HTMLHe
   }, []);
 
   const hour = date.getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const greeting = greetingForHour(hour);
   const machineDate = [date.getFullYear(), date.getMonth() + 1, date.getDate()].map((value) => String(value).padStart(2, '0')).join('-');
 
   return (

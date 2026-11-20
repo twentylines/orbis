@@ -92,12 +92,14 @@ function renderLocalUpdates({
   jobState,
   operatingSystem = 'Ubuntu 24.04 LTS',
   releaseBody = 'Release notes',
+  releaseChannel = 'stable',
 }: {
   operator?: boolean;
   legacyHelper?: boolean;
   jobState?: 'running' | 'complete';
   operatingSystem?: string;
   releaseBody?: string;
+  releaseChannel?: 'stable' | 'nightly';
 } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
   client.setQueryData(appContextQueryKey(), { user: { id: 7, operator }, version: { current: '4.10.1' } });
@@ -108,8 +110,8 @@ function renderLocalUpdates({
     imageDigest: null,
     runtipiCompatibility: '4.10.1',
   });
-  client.setQueryData(orbisReleaseChannelsOptions().queryKey, orbisReleaseChannelStatus);
-  client.setQueryData(orbisReleasesOptions('stable').queryKey, [
+  client.setQueryData(orbisReleaseChannelsOptions().queryKey, { ...orbisReleaseChannelStatus, current: releaseChannel });
+  client.setQueryData(orbisReleasesOptions(releaseChannel).queryKey, [
     {
       tag: 'v0.2.0',
       imageManifestUrl: 'https://example.test/manifest.json',
@@ -188,6 +190,11 @@ test('default System view brings the Orbis, OS and service statuses together whi
   expect(markup).toContain('Last checked <time dateTime="2026-11-19T05:00:00Z">');
   expect(markup).toContain('>Release notes</p>');
   expect(markup).toContain('/settings?tab=updates');
+});
+
+test('the Orbis action follows the release status without labelling the release by the selected channel', () => {
+  const markup = renderLocalUpdates({ releaseChannel: 'nightly' });
+  expect(markup).toMatch(/Update available <strong>0\.2\.0<\/strong><\/p><\/div><button[^>]*desktop-system-update-primary[^>]*>Update Orbis/);
 });
 
 test('legacy helper capabilities and operator permissions still control system actions and inventory details', () => {

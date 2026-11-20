@@ -620,7 +620,7 @@ function LocalUpdates() {
           aria-labelledby={`${tabsId}-system-tab`}
           hidden={section !== 'system'}
         >
-          <section className="desktop-updates-card" aria-labelledby={`${tabsId}-orbis-title`}>
+          <section className="desktop-updates-card desktop-updates-card-orbis" aria-labelledby={`${tabsId}-orbis-title`}>
             <div className="desktop-updates-product">
               <div className="desktop-updates-card-head desktop-updates-product-head">
                 <h2 id={`${tabsId}-orbis-title`}>Orbis</h2>
@@ -715,7 +715,6 @@ function LocalUpdates() {
                             Latest release <strong>{formatOrbisVersion(latest.tag)}</strong>
                           </>
                         )}
-                        {channels.data ? <> · {channels.data.current === 'nightly' ? 'Nightly' : 'Stable'}</> : null}
                       </p>
                     ) : null}
                   </div>

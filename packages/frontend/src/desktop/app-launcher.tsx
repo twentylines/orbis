@@ -24,9 +24,9 @@ import { useDesktopWindows } from './window-viewport';
 import { DockCompanion } from './dock-companion';
 import { dockNavigationFocusTarget } from './dock-scroll-reveal';
 import { useDesktopPreferences } from './preferences';
-import { appAddress, appOpeningMode } from './app-opening';
+import { appOpeningMode, appRestorePlan } from './app-opening';
 import { readOpenedApps, rememberOpenedApp, type OpenedApps } from './app-library';
-import { appWindowReducer, appWorkspace, type AppLaunchRequest } from './app-window-state';
+import { appWindowReducer, appWindowRatio, appWorkspace, minimizedAppGroups, parkedAppLayout, type AppLaunchRequest } from './app-window-state';
 import { AppWindow } from './app-window';
 import { useAppWindowArea } from './app-window-area';
 import { useAppTrayLayout } from './app-tray-layout';
@@ -37,6 +37,8 @@ import { desktopNavigation } from './navigation';
 import { AppEmbeddingProvider } from './app-embedding';
 import { appLaunchEvent } from './app-launch-event';
 import './app-launcher.css';
+
+const trayMemberSelector = (urn: string) => `[data-tray-member="${CSS.escape(urn)}"]`;
 
 const AppLauncherContext = createContext<(request: AppLaunchRequest) => boolean>(() => false);
 const AppTrayContext = createContext<ReactNode>(null);
@@ -88,11 +90,13 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   const area = useAppWindowArea();
   const origins = useRef(new Map<string, { bounds: DOMRect; opacity?: number }>());
   const openers = useRef(new Map<string, HTMLElement>());
-  const minimized = useMemo(() => state.windows.filter(({ status }) => status === 'minimized' || status === 'minimizing'), [state.windows]);
+  const minimized = useMemo(() => minimizedAppGroups(state), [state]);
   useAppTrayLayout(desktop, minimized.length, tray);
   const trayButton = useCallback(
     (urn: string) =>
-      [...(tray?.querySelectorAll<HTMLButtonElement>('[data-minimized-app]') ?? [])].find((button) => button.dataset.minimizedApp === urn),
+      [...(tray?.querySelectorAll<HTMLButtonElement>('[data-minimized-app]') ?? [])].find(
+        (button) => button.dataset.minimizedApp === urn || Boolean(button.querySelector(trayMemberSelector(urn))),
+      ),
     [tray],
   );
   const remember = useCallback(
@@ -102,26 +106,37 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   const captureOpener = useCallback((urn: string) => {
     if (document.activeElement instanceof HTMLElement) openers.current.set(urn, document.activeElement);
   }, []);
+  const planRestore = useCallback(
+    (request: AppLaunchRequest, members: readonly AppLaunchRequest[]) =>
+      appRestorePlan(preferences.appLaunch, request, members, window.location.origin, desktop),
+    [desktop, preferences.appLaunch],
+  );
   const openApp = useCallback(
     (request: AppLaunchRequest) => {
-      const url = appAddress(request.preferredUrl ?? request.launchUrl);
-      if (!url) return false;
+      const group = minimizedAppGroups(latestState.current).find((members) => members.some((item) => item.request.urn === request.urn));
+      const plan = planRestore(request, group?.map((item) => item.request) ?? []);
+      if (!plan) return false;
+
       remember(request);
-      if (appOpeningMode(preferences.appLaunch, request.urn, url, window.location.origin, desktop) === 'tab') {
-        window.open(url, '_blank', 'noopener,noreferrer');
+      if (plan.mode === 'tab') {
+        window.open(plan.url, '_blank', 'noopener,noreferrer');
+        if (document.activeElement?.closest('.orbis-app-tray')) dockNavigationFocusTarget()?.focus({ preventScroll: true });
         dispatch({ type: 'remove', urn: request.urn });
         origins.current.delete(request.urn);
         openers.current.delete(request.urn);
       } else {
-        captureOpener(request.urn);
-        const origin = trayButton(request.urn)?.getBoundingClientRect();
-        if (origin) origins.current.set(request.urn, { bounds: origin });
-        else origins.current.delete(request.urn);
-        dispatch({ type: 'open', request: { ...request, launchUrl: url } });
+        for (const member of plan.requests) {
+          if (member.urn !== request.urn) remember(member);
+          captureOpener(member.urn);
+          const origin = trayButton(member.urn)?.getBoundingClientRect();
+          if (origin) origins.current.set(member.urn, { bounds: origin });
+          else origins.current.delete(member.urn);
+        }
+        dispatch({ type: 'open', request: { ...request, launchUrl: plan.url }, restorePair: group?.length === 2 ? plan.restorePair : undefined });
       }
       return true;
     },
-    [desktop, preferences.appLaunch, remember, trayButton, captureOpener],
+    [planRestore, remember, trayButton, captureOpener],
   );
   useEffect(() => {
     const launch = (event: Event) => {
@@ -240,50 +255,67 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       <DockCompanion visible={desktop && minimized.length > 0} side="right" retainOnExit expandedWidth="var(--orbis-app-tray-width, max-content)">
         <fieldset ref={setTray} className="orbis-app-tray" aria-label="Minimized apps" title="Minimized apps — scroll horizontally for more">
           <ul className="app-tray-list">
-            {minimized.map(({ request, status }) => (
-              <li key={request.urn} className="app-tray-item">
-                <Button
-                  className="app-tray-restore"
-                  data-minimized-app={request.urn}
-                  data-flying={status === 'minimizing' || undefined}
-                  aria-label={
-                    preferences.appLaunch.mode === 'tab' || preferences.appLaunch.apps[request.urn]?.mode === 'tab'
-                      ? `Open ${request.name} in new tab`
-                      : `Restore ${request.name}`
-                  }
-                  title={request.name}
-                  onClick={() => {
-                    openApp(request);
-                    if (preferences.appLaunch.mode === 'tab' || preferences.appLaunch.apps[request.urn]?.mode === 'tab')
-                      dockNavigationFocusTarget()?.focus({ preventScroll: true });
-                  }}
-                  onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
-                >
-                  <AppLogo urn={request.urn} url={request.logoUrl} size={28} />
-                </Button>
-                <Button
-                  className="app-tray-close"
-                  size="icon"
-                  aria-label={`Close ${request.name}`}
-                  onClick={() => {
-                    const index = minimized.findIndex((item) => item.request.urn === request.urn);
-                    const next = minimized[index + 1] ?? minimized[index - 1];
-                    const target = next ? trayButton(next.request.urn) : dockNavigationFocusTarget();
-                    dispatch({ type: 'remove', urn: request.urn });
-                    origins.current.delete(request.urn);
-                    openers.current.delete(request.urn);
-                    target?.focus({ preventScroll: true });
-                  }}
-                >
-                  <IconX size={16} aria-hidden="true" />
-                </Button>
-              </li>
-            ))}
+            {minimized.map((members, index) => {
+              const { request, status } = members[0];
+              const grouped = members.length > 1;
+              const requests = members.map((item) => item.request);
+              const names = requests.map((member) => member.name).join(' and ');
+              const plan = planRestore(request, requests);
+              const restoreLabel =
+                plan?.mode === 'tab'
+                  ? `Open ${request.name} in new tab`
+                  : plan?.restorePair
+                    ? `Restore ${names} in split screen`
+                    : `Restore ${request.name}`;
+              return (
+                <li key={request.urn} className="app-tray-item">
+                  <Button
+                    className="app-tray-restore"
+                    data-minimized-app={request.urn}
+                    data-flying={(!grouped && status === 'minimizing') || undefined}
+                    aria-label={restoreLabel}
+                    title={restoreLabel}
+                    onClick={() => openApp(request)}
+                    onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
+                  >
+                    {grouped ? (
+                      <span className="app-tray-pair" aria-hidden="true">
+                        {members.map(({ request: member, status: memberStatus }) => (
+                          <span key={member.urn} data-tray-member={member.urn} data-flying={memberStatus === 'minimizing' || undefined}>
+                            <AppLogo urn={member.urn} url={member.logoUrl} size={17} />
+                          </span>
+                        ))}
+                      </span>
+                    ) : (
+                      <AppLogo urn={request.urn} url={request.logoUrl} size={28} />
+                    )}
+                  </Button>
+                  <Button
+                    className="app-tray-close"
+                    size="icon"
+                    aria-label={`Close ${names}`}
+                    onClick={() => {
+                      const next = minimized[index + 1] ?? minimized[index - 1];
+                      const target = next ? trayButton(next[0].request.urn) : dockNavigationFocusTarget();
+                      const urns = members.map((item) => item.request.urn);
+                      dispatch({ type: 'remove-group', urns });
+                      for (const urn of urns) {
+                        origins.current.delete(urn);
+                        openers.current.delete(urn);
+                      }
+                      target?.focus({ preventScroll: true });
+                    }}
+                  >
+                    <IconX size={16} aria-hidden="true" />
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
         </fieldset>
       </DockCompanion>
     ),
-    [desktop, minimized, trayButton, openApp, preferences.appLaunch],
+    [desktop, minimized, trayButton, openApp, planRestore],
   );
   return (
     <AppEmbeddingProvider>
@@ -301,14 +333,17 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                         active={workspace.active === item.request.urn}
                         desktop={windowsEnabled}
                         area={area}
-                        ratio={ratio}
+                        ratio={appWindowRatio(state, item)}
                         serverName={preferences.serverName}
                         saved={preferences.appLaunch.apps[item.request.urn]?.bounds}
                         origin={origins.current.get(item.request.urn)?.bounds}
                         originOpacity={origins.current.get(item.request.urn)?.opacity}
                         trayReady={Boolean(tray)}
                         trayTarget={() => flightTarget(item.request.urn)}
-                        trayElement={() => trayButton(item.request.urn)}
+                        trayElement={() => {
+                          const button = trayButton(item.request.urn);
+                          return button?.querySelector<HTMLElement>(trayMemberSelector(item.request.urn)) ?? button;
+                        }}
                         onPlace={(mode) => {
                           const partner = [...state.windows]
                             .reverse()
@@ -335,7 +370,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                         onMinimize={() => dispatch({ type: 'minimize', urn: item.request.urn })}
                         onMinimized={() => {
                           dispatch({ type: 'minimized', urn: item.request.urn });
-                          if (!item.automatic) restoreFocus(item.request.urn, true);
+                          if (!item.automatic && !parkedAppLayout(state, item.request.urn)) restoreFocus(item.request.urn, true);
                         }}
                         onClose={() => dispatch({ type: 'close', urn: item.request.urn })}
                         onRemoved={() => remove(item.request.urn, true)}

@@ -212,6 +212,7 @@ function ActivityPill({ activity, desktop }: { activity: DesktopActivity; deskto
                   <small>{displayed.detail}</small>
                   {displayed.kind === 'time-machine' ? <RecoveryProgressBar label="Time Machine capture" percentage={displayed.percentage} /> : null}
                 </span>
+                {hasActivity ? <span className="desktop-activity-loading" aria-hidden="true" /> : null}
               </button>
             </Dialog.Trigger>
             <Dialog.Portal forceMount>

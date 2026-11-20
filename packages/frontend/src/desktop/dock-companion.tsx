@@ -278,18 +278,27 @@ export function DockGlass({ collapsed = false, reduced = false }: { collapsed?: 
       const tray = dock.querySelector<HTMLElement>('.orbis-app-tray');
       const activity = dock.querySelector<HTMLElement>('.desktop-activity-rail');
       const traySize = tray?.parentElement?.offsetWidth ?? 0;
+      const scrollTopSpacer = dock.querySelector<HTMLElement>('.desktop-dock-top-space');
+      const scrollTopSpace = scrollTopSpacer?.offsetWidth ?? 0;
+      const sideBySide = scrollTopSpacer && getComputedStyle(scrollTopSpacer).position === 'static';
       const primaryWidth = primary.offsetWidth;
       const style = getComputedStyle(dock);
       const inset = Number.parseFloat(style.getPropertyValue('--desktop-inset')) || 24;
       const available = dock.ownerDocument.documentElement.clientWidth - inset * 2;
-      const activitySpace = Math.min(400, Math.max(64, available - primaryWidth - traySize - pillGap * 2));
+      const activityFont = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      const activitySpace = Math.min(400 * Math.max(1, activityFont / 16), Math.max(64, available - primaryWidth - traySize - pillGap * 2));
       setDockStyle(dock, '--orbis-activity-space', `${activitySpace}px`);
       setDockStyle(dock, '--orbis-dock-nav-margin', `${((compactHeight - primaryWidth) * progress) / 2}px`);
       const compactTrayWidth = dockSideWidth(tray?.querySelectorAll('.app-tray-item').length ?? 0, 48, 6, 8, available * 0.32);
       const activityCount = Number(activity?.dataset.activityCount) || 0;
-      const activityFont = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-      const compactPillWidth = Math.max(128, activityFont * 8.5);
-      const compactRailWidth = dockSideWidth(activityCount, compactPillWidth, pillGap, 0, available - compactHeight - compactTrayWidth - pillGap * 2);
+      const compactPillWidth = 88 + activityFont * 4.75;
+      const compactRailWidth = dockSideWidth(
+        activityCount,
+        compactPillWidth,
+        pillGap,
+        0,
+        available - compactHeight - compactTrayWidth - scrollTopSpace - pillGap * 2,
+      );
       for (const [control, compactWidth] of [
         [tray, compactTrayWidth],
         [activity, compactRailWidth],
@@ -329,7 +338,7 @@ export function DockGlass({ collapsed = false, reduced = false }: { collapsed?: 
         };
       };
       const originalMain = read(primary);
-      const center = originalMain.left + originalMain.width / 2;
+      const center = originalMain.left + (originalMain.width - (sideBySide ? 0 : scrollTopSpace)) / 2;
       setDockStyle(dock, '--orbis-dock-nav-center', `${center}px`);
       const shape = foldDockBox(
         originalMain,
@@ -361,7 +370,10 @@ export function DockGlass({ collapsed = false, reduced = false }: { collapsed?: 
           const box = read(trigger);
           box.left = Math.max(box.left, rail.left);
           box.right = Math.min(box.right, rail.right);
+          box.top = Math.max(box.top, rail.top);
+          box.bottom = Math.min(box.bottom, rail.bottom);
           box.width = Math.max(0, box.right - box.left);
+          box.height = Math.max(0, box.bottom - box.top);
           if (box.width && box.height) shapes.push(box);
         }
         shapes.sort((a, b) => a.left - b.left);
@@ -390,11 +402,17 @@ export function DockGlass({ collapsed = false, reduced = false }: { collapsed?: 
     const observe = () => {
       sizes.disconnect();
       sizes.observe(dock);
-      for (const node of dock.querySelectorAll('.desktop-dock-main, .desktop-dock-companion, .desktop-dock-companion-content')) sizes.observe(node);
+      for (const node of dock.querySelectorAll(
+        '.desktop-dock-main, .desktop-dock-companion, .desktop-dock-companion-content, .desktop-dock-top-space',
+      ))
+        sizes.observe(node);
       schedule();
     };
-    const changes = new MutationObserver(observe);
-    changes.observe(dock, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-pill-motion'] });
+    const changes = new MutationObserver((records) => {
+      if (records.some(({ attributeName }) => attributeName === 'data-scroll-top')) redraw();
+      if (records.some(({ attributeName }) => attributeName !== 'data-scroll-top')) observe();
+    });
+    changes.observe(dock, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-pill-motion', 'data-scroll-top'] });
     observe();
     draw();
     return () => {

@@ -13,32 +13,55 @@ type Props = {
   diskUsed: number | null;
   diskTotal: number | null;
   diskLabel: string;
+  gpus?: { id: string; label: string; utilizationPercent: number | null; simulated?: boolean }[];
 };
 
-export function SystemGauges({ cpu, clockGHz, memoryUsed, memoryTotal, diskUsed, diskTotal, diskLabel }: Props) {
+export function SystemGauges({ cpu, clockGHz, memoryUsed, memoryTotal, diskUsed, diskTotal, diskLabel, gpus = [] }: Props) {
   const reportedClock = typeof clockGHz === 'number' && Number.isFinite(clockGHz) && clockGHz > 0 ? clockGHz : null;
   const memoryPercent = usagePercent(memoryUsed, memoryTotal);
   const diskPercent = usagePercent(diskUsed, diskTotal);
-  const readings = [
-    { title: 'CPU', value: cpu, icon: IconCpu, hash: 'telemetry-cpu-title' },
-    { title: 'Memory', value: memoryPercent, icon: IconDeviceDesktopAnalytics, hash: 'telemetry-memory-title' },
+  const readings: {
+    id: string;
+    title: string;
+    value: number | null;
+    icon: typeof IconCpu;
+    hash: string;
+    description?: string;
+    simulated?: boolean;
+  }[] = [
+    { id: 'cpu', title: 'CPU', value: cpu, icon: IconCpu, hash: 'telemetry-cpu-title' },
+    { id: 'memory', title: 'Memory', value: memoryPercent, icon: IconDeviceDesktopAnalytics, hash: 'telemetry-memory-title' },
     {
+      id: 'storage',
       title: 'Storage',
       value: diskPercent,
       icon: IconDatabase,
       hash: diskLabel === 'Storage' ? 'host-storage-title' : 'telemetry-disks-title',
     },
   ];
+  const reportedGpus = gpus.filter(
+    ({ utilizationPercent: value }) => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100,
+  );
+  const gpuReadings = reportedGpus.map((gpu, index) => ({
+    id: `gpu:${gpu.id}`,
+    title: reportedGpus.length === 1 ? 'GPU' : `GPU ${index + 1}`,
+    value: gpu.utilizationPercent,
+    icon: IconDeviceDesktopAnalytics,
+    hash: 'gpu',
+    description: gpu.label,
+    simulated: gpu.simulated,
+  }));
   return (
     <div className="system-gauges-group">
       <div className="system-gauges">
-        {readings.map(({ title, value, icon: Icon, hash }) => (
+        {[...readings.slice(0, 1), ...gpuReadings, ...readings.slice(1)].map(({ id, title, value, icon: Icon, hash, description, simulated }) => (
           <Link
-            key={title}
-            to={`/monitor#${hash}`}
+            key={id}
+            title={description}
+            to={hash === 'gpu' ? '/monitor?section=performance&metric=gpu' : `/monitor#${hash}`}
             className="system-gauge"
             data-high={highUsage(value)}
-            aria-label={`${title}, ${value === null ? 'unavailable' : `${value.toFixed(1)} percent${highUsage(value) ? ', high' : ''}`}`}
+            aria-label={`${title}, ${value === null ? 'unavailable' : `${value.toFixed(1)} percent${highUsage(value) ? ', high' : ''}`}${simulated ? ', simulated preview' : ''}`}
           >
             <span className="system-dial" style={{ '--dial-progress': `${Math.max(0, Math.min(100, value ?? 0))}%` } as CSSProperties}>
               <Icon size={16} aria-hidden="true" />

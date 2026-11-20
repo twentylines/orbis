@@ -18,7 +18,7 @@
     justify-content: flex-end;
   }
 }
-.desktop .desktop-dock-reveal {
+.desktop .desktop-dock :is(.desktop-dock-reveal, .desktop-dock-scroll-top) {
   position: absolute;
   z-index: 2;
   bottom: 0;
@@ -42,12 +42,75 @@
 .desktop-dock[data-scroll-collapsed] :is(.orbis-app-tray, .desktop-activity-trigger) {
   pointer-events: auto;
 }
+.desktop .desktop-dock .desktop-dock-glass {
+  visibility: var(--orbis-dock-shared-glass, visible);
+}
+.desktop .desktop-dock :is(.desktop-dock-main, .desktop-dock-reveal, .orbis-app-tray, .desktop-activity-trigger) {
+  background: var(--orbis-dock-local-glass, transparent);
+  backdrop-filter: var(--orbis-dock-local-filter, none);
+  -webkit-backdrop-filter: var(--orbis-dock-local-filter, none);
+}
 .desktop-dock:is([data-scroll-collapsed], [data-scroll-revealing]) .desktop-dock-reveal {
   pointer-events: auto;
 }
-.desktop .desktop-dock-reveal:focus-visible {
+.desktop .desktop-dock :is(.desktop-dock-reveal, .desktop-dock-scroll-top):focus-visible {
   outline: 3px solid var(--desktop-focus);
   outline-offset: -6px;
+}
+.desktop-dock-top-space {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  transition: width 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.desktop-dock[data-scroll-top] .desktop-dock-top-space {
+  width: 68px;
+}
+.desktop .desktop-dock .desktop-dock-scroll-top {
+  background: var(--desktop-chrome);
+  backdrop-filter: var(--desktop-glass-chrome-filter);
+  -webkit-backdrop-filter: var(--desktop-glass-chrome-filter);
+  opacity: 0;
+  scale: 0.72;
+  transition:
+    translate 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    scale 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 145ms ease;
+}
+.desktop .desktop-dock[data-scroll-top] .desktop-dock-scroll-top {
+  opacity: clamp(0, calc((var(--orbis-dock-fold, 0) - 0.72) / 0.28), 1);
+  translate: 40px 0;
+  scale: 1;
+  pointer-events: auto;
+}
+@media (min-width: 1100px) and (min-height: 640px) {
+  .desktop-dock-top-space {
+    position: static;
+    flex: none;
+    margin-inline-end: -12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-dock {
+    --orbis-dock-shared-glass: hidden;
+    --orbis-dock-local-glass: var(--desktop-chrome);
+    --orbis-dock-local-filter: var(--desktop-glass-chrome-filter);
+  }
+  .desktop .desktop-dock :is(.desktop-dock-scroll-top, .desktop-dock-reveal, .desktop-dock-top-space) {
+    transition: none;
+  }
+}
+:root[data-orbis-motion="reduced"] .desktop-dock {
+  --orbis-dock-shared-glass: hidden;
+  --orbis-dock-local-glass: var(--desktop-chrome);
+  --orbis-dock-local-filter: var(--desktop-glass-chrome-filter);
+}
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"])
+  .desktop
+  .desktop-dock
+  :is(.desktop-dock-scroll-top, .desktop-dock-reveal, .desktop-dock-top-space) {
+  transition: none;
 }
 .desktop-dock-scroll-ring {
   position: absolute;

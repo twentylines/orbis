@@ -1885,3 +1885,34 @@
     display: none;
   }
 }
+
+.workspace-operations::before {
+  background: color-mix(in srgb, var(--desktop-accent) 4%, var(--desktop-home-surface));
+}
+.workspace-operations .workspace-section-heading {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--desktop-line);
+}
+.workspace-recent-tasks b {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--desktop-accent) 11%, transparent);
+}
+.workspace-recent-tasks b::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.workspace-recent-tasks b:is([data-status="failed"], [data-status="interrupted"], [data-status="unconfirmed"]) {
+  background: color-mix(in srgb, var(--desktop-negative) 10%, transparent);
+}
+
+.workspace-recent-tasks b[data-status="succeeded"] {
+  color: var(--desktop-positive);
+  background: color-mix(in srgb, var(--desktop-positive) 11%, transparent);
+}

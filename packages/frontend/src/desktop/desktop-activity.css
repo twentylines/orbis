@@ -79,6 +79,28 @@
   box-shadow: none;
   filter: none;
 }
+.desktop-activity-loading {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: desktop-activity-spin 900ms linear infinite;
+}
+@keyframes desktop-activity-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"]) .desktop-activity-loading {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-activity-loading {
+    animation: none;
+  }
+}
 .desktop-activity-summary,
 .desktop-activity-list li > span:last-child {
   display: grid;

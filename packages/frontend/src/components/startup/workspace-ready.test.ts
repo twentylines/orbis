@@ -151,6 +151,29 @@ test('visible app images must finish decoding before Home is revealed', async ()
   }
 });
 
+test('a stalled visible supplemental image does not block Home readiness', async () => {
+  const h = harness();
+  h.state.images = [
+    {
+      dataset: { startupOptional: 'true' },
+      loading: 'lazy',
+      complete: false,
+      src: '/attention-icon.png',
+      getBoundingClientRect: () => ({ top: 100, bottom: 148 }),
+    } as unknown as HTMLImageElement,
+  ];
+  const stop = h.start();
+  try {
+    h.state.dataReady = true;
+    h.releaseFonts();
+    await Bun.sleep(0);
+    expect(h.state).toMatchObject({ ready: 1, slow: 0 });
+  } finally {
+    stop();
+    h.restore();
+  }
+});
+
 test('a stalled Home reports a retry state instead of claiming readiness', async () => {
   const h = harness();
   const stop = h.start(10);

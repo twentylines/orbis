@@ -1,4 +1,5 @@
 import type { AppLaunchPreferences, DesktopWindowBounds } from '@runtipi/common/schemas';
+import type { AppLaunchRequest } from './app-window-state';
 import type { WindowArea } from './window-geometry';
 import { clampAppBounds } from './app-window-layout';
 
@@ -20,6 +21,27 @@ export function canEmbedApp(url: string, origin: string, desktop: boolean) {
 export function appOpeningMode(preferences: AppLaunchPreferences, key: string, url: string, origin: string, desktop: boolean) {
   if (preferences.mode === 'tab' || !canEmbedApp(url, origin, desktop)) return 'tab';
   return preferences.apps[key]?.mode ?? preferences.mode;
+}
+
+export function appRestorePlan(
+  preferences: AppLaunchPreferences,
+  request: AppLaunchRequest,
+  members: readonly AppLaunchRequest[],
+  origin: string,
+  desktop: boolean,
+) {
+  const url = appAddress(request.preferredUrl ?? request.launchUrl);
+  if (!url) return undefined;
+  const mode = appOpeningMode(preferences, request.urn, url, origin, desktop);
+  const restorePair =
+    mode === 'window' &&
+    members.length > 1 &&
+    members.every((member) => {
+      if (member.urn === request.urn) return true;
+      const address = appAddress(member.launchUrl);
+      return Boolean(address && appOpeningMode(preferences, member.urn, address, origin, desktop) === 'window');
+    });
+  return { url, mode, restorePair, requests: restorePair ? members : [request] };
 }
 
 export function primaryAppAddress(destinations: { url: string }[], origin: string) {

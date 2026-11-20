@@ -336,7 +336,13 @@
     outline-offset: -3px;
   }
 }
-.app-tray-restore[data-flying="true"] .app-logo {
+.app-tray-pair {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.app-tray-restore[data-flying="true"] .app-logo,
+.app-tray-pair [data-flying="true"] .app-logo {
   opacity: 0;
 }
 

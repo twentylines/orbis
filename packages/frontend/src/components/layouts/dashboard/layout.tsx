@@ -298,10 +298,15 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               )}
             </main>
 
-            <nav ref={dock} className="desktop-dock" aria-label="Main navigation" data-scroll-collapsed={dockScroll.collapsed || undefined}>
+            <nav
+              ref={dock}
+              className="desktop-dock"
+              aria-label="Main navigation"
+              data-scroll-collapsed={dockScroll.collapsed || undefined}
+              data-scroll-top={dockScroll.canScrollToTop || undefined}
+            >
               <DockGlass collapsed={dockScroll.collapsed} reduced={Boolean(reduceMotion)} />
               <DockActivity />
-              <DockScrollReveal collapsed={dockScroll.collapsed} expand={dockScroll.expand} />
               <div className="desktop-dock-main" inert={dockScroll.collapsed || undefined}>
                 <DockSelection path={dockSection?.path} reduced={Boolean(reduceMotion)} />
                 {navigation
@@ -332,6 +337,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                     </Link>
                   ))}
               </div>
+              <DockScrollReveal {...dockScroll} />
               <MinimizedApps />
             </nav>
             {loggingOff ? null : <RestartUpdateCover />}

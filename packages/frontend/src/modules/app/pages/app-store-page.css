@@ -7,7 +7,7 @@
 }
 .orbis-store-toolbar {
   display: grid;
-  grid-template-columns: minmax(12rem, 1fr) minmax(12rem, 16rem) minmax(11rem, 22rem) auto;
+  grid-template-columns: minmax(12rem, 1fr) minmax(12rem, 16rem) minmax(11rem, 24rem) auto;
   align-items: stretch;
   gap: 10px;
   padding-bottom: 20px;
@@ -54,10 +54,10 @@
   background: transparent;
   color: var(--desktop-muted);
 }
-.orbis-store-view-choice,
-.orbis-store-player-choice {
-  display: flex;
-  flex-wrap: wrap;
+.orbis-store-view-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
   align-items: stretch;
   gap: 4px;
   padding: 4px;
@@ -66,11 +66,6 @@
   border-radius: 13px;
   background: color-mix(in srgb, var(--desktop-preset-tint) 4%, var(--desktop-surface));
   --orbis-selection-radius: 9px;
-}
-.orbis-store-view-choice {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  min-width: 0;
 }
 .orbis-store-refresh {
   display: flex;
@@ -81,8 +76,7 @@
   visibility: hidden;
   pointer-events: none;
 }
-.orbis-store-view-choice > button,
-.orbis-store-player-choice > button {
+.orbis-store-view-choice > button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -99,8 +93,7 @@
   font-weight: 600;
   line-height: 1.4;
 }
-.orbis-store-view-choice > button[aria-pressed="true"],
-.orbis-store-player-choice > button[aria-pressed="true"] {
+.orbis-store-view-choice > button[aria-pressed="true"] {
   background: color-mix(in srgb, var(--desktop-preset-tint) 15%, var(--desktop-surface));
   color: var(--desktop-ink);
 }
@@ -139,6 +132,9 @@
   align-items: stretch;
   min-width: 0;
 }
+.orbis-store-category {
+  min-inline-size: min(100%, 12.5rem);
+}
 .orbis-store-category > label > .position-relative,
 .orbis-store-source > label > .position-relative {
   flex: 1;
@@ -166,6 +162,20 @@
   align-items: center;
   min-width: 0;
 }
+.orbis-store-category .orbis-select-trigger {
+  position: relative;
+  padding-inline: 38px;
+}
+.orbis-store-category .orbis-select-trigger > .orbis-select-value {
+  flex: 1;
+  justify-content: center;
+}
+.orbis-store-category .orbis-select-trigger > .orbis-menu-chevron {
+  position: absolute;
+  inset-inline-end: 12px;
+  top: 50%;
+  translate: 0 -50%;
+}
 .orbis-store-category-value .orbis-store-category-text {
   translate: 0 -0.0625em;
 }
@@ -188,8 +198,7 @@
 .orbis-store-grid-item {
   min-width: 0;
 }
-.orbis-store-result-heading,
-.orbis-store-section-heading {
+.orbis-store-result-heading {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -205,8 +214,7 @@
   gap: 8px 14px;
   min-width: 0;
 }
-.orbis-store-result-heading h2,
-.orbis-store-section-heading h2 {
+.orbis-store-result-heading h2 {
   margin: 0;
   font-size: 1.625rem;
   font-weight: 700;
@@ -219,8 +227,7 @@
   font-size: 0.875rem;
   line-height: 1.5;
 }
-.orbis-store-result-heading button,
-.orbis-store-section-heading button {
+.orbis-store-result-heading button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -236,7 +243,6 @@
   line-height: 1.4;
 }
 .orbis-store-result-heading button:focus-visible,
-.orbis-store-section-heading button:focus-visible,
 .orbis-store-clear-search:focus-visible {
   outline: 2px solid var(--desktop-focus);
   outline-offset: 3px;
@@ -369,188 +375,6 @@
   opacity: 0.65;
   cursor: default;
 }
-.orbis-store-collections {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-auto-rows: 1fr;
-  gap: 24px;
-}
-.orbis-store-collections:empty {
-  display: none;
-}
-.orbis-store-collection {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  border: 0;
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--desktop-preset-tint) 7%, var(--desktop-surface));
-  overflow: hidden;
-}
-.orbis-store-collection-content {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  flex: 1;
-  gap: 12px;
-  padding: 24px;
-}
-.orbis-store .orbis-store-collection h3 {
-  margin: 0;
-  color: var(--desktop-ink);
-  font-size: 1.875rem;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 1.15;
-}
-.orbis-store-collection p {
-  margin: 0;
-  color: var(--desktop-muted);
-  font-size: 0.9375rem;
-  line-height: 1.6;
-}
-.orbis-store-collection :is(.orbis-store-collection-action, .orbis-store-collection-link) {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  width: min(100%, 9rem);
-  max-width: 100%;
-  margin-top: auto;
-  padding: 10px 15px;
-  border: 0;
-  border-radius: 12px;
-  background: var(--desktop-action);
-  color: var(--desktop-action-ink);
-  font: inherit;
-  font-weight: 600;
-  font-size: 0.9375rem;
-  line-height: 1.4;
-  text-decoration: none;
-}
-.orbis-store-collection-action:focus-visible,
-.orbis-store-collection-link:focus-visible {
-  outline: 2px solid var(--desktop-focus);
-  outline-offset: 4px;
-}
-.orbis-store-collection-art {
-  position: relative;
-  height: 11rem;
-  overflow: hidden;
-  isolation: isolate;
-  border-radius: 0;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--desktop-preset-tint) 22%, var(--desktop-surface)),
-    color-mix(in srgb, var(--desktop-preset-tint) 6%, var(--desktop-surface))
-  );
-}
-.orbis-store-artwork-app {
-  position: absolute;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 18%;
-  background: transparent;
-  filter: drop-shadow(0 10px 12px rgb(0 0 0 / 0.12));
-  --app-logo-size: 7rem;
-}
-.orbis-store-artwork-motion {
-  position: absolute;
-  inset: 0;
-}
-.orbis-store-artwork-app[data-art-position="0"] {
-  inset-inline-start: 12%;
-  top: 18%;
-  z-index: 2;
-}
-.orbis-store-artwork-app[data-art-position="1"] {
-  inset-inline-start: 55%;
-  top: 12%;
-  --app-logo-size: 4.5rem;
-}
-.orbis-store-artwork-app[data-art-position="2"] {
-  inset-inline-start: 72%;
-  top: 54%;
-  z-index: 3;
-  --app-logo-size: 3.5rem;
-}
-.orbis-store-artwork-app[data-art-position="3"] {
-  inset-inline-start: 46%;
-  top: 59%;
-  --app-logo-size: 3rem;
-}
-.orbis-store-collection-art[data-collection-kind="gaming"] .orbis-store-artwork-app {
-  inset-inline-start: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  --app-logo-size: 8rem;
-}
-.orbis-store-artwork-app .app-logo {
-  object-fit: contain;
-  border-radius: 18%;
-}
-.orbis-store-discover[data-presentation="editorial"] .orbis-store-section-heading h2 {
-  font-size: 1.125rem;
-  letter-spacing: -0.02em;
-}
-.orbis-store-discover[data-presentation="editorial"] .orbis-store-collections {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-}
-.orbis-store-discover[data-presentation="editorial"] .orbis-store-collection {
-  display: grid;
-  grid-template-columns: minmax(8rem, 0.7fr) minmax(0, 1fr);
-  border-radius: 18px;
-}
-.orbis-store-discover[data-presentation="editorial"] .orbis-store-collection-art {
-  height: 100%;
-  min-height: 10rem;
-  border-radius: 0;
-}
-.orbis-store-discover[data-presentation="editorial"] .orbis-store-artwork-app {
-  --app-logo-size: 4rem;
-}
-.orbis-store-discover[data-presentation="editorial"] .orbis-store-artwork-app[data-art-position="1"] {
-  --app-logo-size: 2.5rem;
-}
-.orbis-store-discover[data-presentation="editorial"] .orbis-store-artwork-app[data-art-position="2"] {
-  --app-logo-size: 2rem;
-}
-.orbis-store-discover[data-presentation="editorial"] .orbis-store-artwork-app[data-art-position="3"] {
-  display: none;
-}
-.orbis-store-discover[data-presentation="editorial"] .orbis-store-collection-art[data-collection-kind="gaming"] .orbis-store-artwork-app {
-  --app-logo-size: 5.5rem;
-}
-.orbis-store-discover[data-presentation="editorial"] .orbis-store-collection-content {
-  gap: 12px;
-  padding: 18px;
-}
-.orbis-store-discover[data-presentation="editorial"] .orbis-store-collection h3 {
-  font-size: 1.375rem;
-}
-.orbis-store-discover[data-presentation="editorial"] .orbis-store-collection p {
-  font-size: 0.875rem;
-}
-.orbis-store-discover[data-presentation="editorial"] .orbis-store-message {
-  padding: 16px;
-}
-.orbis-store-discovery-note {
-  display: block;
-  margin-block: 16px;
-  color: var(--desktop-muted);
-  font-size: 0.875rem;
-  line-height: 1.6;
-}
-.orbis-store-shelf {
-  margin-top: 36px;
-  padding-top: 24px;
-  border-top: 1px solid var(--desktop-line);
-}
 .orbis-store-view-transition {
   position: relative;
   min-width: 0;
@@ -560,53 +384,7 @@
   width: 100%;
   min-width: 0;
 }
-.orbis-store-stack-dialog {
-  max-width: min(680px, calc(100vw - 32px));
-}
-.orbis-store-stack-body {
-  padding: 4px var(--orbis-dialog-gutter, 24px) 20px;
-  color: var(--desktop-ink);
-}
-.orbis-store-stack-dialog .orbis-store-stack-body h3 {
-  margin-block: 20px 14px;
-}
-.orbis-store-stack-options {
-  display: grid;
-  gap: 18px;
-}
-.orbis-store-stack-options p {
-  margin: 6px 0 0;
-  color: var(--desktop-muted);
-  font-size: 0.875rem;
-  line-height: 1.6;
-}
-.orbis-store-stack-note {
-  padding: 16px;
-  margin-block: 20px;
-  border: 1px solid var(--desktop-line);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--desktop-preset-tint) 7%, var(--desktop-surface));
-  line-height: 1.6;
-}
-
-@container (min-width: 60rem) {
-  .orbis-store-discover[data-presentation="page"] .orbis-store-collections {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .orbis-store-discover[data-presentation="page"] .orbis-store-collection {
-    display: grid;
-    grid-template-columns: minmax(10rem, 0.9fr) minmax(0, 1.1fr);
-    min-height: 14rem;
-  }
-  .orbis-store-discover[data-presentation="page"] .orbis-store-collection-art {
-    height: 100%;
-    min-height: 14rem;
-  }
-}
 @container (max-width: 60rem) {
-  .orbis-store-discover[data-presentation="editorial"] .orbis-store-collections {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .orbis-store-toolbar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 44px;
@@ -668,13 +446,6 @@
   }
 }
 @container (max-width: 38rem) {
-  .orbis-store-discover[data-presentation="editorial"] .orbis-store-collection {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .orbis-store-discover[data-presentation="editorial"] .orbis-store-collection-art {
-    height: 6rem;
-    min-height: 0;
-  }
   .orbis-store-toolbar {
     gap: 10px;
     padding-bottom: 16px;
@@ -683,19 +454,11 @@
   .orbis-store-view-choice > button {
     padding-inline: 10px;
   }
-  .orbis-store-result-heading,
-  .orbis-store-section-heading {
+  .orbis-store-result-heading {
     margin-bottom: 14px;
   }
-  .orbis-store-result-heading h2,
-  .orbis-store-section-heading h2 {
+  .orbis-store-result-heading h2 {
     font-size: 1.5rem;
-  }
-  .orbis-store-collection-content {
-    padding: 20px;
-  }
-  .orbis-store-collection h3 {
-    font-size: 1.625rem;
   }
   .orbis-store-grid {
     gap: 14px;
@@ -703,10 +466,4 @@
 }
 .orbis-store[data-reduced-motion="true"] .orbis-store-tile.app-tile {
   transition: none;
-}
-
-.orbis-store-stack-body h3 {
-  font-size: 1.125rem;
-  font-weight: 650;
-  line-height: 1.4;
 }

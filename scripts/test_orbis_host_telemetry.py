@@ -156,6 +156,54 @@ class HostTelemetryTests(unittest.TestCase):
         self.assertEqual(sample["disks"][0]["writeBytesPerSecond"], 400 * 512 / 10)
         self.assertEqual(sample["disks"][0]["busyPercent"], 50)
 
+    def test_one_second_rates_do_not_repeat_filesystem_or_battery_probes(self):
+        with mock.patch.object(self.reader, "battery", wraps=self.reader.battery) as battery:
+            first = self.collect(10)
+            self.assertIsNone(first["battery"])
+            self.assertTrue(first["available"])
+            self.counters(received=2000, sent=4000, read=110, written=220, busy=450)
+            second = self.collect(11)
+            self.assertEqual(second["network"][0]["rxBytesPerSecond"], 1000)
+            self.assertEqual(second["network"][0]["txBytesPerSecond"], 2000)
+            self.assertEqual(second["disks"][0]["readBytesPerSecond"], 10 * 512)
+            self.assertEqual(second["disks"][0]["busyPercent"], 5)
+            self.usage.assert_called_once()
+            battery.assert_called_once()
+            self.collect(20)
+            self.assertEqual(self.usage.call_count, 2)
+            self.assertEqual(battery.call_count, 2)
+
+    def test_fast_samples_keep_counter_reset_gap_and_subsecond_guards(self):
+        self.assertIsNone(MODULE.delta(2000, 1000, 0.1))
+        self.assertEqual(MODULE.delta(2000, 1000, 1), 1000)
+        self.assertIsNone(MODULE.delta(1, 1000, 1))
+        self.assertIsNone(MODULE.delta(2000, 1000, 61))
+
+    def test_read_admits_one_worker_near_each_second_and_coalesces_pending_reads(self):
+        self.reader.sample = self.collect(10)
+        self.reader.last_attempt = 10
+        with mock.patch.object(MODULE.threading, "Thread") as worker:
+            with mock.patch.object(MODULE.time, "monotonic", return_value=10.899):
+                self.reader.read()
+                worker.assert_not_called()
+            with mock.patch.object(MODULE.time, "monotonic", return_value=10.901):
+                for _ in range(100):
+                    self.reader.read()
+            worker.assert_called_once()
+            worker.return_value.start.assert_called_once()
+
+    def test_read_returns_new_counters_when_worker_finishes_within_budget(self):
+        with mock.patch.object(MODULE.time, "monotonic", return_value=10):
+            first = self.reader.read()
+        self.assertTrue(first["available"])
+        self.assertIsNone(first["network"][0]["rxBytesPerSecond"])
+        self.counters(received=2000)
+        with mock.patch.object(MODULE.time, "monotonic", return_value=11):
+            second = self.reader.read()
+        self.assertTrue(second["available"])
+        self.assertGreater(second["sampledAt"], first["sampledAt"])
+        self.assertEqual(second["network"][0]["rxBytesPerSecond"], 1000)
+
     def test_resets_replaced_devices_and_long_gaps_never_create_spikes(self):
         self.collect(10)
         self.counters(received=1, sent=1, read=1, written=1, busy=1)
@@ -192,7 +240,7 @@ class HostTelemetryTests(unittest.TestCase):
         self.assertEqual(sample["network"], [])
         self.assertEqual(sample["unavailable"], ["network", "disks"])
 
-    def test_blocked_probe_has_one_worker_and_never_blocks_readers(self):
+    def test_blocked_probe_has_one_worker_and_bounds_the_initiating_read(self):
         started, release, done = threading.Event(), threading.Event(), threading.Event()
         sample = self.collect(10)
         def blocked():
@@ -202,7 +250,9 @@ class HostTelemetryTests(unittest.TestCase):
             return sample
         with mock.patch.object(self.reader, "collect", side_effect=blocked) as collect:
             try:
+                before_first = time.monotonic()
                 first = self.reader.read()
+                self.assertLess(time.monotonic() - before_first, 0.25)
                 self.assertFalse(first["available"])
                 self.assertTrue(started.wait(1))
                 start = time.monotonic()

@@ -1,0 +1,143 @@
+.home-attention {
+  --attention-tone: var(--desktop-accent);
+  background: color-mix(in srgb, var(--attention-tone) 5%, var(--desktop-home-surface));
+}
+.home-attention[data-attention="true"] {
+  --attention-tone: var(--desktop-warning);
+}
+.home-attention-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.home-attention-heading > div {
+  min-width: 0;
+}
+.home-attention-symbol {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  height: 44px;
+  border-radius: 15px;
+  color: var(--attention-tone);
+  background: color-mix(in srgb, var(--attention-tone) 15%, transparent);
+}
+.home-attention .home-attention-heading h2 {
+  margin: 0;
+}
+.home-attention .home-attention-heading p {
+  margin: 5px 0 0;
+  max-width: none;
+  color: var(--desktop-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.home-attention-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+}
+.home-attention .home-attention-list a,
+.home-attention .home-attention-health {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--desktop-ink);
+  padding: 12px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 14px;
+  text-decoration: none;
+  background: color-mix(in srgb, var(--attention-tone) 5%, transparent);
+}
+.home-attention-list .app-logo {
+  flex-shrink: 0;
+}
+.home-attention-app,
+.home-attention-health > span {
+  display: grid;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+.home-attention-app strong {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.8125rem;
+}
+.home-attention-app small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--desktop-muted);
+  font-size: 0.6875rem;
+}
+.home-attention-app small svg {
+  flex-shrink: 0;
+}
+.home-attention-action {
+  flex-shrink: 0;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--attention-tone) 12%, transparent);
+  color: var(--desktop-ink);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+.home-attention .home-attention-health {
+  margin-top: 18px;
+  color: var(--desktop-ink);
+}
+.home-attention .home-attention-health > svg {
+  flex-shrink: 0;
+  color: var(--desktop-warning);
+}
+.home-attention-health strong {
+  font-size: 0.8125rem;
+}
+.home-attention-health small {
+  color: var(--desktop-muted);
+  font-size: 0.6875rem;
+}
+.home-attention .home-attention-note {
+  display: block;
+  margin: 14px 0 0;
+  color: var(--desktop-muted);
+  font-size: 0.75rem;
+}
+.home-attention .home-attention-more {
+  display: inline-flex;
+  margin-top: 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 10px;
+  text-decoration: none;
+}
+.home-attention a:hover {
+  background: color-mix(in srgb, var(--attention-tone) 12%, transparent);
+  text-decoration: none;
+}
+.home-attention a:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 2px;
+}
+@media (max-width: 380px) {
+  .home-attention .home-attention-list a {
+    flex-wrap: wrap;
+  }
+  .home-attention-app {
+    min-width: min(8em, 100%);
+  }
+  .home-attention-action {
+    margin-left: auto;
+  }
+}
+
+.home-attention-list > li {
+  min-width: 0;
+}

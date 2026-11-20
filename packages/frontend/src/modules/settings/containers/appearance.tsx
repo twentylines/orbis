@@ -58,7 +58,6 @@ export function AppearanceReset({ open, onOpenChange, onReset }: { open: boolean
               <li>Server display name, colours, light/dark mode, text size and spacing.</li>
               <li>Wallpaper, material effects, motion, clock and dock settings.</li>
               <li>Home layout and pins, saved window positions and sizes, and app-opening preferences.</li>
-              <li>Store recommendations and hidden suggestion categories.</li>
             </ul>
             <p>Your selected theme pack and uploaded images are kept. Accounts, installed apps and their data are unchanged.</p>
           </DialogDescription>

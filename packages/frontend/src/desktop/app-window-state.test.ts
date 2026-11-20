@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { appWindowReducer as reduce, appWorkspace, type AppWindowState } from './app-window-state';
+import { appWindowReducer as reduce, appWorkspace, minimizedAppGroups, type AppWindowState } from './app-window-state';
 
 const first = { urn: 'first:store', name: 'First', launchUrl: 'https://first.local' };
 const second = { urn: 'second:store', name: 'Second', launchUrl: 'https://second.local' };
@@ -149,14 +149,17 @@ test('disabling windows keeps automatically minimized apps hidden when their sec
   expect(returned.windows[0]?.status).toBe('minimized');
   expect(returned.windows[0]?.automatic).toBe(false);
 });
-test('snapping two visible windows places the partner on the other side and restores the picker when one minimizes', () => {
+test('minimizing either snapped pane minimizes and restores both windows as a pair', () => {
   let state = open(open({ windows: [], section: '/dashboard' }), second);
   state = reduce(state, { type: 'place', urn: first.urn, mode: 'right', partner: second.urn });
   expect(appWorkspace(state).split).toEqual({ anchor: first.urn, side: 'right', partner: second.urn });
   expect(state.windows.map(({ mode }) => mode)).toEqual(['right', 'left']);
   state = reduce(state, { type: 'minimize', urn: first.urn });
-  expect(appWorkspace(state).split).toEqual({ anchor: second.urn, side: 'left' });
-  expect(appWorkspace(state).pickerDismissed).toBe(false);
+  state = reduce(state, { type: 'minimized', urn: first.urn });
+  expect(minimizedAppGroups(state).map((members) => members.map(({ request }) => request))).toEqual([[first, second]]);
+  state = open(state, second);
+  expect(state.windows.map(({ status }) => status)).toEqual(['visible', 'visible']);
+  expect(appWorkspace(state).split).toEqual({ anchor: first.urn, side: 'right', partner: second.urn });
 });
 
 test('ending a desktop session clears open and minimized windows and section workspaces', () => {
@@ -164,4 +167,65 @@ test('ending a desktop session clears open and minimized windows and section wor
   expect(active.windows).toHaveLength(2);
   expect(active.windows.every((window) => window.status === 'minimized')).toBe(true);
   expect(reduce(active, { type: 'reset-session' })).toEqual({ windows: [], section: '/dashboard' });
+});
+
+test('restoring a Home pair from Apps transfers both documents and the original split layout', () => {
+  let state = reduce(reduce(open({ windows: [], section: '/dashboard' }), { type: 'place', urn: first.urn, mode: 'left' }), {
+    type: 'pair',
+    request: second,
+  });
+  state = reduce(state, { type: 'ratio', value: 0.62 });
+  state = reduce(state, { type: 'visit', section: '/apps' });
+  expect(minimizedAppGroups(state)).toHaveLength(1);
+  state = open(state, second);
+  expect(state.windows.map(({ section, status }) => [section, status])).toEqual([
+    ['/apps', 'visible'],
+    ['/apps', 'visible'],
+  ]);
+  expect(state.windows[0]?.request).toBe(first);
+  expect(state.windows[1]?.request).toBe(second);
+  expect(appWorkspace(state)).toMatchObject({ active: second.urn, ratio: 0.62, split: { anchor: first.urn, partner: second.urn, side: 'left' } });
+  state = reduce(state, { type: 'visit', section: '/dashboard' });
+  expect(appWorkspace(state).split).toBeUndefined();
+  expect(minimizedAppGroups(state)).toHaveLength(1);
+  state = reduce(state, { type: 'visit', section: '/apps' });
+  expect(state.windows.map(({ status }) => status)).toEqual(['visible', 'visible']);
+  expect(appWorkspace(state).ratio).toBe(0.62);
+  expect(minimizedAppGroups(state)).toHaveLength(0);
+});
+
+test('moving an unrelated window leaves the split intact; unsnapping a pane creates independent tray items', () => {
+  const third = { ...first, urn: 'third:store' };
+  let state = reduce(reduce(open({ windows: [], section: '/apps' }), { type: 'place', urn: first.urn, mode: 'left' }), {
+    type: 'pair',
+    request: second,
+  });
+  state = open(state, third);
+  state = reduce(state, { type: 'place', urn: third.urn, mode: 'floating' });
+  expect(appWorkspace(state).split?.partner).toBe(second.urn);
+  state = reduce(state, { type: 'place', urn: first.urn, mode: 'floating' });
+  expect(appWorkspace(state).split).toBeUndefined();
+  expect(state.windows.map(({ mode }) => mode)).toEqual(['floating', 'floating', 'floating']);
+  state = reduce(state, { type: 'visit', section: '/dashboard' });
+  expect(minimizedAppGroups(state).map((group) => group.length)).toEqual([1, 1, 1]);
+});
+
+test('restoring a pair into an occupied split preserves the other pair as a separate package', () => {
+  const third = { ...first, urn: 'third:store' };
+  const fourth = { ...second, urn: 'fourth:store' };
+  let state = reduce(reduce(open({ windows: [], section: '/dashboard' }), { type: 'place', urn: first.urn, mode: 'left' }), {
+    type: 'pair',
+    request: second,
+  });
+  state = reduce(state, { type: 'visit', section: '/apps' });
+  state = reduce(reduce(open(state, third), { type: 'place', urn: third.urn, mode: 'right' }), { type: 'pair', request: fourth });
+  state = reduce(state, { type: 'ratio', value: 0.66 });
+  state = open(state);
+  expect(minimizedAppGroups(state).map((members) => members.map(({ request }) => request))).toEqual([[third, fourth]]);
+  state = open(state, fourth);
+  expect(minimizedAppGroups(state).map((members) => members.map(({ request }) => request))).toEqual([[first, second]]);
+  expect(appWorkspace(state)).toMatchObject({ ratio: 0.66, split: { anchor: third.urn, partner: fourth.urn, side: 'right' } });
+  state = reduce(state, { type: 'remove-group', urns: [first.urn, second.urn] });
+  expect(state.windows.map(({ request }) => request)).toEqual([third, fourth]);
+  expect(minimizedAppGroups(state)).toHaveLength(0);
 });

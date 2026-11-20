@@ -9,10 +9,16 @@ import {
   type DockScrollSample,
 } from './dock-scroll-state';
 import { useDesktopWindows } from './window-viewport';
+import { prefersReducedMotion } from './motion-setting';
+
+const scrollSettleDelay = 160;
+const scrollTopDistance = 64;
 
 export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string, enabled: boolean) {
   const [collapsed, setCollapsed] = useState(false);
+  const [canScrollToTop, setCanScrollToTop] = useState(false);
   const expand = useRef(() => setCollapsed(false));
+  const scrollToTop = useRef<(() => void) | null>(null);
   const pointerTarget = useRef<Element | null>(null);
   const monitorDestination = useRef<string | null>(null);
   const scrollRoute = dockScrollRoute(route, useDesktopWindows());
@@ -56,12 +62,18 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
     let pointerInside = false;
     let hidden = false;
     let frame = 0;
+    let settleTimer: number | undefined;
+    let settledSource: Element | null = null;
     let wheel: { target: Element; direction: DockScrollDirection; time: number } | undefined;
     let sizes: ResizeObserver | undefined;
     const openControl = () => nav.querySelector('[data-state="open"], [aria-expanded="true"]:not(.desktop-dock-reveal)');
     const held = () => {
       const active = document.activeElement;
-      const focused = active?.matches(':focus-visible') && nav.contains(active) && !active.contains(pointerTarget.current);
+      const focused =
+        active?.matches(':focus-visible') &&
+        nav.contains(active) &&
+        !active.matches('.desktop-dock-scroll-top') &&
+        !active.contains(pointerTarget.current);
       return pointerInside || focused || Boolean(openControl());
     };
     const commit = (next: boolean) => {
@@ -77,6 +89,26 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
         /^(auto|scroll|overlay)$/.test(getComputedStyle(element).overflowY));
     const scrollable = (element: Element) =>
       element.clientHeight > 0 && element.scrollHeight - element.clientHeight >= dockScrollMinExtent && scrollSurface(element);
+    const syncScrollTop = () => {
+      window.clearTimeout(settleTimer);
+      const source = activeSource;
+      if (!hidden || !source?.isConnected || !scrollable(source) || source.scrollTop < scrollTopDistance) {
+        settledSource = null;
+        setCanScrollToTop(false);
+        return;
+      }
+      if (settledSource === source) return;
+      settledSource = null;
+      setCanScrollToTop(false);
+      settleTimer = window.setTimeout(() => {
+        settledSource = source;
+        setCanScrollToTop(true);
+      }, scrollSettleDelay);
+    };
+    scrollToTop.current = () => {
+      if (settledSource !== activeSource || !settledSource?.isConnected || !scrollable(settledSource)) return;
+      settledSource.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'instant' : 'smooth' });
+    };
     // Update the button without rendering the dashboard on every scroll frame.
     const syncProgress = () => {
       const source = activeSource;
@@ -90,6 +122,7 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
       }
       nav.toggleAttribute('data-scroll-progress', progress !== null);
       nav.style.setProperty('--orbis-dock-scroll-remaining', String(1 - (progress ?? 0)));
+      syncScrollTop();
     };
     const register = (element: Element) => {
       if (states.has(element) || !scrollSurface(element)) return;
@@ -209,7 +242,7 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
       // A boundary event can be produced by the folding hit area moving
       // underneath a stationary pointer. Only pointer movement reveals it.
       if (event.pointerType === 'touch' || !(event.target instanceof Element)) return;
-      if (!event.target.closest('.desktop-dock-main, .desktop-dock-reveal')) {
+      if (!event.target.closest('.desktop-dock-main, .desktop-dock-reveal, .orbis-app-tray, .desktop-activity-trigger')) {
         pointerInside = false;
         return;
       }
@@ -276,6 +309,7 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
     window.addEventListener('resize', reveal);
     window.addEventListener(dockCollapseForMonitorChart, collapseForChart);
     return () => {
+      window.clearTimeout(settleTimer);
       cancelAnimationFrame(frame);
       sizes?.disconnect();
       changes.disconnect();
@@ -293,8 +327,15 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
       window.removeEventListener('resize', reveal);
       window.removeEventListener(dockCollapseForMonitorChart, collapseForChart);
       expand.current = () => setCollapsed(false);
+      scrollToTop.current = null;
     };
   }, [dock, scrollRoute, enabled]);
 
-  return { collapsed: enabled && Boolean(scrollRoute) && collapsed, expand: () => expand.current() };
+  const isCollapsed = enabled && Boolean(scrollRoute) && collapsed;
+  return {
+    collapsed: isCollapsed,
+    canScrollToTop: isCollapsed && canScrollToTop,
+    expand: () => expand.current(),
+    scrollToTop: () => scrollToTop.current?.(),
+  };
 }

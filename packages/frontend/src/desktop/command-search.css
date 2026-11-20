@@ -1,9 +1,24 @@
-.desktop-search-trigger[data-search-open="true"] {
-  opacity: 0;
+.desktop-system-bar > * {
+  opacity: 1;
+  filter: none;
+  transition:
+    opacity 220ms ease-out,
+    filter 280ms cubic-bezier(0.2, 0.65, 0.3, 1);
 }
 .desktop-system-bar:has(.desktop-search-trigger[data-search-open="true"]) > * {
+  opacity: 0;
+  filter: blur(6px);
   visibility: hidden;
   pointer-events: none;
+  transition: none;
+}
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"]) .desktop-system-bar > * {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-system-bar > * {
+    transition: none;
+  }
 }
 .desktop-search-backdrop {
   position: fixed;

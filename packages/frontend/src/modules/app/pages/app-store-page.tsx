@@ -27,7 +27,6 @@ import { useTranslation } from 'react-i18next';
 import { Navigate, useLocation, useParams, useSearchParams } from 'react-router';
 import { StoreViewTransition } from '../components/store-discover/store-view-transition';
 import { StoreCatalogue } from './store-catalogue';
-import { StoreShowcase } from '../components/store-discover/store-showcase';
 import { nextStorePreviewHistory, type StorePreviewHistory } from './store-preview-navigation';
 import { useStorePreview } from './store-preview-context';
 import './app-store-page.css';
@@ -314,9 +313,6 @@ function LocalStore() {
         apps={
           <div className="orbis-store-catalogue">
             <div className="orbis-store-results" aria-busy={updating || undefined}>
-              {!hasFilters && data ? (
-                <StoreShowcase apps={apps} storeId={selectedStore} installedApps={installedApps} pendingApps={pendingApps} onBrowse={browse} />
-              ) : null}
               <div className="orbis-store-result-heading">
                 <div>
                   <h2>{category ? t(`APP_CATEGORY_${category.toUpperCase()}`) : search ? 'Search results' : 'All apps'}</h2>

@@ -158,10 +158,23 @@ export function StartupBoundary({ children }: PropsWithChildren) {
       else reveal();
     };
     const targets = [surface.current, desktopTarget, authTarget].filter((target): target is HTMLElement => Boolean(target));
-    let stopWorkspace: () => void = () => undefined;
+    let wallpapersReady = false;
+    let workspaceReady = false;
+    const finishWhenReady = () => {
+      if (wallpapersReady && workspaceReady) finishLoading();
+    };
     const stopWaiting = waitForStartupWallpapers(targets, () => {
-      stopWorkspace = waitForWorkspaceReady(desktopTarget, finishLoading, () => setWorkspaceSlow(true));
+      wallpapersReady = true;
+      finishWhenReady();
     });
+    const stopWorkspace = waitForWorkspaceReady(
+      desktopTarget,
+      () => {
+        workspaceReady = true;
+        finishWhenReady();
+      },
+      () => setWorkspaceSlow(true),
+    );
     return () => {
       stopWaiting();
       stopWorkspace();

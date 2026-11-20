@@ -10,6 +10,8 @@ from pathlib import Path
 
 
 LIMIT = 32
+COUNTER_MIN_INTERVAL = 0.9
+COUNTER_RESPONSE_BUDGET = 0.05
 MAX_SAFE_INTEGER = 2**53 - 1
 NAME = re.compile(r"[a-zA-Z0-9_.:@+!-]{1,128}\Z")
 PSEUDO = {
@@ -37,7 +39,7 @@ def name_valid(value: str) -> bool:
 
 
 def delta(current: int, previous: int | None, elapsed: float | None):
-    if previous is None or elapsed is None or not 2 <= elapsed <= 60 or current < previous:
+    if previous is None or elapsed is None or not 0.5 <= elapsed <= 60 or current < previous:
         return None
     return number((current - previous) / elapsed)
 
@@ -50,6 +52,7 @@ class HostTelemetry:
         self.last_attempt = float("-inf")
         self.sample = None
         self.failed = False
+        self.slow_sample = None
         self.previous_network = {}
         self.previous_disks = {}
         boot = self.small(self.proc / "sys/kernel/random/boot_id")
@@ -270,20 +273,29 @@ class HostTelemetry:
     def collect(self):
         now = time.monotonic()
         sampled_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        result = {"available": True, "sampledAt": sampled_at, "battery": self.battery(), "filesystems": [], "network": [], "disks": [], "omitted": {}, "unavailable": []}
-        for section in ("network", "disks", "filesystems"):
+        # Network/disk deltas need one-second counters; filesystem probes and
+        # battery attributes retain a ten-second cadence in the same bounded worker.
+        if self.slow_sample is None or now - self.slow_sample[0] >= 10:
             try:
-                values = self.filesystems() if section == "filesystems" else getattr(self, section)(now)
+                filesystems = self.filesystems()
+            except (OSError, ValueError, OverflowError):
+                filesystems = ([], 0, True)
+            self.slow_sample = (now, self.battery(), filesystems)
+        _, battery, filesystems = self.slow_sample
+        result = {"available": True, "sampledAt": sampled_at, "battery": battery, "filesystems": filesystems[0], "network": [], "disks": [], "omitted": {"filesystems": filesystems[1]}, "unavailable": []}
+        if len(filesystems) == 3 and filesystems[2]:
+            result["unavailable"].append("filesystems")
+        for section in ("network", "disks"):
+            try:
+                values = getattr(self, section)(now)
                 result[section], result["omitted"][section] = values[:2]
-                if len(values) == 3 and values[2]:
-                    result["unavailable"].append(section)
             except (OSError, ValueError, OverflowError):
                 result["unavailable"].append(section)
                 result["omitted"][section] = 0
         result["available"] = any(result[section] for section in ("filesystems", "network", "disks")) or len(result["unavailable"]) < 3
         return result
 
-    def refresh(self):
+    def refresh(self, done):
         try:
             sample = self.collect()
             with self.lock:
@@ -295,15 +307,23 @@ class HostTelemetry:
         finally:
             with self.lock:
                 self.running = False
+                done.set()
 
     def read(self):
+        done = None
         with self.lock:
             now = time.monotonic()
-            if not self.running and now - self.last_attempt >= 10:
+            if not self.running and now - self.last_attempt >= COUNTER_MIN_INTERVAL:
                 self.running = True
                 self.last_attempt = now
                 # One bounded worker prevents an unresponsive network filesystem from tying up HTTP handlers or spawning more probes.
-                threading.Thread(target=self.refresh, daemon=True, name="orbis-host-counters").start()
+                done = threading.Event()
+                threading.Thread(target=self.refresh, args=(done,), daemon=True, name="orbis-host-counters").start()
+        # Give the initiating request a short chance to receive the new counters.
+        # Concurrent readers keep using the previous sample if a device probe stalls.
+        if done is not None:
+            done.wait(COUNTER_RESPONSE_BUDGET)
+        with self.lock:
             if self.sample is None:
                 return {"available": False, "reason": "Collecting host readings." if self.running else "Host readings are unavailable."}
             age = datetime.now(timezone.utc).timestamp() - datetime.fromisoformat(self.sample["sampledAt"].replace("Z", "+00:00")).timestamp()

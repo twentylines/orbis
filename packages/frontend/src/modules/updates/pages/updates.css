@@ -109,6 +109,9 @@
   background: color-mix(in srgb, var(--desktop-preset-tint) 5%, var(--desktop-content-fill));
   container-type: inline-size;
 }
+.desktop-updates-card-orbis {
+  align-self: start;
+}
 .desktop-updates-release,
 .desktop-updates-sentinel {
   grid-column: 1 / -1;
@@ -395,6 +398,9 @@
     align-self: center;
     inline-size: clamp(8.5rem, 31cqi, 12rem);
   }
+  .desktop-updates-card-orbis .desktop-updates-artwork {
+    inline-size: clamp(5rem, 18cqi, 7rem);
+  }
 }
 .desktop-updates-card-head h2 {
   flex: 1 1 min-content;
@@ -416,6 +422,13 @@
 .desktop-update-summary > div {
   min-width: 0;
   flex: 1 1 11rem;
+}
+.desktop-updates-card-orbis .desktop-update-summary {
+  display: grid;
+  justify-items: start;
+}
+.desktop-updates-card-orbis .desktop-update-summary > button {
+  max-inline-size: 100%;
 }
 .desktop-update-summary :is(p, output) {
   display: block;
