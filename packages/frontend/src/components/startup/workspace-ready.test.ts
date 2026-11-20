@@ -151,6 +151,42 @@ test('visible app images must finish decoding before Home is revealed', async ()
   }
 });
 
+test('ready Home decodes app images while fonts load and still waits for both', async () => {
+  const h = harness();
+  let decodes = 0;
+  let releaseImage = () => {};
+  h.state.dataReady = true;
+  h.state.images = [
+    {
+      loading: 'eager',
+      complete: true,
+      naturalWidth: 48,
+      src: '/icon.png',
+      decode: () => {
+        decodes++;
+        return new Promise<void>((resolve) => {
+          releaseImage = resolve;
+        });
+      },
+    } as unknown as HTMLImageElement,
+  ];
+  const stop = h.start();
+  try {
+    expect(decodes).toBe(1);
+    expect(h.state.ready).toBe(0);
+    releaseImage();
+    await Bun.sleep(0);
+    expect(h.state.ready).toBe(0);
+    h.releaseFonts();
+    await Bun.sleep(0);
+    expect(h.state.ready).toBe(1);
+    expect(decodes).toBe(1);
+  } finally {
+    stop();
+    h.restore();
+  }
+});
+
 test('a stalled visible supplemental image does not block Home readiness', async () => {
   const h = harness();
   h.state.images = [

@@ -23,7 +23,7 @@ export function waitForWorkspaceReady(surface: HTMLElement | null, ready: () => 
     events.removeEventListener('error', check, true);
   }
   function check() {
-    if (stopped || !fontsReady) return;
+    if (stopped) return;
     // Suspense replaces the pending Guest shell, so observe its document and
     // resolve the current surface rather than holding the removed fallback.
     const home = guest ? document.querySelector('.desktop-guest') : surface?.querySelector('.workspace');
@@ -50,7 +50,7 @@ export function waitForWorkspaceReady(surface: HTMLElement | null, ready: () => 
       batch.push(image.decode().then(complete, complete));
     }
     if (batch.length) void Promise.all(batch).then(check);
-    if (pending) return;
+    if (pending || !fontsReady) return;
     stop();
     ready();
   }
@@ -62,6 +62,9 @@ export function waitForWorkspaceReady(surface: HTMLElement | null, ready: () => 
   });
   events.addEventListener('load', check, true);
   events.addEventListener('error', check, true);
+  // Font readiness and image decode are independent. Prepare both together,
+  // retaining the final gate so the workspace never reveals between them.
+  check();
   void (document.fonts?.ready ?? Promise.resolve()).then(() => {
     fontsReady = true;
     check();

@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { ExchangeRatesController } from './exchange-rates.controller';
+import { ExchangeRatesService } from './exchange-rates.service';
 import { SystemController } from './system.controller';
 import { SystemService } from './system.service';
 import { OrbisReleaseService } from './orbis-release.service';
@@ -19,8 +21,9 @@ import { InstalledSoftwareService } from './installed-software.service';
 
 @Module({
   imports: [DockerModule, AppsModule, MonitoringActivityModule],
-  controllers: [SystemController],
+  controllers: [SystemController, ExchangeRatesController],
   providers: [
+    ExchangeRatesService,
     SystemService,
     SentinelService,
     SentinelReleasesService,
