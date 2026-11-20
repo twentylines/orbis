@@ -56,6 +56,22 @@ export const coreUpdateTitle = (phase: CoreUpdateWatch['phase'], operation: Core
 
 const restartingMessage = 'The page will reload automatically when Orbis is ready.';
 
+export function coreUpdatePhaseMessage(phase?: string | null): string | undefined {
+  const messages: Record<string, string> = {
+    preparing: 'Checking the release and backup storage…',
+    downloading: 'Downloading the verified Orbis image…',
+    pulled: 'Image downloaded. Preparing the backup…',
+    stopping: 'Pausing Orbis control services. Applications keep running.',
+    stopped: 'Control services paused for backup…',
+    snapshotting: 'Saving and verifying the safety backup. Applications keep running.',
+    'snapshot-ready': 'Backup verified. Applying the update…',
+    staged: 'Starting Orbis and checking server health…',
+    restarting: restartingMessage,
+    verifying: 'Starting Orbis and checking server health.',
+  };
+  return phase && Object.hasOwn(messages, phase) ? messages[phase] : undefined;
+}
+
 export function advanceCoreUpdate(watch: CoreUpdateWatch | null, event: CoreUpdateEvent): CoreUpdateWatch | null {
   if (event.type === 'accepted') {
     if (!validCoreUpdate(event.id, event.targetTag)) return watch;
@@ -123,6 +139,11 @@ export function advanceCoreUpdate(watch: CoreUpdateWatch | null, event: CoreUpda
   if (job.state !== 'complete' && job.phase === 'restarting') return { ...next, phase: 'offline', message: restartingMessage };
   if (job.state !== 'complete' && job.phase === 'verifying')
     return { ...next, phase: 'checking', message: 'Starting Orbis and checking server health.' };
+  if (job.state === 'running' && ['preparing', 'pulled', 'stopping', 'stopped', 'snapshotting', 'snapshot-ready'].includes(job.phase ?? '')) {
+    // Control services are deliberately offline during the safety checkpoint.
+    // Their health cannot describe which step this matching active job is doing.
+    return { ...next, phase: 'updating', message: coreUpdatePhaseMessage(job.phase) ?? next.message };
+  }
   if (!status.available || status.coreState !== 'running' || status.coreHealth !== 'healthy') {
     return { ...next, phase: 'offline', message: restartingMessage };
   }

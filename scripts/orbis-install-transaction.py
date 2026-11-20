@@ -144,7 +144,7 @@ def quiesce(root: Path, reader, record: dict) -> None:
     STORAGE.require_quiet_existing(root, reader, value["storage"])
 
 
-def checkpoint(root: Path, reader, value: dict, *, host_writers_stopped: bool) -> dict:
+def checkpoint(root: Path, reader, value: dict, *, host_writers_stopped: bool, progress=None) -> dict:
     validate_review(value)
     if not host_writers_stopped:
         raise TransactionError("Confirm native host and remote storage writers are stopped before checkpointing")
@@ -155,13 +155,19 @@ def checkpoint(root: Path, reader, value: dict, *, host_writers_stopped: bool) -
     save(record)
     record["stage"] = "quiescing"
     save(record)
+    if progress is not None:
+        progress("stopping")
     quiesce(root, reader, record)
     record["stage"] = "snapshotting"
     save(record)
+    if progress is not None:
+        progress("snapshotting")
     STORAGE.capture(root, reader, value["storage"], host_writers_stopped=True)
     manifest = STORAGE.verified_manifest(Path(value["storage"]["bundle"]))
     record.update(stage="ready", backupFingerprint=APPS.digest(manifest))
     save(record)
+    if progress is not None:
+        progress("snapshot-ready")
     return {"schema": SCHEMA, "result": "installation-checkpointed", "journal": value["journal"], "containersRemainStopped": True, "resources": len(manifest["copies"])}
 
 

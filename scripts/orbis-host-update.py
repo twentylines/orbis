@@ -771,7 +771,12 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
             write_journal(snapshot, record)
             if record.get("backupScope") in {"controller", CONTROLLER.SCOPE}:
                 tools, reader = controller_tools(context, lock_fd)
-                tools.checkpoint(root, reader, planned["checkpoint"], host_writers_stopped=True)
+                def publish_checkpoint(phase):
+                    if phase not in {"stopping", "snapshotting", "snapshot-ready"}:
+                        raise ValueError("checkpoint progress does not match the update")
+                    record["stage"] = phase
+                    write_journal(snapshot, record)
+                tools.checkpoint(root, reader, planned["checkpoint"], host_writers_stopped=True, progress=publish_checkpoint)
             else:
                 stop_core(root, context)
                 require_quiet_apps(root, context)

@@ -38,7 +38,7 @@ import {
   serverRestartQueryKey,
   type ServerRestartStatus,
 } from '@/desktop/host-update-watch';
-import { coreWatchIsActive } from '@/desktop/core-update-state';
+import { coreUpdatePhaseMessage, coreWatchIsActive } from '@/desktop/core-update-state';
 import { installedOrbisBuildOptions, orbisReleaseErrorMessage, orbisReleasesOptions, newerOrbisRelease } from '@/desktop/orbis-release';
 import { useReviewExpired } from '@/desktop/use-review-expired';
 import { orbisReleaseChannelsOptions, releaseChannelErrorMessage } from '@/desktop/release-channels';
@@ -445,18 +445,7 @@ function LocalUpdates() {
     onSuccess: () => void host.refetch(),
   });
   const job = user.operator ? host.data?.job : undefined;
-  const corePhase = (
-    {
-      preparing: 'Checking the release and backup storage…',
-      downloading: 'Downloading the verified Orbis image…',
-      pulled: 'Image downloaded. Preparing the backup…',
-      stopping: 'Backing up control data. Apps keep running.',
-      stopped: 'Control services paused for backup…',
-      snapshotting: 'Backing up control data…',
-      'snapshot-ready': 'Backup verified. Applying the update…',
-      staged: 'Starting Orbis and checking server health…',
-    } as Record<string, string>
-  )[job?.phase ?? ''];
+  const corePhase = coreUpdatePhaseMessage(job?.phase);
   const jobBusy = job?.state === 'running' || job?.state === 'recovering';
   const canPlan = Boolean(
     build.data &&

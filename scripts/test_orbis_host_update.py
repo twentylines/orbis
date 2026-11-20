@@ -113,6 +113,13 @@ class OrbisHostUpdateTests(unittest.TestCase):
         checkpoint = {'storage': {'backupScope': UPDATE.CONTROLLER.SCOPE}}
         runtime = mock.Mock()
         tools, reader = mock.Mock(), mock.Mock()
+        checkpoint_stages = []
+        def save_checkpoint(root, actual_reader, value, *, host_writers_stopped, progress):
+            self.assertEqual((root, actual_reader, value, host_writers_stopped), (self.root, reader, checkpoint, True))
+            for phase in ('stopping', 'snapshotting', 'snapshot-ready'):
+                progress(phase)
+                checkpoint_stages.append(json.loads(UPDATE.journal_path(self.snapshot).read_text())['stage'])
+        tools.checkpoint.side_effect = save_checkpoint
         def start_target(*, progress):
             before = json.loads(UPDATE.journal_path(self.snapshot).read_text())
             self.assertEqual((before['stage'], before['progressPhase']), ('staged', 'restarting'))
@@ -132,7 +139,8 @@ class OrbisHostUpdateTests(unittest.TestCase):
         runtime.start_target.assert_called_once()
         runtime.restore_policies.assert_called_once_with(target=True)
         runtime.commit.assert_called_once()
-        tools.checkpoint.assert_called_once_with(self.root, reader, checkpoint, host_writers_stopped=True)
+        tools.checkpoint.assert_called_once()
+        self.assertEqual(checkpoint_stages, ['stopping', 'snapshotting', 'snapshot-ready'])
         self.assertFalse(any(call[0] in {'compose', 'stop'} for call in fake.calls))
         saved = json.loads(UPDATE.journal_path(self.snapshot).read_text())
         self.assertEqual(saved['backupScope'], UPDATE.CONTROLLER.SCOPE)

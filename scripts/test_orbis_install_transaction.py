@@ -300,12 +300,31 @@ class TransactionTests(unittest.TestCase):
 
     def test_failed_snapshot_retains_recoverable_quiesced_services(self):
         value = self.review()
+        observed = []
+        def progress(phase):
+            observed.append((phase, json.loads(self.journal.read_text())["stage"]))
         with mock.patch.object(TX.STORAGE, "capture", side_effect=RuntimeError("disk full")):
             with self.assertRaisesRegex(RuntimeError, "disk full"):
-                TX.checkpoint(self.root, self.docker, value, host_writers_stopped=True)
+                TX.checkpoint(self.root, self.docker, value, host_writers_stopped=True, progress=progress)
+        self.assertEqual(observed, [("stopping", "quiescing"), ("snapshotting", "snapshotting")])
         self.assertEqual(json.loads(self.journal.read_text())["stage"], "snapshotting")
         self.recover()
         self.assertEqual(self.states(), self.original)
+
+    def test_progress_reports_ready_only_after_verified_backup_is_durable(self):
+        value = self.review()
+        observed = []
+        def progress(phase):
+            saved = json.loads(self.journal.read_text())
+            observed.append((phase, saved['stage']))
+            if phase == 'snapshot-ready':
+                self.assertIn('backupFingerprint', saved)
+                self.assertTrue(all(state != 'running' for state, _ in self.states().values()))
+                verified.assert_called_once_with(self.bundle)
+        with mock.patch.object(TX.STORAGE, 'capture'), \
+                mock.patch.object(TX.STORAGE, 'verified_manifest', return_value={'plan': value['storage'], 'copies': []}) as verified:
+            TX.checkpoint(self.root, self.docker, value, host_writers_stopped=True, progress=progress)
+        self.assertEqual(observed, [('stopping', 'quiescing'), ('snapshotting', 'snapshotting'), ('snapshot-ready', 'ready')])
 
     def test_completed_recovery_cannot_be_replayed(self):
         self.quiesce()

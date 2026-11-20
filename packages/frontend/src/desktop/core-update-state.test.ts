@@ -5,6 +5,7 @@ import {
   claimCoreRefresh,
   coreWatchIsActive,
   coreUpdateTitle,
+  coreUpdatePhaseMessage,
   resumeCoreUpdate,
   type CoreUpdateStatus,
 } from './core-update-state';
@@ -22,6 +23,38 @@ const status = (state: string, overrides: Partial<CoreUpdateStatus> = {}): CoreU
   ...overrides,
 });
 const accepted = () => advanceCoreUpdate(null, { type: 'accepted', id, targetTag });
+
+describe('safety checkpoint progress', () => {
+  test.each(['preparing', 'pulled', 'stopping', 'stopped', 'snapshotting', 'snapshot-ready'])(
+    'keeps %s distinct from a restart while control services are paused',
+    (phase) => {
+      const watch = advanceCoreUpdate(accepted(), {
+        type: 'status',
+        status: status('running', { coreState: 'exited', coreHealth: undefined, job: { id, targetTag, state: 'running', phase } }),
+      });
+      expect(watch?.phase).toBe('updating');
+      expect(watch?.message).toBe(coreUpdatePhaseMessage(phase));
+      expect(claimCoreRefresh(watch, new Set()).refresh).toBe(false);
+    },
+  );
+  test('checkpoint text cannot override a failed or unrelated update', () => {
+    const failed = advanceCoreUpdate(accepted(), {
+      type: 'status',
+      status: status('failed', { job: { id, targetTag, state: 'failed', phase: 'snapshotting', message: 'Backup failed.' } }),
+    });
+    expect(failed).toMatchObject({ phase: 'failed', message: 'Backup failed.' });
+    const unrelated = advanceCoreUpdate(accepted(), {
+      type: 'status',
+      status: status('running', { job: { id: other, targetTag, state: 'running', phase: 'snapshotting' } }),
+    });
+    expect(unrelated?.message).toBe(accepted()?.message);
+  });
+  test('unknown phase strings never become UI text', () => {
+    for (const phase of ['PRIVATE_FIXTURE', 'constructor', 'toString', '__proto__', undefined, null]) {
+      expect(coreUpdatePhaseMessage(phase)).toBeUndefined();
+    }
+  });
+});
 
 describe('reviewed downgrade lifecycle', () => {
   test('keeps the downgrade identity through restart and refreshes only the healthy target', () => {
