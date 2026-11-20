@@ -176,7 +176,7 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   }
   if (opacity !== null) surface[3] = opacity / 100;
   if (chromeOpacity !== null) chrome[3] = chromeOpacity / 100;
-  const defaultChromeOpacity = mode === 'dark' ? 0.76 : 0.84;
+  const defaultChromeOpacity = dark ? 0.52 : 0.8;
   const defaultChromeChanged = !solid && chromeOpacity === null && chrome[3] > defaultChromeOpacity;
   if (defaultChromeChanged) chrome[3] = defaultChromeOpacity;
   if (solid) surface[3] = chrome[3] = panel[3] = 1;
@@ -206,8 +206,7 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   const chromePaint: Rgba = guardedGlass ? [chrome[0], chrome[1], chrome[2], 1] : chrome;
   const tintedPaint = mix(chromePaint, preset, chromeTint);
   const darkChrome = dark && !oled;
-  const shade = darkChrome ? 0.25 : 1;
-  const originalChrome = [...tintedPaint.slice(0, 3).map((channel) => channel * shade), chrome[3]] as Rgba;
+  const originalChrome = [...tintedPaint.slice(0, 3), chrome[3]] as Rgba;
   let tintedChrome = originalChrome;
   const chromeInk = colour(source.getPropertyValue('--desktop-chrome-ink').trim());
   const controlBackgrounds = (paint: Rgba, brightness: number, highlight: number) =>
@@ -215,8 +214,8 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   const highlight = guardedGlass ? 0.24 : 0.2;
   const hasChromeContrast = (paint: Rgba, brightness: number) =>
     controlBackgrounds(paint, brightness, highlight).every((background) => contrast(chromeInk, background) >= 4.65);
-  // Keep the underlying scene dim in Dark while leaving the requested tint alpha untouched.
-  let brightness = dark && guardedGlass ? 0.22 : 1;
+  // Start with the original scene and only dim as much as the controls need.
+  let brightness = 1;
   let chromeAdjusted = false;
   // Bound the tint once at full opacity. For custom glass, any remaining glare
   // comes from the backdrop, including light page content under sticky chrome.
@@ -233,7 +232,7 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   }
   if (guardedGlass && !hasChromeContrast(tintedChrome, brightness)) {
     let lower = 0;
-    let upper = Math.round(brightness * 100);
+    let upper = 100;
     while (upper - lower > 1) {
       const percent = Math.floor((lower + upper) / 2);
       if (hasChromeContrast(tintedChrome, percent / 100)) lower = percent;
@@ -248,7 +247,7 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   const chromeBackgrounds = controlBackgrounds(tintedChrome, brightness, highlight);
   const menuSurface: Rgba = darkChrome
     ? tintedChrome
-    : ([...tintedSurface.slice(0, 3), solid ? 1 : Math.max(0.8, Math.min(0.86, tintedSurface[3]))] as Rgba);
+    : ([...tintedSurface.slice(0, 3), solid ? 1 : Math.max(0.74, Math.min(0.78, tintedSurface[3]))] as Rgba);
   set('menu-surface', css(menuSurface));
   const menuBackgrounds = darkChrome
     ? [menuSurface, mix(menuSurface, preset, 0.2)].flatMap((background) => backgrounds(background, 255 * brightness))

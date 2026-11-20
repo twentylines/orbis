@@ -136,6 +136,7 @@ describe('saved appearance applied before hydration and to live materials', () =
     const result = apply({});
     expect([...result.properties.keys()].sort()).toEqual([
       '--orbis-accent',
+      '--orbis-chrome',
       '--orbis-chrome-focus',
       '--orbis-chrome-muted',
       '--orbis-control-transition-duration',
@@ -314,8 +315,9 @@ describe('saved appearance applied before hydration and to live materials', () =
         const { properties } = apply({}, { dark, tokens });
         const menu = rgb(properties.get('--orbis-menu-surface') ?? '');
         const chrome = rgb(properties.get('--orbis-chrome') ?? tokens['--desktop-base-chrome'] ?? '');
-        expect(menu[3]).toBe(dark ? 0.76 : 0.86);
-        expect(chrome[3]).toBeLessThanOrEqual(dark ? 0.76 : 0.84);
+        expect(menu[3]).toBe(dark ? 0.52 : 0.78);
+        expect(chrome[3]).toBeLessThanOrEqual(dark ? 0.52 : 0.8);
+        if (!dark) expect(properties.has('--orbis-chrome-backdrop-brightness')).toBe(false);
         for (const wallpaper of [0, 255]) {
           const behind = composite(menu, dark ? chromeBackdrop(properties, wallpaper) : wallpaper);
           expect(contrast(rgb(tokens['--desktop-ink'] ?? ''), behind)).toBeGreaterThanOrEqual(4.5);
@@ -326,11 +328,11 @@ describe('saved appearance applied before hydration and to live materials', () =
       }
     }
   });
-  test('dark Stone defaults match the approved saved pane and chrome composition', () => {
+  test('dark Stone defaults use translucent chrome and keep the 95% pane', () => {
     const options = { dark: true, tokens: actualPalette('stone', true) };
     const defaults = apply({}, options).properties;
     const reference = apply(
-      { materialMode: 'custom', transparency: 'glass', surfaceOpacity: 95, chromeOpacity: 76, chromeBlur: 14, glassTint: 0 },
+      { materialMode: 'custom', transparency: 'glass', surfaceOpacity: 95, chromeOpacity: 52, chromeBlur: 14, glassTint: 0 },
       options,
     ).properties;
     for (const token of ['pane-surface', 'chrome', 'chrome-backdrop-brightness', 'chrome-muted', 'chrome-focus']) {
@@ -382,7 +384,7 @@ describe('saved appearance applied before hydration and to live materials', () =
       const defaultChrome = rgb(apply({}, options).properties.get('--orbis-chrome') ?? '');
       const untinted = apply({ materialMode: 'custom' }, options);
       expect(defaultChrome).toEqual(rgb(untinted.properties.get('--orbis-chrome') ?? ''));
-      expect(defaultChrome[3]).toBe(0.76);
+      expect(defaultChrome[3]).toBe(0.52);
 
       const tinted = apply({ materialMode: 'custom', chromeOpacity: 72, glassTint: 20 }, options);
       const customChrome = rgb(tinted.properties.get('--orbis-chrome') ?? '');
@@ -554,7 +556,7 @@ test('legacy chrome stays in Dark on first paint and explicit mode profiles reta
   expect(rgb(dark.get('--orbis-menu-surface') ?? '')[3]).toBe(0.1);
   expect(dark.get('--orbis-chrome-filter')).toBe('blur(7px) saturate(1.2)');
   expect(dark.get('--orbis-glass-filter')).toBe('blur(40px) saturate(1.2)');
-  expect(dark.get('--orbis-chrome-backdrop-brightness')).toBe('brightness(0.22)');
+  expect(chromeBackdrop(dark, 1)).toBeGreaterThan(0.22);
   expect(light.get('--orbis-theme-tint')).toBe(dark.get('--orbis-theme-tint'));
   expect(light.get('--orbis-text-scale')).toBe('1.25');
 
