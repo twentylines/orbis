@@ -6,8 +6,8 @@
   padding: 4px;
   color: var(--desktop-ink, var(--tblr-body-color));
   background: var(--desktop-menu-surface, var(--tblr-bg-surface));
-  backdrop-filter: var(--desktop-chrome-filter, blur(28px) saturate(1.2));
-  -webkit-backdrop-filter: var(--desktop-chrome-filter, blur(28px) saturate(1.2));
+  backdrop-filter: var(--desktop-menu-filter, blur(28px) saturate(1.2));
+  -webkit-backdrop-filter: var(--desktop-menu-filter, blur(28px) saturate(1.2));
   border: 1px solid var(--desktop-line, var(--tblr-border-color));
   border-radius: var(--orbis-control-radius, 12px);
   box-shadow: none;

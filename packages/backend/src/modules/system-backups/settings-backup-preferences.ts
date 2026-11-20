@@ -1,5 +1,5 @@
 import { desktopAppearanceSchema } from '@runtipi/common/schemas';
-import { desktopMaterialFields, hasDesktopMaterialOverrides } from '@runtipi/common/schemas/desktop-appearance';
+import { desktopMaterialFields, desktopModeMaterialKeys, hasDesktopMaterialOverrides } from '@runtipi/common/schemas/desktop-appearance';
 import { desktopPreferencesSchema } from '../desktop-preferences/desktop-preferences.dto';
 import type { DesktopPreferences } from '../desktop-preferences/desktop-preferences.service';
 
@@ -14,7 +14,7 @@ const appearance = {
   settings: ['textScale', 'timeFormat', 'motion', 'transparency', 'lowEffects', 'oledDark'],
   dashboard: ['dockPlacement', 'dockSize', 'dockAutoHide', 'dockPins'],
   wallpapers: ['wallpaperImage', 'wallpaperFit', 'wallpaperColours', 'wallpaperX', 'wallpaperY', 'wallpaperDim', 'wallpaperBlur'],
-  themes: ['accent', 'themeColour', ...desktopMaterialFields, 'materialMode'],
+  themes: ['accent', 'themeColour', ...desktopMaterialFields, ...desktopModeMaterialKeys, 'materialMode'],
 } as const;
 const sections = ['settings', 'dashboard', 'wallpapers', 'themes'] as const;
 const fail = () => new Error('The desktop backup contains unsupported preferences. No settings were restored.');

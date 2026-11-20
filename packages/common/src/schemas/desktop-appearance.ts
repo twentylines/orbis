@@ -13,6 +13,19 @@ const appPins = type('string > 2 & string <= 180')
   .array()
   .narrow((items) => items.length <= 6 && new Set(items).size === items.length && items.every((item) => /^[^:]+:[^:]+$/.test(item)));
 
+const materialFields = {
+  'surfaceOpacity?': materialOpacity,
+  'chromeOpacity?': materialOpacity,
+  'glassBlur?': '0 <= number.integer <= 40 | null',
+  'chromeBlur?': '0 <= number.integer <= 64 | null',
+  'glassTint?': '0 <= number.integer <= 30 | null',
+  'materialMode?': type.enumerated('default', 'custom'),
+  'transparency?': type.enumerated('system', 'glass', 'solid'),
+} as const;
+const desktopMaterialSchema = type(materialFields).onUndeclaredKey('reject');
+export type DesktopMaterial = typeof desktopMaterialSchema.infer;
+export const desktopModeMaterialKeys = ['lightMaterial', 'darkMaterial'] as const;
+
 export const desktopAppearanceSchema = type({
   'accent?': colour,
   'themeColour?': colour,
@@ -24,16 +37,12 @@ export const desktopAppearanceSchema = type({
   'wallpaperY?': '0 <= number.integer <= 100',
   'wallpaperDim?': '0 <= number.integer <= 70',
   'wallpaperBlur?': '0 <= number.integer <= 24',
-  'surfaceOpacity?': materialOpacity,
-  'chromeOpacity?': materialOpacity,
-  'glassBlur?': '0 <= number.integer <= 40 | null',
-  'chromeBlur?': '0 <= number.integer <= 64 | null',
-  'glassTint?': '0 <= number.integer <= 30 | null',
-  'materialMode?': type.enumerated('default', 'custom'),
+  ...materialFields,
+  'lightMaterial?': desktopMaterialSchema.or('null'),
+  'darkMaterial?': desktopMaterialSchema.or('null'),
   'textScale?': '85 <= number.integer <= 150',
   'timeFormat?': type.enumerated('12h', '24h'),
   'motion?': type.enumerated('system', 'reduced'),
-  'transparency?': type.enumerated('system', 'glass', 'solid'),
   'lowEffects?': 'boolean',
   'oledDark?': 'boolean',
   'dockPlacement?': type.enumerated('bottom', 'left', 'right'),
@@ -61,6 +70,8 @@ export const defaultDesktopAppearance: DesktopAppearance = {
   chromeBlur: null,
   glassTint: null,
   materialMode: 'default',
+  lightMaterial: null,
+  darkMaterial: null,
   textScale: 100,
   timeFormat: '12h',
   motion: 'system',

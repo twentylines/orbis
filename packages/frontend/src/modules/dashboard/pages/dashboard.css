@@ -392,7 +392,7 @@
 .workspace-storage,
 .workspace-operations,
 .workspace-attention {
-  background: var(--desktop-pane-surface);
+  background: var(--desktop-home-surface);
   border: 1px solid var(--desktop-edge);
   color: var(--desktop-ink);
   border-radius: 24px;
@@ -414,7 +414,7 @@
   min-height: 0;
   position: relative;
   overflow: visible;
-  background: var(--desktop-pane-surface);
+  background: var(--desktop-home-surface);
   border: 1px solid var(--desktop-line);
   border-radius: 24px;
   box-shadow: none;
@@ -1172,7 +1172,7 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background: color-mix(in srgb, var(--desktop-preset-tint) 7%, var(--desktop-pane-surface));
+  background: color-mix(in srgb, var(--desktop-preset-tint) 7%, var(--desktop-home-surface));
   border-color: color-mix(in srgb, var(--desktop-warning) 25%, var(--desktop-line));
 }
 
@@ -1318,7 +1318,7 @@
   inset: 0;
   z-index: -1;
   border-radius: inherit;
-  background: var(--desktop-pane-surface);
+  background: var(--desktop-home-surface);
   backdrop-filter: var(--desktop-pane-filter);
   -webkit-backdrop-filter: var(--desktop-pane-filter);
   pointer-events: none;

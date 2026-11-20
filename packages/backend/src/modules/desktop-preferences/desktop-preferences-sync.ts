@@ -1,12 +1,18 @@
 import { type } from 'arktype';
 import { desktopAppearanceSchema, normaliseDesktopAppearance, defaultDesktopAppearance } from '@runtipi/common/schemas';
-import { desktopColourPresetSchema, desktopMaterialFields, hasDesktopMaterialOverrides } from '@runtipi/common/schemas/desktop-appearance';
+import {
+  desktopColourPresetSchema,
+  desktopMaterialFields,
+  desktopModeMaterialKeys,
+  hasDesktopMaterialOverrides,
+} from '@runtipi/common/schemas/desktop-appearance';
 import type { DesktopPreferences } from './desktop-preferences.service';
 
 export const customisationAppearanceKeys = [
   'accent',
   'themeColour',
   ...desktopMaterialFields,
+  ...desktopModeMaterialKeys,
   'materialMode',
   'textScale',
   'timeFormat',
@@ -124,7 +130,7 @@ export function patchSelectedPreferences(raw: string, current: DesktopPreference
   for (const key of ['preset', 'mode', 'density'] as const) if (next[key] !== current[key]) add(top, key, next[key]);
   const changedAppearance: Record<string, unknown> = {};
   for (const key of customisationAppearanceKeys)
-    if (next.appearance?.[key] !== current.appearance?.[key]) changedAppearance[key] = next.appearance?.[key];
+    if (JSON.stringify(next.appearance?.[key]) !== JSON.stringify(current.appearance?.[key])) changedAppearance[key] = next.appearance?.[key];
   if (
     !appearance?.entries.has('materialMode') &&
     next.appearance?.materialMode !== undefined &&

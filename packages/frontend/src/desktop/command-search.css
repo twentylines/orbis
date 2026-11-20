@@ -56,8 +56,8 @@
   background: var(--desktop-menu-surface);
   color: var(--desktop-ink);
   box-shadow: none;
-  backdrop-filter: var(--desktop-glass-filter);
-  -webkit-backdrop-filter: var(--desktop-glass-filter);
+  backdrop-filter: var(--desktop-search-menu-filter);
+  -webkit-backdrop-filter: var(--desktop-search-menu-filter);
   pointer-events: auto;
 }
 .desktop-search-surface[data-glass-blur="true"] .desktop-search-dropdown {

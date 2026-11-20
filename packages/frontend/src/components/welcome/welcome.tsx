@@ -1,3 +1,4 @@
+import { desktopMaterialForMode } from '@/desktop/appearance-cache';
 import { PaneScrollProgress } from '@/components/pane-scroll-progress';
 import { InterstellarBackdrop } from '@/components/startup/interstellar-backdrop';
 import { useStartupSession } from '@/components/startup/startup-boundary';
@@ -268,11 +269,12 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   const reduceMotion = useReducedMotion();
   const reduceTransparency = useReducedTransparency();
   const reduceSetupMotion = reduceMotion || draft.appearance.motion === 'reduced' || draft.appearance.lowEffects;
+  const material = desktopMaterialForMode(draft.appearance, resolvedSetupMode);
   const glassEnabled =
     !draft.appearance.lowEffects &&
     !(resolvedSetupMode === 'dark' && draft.appearance.oledDark) &&
-    draft.appearance.glassBlur !== 0 &&
-    (draft.appearance.transparency === 'glass' || (draft.appearance.transparency === 'system' && !reduceTransparency));
+    material.glassBlur !== 0 &&
+    (material.transparency === 'glass' || (material.transparency === 'system' && !reduceTransparency));
   const canManageUpdates = user.operator;
   const protection = useQuery({
     queryKey: ['setup-time-machine-preferences', user.id],
@@ -691,17 +693,21 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                               checked={glassEnabled}
                               disabled={draft.appearance.lowEffects || (resolvedSetupMode === 'dark' && draft.appearance.oledDark)}
                               aria-describedby="setup-glass-help"
-                              onCheckedChange={(enabled) =>
+                              onCheckedChange={(enabled) => {
+                                const materialKey = resolvedSetupMode === 'dark' ? 'darkMaterial' : 'lightMaterial';
                                 setDraft({
                                   ...draft,
                                   appearance: {
                                     ...draft.appearance,
-                                    transparency: enabled ? 'glass' : 'solid',
-                                    glassBlur: enabled && draft.appearance.glassBlur === 0 ? null : draft.appearance.glassBlur,
-                                    chromeBlur: enabled && draft.appearance.chromeBlur === 0 ? null : draft.appearance.chromeBlur,
+                                    [materialKey]: {
+                                      ...material,
+                                      transparency: enabled ? 'glass' : 'solid',
+                                      glassBlur: enabled && material.glassBlur === 0 ? null : material.glassBlur,
+                                      chromeBlur: enabled && material.chromeBlur === 0 ? null : material.chromeBlur,
+                                    },
                                   },
-                                })
-                              }
+                                });
+                              }}
                             />
                             <p id="setup-glass-help" className="orbis-setup-help">
                               {resolvedSetupMode === 'dark' && draft.appearance.oledDark

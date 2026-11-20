@@ -3,6 +3,7 @@
   --desktop-ink: var(--orbis-theme-ink, var(--desktop-base-ink));
   --desktop-preset-tint: var(--orbis-theme-tint, var(--desktop-base-preset-tint));
   --desktop-surface: var(--orbis-surface, var(--desktop-base-surface));
+  --desktop-home-surface: var(--orbis-home-surface, var(--desktop-pane-surface));
   --desktop-pane-surface: var(--orbis-pane-surface, var(--desktop-surface));
   --desktop-pane-filter: var(--orbis-glass-filter, blur(36px) saturate(1.35));
   --desktop-content-fill: var(--desktop-surface);
@@ -25,6 +26,8 @@
   --desktop-chrome-filter: var(--orbis-chrome-filter, var(--orbis-glass-filter, var(--desktop-default-chrome-filter, blur(16px) saturate(1.45))));
   --desktop-glass-chrome-blur: var(--orbis-glass-chrome-blur, var(--desktop-chrome-filter));
   --desktop-glass-chrome-filter: var(--desktop-glass-chrome-blur) var(--orbis-chrome-backdrop-brightness, );
+  --desktop-menu-filter: var(--desktop-chrome-filter);
+  --desktop-search-menu-filter: var(--desktop-glass-filter);
   --desktop-menu-surface: var(--orbis-menu-surface, var(--desktop-surface));
   --desktop-menu-muted: var(--orbis-menu-muted, var(--desktop-muted));
   --desktop-wallpaper: url("/wallpapers/stone-v2.webp");
@@ -251,6 +254,8 @@ html[data-desktop-preset="blush"] {
 }
 
 html[data-desktop-mode="dark"] {
+  --desktop-menu-filter: var(--desktop-glass-chrome-filter);
+  --desktop-search-menu-filter: var(--desktop-glass-chrome-filter);
   --desktop-default-chrome-filter: blur(14px) saturate(1.2);
   --desktop-menu-surface: var(--desktop-chrome);
   --desktop-menu-muted: var(--orbis-menu-muted, var(--desktop-chrome-ink));
@@ -395,8 +400,8 @@ body:has(.orbis-theme) :is(.orbis-dropdown-menu, .dropdown-menu, .orbis-popup-su
   background: var(--desktop-menu-surface);
   border-color: var(--desktop-line);
   border-radius: var(--orbis-control-radius, 12px);
-  backdrop-filter: var(--desktop-chrome-filter);
-  -webkit-backdrop-filter: var(--desktop-chrome-filter);
+  backdrop-filter: var(--desktop-menu-filter);
+  -webkit-backdrop-filter: var(--desktop-menu-filter);
 }
 body:has(.orbis-theme) .modal-header,
 body:has(.orbis-theme) .modal-footer {

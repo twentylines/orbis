@@ -18,7 +18,14 @@ import { desktopWindowsSchema, type DesktopWindows, type DesktopWindowId, type D
 import { appLaunchSchema, defaultAppLaunch, type AppLaunchPreferences } from '@runtipi/common/schemas/app-launch';
 import { desktopAppearanceSchema, normaliseDesktopAppearance, type DesktopAppearance } from '@runtipi/common/schemas/desktop-appearance';
 import { useResolvedColourMode, readSystemColourMode, type ColourMode, type ResolvedColourMode } from './colour-mode';
-import { appearanceFromStored, preferenceStorageKey, preferenceCacheLimit, preferenceChangeEvent, appearanceCacheEvent } from './appearance-cache';
+import {
+  desktopMaterialForMode,
+  appearanceFromStored,
+  preferenceStorageKey,
+  preferenceCacheLimit,
+  preferenceChangeEvent,
+  appearanceCacheEvent,
+} from './appearance-cache';
 import { validHomePins } from './workspace-apps';
 import {
   toolbarActionIds,
@@ -260,6 +267,16 @@ function onboardingStatus(value: unknown) {
   };
 }
 
+function mergeAppearance(previous: DesktopAppearance, patch: Partial<DesktopAppearance>): DesktopAppearance {
+  const next = { ...previous, ...patch };
+  for (const key of ['lightMaterial', 'darkMaterial'] as const) {
+    if (!patch[key]) continue;
+    const mode = key === 'lightMaterial' ? 'light' : 'dark';
+    next[key] = { ...desktopMaterialForMode(previous, mode), ...patch[key] };
+  }
+  return next;
+}
+
 export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const { isLoggedIn, sessionEpoch, sessionAbortSignal } = useUserContext();
   const { pathname } = useLocation();
@@ -398,7 +415,10 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       root.dataset.orbisAppearanceReady = 'true';
       applyThemePackRuntime(themePack, effectiveMode, displayed.wallpaperMode === 'theme', !automaticColours?.preset);
       const colours = wallpaperColourOverrides(automaticColours);
-      applyAppearanceRuntime(themePackAppearance(themePack, { ...displayed.appearance, ...colours }), effectiveMode);
+      applyAppearanceRuntime(
+        themePackAppearance(themePack, { ...displayed.appearance, ...desktopMaterialForMode(displayed.appearance, effectiveMode), ...colours }),
+        effectiveMode,
+      );
     };
     transitionAppearance(
       apply,
@@ -784,7 +804,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     fieldEdits.current.set('appearance', revision.current);
     setSyncState(isLoggedIn ? (serverReady ? 'saving' : syncState === 'loading' ? 'loading' : 'error') : 'local');
     const { wallpaperUnsplash: _selection, ...appearance } = value;
-    replacePreferences((previous) => ({ ...previous, appearance: { ...previous.appearance, ...appearance } }));
+    replacePreferences((previous) => ({ ...previous, appearance: mergeAppearance(previous.appearance, appearance) }));
   };
 
   const updateWindow = (id: DesktopWindowId, value: DesktopWindowState) => {
@@ -922,7 +942,7 @@ export function DesktopPreferencesPreview({
         resolvedMode,
         update: (patch) => onChange({ ...value, ...patch }),
         commit: async (patch) => onChange({ ...value, ...patch }),
-        updateAppearance: (patch) => onChange({ ...value, appearance: { ...value.appearance, ...patch } }),
+        updateAppearance: (patch) => onChange({ ...value, appearance: mergeAppearance(value.appearance, patch) }),
       }}
     >
       {children}

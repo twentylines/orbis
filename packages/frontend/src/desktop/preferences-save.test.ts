@@ -4,6 +4,7 @@ import { PreferenceSaveQueue, PreferenceSession } from './preference-save-queue'
 const scenarios = [
   'appearance-search-autosave',
   'colour-slider-autosave',
+  'mode-material-autosave',
   'workspace-sort-keyboard',
   'workspace-sort-reparent-focus',
   'workspace-sort-swap',

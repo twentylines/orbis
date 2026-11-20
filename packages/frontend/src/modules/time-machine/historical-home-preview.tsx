@@ -1,3 +1,4 @@
+import { desktopMaterialForMode } from '@/desktop/appearance-cache';
 import { useHistoricalAppIcons } from './historical-app-icons';
 import { useState, type CSSProperties } from 'react';
 import type { TimeMachinePoint, TimeMachinePreview } from '@runtipi/common/schemas/time-machine';
@@ -37,7 +38,10 @@ export function historicalHomeLayout(preview: SavedPreview) {
 
 export function historicalHomeStyle(preview: SavedPreview): CSSProperties {
   const { desktop, theme } = preview;
-  const appearance = themePackAppearance(theme, normaliseDesktopAppearance(desktop.appearance));
+  const savedAppearance = normaliseDesktopAppearance(desktop.appearance);
+  const mode = desktop.mode === 'system' ? 'light' : desktop.mode;
+  const material = savedAppearance.lightMaterial || savedAppearance.darkMaterial ? desktopMaterialForMode(savedAppearance, mode) : {};
+  const appearance = themePackAppearance(theme, { ...savedAppearance, ...material });
   const palette = desktop.mode === 'system' ? null : theme?.[desktop.mode];
   const solid = appearance.transparency === 'solid' || appearance.lowEffects || (desktop.mode === 'dark' && appearance.oledDark);
   const style: Record<string, string | number> = {

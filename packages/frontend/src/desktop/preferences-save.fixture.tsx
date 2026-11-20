@@ -1,3 +1,4 @@
+import { desktopMaterialForMode } from './appearance-cache';
 import { expect, mock } from 'bun:test';
 import { PreferenceSession } from './preference-save-queue';
 import { usePreferenceNameDraft } from './preference-name-draft';
@@ -164,6 +165,19 @@ type RequestRecord = {
 };
 const requests: RequestRecord[] = [];
 let server = structuredClone(defaultDesktopPreferences);
+if (process.argv[2] === 'mode-material-autosave') {
+  server.mode = 'light';
+  Object.assign(server.appearance, {
+    materialMode: 'custom',
+    chromeOpacity: 10,
+    chromeBlur: 7,
+    glassBlur: 40,
+    transparency: 'glass',
+    themeColour: '#917965',
+    textScale: 125,
+    dockPins: ['media:fixture'],
+  });
+}
 if (process.argv[2] === 'retired-wallpaper-readback') server.appearance.wallpaperUnsplash = 'legacy-photo';
 if (process.argv[2]?.startsWith('logical-processors-')) delete server.showLogicalProcessors;
 let onboardingComplete =
@@ -730,6 +744,44 @@ const scenarios: Record<string, () => Promise<void>> = {
     expect(puts()).toHaveLength(1);
     expect(JSON.parse(puts()[0]?.body ?? '{}')).toMatchObject({ appearance: { themeColour: '#ae4869', accent: '#345678' } });
     expect(controls.syncState).toBe('saved');
+  },
+  'mode-material-autosave': async () => {
+    const material = () => desktopMaterialForMode(controls.preferences.appearance, controls.resolvedMode);
+    expect(controls.resolvedMode).toBe('light');
+    expect(material()).toMatchObject({ chromeOpacity: null, chromeBlur: null, glassBlur: null, materialMode: 'default' });
+    await act(async () => controls.update({ mode: 'dark' }));
+    expect(material()).toMatchObject({ chromeOpacity: 10, chromeBlur: 7, glassBlur: 40 });
+    await act(async () => {
+      controls.updateAppearance({ darkMaterial: { chromeOpacity: 0 } });
+      controls.updateAppearance({ darkMaterial: { chromeBlur: 0 } });
+      controls.update({ mode: 'light' });
+      controls.updateAppearance({ lightMaterial: { materialMode: 'custom', chromeOpacity: 82, chromeBlur: 18 } });
+      controls.updateAppearance({ lightMaterial: { glassBlur: 12 }, themeColour: '#ae4869', accent: '#345678' });
+    });
+    expect(material()).toMatchObject({ chromeOpacity: 82, chromeBlur: 18, glassBlur: 12 });
+    await act(async () => controls.update({ mode: 'dark' }));
+    expect(material()).toMatchObject({ chromeOpacity: 0, chromeBlur: 0, glassBlur: 40 });
+    expect(puts()).toHaveLength(0);
+    await act(async () => {
+      await Bun.sleep(350);
+    });
+    expect(puts()).toHaveLength(1);
+    expect(JSON.parse(puts()[0]?.body ?? '{}')).toMatchObject({
+      mode: 'dark',
+      appearance: {
+        chromeOpacity: 10,
+        chromeBlur: 7,
+        textScale: 125,
+        dockPins: ['media:fixture'],
+        themeColour: '#ae4869',
+        accent: '#345678',
+        darkMaterial: { chromeOpacity: 0, chromeBlur: 0, glassBlur: 40 },
+        lightMaterial: { chromeOpacity: 82, chromeBlur: 18, glassBlur: 12 },
+      },
+    });
+    expect(controls.syncState).toBe('saved');
+    await act(async () => controls.update({ mode: 'light' }));
+    expect(material()).toMatchObject({ chromeOpacity: 82, chromeBlur: 18, glassBlur: 12 });
   },
   'batched-edit-commit': async () => {
     await act(async () => {

@@ -1,3 +1,4 @@
+import { desktopMaterialForMode } from '@/desktop/appearance-cache';
 import { Switch } from '@/components/ui/Switch';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { useReducedTransparency } from '@/desktop/motion-preferences';
@@ -5,7 +6,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { AppearanceRange } from './appearance-controls';
 import { applyAppearanceRuntime } from '@/desktop/appearance-runtime';
 import { wallpaperColourOverrides } from '@/desktop/wallpaper-presets';
-import type { DesktopAppearance } from '@runtipi/common/schemas';
+import type { DesktopMaterial } from '@runtipi/common/schemas/desktop-appearance';
 import { ColourPicker } from '@/components/ui/ColourPicker/ColourPicker';
 import { themePackAppearanceSnapshot, type ThemePackAppearance } from '@/modules/theme-packs/theme-pack-cache';
 import { themePackAppearance } from '@/modules/theme-packs/theme-pack-runtime';
@@ -125,7 +126,11 @@ export function ColourSettings() {
 
 export function MaterialSettings() {
   const { preferences, resolvedMode, activeThemePack, displayedWallpaperColours, updateAppearance } = useDesktopPreferences();
-  const value = preferences.appearance;
+  const appearance = preferences.appearance;
+  const materialKey = resolvedMode === 'dark' ? 'darkMaterial' : 'lightMaterial';
+  const material = desktopMaterialForMode(appearance, resolvedMode);
+  const value = { ...appearance, ...material };
+  const updateMaterial = (patch: DesktopMaterial) => updateAppearance({ [materialKey]: patch });
   const systemSolid = useReducedTransparency();
   const systemTransparency =
     matchMedia('(prefers-reduced-transparency: reduce)').matches || matchMedia('(prefers-reduced-transparency: no-preference)').matches;
@@ -142,7 +147,7 @@ export function MaterialSettings() {
     const cachedPack = packId ? themePackAppearanceSnapshot() : null;
     previewPack.current = cachedPack?.id === packId && cachedPack?.version === packVersion ? cachedPack : null;
   }, [packId, packVersion]);
-  const preview = (key: keyof DesktopAppearance) => (next: number) => {
+  const preview = (key: keyof Omit<DesktopMaterial, 'transparency' | 'materialMode'>) => (next: number) => {
     const colours = wallpaperColourOverrides(value.wallpaperColours ? displayedWallpaperColours : null);
     applyAppearanceRuntime(themePackAppearance(previewPack.current, { ...value, ...colours, [key]: next }), resolvedMode);
   };
@@ -169,15 +174,15 @@ export function MaterialSettings() {
     value.themeColour,
     displayedWallpaperColours,
   ]);
-  const selectMaterial = (transparency: DesktopAppearance['transparency'], materialMode: DesktopAppearance['materialMode']) => {
-    if (value.transparency !== transparency || value.materialMode !== materialMode) updateAppearance({ transparency, materialMode });
+  const selectMaterial = (transparency: Required<DesktopMaterial>['transparency'], materialMode: Required<DesktopMaterial>['materialMode']) => {
+    if (value.transparency !== transparency || value.materialMode !== materialMode) updateMaterial({ transparency, materialMode });
   };
   return (
     <>
       <section ref={section} className="appearance-section" aria-labelledby="appearance-glass">
         <div>
           <h2 id="appearance-glass">Surfaces</h2>
-          <p>Choose how much of the wallpaper shows through.</p>
+          <p>Choose how much of the wallpaper shows through in {dark ? 'Dark' : 'Light'} mode.</p>
         </div>
         <div className="appearance-material-controls appearance-surface-options">
           <SelectionGroup as="fieldset" className="appearance-choice appearance-surface-choices" aria-label="Transparency preference">
@@ -208,15 +213,15 @@ export function MaterialSettings() {
           </SelectionGroup>
           <div className="appearance-custom-controls" data-expanded={showCustom}>
             <div className="appearance-custom-clip" inert={!showCustom}>
-              <section id={customControls} className="appearance-custom-content" aria-label="Custom surface controls">
+              <section key={resolvedMode} id={customControls} className="appearance-custom-content" aria-label="Custom surface controls">
                 <div className="appearance-range-grid">
                   <AppearanceRange
                     label="Panel opacity"
                     max={100}
-                    value={value.surfaceOpacity ?? defaultOpacity.panel ?? (dark ? 90 : 76)}
+                    value={value.surfaceOpacity ?? defaultOpacity.panel ?? 95}
                     disabled={opaque}
                     onPreview={preview('surfaceOpacity')}
-                    onChange={(surfaceOpacity) => updateAppearance({ surfaceOpacity })}
+                    onChange={(surfaceOpacity) => updateMaterial({ surfaceOpacity })}
                   />
                   <AppearanceRange
                     label="Bar and dock opacity"
@@ -224,7 +229,7 @@ export function MaterialSettings() {
                     value={value.chromeOpacity ?? defaultOpacity.chrome ?? (dark ? 76 : 84)}
                     disabled={opaque}
                     onPreview={preview('chromeOpacity')}
-                    onChange={(chromeOpacity) => updateAppearance({ chromeOpacity })}
+                    onChange={(chromeOpacity) => updateMaterial({ chromeOpacity })}
                   />
                   <AppearanceRange
                     label="Panel blur"
@@ -233,7 +238,7 @@ export function MaterialSettings() {
                     value={value.glassBlur ?? 36}
                     disabled={opaque}
                     onPreview={preview('glassBlur')}
-                    onChange={(glassBlur) => updateAppearance({ glassBlur })}
+                    onChange={(glassBlur) => updateMaterial({ glassBlur })}
                   />
                   <AppearanceRange
                     label="Bar and dock blur"
@@ -242,7 +247,7 @@ export function MaterialSettings() {
                     value={value.chromeBlur ?? value.glassBlur ?? (dark ? 14 : 16)}
                     disabled={opaque}
                     onPreview={preview('chromeBlur')}
-                    onChange={(chromeBlur) => updateAppearance({ chromeBlur })}
+                    onChange={(chromeBlur) => updateMaterial({ chromeBlur })}
                   />
                   <AppearanceRange
                     label="Panel tint"
@@ -250,7 +255,7 @@ export function MaterialSettings() {
                     value={value.glassTint ?? 0}
                     disabled={opaque}
                     onPreview={preview('glassTint')}
-                    onChange={(glassTint) => updateAppearance({ glassTint })}
+                    onChange={(glassTint) => updateMaterial({ glassTint })}
                   />
                 </div>
                 {opaque ? <p>{oled ? 'OLED uses black panels.' : 'Custom controls apply when transparency is enabled.'}</p> : null}
@@ -260,9 +265,7 @@ export function MaterialSettings() {
                     disabled={[value.surfaceOpacity, value.chromeOpacity, value.glassBlur, value.chromeBlur, value.glassTint].every(
                       (item) => item === null,
                     )}
-                    onClick={() =>
-                      updateAppearance({ surfaceOpacity: null, chromeOpacity: null, glassBlur: null, chromeBlur: null, glassTint: null })
-                    }
+                    onClick={() => updateMaterial({ surfaceOpacity: null, chromeOpacity: null, glassBlur: null, chromeBlur: null, glassTint: null })}
                   >
                     Reset custom controls
                   </button>

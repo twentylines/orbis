@@ -1,3 +1,4 @@
+import { desktopMaterialForMode } from '@/desktop/appearance-cache';
 import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { resolveWallpaperKey } from '@/desktop/wallpaper-presets';
@@ -79,12 +80,13 @@ export const AuthLayout = ({
 
   const { preferences, resolvedMode } = useDesktopPreferences();
   const reducedTransparency = useReducedTransparency();
+  const material = desktopMaterialForMode(preferences.appearance, resolvedMode);
   const glass =
     setup &&
     !preferences.appearance.lowEffects &&
-    preferences.appearance.glassBlur !== 0 &&
+    material.glassBlur !== 0 &&
     !(resolvedMode === 'dark' && preferences.appearance.oledDark) &&
-    (preferences.appearance.transparency === 'glass' || (preferences.appearance.transparency === 'system' && !reducedTransparency));
+    (material.transparency === 'glass' || (material.transparency === 'system' && !reducedTransparency));
   return (
     <div
       className={`page page-center desktop-auth orbis-theme${setup ? ' desktop-auth-setup' : ''}`}

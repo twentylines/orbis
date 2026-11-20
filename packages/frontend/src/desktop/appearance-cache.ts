@@ -1,8 +1,29 @@
+import type { DesktopAppearance, DesktopMaterial } from '@runtipi/common/schemas/desktop-appearance';
 import { themePackCacheBootstrap } from '@/modules/theme-packs/theme-pack-cache';
 import { applyThemePackAppearanceRuntime, themePackAppearance } from '@/modules/theme-packs/theme-pack-runtime';
 import { applyAppearanceRuntime } from './appearance-runtime';
 import { resolveColourMode } from './colour-mode';
 import { resolveWallpaperKey, themePresets, type ThemePreset } from './wallpaper-presets';
+
+// Legacy material overrides were shared and carry no mode provenance. Keep them
+// in Dark, even if the last selected mode was Light. The shared device/solid
+// preference still applies until a mode has its own transparency selection.
+// This function is also embedded before hydration.
+export function desktopMaterialForMode(appearance: Partial<DesktopAppearance>, mode: 'light' | 'dark'): Required<DesktopMaterial> {
+  const scoped = mode === 'dark' ? appearance.darkMaterial : appearance.lightMaterial;
+  const material = scoped ?? (mode === 'dark' ? appearance : {});
+  const { surfaceOpacity = null, chromeOpacity = null, glassBlur = null, chromeBlur = null, glassTint = null } = material;
+  const custom = [surfaceOpacity, chromeOpacity, glassBlur, chromeBlur, glassTint].some((value) => typeof value === 'number');
+  return {
+    surfaceOpacity,
+    chromeOpacity,
+    glassBlur,
+    chromeBlur,
+    glassTint,
+    materialMode: material.materialMode ?? (custom ? 'custom' : 'default'),
+    transparency: scoped?.transparency ?? appearance.transparency ?? 'system',
+  };
+}
 
 const appearanceOptions = {
   presets: themePresets,
@@ -115,7 +136,8 @@ export const appearanceBootstrap = `(()=>{
     }
     if(typeof getComputedStyle!=='function')return;
     const personal=stored.appearance&&typeof stored.appearance==='object'?stored.appearance:{};
-    (${applyAppearanceRuntime.toString()})(cachedThemePack?(${themePackAppearance.toString()})(cachedThemePack,personal):personal,mode);
+    const appearance={...personal,...(${desktopMaterialForMode.toString()})(personal,mode)};
+    (${applyAppearanceRuntime.toString()})(cachedThemePack?(${themePackAppearance.toString()})(cachedThemePack,appearance):appearance,mode);
     if(root.dataset.orbisEffects&&typeof document.removeEventListener==='function')document.removeEventListener('load',apply,true);
   };
   if(typeof requestAnimationFrame==='function')requestAnimationFrame(apply);

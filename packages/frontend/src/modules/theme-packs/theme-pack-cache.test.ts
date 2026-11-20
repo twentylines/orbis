@@ -6,7 +6,7 @@ import { runInNewContext } from 'node:vm';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { bundledThemePacks } from '../../../../backend/src/modules/theme-packs/theme-pack-catalogue';
-import { appearanceBootstrap, preferenceStorageKey } from '@/desktop/appearance-cache';
+import { desktopMaterialForMode, appearanceBootstrap, preferenceStorageKey } from '@/desktop/appearance-cache';
 import { applyAppearanceRuntime } from '@/desktop/appearance-runtime';
 import { applyThemePackRuntime, themePackAppearance } from './theme-pack-runtime';
 import {
@@ -323,8 +323,9 @@ describe('pack first paint and hydration use identical appearance', () => {
         globalThis.document = initial.document as unknown as Document;
         globalThis.getComputedStyle = initial.getComputedStyle as unknown as typeof getComputedStyle;
         globalThis.matchMedia = (() => ({ matches: false })) as unknown as typeof matchMedia;
-        applyThemePackRuntime(selected, dark ? 'dark' : 'light', true);
-        applyAppearanceRuntime(themePackAppearance(selected, personal), dark ? 'dark' : 'light');
+        const mode = dark ? 'dark' : 'light';
+        applyThemePackRuntime(selected, mode, true);
+        applyAppearanceRuntime(themePackAppearance(selected, { ...personal, ...desktopMaterialForMode(personal, mode) }), mode);
         expect(initial.properties).toEqual(before);
       }
     }
