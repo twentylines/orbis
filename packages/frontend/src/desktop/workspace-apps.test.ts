@@ -13,12 +13,20 @@ test('shows more than twelve pins in saved order without changing installed or s
   expect(pins).toEqual(original);
   expect(apps[0]?.info.urn).toBe('app-0:store');
 });
-test('keeps unavailable pin identities and orders available apps before unpinned apps', () => {
+test('keeps unavailable pin identities and omits unavailable and unpinned apps from the pinned view', () => {
   const pins = ['missing:store', 'app-4:store', 'app-1:store'];
-  expect(homeApps(apps, pins, false).map(({ info }) => info.urn)).toEqual(['app-4:store', 'app-1:store', 'app-0:store']);
+  expect(homeApps(apps, pins, false).map(({ info }) => info.urn)).toEqual(['app-4:store', 'app-1:store']);
   expect(homeApps(apps, pins, true)).toHaveLength(35);
   expect(pins[0]).toBe('missing:store');
 });
+test('renders exactly the available pin count, including an empty pinned view', () => {
+  for (const count of [0, 1, 2, 3, 7, 13]) {
+    const pins = apps.slice(0, count).map(({ info }) => info.urn);
+    expect(homeApps(apps, pins, false).map(({ info }) => info.urn)).toEqual(pins);
+  }
+  expect(homeApps(apps, [], true)).toEqual(apps);
+});
+
 test('keyboard moves and drag placement preserve every pin exactly once', () => {
   const pins = ['a:store', 'b:store', 'c:store', 'd:store'];
   expect(moveHomePin(pins, 'b:store', -1)).toEqual(['b:store', 'a:store', 'c:store', 'd:store']);

@@ -8,7 +8,7 @@
   padding: 0;
   border: 1px solid var(--desktop-line);
   border-radius: 18px;
-  background: var(--desktop-surface);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 6%, transparent);
   color: var(--desktop-ink);
   text-decoration: none;
   overflow: hidden;
@@ -18,15 +18,19 @@
     box-shadow 180ms ease;
 }
 .orbis-store .orbis-store-tile.app-tile:hover {
-  border-color: color-mix(in srgb, var(--desktop-accent) 50%, var(--desktop-line));
-  background: var(--desktop-surface);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.06);
+  border-color: var(--desktop-accent);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 12%, transparent);
   color: var(--desktop-ink);
   text-decoration: none;
 }
+/* Match the Apps link's preset hover tint beneath the translucent card. */
+html:not([data-orbis-theme-pack]) .orbis-store-product:has(> .orbis-store-tile-catalogue:is(:hover, :active)) {
+  border-radius: 16px;
+  background-color: color-mix(in srgb, var(--desktop-preset-tint) 16%, transparent);
+}
 .orbis-store .orbis-store-tile.app-tile[aria-expanded="true"] {
-  border-color: var(--desktop-accent);
-  background: var(--desktop-surface);
+  border-color: color-mix(in srgb, var(--desktop-accent) 30%, var(--desktop-line));
+  background: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
 }
 .orbis-store .orbis-store-tile:focus-visible {
   outline: 2px solid var(--desktop-focus);

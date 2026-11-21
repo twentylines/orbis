@@ -496,11 +496,8 @@
 .workspace-app-list {
   display: grid;
   grid-auto-rows: 1fr;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14.5rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14.5rem), 1fr));
   gap: 12px;
-}
-.workspace-widget-wide .workspace-app-list {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14.5rem), 1fr));
 }
 .workspace-home-app-actions {
   display: flex;
@@ -517,23 +514,10 @@
   font-weight: 650;
   white-space: nowrap;
 }
-.workspace-app-scroll {
+.workspace-app-region {
   min-width: 0;
 }
 @media (min-width: 1100px) and (min-height: 640px) {
-  .workspace-app-scroll {
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--desktop-line) transparent;
-    scroll-padding-block: 20px;
-    padding: 6px;
-    margin: -6px;
-    mask-image: none;
-  }
-  .workspace-app-scroll:focus-visible,
-  .workspace-app-scroll:focus-within {
-    mask-image: none;
-  }
   .workspace-pin-order {
     max-height: 52dvh;
     overflow-y: auto;
@@ -544,8 +528,7 @@
     margin-inline: -4px;
   }
 }
-.workspace-app-scroll[data-scroll="true"]:focus-visible,
-.workspace-app-scroll .workspace-app:focus-visible {
+.workspace-app-region .workspace-app:focus-visible {
   outline: 3px solid var(--desktop-focus);
   outline-offset: -3px;
 }
@@ -1688,9 +1671,6 @@
     flex-direction: row;
     align-items: center;
   }
-  .workspace-app-scroll[data-scroll="true"] {
-    padding-right: 0;
-  }
   .workspace-section-heading h2,
   .workspace-attention h2 {
     font-size: var(--orbis-compact-section);
@@ -1735,32 +1715,6 @@
   background: color-mix(in srgb, var(--desktop-ink) 8%, transparent);
 }
 
-@media (min-width: 1100px) and (min-height: 640px) {
-  .workspace-apps {
-    display: flex;
-    flex-direction: column;
-    height: var(--workspace-widget-height, auto);
-  }
-  .workspace-apps:has(> .workspace-app-editing) {
-    min-height: min-content;
-  }
-  .workspace-apps > :not(.workspace-app-scroll) {
-    flex: none;
-  }
-  .workspace-apps:has(.workspace-app-chooser[open]) {
-    height: auto;
-    min-height: var(--workspace-widget-height, 0px);
-  }
-  .workspace-apps .workspace-app-scroll {
-    flex: 1;
-    min-height: 4rem;
-  }
-  .workspace-apps:has(.workspace-app-chooser[open]) .workspace-app-scroll {
-    max-height: none;
-    overflow: visible;
-    scrollbar-gutter: auto;
-  }
-}
 .workspace-operations::before {
   background: color-mix(in srgb, var(--desktop-accent) 4%, var(--desktop-home-surface));
 }

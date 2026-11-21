@@ -9,7 +9,7 @@ function saved() {
   if (!point.metadata?.preview.available) throw new Error('Missing saved fixture');
   return { point, preview: point.metadata.preview };
 }
-test('historical app ordering and minimum visible apps match Home without mutating captured metadata', () => {
+test('historical app ordering and exact pin count match Home without mutating captured metadata', () => {
   const { preview } = saved();
   preview.apps = Array.from({ length: 8 }, (_, index) => ({
     urn: `app${index}:store`,
@@ -19,7 +19,7 @@ test('historical app ordering and minimum visible apps match Home without mutati
   preview.desktop.workspace.pinnedApps = ['app5:store', 'app2:store'];
   preview.desktop.workspace.showAllApps = false;
   const before = JSON.stringify(preview);
-  expect(historicalHomeLayout(preview).apps.map((app) => app.urn)).toEqual(['app5:store', 'app2:store', 'app0:store']);
+  expect(historicalHomeLayout(preview).apps.map((app) => app.urn)).toEqual(['app5:store', 'app2:store']);
   preview.desktop.workspace.showAllApps = true;
   expect(historicalHomeLayout(preview).apps).toHaveLength(8);
   preview.desktop.workspace.showAllApps = false;

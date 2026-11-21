@@ -14,6 +14,7 @@ import { prefersReducedMotion } from './motion-setting';
 
 const scrollSettleDelay = 160;
 const scrollTopDistance = 64;
+const isPastPaneStart = (pane: Element) => pane.scrollTop > 1;
 
 export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string, enabled: boolean) {
   const [collapsed, setCollapsed] = useState(false);
@@ -59,6 +60,8 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
     const scrolling = document.scrollingElement ?? document.documentElement;
     let activeSource: Element | null = null;
     let focusedSource: Element | null = null;
+    // Pointer and keyboard selection outlasts passive scroll in a sibling.
+    let selectedPane: Element | null = null;
     let coveredRail: Element | null = null;
     let pointerInside = false;
     let hidden = false;
@@ -90,16 +93,17 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
         /^(auto|scroll|overlay)$/.test(getComputedStyle(element).overflowY));
     const scrollable = (element: Element) =>
       element.clientHeight > 0 && element.scrollHeight - element.clientHeight >= dockScrollMinExtent && scrollSurface(element);
-    const syncScrollTop = () => {
+    const syncScrollTop = (immediate = false) => {
       window.clearTimeout(settleTimer);
       const source = activeSource;
-      if (!hidden || !source?.isConnected || !scrollable(source) || source.scrollTop < scrollTopDistance) {
+      const pastStart = source && (source === selectedPane ? isPastPaneStart(source) : source.scrollTop >= scrollTopDistance);
+      if (!hidden || !source?.isConnected || !scrollable(source) || !pastStart) {
         settledSource = null;
         setCanScrollToTop(false);
         return;
       }
       if (settledSource === source) return;
-      if (dockScrollNearEnd(source.scrollTop, source.scrollHeight - source.clientHeight, source.clientHeight)) {
+      if (immediate || dockScrollNearEnd(source.scrollTop, source.scrollHeight - source.clientHeight, source.clientHeight)) {
         settledSource = source;
         setCanScrollToTop(true);
         return;
@@ -121,7 +125,7 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
       settledSource.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'instant' : 'smooth' });
     };
     // Update the button without rendering the dashboard on every scroll frame.
-    const syncProgress = () => {
+    const syncProgress = (immediate = false) => {
       const source = activeSource;
       const progress =
         source?.isConnected && scrollable(source) ? dockScrollProgress(source.scrollTop, source.scrollHeight - source.clientHeight) : null;
@@ -133,7 +137,7 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
       }
       nav.toggleAttribute('data-scroll-progress', progress !== null);
       nav.style.setProperty('--orbis-dock-scroll-remaining', String(1 - (progress ?? 0)));
-      syncScrollTop();
+      syncScrollTop(immediate);
     };
     const register = (element: Element) => {
       if (states.has(element) || !scrollSurface(element)) return;
@@ -144,6 +148,22 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
     const registerTree = (element: Element) => {
       register(element);
       for (const child of element.querySelectorAll('*')) register(child);
+    };
+    const splitPaneFor = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) return null;
+      const pane = target.closest('.store-catalogue-pane, .store-preview-content');
+      return pane?.closest('.store-split-desktop[data-preview-open="true"]') && content.contains(pane) && scrollSurface(pane) ? pane : null;
+    };
+    const selectPane = (target: EventTarget | null) => {
+      const pane = splitPaneFor(target);
+      if (!pane) return false;
+      selectedPane = pane;
+      activeSource = pane;
+      const next = scrollable(pane) && isPastPaneStart(pane);
+      states.set(pane, sampleDockScroll(undefined, pane.scrollTop, pane.scrollHeight - pane.clientHeight, next));
+      commit(next);
+      syncProgress(true);
+      return true;
     };
     const reset = (next = false) => {
       hidden = next;
@@ -157,6 +177,10 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
       syncProgress();
     };
     const refresh = () => {
+      if (selectedPane && !splitPaneFor(selectedPane)) {
+        if (activeSource === selectedPane && !scrollable(selectedPane)) activeSource = null;
+        selectedPane = null;
+      }
       for (const [element, previous] of states) {
         if (element.isConnected) {
           const extent = element.scrollHeight - element.clientHeight;
@@ -223,7 +247,8 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
           // A split pane can restore or clamp its position during a gesture in
           // its sibling. Update its baseline without borrowing that gesture.
           const matchesInput = scrollable(source) && (!input || source.contains(input.target));
-          const relevant = (!chartEntry || manualChartScroll) && matchesInput;
+          const matchesSelection = !selectedPane || source === selectedPane;
+          const relevant = (!chartEntry || manualChartScroll) && matchesInput && matchesSelection;
           const extent = source.scrollHeight - source.clientHeight;
           const moved = !previous || Math.abs(source.scrollTop - previous.travel.top) > 1;
           // Layout clamps and a previously focused pane's remaining scroll must not claim the ring.
@@ -231,6 +256,7 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
           const stable = !previous || Math.abs(extent - previous.extent) <= 1;
           if (
             matchesInput &&
+            matchesSelection &&
             matchesFocus &&
             moved &&
             (stable || input || source === activeSource || chartEntry) &&
@@ -241,7 +267,7 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
           const next = sampleDockScroll(relevant ? previous : undefined, source.scrollTop, extent, hidden, engaged && !chartEntry, input?.direction);
           states.set(source, next);
           if (next.travel.collapsed !== hidden) nextHidden = next.travel.collapsed;
-          if (previous && next.travel.direction === 1 && next.travel.top - previous.travel.top > 1) descending = true;
+          if (relevant && previous && next.travel.direction === 1 && next.travel.top - previous.travel.top > 1) descending = true;
         }
         pending.clear();
         if (movedSource) activeSource = movedSource;
@@ -270,6 +296,7 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
     const focusScrollSurface = (event: Event) => {
       focusedSource = null;
       if (!(event.target instanceof Element) || !content.contains(event.target)) return;
+      if (selectPane(event.target) || selectedPane) return;
       for (let node: Element | null = event.target; node; node = node.parentElement) {
         if ((node !== scrolling && !content.contains(node)) || !scrollable(node)) continue;
         focusedSource = node;
@@ -291,12 +318,19 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
     // can establish a new scroll baseline on this same destination.
     const manualScroll = (event: Event) => {
       clearWheel();
-      if (event instanceof PointerEvent && event.target instanceof Node && content.contains(event.target)) focusedSource = null;
-      if (event instanceof KeyboardEvent && event.target instanceof Element) focusScrollSurface(event);
+      if (event instanceof PointerEvent && event.target instanceof Node && content.contains(event.target)) {
+        focusedSource = null;
+        selectPane(event.target);
+      }
+      if (event instanceof KeyboardEvent && event.target instanceof Element && !selectedPane) focusScrollSurface(event);
       if (!chartEntry || !(event.target instanceof Element) || !content.contains(event.target)) return;
       if (event instanceof KeyboardEvent && !['ArrowUp', 'PageUp', 'Home'].includes(event.key)) return;
       if (event instanceof PointerEvent && event.pointerType !== 'touch' && event.target !== scrolling && !states.has(event.target)) return;
       manualChartScroll = true;
+    };
+    const activatePane = (event: MouseEvent) => {
+      // Keyboard and assistive-technology clicks can arrive without a pointerdown.
+      if (event.detail === 0) selectPane(event.target);
     };
     // Pane creation gets a baseline without changing visibility. In particular,
     // Store's selected app can mount/resize beside an already scrolled catalogue.
@@ -310,6 +344,7 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
     });
     changes.observe(content, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'inert'] });
     document.addEventListener('focusin', focusScrollSurface);
+    document.addEventListener('click', activatePane, true);
     document.addEventListener('scroll', receive, { capture: true, passive: true });
     document.addEventListener('wheel', noteWheel, { capture: true, passive: true });
     document.addEventListener('pointerdown', manualScroll, true);
@@ -328,6 +363,7 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
       nav.removeAttribute('data-scroll-progress');
       nav.style.removeProperty('--orbis-dock-scroll-remaining');
       document.removeEventListener('focusin', focusScrollSurface);
+      document.removeEventListener('click', activatePane, true);
       document.removeEventListener('scroll', receive, true);
       document.removeEventListener('wheel', noteWheel, true);
       document.removeEventListener('pointerdown', manualScroll, true);

@@ -5,7 +5,7 @@ import { revealPageFocus, useDesktopWindows } from '@/desktop/window-viewport';
 import { useWindowVisible, WindowVisibilityContext } from '@/desktop/window-visibility';
 import { IconArrowLeft, IconX } from '@tabler/icons-react';
 import { QueryErrorResetBoundary } from '@tanstack/react-query';
-import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useLocation, useNavigate, useOutlet } from 'react-router';
 import { StorePreviewContext } from './store-preview-context';
@@ -76,16 +76,21 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
   const anchor = useRef<{ urn: string; top: number; element: HTMLElement } | null>(null);
   const opener = useRef<HTMLElement | null>(null);
   const suggestionKind = installed ? undefined : (suggestion?.kind ?? null);
+  const selection = useMemo(() => ({ urn: selected, suggestionKind }), [selected, suggestionKind]);
+  const alignedSelection = useRef<typeof selection | null>(null);
   const paneBounds = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
   const tileMotion = useRef<Animation[]>([]);
   const onCardMount = useCallback(
     (card: HTMLAnchorElement | null) => {
-      if (!split || !selected || anchor.current || card?.dataset.storeApp !== selected) return;
-      if (suggestionKind !== undefined && (card.dataset.storeSuggestion ?? null) !== suggestionKind) return;
+      // Composed link refs can reattach on unrelated workspace renders.
+      if (!split || !selection.urn || alignedSelection.current === selection || anchor.current || card?.dataset.storeApp !== selection.urn) return;
+      if (selection.suggestionKind !== undefined && (card.dataset.storeSuggestion ?? null) !== selection.suggestionKind) return;
       const catalogue = card.closest<HTMLElement>('.store-catalogue-pane');
-      if (catalogue) alignCatalogueCard(catalogue, card);
+      if (!catalogue) return;
+      alignCatalogueCard(catalogue, card);
+      alignedSelection.current = selection;
     },
-    [selected, split, suggestionKind],
+    [selection, split],
   );
   const capture = useCallback(
     (target?: Element | null) => {
@@ -179,7 +184,10 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
       const target = urn
         ? resolvePreviewCard(catalogue.current, urn, reference?.element ?? opener.current, selected ? suggestionKind : lastSuggestionKind)
         : null;
-      if (target) alignCatalogueCard(catalogue.current, target, reference && reference.urn === urn ? reference.top : undefined);
+      if (target && (!selected || reference || alignedSelection.current !== selection)) {
+        alignCatalogueCard(catalogue.current, target, reference && reference.urn === urn ? reference.top : undefined);
+        if (selected) alignedSelection.current = selection;
+      }
     }
     anchor.current = null;
     if (split && snapshot.current.length && !prefersReducedMotion()) {
@@ -229,7 +237,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
       },
       () => undefined,
     );
-  }, [selected, split, suggestionKind]);
+  }, [selected, selection, split, suggestionKind]);
 
   return (
     <StorePreviewContext.Provider

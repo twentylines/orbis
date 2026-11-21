@@ -1,7 +1,8 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { IconPin, IconLayoutGrid, IconList } from '@tabler/icons-react';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { Switch } from '@/components/ui/Switch';
+import '@/components/ui/dropdown.css';
 import type { WorkspacePreferences, WidgetId } from '@/desktop/preferences';
 import { defaultWorkspaceLayout, type WorkspaceCapabilities } from '@/desktop/workspace-layout';
 import { maximumHomePins } from '@/desktop/workspace-apps';
@@ -18,42 +19,49 @@ type EditingProps = {
   save: (next: WorkspacePreferences) => void;
 };
 
-export function DashboardEditing({ workspace, capabilities, save, syncState }: EditingProps & { syncState: string }) {
+export function DashboardEditing({ workspace, save, reset }: Pick<EditingProps, 'workspace' | 'save'> & { reset: () => void }) {
+  const options = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const dismissOutside = (event: PointerEvent) => {
+      const details = options.current;
+      if (details?.open && event.target instanceof Node && !details.contains(event.target)) details.open = false;
+    };
+    document.addEventListener('pointerdown', dismissOutside);
+    return () => document.removeEventListener('pointerdown', dismissOutside);
+  }, []);
   return (
-    <section className="workspace-editor workspace-editor-compact" id="workspace-editor" aria-label="Workspace controls">
-      <div className="workspace-editor-options">
-        <details className="workspace-widget-chooser">
-          <summary>Visible widgets</summary>
-          <div>
-            {workspace.order.map((id) => (
-              <Switch
-                key={id}
-                label={labels[id]}
-                checked={!workspace.hidden.includes(id)}
-                onCheckedChange={(checked) =>
-                  save({ ...workspace, hidden: checked ? workspace.hidden.filter((item) => item !== id) : [...workspace.hidden, id] })
-                }
-              />
-            ))}
-          </div>
-        </details>
-        <p>Drag a widget or toolbar control to move it. Keyboard: Space, arrows, Enter. Escape cancels.</p>
+    <details
+      className="workspace-widget-chooser"
+      id="workspace-editor"
+      ref={options}
+      onBlur={(event) => {
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || !event.currentTarget.open) return;
+        event.stopPropagation();
+        event.currentTarget.open = false;
+        event.currentTarget.querySelector('summary')?.focus();
+      }}
+    >
+      <summary>Layout options</summary>
+      <div className="workspace-layout-options orbis-popup-surface" data-state="open">
+        {workspace.order.map((id) => (
+          <Switch
+            key={id}
+            label={labels[id]}
+            checked={!workspace.hidden.includes(id)}
+            onCheckedChange={(checked) =>
+              save({ ...workspace, hidden: checked ? workspace.hidden.filter((item) => item !== id) : [...workspace.hidden, id] })
+            }
+          />
+        ))}
+        <button type="button" className="workspace-reset-layout" onClick={reset}>
+          Reset layout
+        </button>
+        <p>Drag to reorder. Use Space, arrow keys and Enter to reorder with the keyboard.</p>
       </div>
-      {!capabilities?.workspaceLayout || !capabilities?.toolbarOrder ? (
-        <p className="workspace-editor-sync">This server supports widget order and pins. Icon view and toolbar order need a newer server.</p>
-      ) : null}
-      <p className="workspace-editor-sync" role={syncState === 'error' ? 'alert' : 'status'}>
-        {syncState === 'saving'
-          ? 'Saving layout…'
-          : syncState === 'saved'
-            ? 'Saved to your account.'
-            : syncState === 'error'
-              ? 'Could not save this layout. Select Save to retry.'
-              : syncState === 'local'
-                ? 'Saved on this device.'
-                : 'Waiting for account sync.'}
-      </p>
-    </section>
+    </details>
   );
 }
 
@@ -67,7 +75,6 @@ export function ApplicationEditing({
   setSearch,
   chooserOpen,
   setChooserOpen,
-  canResize,
   save,
 }: EditingProps & {
   apps: { info: { urn: string; name: string } }[];
@@ -77,7 +84,6 @@ export function ApplicationEditing({
   setSearch: (search: string) => void;
   chooserOpen: boolean;
   setChooserOpen: (open: boolean) => void;
-  canResize: boolean;
 }) {
   const searchInput = useRef<HTMLInputElement>(null);
   const chooser = useRef<HTMLDetailsElement>(null);
@@ -144,23 +150,6 @@ export function ApplicationEditing({
           }}
         >
           Remove {missingPins.length} unavailable pin{missingPins.length === 1 ? '' : 's'}
-        </button>
-      ) : null}
-      {canResize && layout.widgets.applications ? (
-        <button
-          type="button"
-          onClick={(event) => {
-            const widget = event.currentTarget.closest('.workspace-widget');
-            const { applications: _applications, ...widgets } = layout.widgets;
-            save({ ...workspace, layout: { ...layout, widgets } });
-            requestAnimationFrame(() =>
-              (
-                widget?.querySelector<HTMLElement>('.workspace-app-resize') ?? widget?.querySelector<HTMLElement>('.workspace-app-chooser summary')
-              )?.focus({ preventScroll: true }),
-            );
-          }}
-        >
-          Reset Applications height
         </button>
       ) : null}
       <Switch label="Show all apps" checked={workspace.showAllApps} onCheckedChange={(showAllApps) => save({ ...workspace, showAllApps })} />

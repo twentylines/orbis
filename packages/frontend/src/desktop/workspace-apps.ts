@@ -33,8 +33,7 @@ export function homeApps<T extends { info: { urn: string } }>(installed: T[], pi
     (left, right) => (positions.get(left.info.urn) ?? Number.POSITIVE_INFINITY) - (positions.get(right.info.urn) ?? Number.POSITIVE_INFINITY),
   );
   if (showAll) return ordered;
-  const presentPins = installed.filter(({ info }) => positions.has(info.urn)).length;
-  return ordered.slice(0, Math.max(3, presentPins));
+  return ordered.filter(({ info }) => positions.has(info.urn));
 }
 
 export function workspaceRows<T extends string>(order: T[], wide: T[]): T[][] {

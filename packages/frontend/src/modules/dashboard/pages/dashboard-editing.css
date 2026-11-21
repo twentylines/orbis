@@ -9,7 +9,6 @@
   animation: none;
   scroll-margin-block: 120px 36px;
   border-radius: 24px;
-  outline: 1px dashed var(--desktop-line);
 }
 .workspace[data-editing] .workspace-app {
   animation: none;
@@ -25,18 +24,25 @@
   gap: 4px;
 }
 .workspace-widget-editbar {
-  padding: 4px 28px;
+  position: absolute;
+  z-index: 2;
+  inset: 14px 28px auto;
+}
+.workspace-widget-activity .workspace-widget-editbar {
+  inset-inline: 27px;
+}
+.workspace-widget-editbar + .workspace-widget-content > section {
+  padding-block-start: 70px;
 }
 .workspace-widget-hide {
   margin-inline-start: auto;
 }
 .workspace-app-editbar {
-  padding: 2px 4px;
+  padding: 4px 8px 0;
 }
 .workspace-drag-grip,
 .workspace-widget-hide,
-.workspace-app-unpin,
-.workspace-resize-handle {
+.workspace-app-unpin {
   box-sizing: border-box;
   display: grid;
   place-items: center;
@@ -46,7 +52,7 @@
   padding: 0;
   border: 1px solid transparent;
   border-radius: 10px;
-  background: var(--desktop-surface);
+  background: transparent;
   color: var(--desktop-ink);
   cursor: pointer;
 }
@@ -54,22 +60,17 @@
   touch-action: none;
   cursor: grab;
 }
-.workspace :is(.workspace-drag-grip, .workspace-widget-hide, .workspace-app-unpin, .workspace-resize-handle):is(:hover, [aria-pressed="true"]) {
+.workspace :is(.workspace-drag-grip, .workspace-widget-hide, .workspace-app-unpin):is(:hover, [aria-pressed="true"]) {
   border-color: var(--desktop-accent);
   background: color-mix(in srgb, var(--desktop-preset-tint) 16%, var(--desktop-surface));
 }
-.workspace :is(.workspace-drag-grip, .workspace-widget-hide, .workspace-app-unpin, .workspace-resize-handle):focus-visible {
+.workspace :is(.workspace-drag-grip, .workspace-widget-hide, .workspace-app-unpin):focus-visible {
   outline: 3px solid var(--desktop-focus);
   outline-offset: -3px;
 }
-.workspace-app-resize {
-  margin: 4px 28px 4px auto;
-  cursor: ns-resize;
-  touch-action: none;
-}
 @media (max-width: 650px) {
   .workspace .workspace-widget-editbar {
-    padding-inline: var(--orbis-compact-panel-space);
+    inset-inline: var(--orbis-compact-panel-space);
   }
 }
 .workspace [data-sorting] {
@@ -78,34 +79,45 @@
   box-shadow: 0 14px 35px #0003;
   cursor: grabbing;
 }
-.workspace .workspace-editor-compact {
-  padding: 12px 16px;
-  margin: 0 0 18px;
-  animation: none;
-}
 .workspace-editor-options {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px 16px;
 }
-.workspace-editor-options > p {
-  flex: 1 1 20rem;
+.workspace-widget-chooser {
+  align-self: center;
+}
+.workspace[data-editing] .workspace-actions {
+  position: relative;
+}
+.workspace-widget-chooser .workspace-layout-options {
+  position: absolute;
+  z-index: 40;
+  inset-block-start: calc(100% + 6px);
+  inset-inline-end: 0;
+  display: grid;
+  gap: 6px;
+  width: min(19rem, calc(100vw - 80px));
+  padding: 12px;
+}
+.workspace-layout-options :is(.orbis-switch, button) {
+  min-height: 44px;
   margin: 0;
-  color: var(--desktop-muted);
+}
+.workspace-layout-options p {
+  margin: 4px 0 0;
   font-size: 0.8125rem;
+  color: var(--desktop-muted);
 }
 .workspace-editor-options .orbis-switch {
   margin: 0;
-}
-.workspace-editor-compact .workspace-editor-sync {
-  margin: 8px 0 0;
 }
 .workspace-app-editing {
   margin-bottom: 16px;
 }
 .workspace-app-editing > button,
-.workspace-editor-options summary,
+:is(.workspace-editor-options, .workspace-widget-chooser) summary,
 .workspace-pin-list button {
   box-sizing: border-box;
   min-height: 44px;
@@ -129,7 +141,7 @@
 .workspace-pin-list button > svg {
   flex: none;
 }
-.workspace-editor-options summary {
+:is(.workspace-editor-options, .workspace-widget-chooser) summary {
   align-content: center;
   width: fit-content;
   max-width: 100%;
@@ -143,7 +155,7 @@
 .workspace-editor-options :is(button:not(:disabled), summary):hover {
   border-color: var(--desktop-accent);
 }
-.workspace-editor-options :is(button, summary, input):focus-visible {
+:is(.workspace-editor-options, .workspace-widget-chooser) :is(button, summary, input):focus-visible {
   outline: 3px solid var(--desktop-focus);
   outline-offset: 2px;
 }
@@ -151,14 +163,10 @@
   flex-basis: 100%;
   min-width: 0;
 }
-.workspace-widget-chooser > div,
 .workspace-app-chooser-content {
   display: grid;
   gap: 12px;
   margin-top: 12px;
-}
-.workspace-widget-chooser > div {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
 }
 .workspace-app-chooser-content label {
   font-size: 0.875rem;
@@ -175,7 +183,7 @@
   font: inherit;
 }
 .workspace-app-chooser-content .workspace-pin-list {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
   max-height: 18rem;
   overflow-y: auto;
   scroll-padding: 6px;
@@ -197,15 +205,18 @@
 .workspace[data-editing] .workspace-app-entry {
   display: flex;
   flex-direction: column;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 14%, transparent);
 }
 .workspace[data-editing] .workspace-app-entry > .workspace-app {
   height: auto;
   flex: 1;
   padding-inline-end: 12px;
   pointer-events: none;
+  background: transparent;
 }
 .workspace[data-app-view="icons"] .workspace-app-list {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 5.25rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 5.25rem), 1fr));
   gap: 16px 12px;
 }
 .workspace[data-app-view="icons"] .workspace-app {
@@ -262,7 +273,7 @@
 }
 
 .workspace[data-editing][data-app-view="icons"] .workspace-app-list {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 7rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr));
 }
 .workspace[data-editing][data-app-view="icons"] .workspace-app-copy {
   position: static;
@@ -287,12 +298,16 @@
 
 .workspace-editor-options > button,
 .workspace-editor-options > .orbis-switch,
-.workspace-editor-options summary {
+:is(.workspace-editor-options, .workspace-widget-chooser) summary {
   min-height: 44px;
 }
 
 .workspace .workspace-heading {
   position: relative;
+}
+.workspace-heading:has(.workspace-widget-chooser[open]) {
+  z-index: 4;
+  animation-fill-mode: none;
 }
 .workspace-edit-controls {
   display: flex;
