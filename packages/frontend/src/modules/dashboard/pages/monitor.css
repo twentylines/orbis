@@ -1041,7 +1041,27 @@
   margin-bottom: 12px;
 }
 .monitor-performance .monitor-processor-chart svg {
-  height: 72px;
+  height: clamp(200px, 22vw, 280px);
+}
+.monitor-performance .monitor-processor-grid .monitor-processor-chart svg {
+  height: 120px;
+}
+.monitor-metric-plot[data-unit="percent"] {
+  display: grid;
+  grid-template-columns: 4.5ch minmax(0, 1fr);
+  gap: 12px;
+}
+.monitor-metric-axis {
+  position: relative;
+  color: var(--desktop-muted);
+  font-size: 0.75rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.monitor-metric-axis > span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
 }
 .monitor-resource-heading {
   display: flex;

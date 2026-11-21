@@ -36,18 +36,36 @@ export function LiveMetricChart({
         <span>{label}</span>
         <strong>{display}</strong>
       </div>
-      <svg viewBox="0 0 200 80" preserveAspectRatio="none" role="img" aria-label={`${label}: ${display}; 60-second chart scaled to ${scale}`}>
-        <path className="monitor-processor-gridlines" d="M0 4H200M0 40H200M0 76H200M50 4V76M100 4V76M150 4V76" />
-        {segments.map((points) => {
-          if (!points.includes(' ')) {
-            const [x, y] = points.split(',');
-            return <rect key={points} x={Number(x) - 1} y={Number(y) - 1.5} width={2} height={3} fill="var(--desktop-accent)" />;
-          }
-          return (
-            <polyline key={points} points={points} fill="none" stroke="var(--desktop-accent)" strokeWidth="1.75" vectorEffect="non-scaling-stroke" />
-          );
-        })}
-      </svg>
+      <div className="monitor-metric-plot" data-unit={unit}>
+        {unit === 'percent' ? (
+          <div className="monitor-metric-axis" aria-hidden="true">
+            {[100, 75, 50, 25, 0].map((tick) => (
+              <span key={tick} style={{ top: `${5 + (100 - tick) * 0.9}%` }}>
+                {tick}%
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <svg viewBox="0 0 200 80" preserveAspectRatio="none" role="img" aria-label={`${label}: ${display}; 60-second chart scaled to ${scale}`}>
+          <path className="monitor-processor-gridlines" d="M0 4H200M0 22H200M0 40H200M0 58H200M0 76H200M50 4V76M100 4V76M150 4V76" />
+          {segments.map((points) => {
+            if (!points.includes(' ')) {
+              const [x, y] = points.split(',');
+              return <rect key={points} x={Number(x) - 1} y={Number(y) - 1.5} width={2} height={3} fill="var(--desktop-accent)" />;
+            }
+            return (
+              <polyline
+                key={points}
+                points={points}
+                fill="none"
+                stroke="var(--desktop-accent)"
+                strokeWidth="1.75"
+                vectorEffect="non-scaling-stroke"
+              />
+            );
+          })}
+        </svg>
+      </div>
       {unit === 'rate' && segments.length ? <div className="monitor-live-scale">0–{scale}</div> : null}
     </div>
   );
