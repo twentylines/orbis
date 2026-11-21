@@ -1187,12 +1187,12 @@ it('serves only point-bound encrypted custom wallpaper after the live image chan
 
 it('keeps an encrypted legacy Forest photograph unchanged while new points capture the current Forest default', async () => {
   const oldPhoto = await fs.readFile(path.resolve('../frontend/public/wallpapers/forest-v2.webp'));
-  const newPhoto = await fs.readFile(path.resolve('../frontend/public/wallpapers/forest-v3.webp'));
+  const newPhoto = await fs.readFile(path.resolve('../frontend/public/wallpapers/forest-v4.webp'));
   const oldIdentity = createHash('sha256').update(oldPhoto).digest('hex');
   const newIdentity = createHash('sha256').update(newPhoto).digest('hex');
   expect(newIdentity).not.toBe(oldIdentity);
   const currentDefault = timeMachineBuiltinPhotographs.forest;
-  expect(currentDefault).toBe('forest-v3.webp');
+  expect(currentDefault).toBe('forest-v4.webp');
   let historical: Awaited<ReturnType<typeof capture>>;
   // Recreate an earlier capture using its then-current bundled default; stored points never consult this map again.
   Reflect.set(timeMachineBuiltinPhotographs, 'forest', 'forest-v2.webp');
