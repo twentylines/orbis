@@ -579,7 +579,10 @@ class HostServiceTests(unittest.TestCase):
         self.assertEqual(args[4].parent, self.snapshots)
 
     def test_no_backup_plan_is_bound_before_overlay_effects_and_worker_dispatch(self):
-        with mock.patch.object(SERVICE.UPDATE, 'update_plan', return_value={'snapshotBytes': 0, 'backupPolicy': 'none'}):
+        modern = {**TARGET, 'installationProtocol': SERVICE.PLAN.INSTALLATION_PROTOCOL}
+        with mock.patch.object(SERVICE, 'manifest_for_tag', return_value=modern), mock.patch.object(
+            SERVICE.UPDATE, 'update_plan', return_value={'snapshotBytes': 0, 'backupPolicy': 'none'}
+        ):
             planned = self.service.plan(TARGET['tag'])
             self.assertEqual(planned['backupPolicy'], 'none')
             self.assertEqual(planned['snapshotBytes'], 0)
@@ -598,9 +601,11 @@ class HostServiceTests(unittest.TestCase):
                 record = SERVICE.read_private(path)
                 if missing:
                     record.pop('backupPolicy')
-                    SERVICE.write_private(path, record)
+                else:
+                    record['backupPolicy'] = 'none'
+                SERVICE.write_private(path, record)
                 self.service.core_overlay_manager.reset_mock()
-                with mock.patch.object(SERVICE.UPDATE, 'update_plan', return_value={'snapshotBytes': 0, 'backupPolicy': 'none'}), \
+                with mock.patch.object(SERVICE.UPDATE, 'update_plan', side_effect=AssertionError('Apply must not repeat the full preflight')), \
                         mock.patch.object(SERVICE.UPDATE, 'apply_update') as worker:
                     with self.assertRaisesRegex(ValueError, 'new plan'):
                         self.service.apply(planned['planId'])
@@ -610,7 +615,10 @@ class HostServiceTests(unittest.TestCase):
                 self.assertFalse(self.service.job_file.exists())
 
     def test_interrupted_no_backup_update_reports_review_without_restore_claim(self):
-        with mock.patch.object(SERVICE.UPDATE, 'update_plan', return_value={'snapshotBytes': 0, 'backupPolicy': 'none'}):
+        modern = {**TARGET, 'installationProtocol': SERVICE.PLAN.INSTALLATION_PROTOCOL}
+        with mock.patch.object(SERVICE, 'manifest_for_tag', return_value=modern), mock.patch.object(
+            SERVICE.UPDATE, 'update_plan', return_value={'snapshotBytes': 0, 'backupPolicy': 'none'}
+        ):
             planned = self.service.plan(TARGET['tag'])
             def interrupted(root, current, target, context, snapshot, **options):
                 SERVICE.UPDATE.write_journal(snapshot, {

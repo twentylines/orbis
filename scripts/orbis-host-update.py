@@ -571,12 +571,16 @@ def restore_core_policies(root: Path, context: str, checkpoint: dict) -> None:
         reader.change(["update", "--restart", flag, identifier])
 
 
+def backup_policy(target: dict[str, str]) -> str:
+    return 'none' if target.get('installationProtocol') == HOST.PLAN.INSTALLATION_PROTOCOL else 'automatic'
+
+
 def update_plan(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path) -> dict[str, object]:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", context):
         raise ValueError("Docker context name is invalid")
     if current["digest"] == target["digest"]:
         raise ValueError("current and target image digests are identical")
-    scoped = target.get("installationProtocol") == HOST.PLAN.INSTALLATION_PROTOCOL
+    scoped = backup_policy(target) == 'none'
     if not scoped and shutil.which("rsync") is None:
         raise ValueError("rsync is required to restore a stopped installation snapshot")
     if journal_path(snapshot).exists() or journal_path(snapshot).is_symlink():
@@ -611,7 +615,7 @@ def update_plan(root: Path, current: dict[str, str], target: dict[str, str], con
         "targetImage": f"{target['image']}@{target['digest']}",
         "snapshot": str(snapshot),
         "snapshotBytes": snapshot_bytes,
-        "backupPolicy": "none" if scoped else "automatic",
+        "backupPolicy": backup_policy(target),
         "runningAppsMustBeStopped": not scoped,
     }
     if scoped:

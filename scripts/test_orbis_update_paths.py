@@ -161,7 +161,7 @@ class UpdateServiceTests(unittest.TestCase):
             for path in (root, snapshots, state): path.mkdir(mode=0o700)
             service = SERVICE.HostService(root, 'owned', snapshots, state)
             SERVICE.save_channel(root, 'nightly', '00000000-0000-4000-8000-000000000002')
-            with mock.patch.object(service, 'current_manifest', return_value=CURRENT), mock.patch.object(SERVICE, 'manifest_for_tag', return_value=TARGET), mock.patch.object(SERVICE.UPDATE, 'update_plan', return_value={'snapshotBytes': 1, 'runningAppsMustBeStopped': False}) as validate:
+            with mock.patch.object(service, 'current_manifest', return_value=CURRENT), mock.patch.object(SERVICE, 'manifest_for_tag', return_value=TARGET), mock.patch.object(SERVICE.UPDATE, 'update_plan', return_value={'snapshotBytes': 0, 'backupPolicy': 'none', 'runningAppsMustBeStopped': False}) as validate:
                 plan = service.plan(TARGET['tag']); validate.reset_mock()
                 self.assertFalse(plan['appsMustBeStopped'])
                 overlays = mock.Mock()
@@ -222,8 +222,7 @@ class ScopedUpdateTests(unittest.TestCase):
             UPDATE.update_plan(self.root, CURRENT, TARGET, self.docker.context, self.bundle)
         self.assertEqual(self.docker.calls, [])
 
-    @unittest.skipUnless(sys.platform == 'linux', 'requires Linux rsync with ACL/xattr support')
-    def test_scoped_start_failure_restores_control_data_and_retains_new_live_app_writes(self):
+    def test_scoped_start_failure_preserves_writes_for_review_without_automatic_restore(self):
         self.prepare()
         data = self.root / 'app-data/app-0/live'
         data.write_bytes(b'original app data')
@@ -253,14 +252,23 @@ class ScopedUpdateTests(unittest.TestCase):
         def prepare_runtime(checkpoint):
             runtime.read.return_value = {'phase': 'prepared', 'checkpoint': checkpoint}
         runtime.prepare.side_effect = prepare_runtime
-        with mock.patch.object(UPDATE, 'docker_checked', side_effect=checked), mock.patch.object(UPDATE.CONTROLLER, 'ControllerUpdate', return_value=runtime):
-            with self.assertRaisesRegex(RuntimeError, 'previous release was restored'):
+        with mock.patch.object(UPDATE, 'docker_checked', side_effect=checked), mock.patch.object(UPDATE.CONTROLLER, 'ControllerUpdate', return_value=runtime), mock.patch.object(
+            FIXTURE.TX, 'checkpoint', side_effect=AssertionError('modern updates must not create a backup')
+        ) as checkpoint, mock.patch.object(UPDATE, 'rollback', side_effect=AssertionError('unbacked writes must not be restored automatically')) as rollback:
+            with self.assertRaisesRegex(UPDATE.CONTROLLER.NoBackupRecoveryRequired, 'no automatic data backup'):
                 UPDATE.apply_update(self.root, CURRENT, TARGET, self.docker.context, self.bundle)
-        self.assertEqual(database.read_bytes(), b'original control database')
+        checkpoint.assert_not_called()
+        rollback.assert_not_called()
+        runtime.start_original.assert_not_called()
+        runtime.stop_for_rollback.assert_not_called()
+        runtime.restore_reconstructed_checkpoint.assert_not_called()
+        self.assertEqual(database.read_bytes(), b'failed new control database')
         self.assertEqual(data.read_bytes(), b'new application writes while updating')
         self.assertEqual(self.docker.apps, self.old_apps)
         self.assertTrue(all(arguments[-1] not in self.old_apps for arguments, _ in self.docker.calls))
-        self.assertEqual(UPDATE.read_journal(self.bundle, self.root, self.docker.context, CURRENT, TARGET)['stage'], 'rolled-back')
+        record = UPDATE.read_journal(self.bundle, self.root, self.docker.context, CURRENT, TARGET)
+        self.assertEqual((record['schema'], record['backupPolicy'], record['stage']), (UPDATE.NO_BACKUP_JOURNAL_SCHEMA, 'none', 'recovery-required'))
+        self.assertFalse(self.bundle.exists())
 
 
 class ScopedRecoveryTests(unittest.TestCase):

@@ -2193,8 +2193,9 @@ class HostService:
             snapshot = Path(plan["snapshot"])
             if snapshot.parent != self.snapshots or snapshot.name != f"orbis-{target['tag']}-{plan_id}":
                 raise ValueError("update plan has an invalid snapshot destination")
-            fresh = UPDATE.update_plan(self.root, current, target, self.context, snapshot)
-            if fresh.get("backupPolicy") != plan["backupPolicy"]:
+            # Policy follows the reviewed target identity. The worker performs
+            # the full Docker/storage revalidation before installation effects.
+            if UPDATE.backup_policy(target) != plan["backupPolicy"]:
                 raise ValueError("update backup policy changed; create a new plan")
             self.core_overlays().reconcile_unaccepted()
             self.require_core_overlay_clear(previous)

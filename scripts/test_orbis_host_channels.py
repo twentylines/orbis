@@ -141,7 +141,7 @@ class HostReleaseChannelTests(unittest.TestCase):
         self.older_beta = manifest("v1.0.0-beta.12", "c")
         self.previous_stable = manifest("v1.0.0", "d")
         self.latest_stable = manifest("v1.0.1", "e")
-        self.update_plan = mock.patch.object(SERVICE.UPDATE, "update_plan", return_value={"snapshotBytes": 123})
+        self.update_plan = mock.patch.object(SERVICE.UPDATE, "update_plan", return_value={"snapshotBytes": 123, "backupPolicy": "automatic"})
         self.update_plan_mock = self.update_plan.start()
         self.addCleanup(self.update_plan.stop)
 
