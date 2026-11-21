@@ -115,6 +115,7 @@ try {
     expect(commits).toEqual([['second', 'third', 'first']]);
   } else {
     const swap = scenario === 'workspace-sort-swap';
+    const step = scenario === 'workspace-sort-grip-top' ? 200 : 100;
     if (swap) {
       await key(' ');
       await key('End');
@@ -148,7 +149,12 @@ try {
         style,
         querySelector: () => null,
         parentElement: capture,
-        getBoundingClientRect: () => ({ left: 0, right: 200, top: sortable.order.indexOf(id) * 100, bottom: sortable.order.indexOf(id) * 100 + 90 }),
+        getBoundingClientRect: () => ({
+          left: 0,
+          right: 200,
+          top: sortable.order.indexOf(id) * step,
+          bottom: sortable.order.indexOf(id) * step + step - 10,
+        }),
       } as unknown as HTMLElement;
       nodes.set(id, node);
       sortable.itemProps(id).ref(node);
@@ -166,7 +172,7 @@ try {
     expect(sortable.picked).toBe(null);
     const edge = scenario === 'workspace-sort-edge';
     const target = swap ? 'third' : 'second';
-    const targetY = swap ? 220 : 120;
+    const targetY = swap ? 220 : step + 20;
     await send('pointermove', edge ? 3 : 50, targetY);
     expect(captured).toBe(true);
     if (scenario !== 'workspace-sort-fast-pointer') {
@@ -177,13 +183,13 @@ try {
         await act(async () => frame(16 + i * 16));
         expect(sortable.order).toEqual(['first', 'second', 'third']);
         expect(sortable.itemProps(target)['data-sortable-over']).toBe(edge ? undefined : true);
-        expect(nodes.get('second')?.getBoundingClientRect().top).toBe(100);
+        expect(nodes.get('second')?.getBoundingClientRect().top).toBe(step);
       }
     }
     expect(commits).toHaveLength(0);
     await send('pointerup', edge ? 3 : 50, targetY);
     expect(commits).toEqual(edge ? [] : swap ? [['third', 'second', 'first']] : [['second', 'first', 'third']]);
-    expect(nodes.get('second')?.getBoundingClientRect().top).toBe(swap ? 100 : edge ? 100 : 0);
+    expect(nodes.get('second')?.getBoundingClientRect().top).toBe(swap ? step : edge ? step : 0);
     expect(captured).toBe(false);
     expect(frames.size).toBe(0);
     expect(nodes.get('first')?.style.translate).toBeUndefined();

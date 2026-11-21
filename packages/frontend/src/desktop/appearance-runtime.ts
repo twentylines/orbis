@@ -252,7 +252,8 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   const chromeBackgrounds = controlBackgrounds(tintedChrome, brightness, highlight);
   // Popups need their own glass: dark navigation's brightness guard erases
   // backdrop detail, and Bar and Dock controls should not disable menu blur.
-  const menuSurface = [...tintedSurface.slice(0, 3), solid ? 1 : Math.max(0.74, Math.min(0.78, tintedSurface[3]))] as Rgba;
+  const menuTint = dark ? mix(tintedSurface, black, 0.55) : tintedSurface;
+  const menuSurface = [...menuTint.slice(0, 3), solid ? 1 : Math.max(0.74, Math.min(0.78, tintedSurface[3]))] as Rgba;
   set('menu-surface', css(menuSurface));
   set('menu-filter', solid ? 'none' : 'blur(24px) saturate(1.2)');
   const menuBackgrounds = [menuSurface, mix(menuSurface, preset, 0.2), mix(surface, paneInk, 0.12)].flatMap((background) => backgrounds(background));

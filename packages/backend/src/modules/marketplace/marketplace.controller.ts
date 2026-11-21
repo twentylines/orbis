@@ -65,7 +65,7 @@ export class MarketplaceController {
 
     if (req.headers['if-none-match'] === etag) {
       res.set({
-        'Cache-Control': 'public, max-age=0, stale-while-revalidate=86400, stale-if-error=86400',
+        'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400, stale-if-error=86400',
         'Content-Type': 'image/jpeg',
         ETag: etag,
       });
@@ -73,7 +73,7 @@ export class MarketplaceController {
     }
 
     res.set({
-      'Cache-Control': 'public, max-age=0, stale-while-revalidate=86400, stale-if-error=86400',
+      'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400, stale-if-error=86400',
       'Content-Type': 'image/jpeg',
       ETag: etag,
     });

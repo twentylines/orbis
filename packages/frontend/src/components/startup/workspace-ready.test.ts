@@ -241,3 +241,27 @@ test('cancelling a transition prevents a late font or data completion from revea
     h.restore();
   }
 });
+
+test('offscreen app icons do not hold a usable workspace behind the loader', async () => {
+  const h = harness();
+  h.state.images = Array.from(
+    { length: 100 },
+    (_, index) =>
+      ({
+        loading: 'lazy',
+        complete: false,
+        src: `/icon-${index}.png`,
+        getBoundingClientRect: () => ({ top: 900 + index * 80, bottom: 960 + index * 80 }),
+      }) as unknown as HTMLImageElement,
+  );
+  const stop = h.start();
+  try {
+    h.state.dataReady = true;
+    h.releaseFonts();
+    await Bun.sleep(0);
+    expect(h.state).toMatchObject({ ready: 1, slow: 0 });
+  } finally {
+    stop();
+    h.restore();
+  }
+});

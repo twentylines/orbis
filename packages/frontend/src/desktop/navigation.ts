@@ -13,10 +13,65 @@ export const desktopNavigation = [
 export const desktopSearchSections = [
   ...desktopNavigation,
   {
+    path: '/monitor?section=performance',
+    label: 'Performance',
+    Icon: IconDeviceDesktopAnalytics,
+    keywords: 'utilisation utilization charts processor ram bandwidth metrics',
+  },
+  {
+    path: '/monitor?section=performance&metric=cpu#telemetry-cpu-title',
+    label: 'CPU',
+    Icon: IconDeviceDesktopAnalytics,
+    keywords: 'processor performance utilisation utilization clock frequency cores logical processors recorded history',
+  },
+  {
+    path: '/monitor?section=performance&metric=memory#telemetry-memory-title',
+    label: 'Memory',
+    Icon: IconDeviceDesktopAnalytics,
+    keywords: 'ram performance utilisation utilization swap capacity recorded history',
+  },
+  {
+    path: '/monitor?section=performance&metric=network#monitor-network-history-title',
+    label: 'Network',
+    Icon: IconDeviceDesktopAnalytics,
+    keywords: 'performance traffic bandwidth download upload speed interface recorded history',
+  },
+  {
+    path: '/monitor?section=devices#host-storage-title',
+    label: 'Storage',
+    Icon: IconDeviceDesktopAnalytics,
+    keywords: 'disk filesystem filesystems mount capacity space usage',
+  },
+  {
+    path: '/monitor?section=devices',
+    label: 'Devices',
+    Icon: IconDeviceDesktopAnalytics,
+    keywords: 'host disks network interfaces hardware activity',
+  },
+  {
+    path: '/monitor?section=sensors#host-gpus-title',
+    label: 'GPU',
+    Icon: IconDeviceDesktopAnalytics,
+    keywords: 'graphics video utilisation utilization temperature vram',
+  },
+  {
+    path: '/monitor?section=sensors#host-temperatures-title',
+    label: 'Sensors',
+    Icon: IconDeviceDesktopAnalytics,
+    keywords: 'temperature heat thermal fans cooling rpm hardware',
+  },
+  {
+    path: '/monitor?section=usage#containers',
+    label: 'Containers',
+    Icon: IconActivity,
+    keywords: 'docker container cpu memory usage running health',
+  },
+  { path: '/monitor?section=usage#processes', label: 'Processes', Icon: IconActivity, keywords: 'host task process cpu memory pid usage' },
+  {
     path: '/monitor#device-history',
     label: 'Device history',
     Icon: IconDeviceDesktopAnalytics,
-    keywords: 'host network interface disk activity charts',
+    keywords: 'host network interface disk activity charts recorded history',
   },
   {
     path: '/monitor?section=drives#drive-health-title',

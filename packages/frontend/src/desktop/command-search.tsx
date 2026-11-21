@@ -41,8 +41,22 @@ import { inferLocalCurrency, parseCurrencyQuery } from './search-currency';
 import { SearchCalculatorResult, useSearchCalculation } from './search-calculator-result';
 import { copyText } from '@/lib/clipboard';
 import './command-search.css';
+import { lazy, Suspense } from 'react';
+import { appSearchIntent, availableAppCommands, searchPalettePresets } from './search-intent';
+import { SearchPalette } from './command-search-palette';
+import type { SearchAppAction } from './command-search-app-action';
+const SearchAppActionDialog = lazy(() => import('./command-search-app-action'));
 
-type SearchResult = SearchAction & { id: string; label: string; detail: string; icon: ReactNode; settingId?: string; actionLabel?: string };
+type SearchResult = SearchAction & {
+  id: string;
+  label: string;
+  detail: string;
+  icon: ReactNode;
+  settingId?: string;
+  actionLabel?: string;
+  managePath?: string;
+  appAction?: SearchAppAction;
+};
 const searchScopes = [
   ['all', 'All'],
   ['apps', 'Apps'],
@@ -59,6 +73,16 @@ const destinationDetails: Record<string, string> = {
   Updates: 'Orbis, apps and operating system updates',
   Settings: 'Appearance, account and server preferences',
   'Task centre': 'Active operations and task history',
+  Performance: 'CPU, memory and network charts',
+  CPU: 'Utilisation, frequency, logical processors and recorded history',
+  Memory: 'RAM, swap and recorded history',
+  Network: 'Traffic, bandwidth and recorded history',
+  Storage: 'Filesystems, capacity and disk activity',
+  Devices: 'Host disks and network interfaces',
+  GPU: 'Graphics utilisation, temperature and video memory',
+  Sensors: 'Temperatures, fans and hardware readings',
+  Containers: 'Docker health and resource usage',
+  Processes: 'Host processes and resource usage',
   'Device history': 'Storage activity and network history',
   'Drive health': 'SMART warnings, drive wear and disk self-tests',
   Customise: 'Colours, wallpaper, text size and workspace',
@@ -87,6 +111,8 @@ export function CommandSearch() {
   );
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const open = suggestion !== null;
+  const [appAction, setAppAction] = useState<SearchAppAction | null>(null);
+  const pendingAppAction = useRef<SearchAppAction | null>(null);
   const [closing, setClosing] = useState(false);
   const [glassBlurEnabled, setGlassBlurEnabled] = useState(false);
   const [search, setSearch] = useState('');
@@ -216,6 +242,10 @@ export function CommandSearch() {
     openRef.current = false;
     setSuggestion(null);
     setClosing(false);
+    if (pendingAppAction.current) {
+      setAppAction(pendingAppAction.current);
+      pendingAppAction.current = null;
+    }
     setSearch('');
     setDebounced('');
     setScope('all');
@@ -398,6 +428,9 @@ export function CommandSearch() {
 
   const needle = query.toLocaleLowerCase();
   const match = createSearchMatcher(query);
+  const intent = appSearchIntent(query);
+  const appMatch = createSearchMatcher(intent?.query ?? query);
+  const presets = scope === 'all' || scope === 'settings' ? searchPalettePresets(query) : [];
   const sections: SearchResult[] = desktopSearchSections
     .filter(
       ({ path }) =>
@@ -424,7 +457,7 @@ export function CommandSearch() {
       icon: <Icon size={22} aria-hidden="true" />,
     }));
   const installedResults: SearchResult[] = (installed.data?.installed ?? [])
-    .filter(({ info }) => info.available && match(info.name, `${info.short_desc} ${info.urn}`) > 0)
+    .filter(({ info }) => info.available && appMatch(info.name, `${info.short_desc} ${info.urn}`) > 0)
     .sort((a, b) => match(b.info.name, b.info.short_desc) - match(a.info.name, a.info.short_desc))
     .slice(0, query || scope === 'apps' ? 24 : 6)
     .map(({ info, app, metadata }) => {
@@ -432,10 +465,14 @@ export function CommandSearch() {
       return {
         id: info.urn,
         path: appPath(info.urn),
+        managePath: appPath(info.urn),
         label: info.name,
         detail: info.short_desc,
         icon: <AppLogo urn={info.urn} size={32} alt="" />,
-        launch: launchUrl ? { urn: info.urn, name: info.name, categories: info.categories, launchUrl, manageUrl: appPath(info.urn) } : undefined,
+        launch:
+          launchUrl && intent?.action !== 'manage'
+            ? { urn: info.urn, name: info.name, categories: info.categories, launchUrl, manageUrl: appPath(info.urn) }
+            : undefined,
       };
     });
   const storeResults: SearchResult[] =
@@ -459,9 +496,28 @@ export function CommandSearch() {
     detail: `Settings · ${settingsSections.find((section) => section.id === entry.section)?.label}`,
     icon: <IconSettings size={22} aria-hidden="true" />,
   }));
+  const actionResults: SearchResult[] =
+    query && user.operator && (scope === 'all' || scope === 'apps')
+      ? (installed.data?.installed ?? [])
+          .filter(({ info }) => info.available && appMatch(info.name, `${info.short_desc} ${info.urn}`) > 0)
+          .flatMap(({ info, app }) =>
+            availableAppCommands(app.status)
+              .filter((action) => !intent || intent.action === action)
+              .map((action) => ({
+                id: `${action}:${info.urn}`,
+                path: appPath(info.urn),
+                managePath: appPath(info.urn),
+                label: `${action[0]?.toUpperCase()}${action.slice(1)} ${info.name}`,
+                detail: 'App action · Confirmation required',
+                icon: <AppLogo urn={info.urn} size={32} alt="" />,
+                appAction: { action, urn: info.urn, name: info.name },
+              })),
+          )
+      : [];
   const destinationGroup = { name: query ? 'Pages and tools' : scope === 'all' ? 'Quick destinations' : 'Pages and tools', items: sections };
   const settingsGroup = { name: 'Settings', items: settingResults };
   const groups = [
+    { name: 'Actions', items: actionResults },
     ...(sections.some((section) => section.label.toLocaleLowerCase() === needle)
       ? [destinationGroup, settingsGroup]
       : [settingsGroup, destinationGroup]),
@@ -469,7 +525,12 @@ export function CommandSearch() {
     { name: 'App Store', items: scope === 'all' || scope === 'store' ? storeResults : [] },
   ];
   const firstResult = defaultSearchResult(groups.flatMap((group) => group.items));
-  const activateResult = (result: SearchResult) => activateSearchResult(result, openApp, close);
+  const activateResult = (result: SearchResult) => {
+    if (result.appAction) {
+      pendingAppAction.current = result.appAction;
+      close();
+    } else activateSearchResult(result, openApp, close);
+  };
   const searchingStore = scope === 'all' || scope === 'store';
   const loadingStore = searchingStore && !utilityQuery && query.length > 0 && (debounced !== query || catalogue.isPending);
 
@@ -485,240 +546,275 @@ export function CommandSearch() {
   };
 
   return (
-    <Dialog.Root
-      open={open}
-      onOpenChange={(next) => {
-        if (next) openSearch();
-        else close();
-      }}
-    >
-      <Dialog.Trigger asChild>
-        <button
-          ref={trigger}
-          type="button"
-          className="desktop-search-trigger"
-          aria-label="Search Orbis"
-          data-search-open={open}
-          data-search-closing={closing}
-        >
-          <IconSearch size={20} aria-hidden="true" />
-          <span>Search</span>
-          <kbd>⌘/Ctrl K</kbd>
-        </button>
-      </Dialog.Trigger>
-      {open ? (
-        <Dialog.Portal>
-          <Dialog.Overlay ref={backdrop} className="desktop-search-backdrop" style={{ top: bar.top + bar.height }} data-closing={closing} />
-          <Dialog.Content
-            ref={bindPanel}
-            className="desktop-search-surface"
-            aria-describedby={undefined}
-            style={
-              {
-                left: bar.left,
-                top: bar.top,
-                width: bar.width,
-                '--desktop-search-bar-height': `${bar.height}px`,
-                '--desktop-search-available': `${bar.available}px`,
-              } as CSSProperties
-            }
-            data-closing={closing}
-            data-glass-blur={glassBlurEnabled}
-            onOpenAutoFocus={(event) => {
-              event.preventDefault();
-              input.current?.focus({ preventScroll: true });
-            }}
-            onCloseAutoFocus={(event) => {
-              event.preventDefault();
-              const target = returnFocus.current;
-              (target?.isConnected && target !== document.body && !target.closest('[inert], [hidden]') ? target : trigger.current)?.focus({
-                preventScroll: true,
-              });
-            }}
-            onEscapeKeyDown={(event) => {
-              event.preventDefault();
-              close();
-            }}
-            onInteractOutside={(event) => {
-              event.preventDefault();
-              if (event.target instanceof Element && event.target.closest('.orbis-notifications')) return;
-              close();
-            }}
+    <>
+      <Dialog.Root
+        open={open}
+        onOpenChange={(next) => {
+          if (next) openSearch();
+          else close();
+        }}
+      >
+        <Dialog.Trigger asChild>
+          <button
+            ref={trigger}
+            type="button"
+            className="desktop-search-trigger"
+            aria-label="Search Orbis"
+            data-search-open={open}
+            data-search-closing={closing}
           >
-            <Dialog.Title className="visually-hidden">Search Orbis</Dialog.Title>
-            <div className="desktop-search-content">
-              <div ref={header} className="desktop-search-input">
-                <IconSearch size={20} aria-hidden="true" />
-                <span className="desktop-search-query">
-                  <input
-                    ref={input}
-                    id="orbis-command-query"
-                    data-focus-surface="parent"
-                    value={search}
-                    type="search"
-                    autoComplete="off"
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder={suggestion ?? undefined}
-                    aria-label="Search Orbis"
-                    aria-controls="desktop-search-results"
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' && !event.nativeEvent.isComposing && calculator) {
-                        event.preventDefault();
-                        void copyCalculation();
-                        return;
-                      }
-                      if (event.key === 'Enter' && !event.nativeEvent.isComposing && firstResult) {
-                        event.preventDefault();
-                        activateResult(firstResult);
-                      }
-                      if (event.key === 'ArrowDown') {
-                        event.preventDefault();
-                        panel.current?.querySelector<HTMLButtonElement>('[data-search-result]')?.focus();
-                      }
-                    }}
-                  />
-                  <span className="desktop-search-closing-label" aria-hidden="true">
-                    Search
-                  </span>
-                </span>
-                <button type="button" className="desktop-search-close" aria-label="Close search" onClick={() => close()}>
-                  <IconX size={22} aria-hidden="true" />
-                </button>
-              </div>
-              <div ref={dropdown} className="desktop-search-dropdown" data-compact={bar.available < 340}>
-                <div className="desktop-search-discovery">
-                  <SelectionGroup as="fieldset" aria-label="Search in">
-                    <legend className="visually-hidden">Search in</legend>
-                    {searchScopes.map(([value, label]) => (
-                      <button
-                        type="button"
-                        key={value}
-                        aria-pressed={scope === value}
-                        onClick={() => {
-                          setScope(value);
-                          input.current?.focus({ preventScroll: true });
-                        }}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </SelectionGroup>
-                </div>
-                <div id="desktop-search-results" className="desktop-search-results" aria-busy={loadingStore || installed.isPending}>
-                  {calculator ? (
-                    <SearchCalculatorResult
-                      result={calculator}
-                      onCopy={() => void copyCalculation()}
-                      onKeyDown={handleResultKeyDown}
-                      message={copyFeedback.query === query ? copyFeedback.message : ''}
+            <IconSearch size={20} aria-hidden="true" />
+            <span>Search</span>
+            <kbd>⌘/Ctrl K</kbd>
+          </button>
+        </Dialog.Trigger>
+        {open ? (
+          <Dialog.Portal>
+            <Dialog.Overlay ref={backdrop} className="desktop-search-backdrop" style={{ top: bar.top + bar.height }} data-closing={closing} />
+            <Dialog.Content
+              ref={bindPanel}
+              className="desktop-search-surface"
+              aria-describedby={undefined}
+              style={
+                {
+                  left: bar.left,
+                  top: bar.top,
+                  width: bar.width,
+                  '--desktop-search-bar-height': `${bar.height}px`,
+                  '--desktop-search-available': `${bar.available}px`,
+                } as CSSProperties
+              }
+              data-closing={closing}
+              data-glass-blur={glassBlurEnabled}
+              onOpenAutoFocus={(event) => {
+                event.preventDefault();
+                input.current?.focus({ preventScroll: true });
+              }}
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                document.documentElement.dataset.orbisKeyboardDismiss = 'true';
+                const target = returnFocus.current;
+                (target?.isConnected && target !== document.body && !target.closest('[inert], [hidden]') ? target : trigger.current)?.focus({
+                  preventScroll: true,
+                });
+              }}
+              onEscapeKeyDown={(event) => {
+                event.preventDefault();
+                close();
+              }}
+              onInteractOutside={(event) => {
+                event.preventDefault();
+                if (event.target instanceof Element && event.target.closest('.orbis-notifications')) return;
+                close();
+              }}
+            >
+              <Dialog.Title className="visually-hidden">Search Orbis</Dialog.Title>
+              <div className="desktop-search-content">
+                <div ref={header} className="desktop-search-input">
+                  <IconSearch size={20} aria-hidden="true" />
+                  <span className="desktop-search-query">
+                    <input
+                      ref={input}
+                      id="orbis-command-query"
+                      data-focus-surface="parent"
+                      value={search}
+                      type="search"
+                      autoComplete="off"
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder={suggestion ?? undefined}
+                      aria-label="Search Orbis"
+                      aria-controls="desktop-search-results"
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && !event.nativeEvent.isComposing && calculator) {
+                          event.preventDefault();
+                          void copyCalculation();
+                          return;
+                        }
+                        if (event.key === 'Enter' && !event.nativeEvent.isComposing && firstResult) {
+                          event.preventDefault();
+                          activateResult(firstResult);
+                        }
+                        if (event.key === 'ArrowDown') {
+                          event.preventDefault();
+                          panel.current?.querySelector<HTMLButtonElement>('[data-search-result]')?.focus();
+                        }
+                      }}
                     />
-                  ) : null}
-                  {groups
-                    .filter((group) => group.items.length)
-                    .map(({ name, items }) => (
-                      <section className="desktop-search-group" key={name} aria-label={name}>
-                        <h3>
-                          {name}
-                          <span>{items.length}</span>
-                          {name === 'Installed apps' && !query && (installed.data?.installed.length ?? 0) > items.length ? (
-                            <button type="button" className="desktop-search-browse" onClick={() => close('/apps')}>
-                              Browse all apps
-                            </button>
-                          ) : null}
-                        </h3>
-                        <div className="desktop-search-grid">
-                          {items.map((result) => {
-                            const toggle = result.settingId ? toggles[result.settingId] : undefined;
-                            const feedback = toggle?.pending ? 'Saving…' : toggle?.error ? toggle.error : toggle?.saved ? 'Saved' : null;
-                            return (
-                              <div className="desktop-search-result" key={result.id}>
-                                <button
-                                  data-search-result
-                                  className="desktop-search-result-main"
-                                  type="button"
-                                  aria-label={`${result.label}${result.detail ? `, ${result.detail}` : ''}`}
-                                  onKeyDown={handleResultKeyDown}
-                                  onClick={() => activateResult(result)}
-                                >
-                                  <span className="desktop-search-result-icon">{result.icon}</span>
-                                  <span className="desktop-search-result-text">
-                                    <strong title={result.label}>
-                                      <WrapWords text={result.label} />
-                                    </strong>
-                                    {result.detail ? <small>{result.detail}</small> : null}
-                                  </span>
-                                </button>
-                                {toggle ? (
-                                  <div className="desktop-search-result-control">
-                                    <Switch
-                                      aria-label={result.label}
-                                      checked={toggle.checked}
-                                      disabled={toggle.disabled}
-                                      onCheckedChange={toggle.setChecked}
-                                    />
-                                  </div>
-                                ) : null}
-                                {result.actionLabel ? (
-                                  <div className="desktop-search-result-control">
-                                    <button
-                                      type="button"
-                                      className="desktop-search-result-action"
-                                      onKeyDown={handleResultKeyDown}
-                                      onClick={() => activateResult(result)}
-                                    >
-                                      {result.actionLabel}
-                                    </button>
-                                  </div>
-                                ) : null}
-                                {feedback ? (
-                                  <output className="desktop-search-result-feedback">
-                                    <span>{feedback}</span>
-                                    {toggle?.error && toggle.retry ? (
-                                      <button type="button" onClick={toggle.retry}>
-                                        Retry
-                                      </button>
-                                    ) : null}
-                                  </output>
-                                ) : null}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </section>
-                    ))}
-                  <div className="desktop-search-feedback" aria-live="polite">
-                    {installed.isError ? (
-                      <p>
-                        Installed apps could not be loaded.{' '}
-                        <button type="button" onClick={() => void installed.refetch()}>
-                          Try again
-                        </button>
-                      </p>
-                    ) : null}
-                    {loadingStore ? <p>Searching the App Store…</p> : null}
-                    {searchingStore && !utilityQuery && query && debounced === query && catalogue.isError ? (
-                      <p>
-                        The App Store could not be searched.{' '}
-                        <button type="button" onClick={() => void catalogue.refetch()}>
-                          Try again
-                        </button>
-                      </p>
-                    ) : null}
-                    {!calculator && !firstResult && !loadingStore && !installed.isPending && !installed.isError && (!query || !catalogue.isError) ? (
-                      <p>No matches for “{query}”. Try an app name or a section such as Updates.</p>
-                    ) : null}
-                  </div>
+                    <span className="desktop-search-closing-label" aria-hidden="true">
+                      Search
+                    </span>
+                  </span>
+                  <button type="button" className="desktop-search-close" aria-label="Close search" onClick={() => close()}>
+                    <IconX size={22} aria-hidden="true" />
+                  </button>
                 </div>
-                <footer className="desktop-search-footer">
-                  <span>↑ ↓ to move{calculator?.copyValue ? ' · Enter to copy result' : calculator ? '' : ' · Enter to open'}</span>
-                  <span>Esc to close</span>
-                </footer>
+                <div ref={dropdown} className="desktop-search-dropdown" data-compact={bar.available < 340}>
+                  <div className="desktop-search-discovery">
+                    <SelectionGroup as="fieldset" aria-label="Search in">
+                      <legend className="visually-hidden">Search in</legend>
+                      {searchScopes.map(([value, label]) => (
+                        <button
+                          type="button"
+                          key={value}
+                          aria-pressed={scope === value}
+                          onClick={() => {
+                            setScope(value);
+                            input.current?.focus({ preventScroll: true });
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </SelectionGroup>
+                  </div>
+                  <div id="desktop-search-results" className="desktop-search-results" aria-busy={loadingStore || installed.isPending}>
+                    {calculator ? (
+                      <SearchCalculatorResult
+                        result={calculator}
+                        onCopy={() => void copyCalculation()}
+                        onKeyDown={handleResultKeyDown}
+                        message={copyFeedback.query === query ? copyFeedback.message : ''}
+                      />
+                    ) : null}
+                    {presets.length > 0 ? <SearchPalette presets={presets} /> : null}
+                    {groups
+                      .filter((group) => group.items.length)
+                      .map(({ name, items }) => (
+                        <section className="desktop-search-group" key={name} aria-label={name}>
+                          <h3>
+                            {name}
+                            <span>{items.length}</span>
+                            {name === 'Installed apps' && !query && (installed.data?.installed.length ?? 0) > items.length ? (
+                              <button type="button" className="desktop-search-browse" onClick={() => close('/apps')}>
+                                Browse all apps
+                              </button>
+                            ) : null}
+                          </h3>
+                          <div className="desktop-search-grid">
+                            {items.map((result) => {
+                              const toggle = result.settingId ? toggles[result.settingId] : undefined;
+                              const feedback = toggle?.error ?? null;
+                              return (
+                                <div className="desktop-search-result" key={result.id}>
+                                  <button
+                                    data-search-result
+                                    className="desktop-search-result-main"
+                                    type="button"
+                                    aria-label={`${result.label}${result.detail ? `, ${result.detail}` : ''}`}
+                                    onKeyDown={handleResultKeyDown}
+                                    onClick={() => activateResult(result)}
+                                  >
+                                    <span className="desktop-search-result-icon">{result.icon}</span>
+                                    <span className="desktop-search-result-text">
+                                      <strong title={result.label}>
+                                        <WrapWords text={result.label} />
+                                      </strong>
+                                      {result.detail ? <small>{result.detail}</small> : null}
+                                    </span>
+                                  </button>
+                                  {toggle ? (
+                                    <div className="desktop-search-result-control">
+                                      <Switch
+                                        aria-label={result.label}
+                                        checked={toggle.checked}
+                                        aria-busy={toggle.pending || undefined}
+                                        disabled={toggle.disabled}
+                                        onCheckedChange={toggle.setChecked}
+                                      />
+                                    </div>
+                                  ) : null}
+                                  {result.managePath ? (
+                                    <div className="desktop-search-result-control">
+                                      <button
+                                        type="button"
+                                        className="desktop-search-result-manage"
+                                        aria-label={`${result.label} app settings`}
+                                        onClick={() => close(result.managePath)}
+                                      >
+                                        <IconSettings size={20} aria-hidden="true" />
+                                      </button>
+                                    </div>
+                                  ) : null}
+                                  {result.actionLabel ? (
+                                    <div className="desktop-search-result-control">
+                                      <button
+                                        type="button"
+                                        className="desktop-search-result-action"
+                                        onKeyDown={handleResultKeyDown}
+                                        onClick={() => activateResult(result)}
+                                      >
+                                        {result.actionLabel}
+                                      </button>
+                                    </div>
+                                  ) : null}
+                                  {feedback ? (
+                                    <output className="desktop-search-result-feedback">
+                                      <span>{feedback}</span>
+                                      {toggle?.error && toggle.retry ? (
+                                        <button type="button" onClick={toggle.retry}>
+                                          Retry
+                                        </button>
+                                      ) : null}
+                                    </output>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      ))}
+                    <div className="desktop-search-feedback" aria-live="polite">
+                      {installed.isError ? (
+                        <p>
+                          Installed apps could not be loaded.{' '}
+                          <button type="button" onClick={() => void installed.refetch()}>
+                            Try again
+                          </button>
+                        </p>
+                      ) : null}
+                      {loadingStore ? <p>Searching the App Store…</p> : null}
+                      {searchingStore && !utilityQuery && query && debounced === query && catalogue.isError ? (
+                        <p>
+                          The App Store could not be searched.{' '}
+                          <button type="button" onClick={() => void catalogue.refetch()}>
+                            Try again
+                          </button>
+                        </p>
+                      ) : null}
+                      {!calculator &&
+                      !firstResult &&
+                      presets.length === 0 &&
+                      !loadingStore &&
+                      !installed.isPending &&
+                      !installed.isError &&
+                      (!query || !catalogue.isError) ? (
+                        <p>No matches for “{query}”. Try an app name or a section such as Updates.</p>
+                      ) : null}
+                    </div>
+                  </div>
+                  <footer className="desktop-search-footer">
+                    <span>↑ ↓ to move{calculator?.copyValue ? ' · Enter to copy result' : calculator ? '' : ' · Enter to open'}</span>
+                    <span>Esc to close</span>
+                  </footer>
+                </div>
               </div>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
+            </Dialog.Content>
+          </Dialog.Portal>
+        ) : null}
+      </Dialog.Root>
+      {appAction ? (
+        <Suspense fallback={null}>
+          <SearchAppActionDialog
+            request={appAction}
+            onClose={() => {
+              setAppAction(null);
+              document.documentElement.dataset.orbisKeyboardDismiss = 'true';
+              trigger.current?.focus({ preventScroll: true });
+            }}
+          />
+        </Suspense>
       ) : null}
-    </Dialog.Root>
+    </>
   );
 }
 import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';

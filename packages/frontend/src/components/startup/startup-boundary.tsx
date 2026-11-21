@@ -12,6 +12,9 @@ import { completeResetStartup } from './reset-startup';
 import { rememberLogout } from '@/desktop/session-motion';
 import { beginSessionMorph, expandSessionMorph, type SessionMorph } from './session-morph';
 
+const StartupCompleteContext = createContext(false);
+export const useStartupComplete = () => useContext(StartupCompleteContext);
+
 const ReadyContext = createContext<(ready: boolean) => void>(() => undefined);
 type SessionTransition = 'signing-in' | 'logging-out' | 'preparing-orbis';
 const SessionContext = createContext<{
@@ -226,54 +229,56 @@ export function StartupBoundary({ children }: PropsWithChildren) {
 
   return (
     <SessionContext.Provider value={session}>
-      <ReadyContext.Provider value={setReady}>
-        {children}
-        {themeHandoff.pending ? (
-          <ThemeApplyCover
-            label="Loading your theme…"
-            error={themeHandoff.error ? 'Your theme could not be confirmed. Retry or cancel to return to the workspace.' : undefined}
-            onRetry={themeHandoff.retry}
-            onCancel={themeHandoff.cancel}
-          />
-        ) : null}
-        {phase === 'complete' ? null : (
-          <StartupSurface
-            ref={surface}
-            overlay
-            initial
-            freshAppearance={operationBoot.operation === 'restore'}
-            setupSpace={
-              sessionTransition === 'preparing-orbis' || showSetupSpace(firstSetup, sessionTransition, operationBoot.operation, themeHandoff.active)
-            }
-            prepareWallpaper={sessionTransition === 'preparing-orbis'}
-            landing={homeLanding}
-            morph={morph}
-            firstBoot={sessionTransition === 'preparing-orbis' && phase === 'loading'}
-            setupSigningIn={sessionTransition === 'preparing-orbis' && phase !== 'loading'}
-            formationOwner={sessionTransition === 'preparing-orbis' ? setupFormationOwner.current : workspaceFormationOwner.current}
-            expandingAuth={authExpansion}
-            signingIn={sessionTransition === 'signing-in'}
-            loggingOff={sessionTransition === 'logging-out'}
-            label={sessionTransition === 'preparing-orbis' ? setupStage : undefined}
-            attention={workspaceSlow}
-            status={
-              workspaceSlow
-                ? { title: 'Your workspace could not finish loading', message: 'Check the connection and try again.' }
-                : themeHandoff.active && !themeHandoff.pending
-                  ? { title: 'Loading theme…', message: 'Preparing your workspace.' }
-                  : undefined
-            }
-            completing={phase !== 'loading'}
-            revealing={phase === 'revealing'}
-          >
-            {workspaceSlow ? (
-              <button type="button" className="orbis-startup-return" onClick={() => window.location.reload()}>
-                Retry
-              </button>
-            ) : null}
-          </StartupSurface>
-        )}
-      </ReadyContext.Provider>
+      <StartupCompleteContext.Provider value={phase === 'complete'}>
+        <ReadyContext.Provider value={setReady}>
+          {children}
+          {themeHandoff.pending ? (
+            <ThemeApplyCover
+              label="Loading your theme…"
+              error={themeHandoff.error ? 'Your theme could not be confirmed. Retry or cancel to return to the workspace.' : undefined}
+              onRetry={themeHandoff.retry}
+              onCancel={themeHandoff.cancel}
+            />
+          ) : null}
+          {phase === 'complete' ? null : (
+            <StartupSurface
+              ref={surface}
+              overlay
+              initial
+              freshAppearance={operationBoot.operation === 'restore'}
+              setupSpace={
+                sessionTransition === 'preparing-orbis' || showSetupSpace(firstSetup, sessionTransition, operationBoot.operation, themeHandoff.active)
+              }
+              prepareWallpaper={sessionTransition === 'preparing-orbis'}
+              landing={homeLanding}
+              morph={morph}
+              firstBoot={sessionTransition === 'preparing-orbis' && phase === 'loading'}
+              setupSigningIn={sessionTransition === 'preparing-orbis' && phase !== 'loading'}
+              formationOwner={sessionTransition === 'preparing-orbis' ? setupFormationOwner.current : workspaceFormationOwner.current}
+              expandingAuth={authExpansion}
+              signingIn={sessionTransition === 'signing-in'}
+              loggingOff={sessionTransition === 'logging-out'}
+              label={sessionTransition === 'preparing-orbis' ? setupStage : undefined}
+              attention={workspaceSlow}
+              status={
+                workspaceSlow
+                  ? { title: 'Your workspace could not finish loading', message: 'Check the connection and try again.' }
+                  : themeHandoff.active && !themeHandoff.pending
+                    ? { title: 'Loading theme…', message: 'Preparing your workspace.' }
+                    : undefined
+              }
+              completing={phase !== 'loading'}
+              revealing={phase === 'revealing'}
+            >
+              {workspaceSlow ? (
+                <button type="button" className="orbis-startup-return" onClick={() => window.location.reload()}>
+                  Retry
+                </button>
+              ) : null}
+            </StartupSurface>
+          )}
+        </ReadyContext.Provider>
+      </StartupCompleteContext.Provider>
     </SessionContext.Provider>
   );
 }

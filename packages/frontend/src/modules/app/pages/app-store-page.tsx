@@ -124,7 +124,7 @@ function LocalStore() {
   const visibleSearch = themes ? themeSearch : search;
   const reduced = useReducedMotion();
   const { t } = useTranslation();
-  const { data: appStores } = useSuspenseQuery(getEnabledAppStoresOptions());
+  const { data: appStores } = useSuspenseQuery({ ...getEnabledAppStoresOptions(), staleTime: 60000 });
 
   useEffect(() => {
     if (selectedStore !== storeId) setStoreId(selectedStore);
@@ -161,6 +161,7 @@ function LocalStore() {
   const { data, hasNextPage, isFetchingNextPage, isFetching, isError, isFetchNextPageError, isPlaceholderData, refetch, fetchNextPage } =
     useInfiniteQuery({
       ...searchAppsInfiniteOptions({ query: { search: querySearch, category, pageSize: 24, storeId: selectedStore } }),
+      staleTime: 60000,
       getNextPageParam: (lastPage) => lastPage.nextCursor,
       placeholderData: keepPreviousData,
       enabled: browsing,

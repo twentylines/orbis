@@ -2,8 +2,8 @@ import { expect, test } from 'bun:test';
 
 test('top-bar controls stay masked during the morph and return through a blur transition', async () => {
   const css = await Bun.file(new URL('./command-search.css', import.meta.url)).text();
-  const open = css.match(/:has\(\.desktop-search-trigger\[data-search-open="true"\]\) > \*\s*\{([^}]*)\}/)?.[1] ?? '';
-  const resting = css.match(/\.desktop-system-bar > \*\s*\{([^}]*)\}/)?.[1] ?? '';
+  const open = css.match(/:has\(\.desktop-search-trigger\[data-search-open="true"\]\) \.desktop-toolbar-content > \*\s*\{([^}]*)\}/)?.[1] ?? '';
+  const resting = css.match(/\.desktop-toolbar-content > \*\s*\{([^}]*)\}/)?.[1] ?? '';
   expect(open).toContain('visibility: hidden');
   expect(open).toContain('pointer-events: none');
   expect(open).toContain('opacity: 0');
@@ -48,4 +48,12 @@ test('closing crossfades the label while preserving the actual query and accessi
   expect(css).toMatch(/\.desktop-search-surface\[data-closing="true"\] \.desktop-search-closing-label\s*\{\s*opacity:\s*1;/);
   expect(css).toContain('transition: opacity 90ms ease');
   expect(css).toContain('@media (prefers-reduced-motion: reduce)');
+});
+
+test('the returning search trigger stays sharp while its sibling controls reveal through blur', async () => {
+  const css = await Bun.file(new URL('./command-search.css', import.meta.url)).text();
+  const trigger = css.match(/\.desktop-system-bar \.desktop-system-actions \.desktop-search-trigger,[^{]+\{([^}]+)\}/)?.[1] ?? '';
+  expect(trigger).toContain('filter: none');
+  expect(trigger).toContain('transition: none');
+  expect(css).not.toContain('.desktop-system-bar:has(.desktop-search-trigger[data-search-open="true"]) > * {');
 });

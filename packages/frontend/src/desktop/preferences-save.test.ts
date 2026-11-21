@@ -9,6 +9,7 @@ const scenarios = [
   'workspace-sort-reparent-focus',
   'workspace-sort-swap',
   'workspace-sort-pointer',
+  'workspace-sort-grip-top',
   'workspace-sort-fast-pointer',
   'workspace-sort-edge',
   'workspace-capability-downgrade',

@@ -1,5 +1,4 @@
 import { greetingForHour } from './home-greeting-time';
-import { useWallpaperText } from '@/desktop/wallpaper-text';
 import { useEffect, useState, type Ref } from 'react';
 
 const minute = 60_000;
@@ -7,7 +6,6 @@ const dateFormat: Intl.DateTimeFormatOptions = { weekday: 'long', month: 'long',
 
 export function HomeGreeting({ headingRef, focusable }: { headingRef: Ref<HTMLHeadingElement>; focusable: boolean }) {
   const [date, setDate] = useState(() => new Date());
-  const dateText = useWallpaperText<HTMLParagraphElement>();
 
   useEffect(() => {
     let timer: number;
@@ -36,7 +34,7 @@ export function HomeGreeting({ headingRef, focusable }: { headingRef: Ref<HTMLHe
       <h1 ref={headingRef} tabIndex={focusable ? -1 : undefined}>
         {greeting}
       </h1>
-      <p className="workspace-subline" ref={dateText}>
+      <p className="workspace-subline">
         <time dateTime={machineDate}>{date.toLocaleDateString(undefined, dateFormat)}</time>
       </p>
     </div>

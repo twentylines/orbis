@@ -50,14 +50,14 @@ export const presetWallpaperColours: Record<ThemePreset, WallpaperColours> = {
 export const presetWallpaperSources: Record<ThemePreset, string> = {
   frost: '/wallpapers/frost-v2.webp',
   graphite: '/wallpapers/graphite-v2.webp',
-  forest: '/wallpapers/forest-v3.webp',
+  forest: '/wallpapers/forest-v4.webp',
   stone: '/wallpapers/stone-v2.webp',
   ocean: '/wallpapers/ocean-v4.webp',
   blush: '/wallpapers/blush-v4.webp',
-  burgundy: '/wallpapers/burgundy-v1.webp',
+  burgundy: '/wallpapers/burgundy-v2.webp',
   amber: '/wallpapers/amber-v1.webp',
   rose: '/wallpapers/rose-v1.webp',
-  orange: '/wallpapers/orange-v1.webp',
+  orange: '/wallpapers/orange-v2.webp',
 };
 export const presetWallpaperPreviews = Object.fromEntries(
   themePresets.map((preset) => [preset, presetWallpaperSources[preset].replace('.webp', '-preview.webp')]),

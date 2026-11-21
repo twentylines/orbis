@@ -35,6 +35,7 @@ export function wallpaperTextColour(
   rect: Rect,
   base: Colour,
   shadowSupported = true,
+  preferLight = false,
 ) {
   const { pixels } = sample;
   if (Math.min(viewport.width, viewport.height, pixels.sourceWidth, pixels.sourceHeight, rect.width, rect.height) <= 0) return null;
@@ -75,6 +76,8 @@ export function wallpaperTextColour(
     // A heading can cross sky and dark foreground; protect its weakest sampled region.
     return Math.min(...readings.map((reading) => contrast(value, reading)));
   };
+  // Session labels keep white on photographic midtones; dark ink is reserved for a broadly bright backdrop.
+  if (preferLight) return readings.filter((value) => value >= 0.5).length >= readings.length * 0.75 ? '#000000' : wallpaperTextColours.light;
   const lightScore = score(colours.light);
   const darkScore = score(shadowSupported ? colours.dark : [0, 0, 0]);
   // Mixed photographs need light ink so its dark, diffuse shadow can support the bright areas.

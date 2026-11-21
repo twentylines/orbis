@@ -49,6 +49,7 @@ function LocalApps() {
   const containers = useContainerTelemetry();
   const { data: apps } = useSuspenseQuery({
     ...getInstalledAppsOptions(),
+    staleTime: 15000,
     refetchInterval: visible ? 15000 : false,
     refetchIntervalInBackground: false,
   });

@@ -585,3 +585,14 @@ test('legacy chrome stays in Dark on first paint and explicit mode profiles reta
   expect(zero.get('--orbis-glass-chrome-blur')).toBe('blur(0px)');
   expect(zero.get('--orbis-glass-filter')).toBe('blur(36px) saturate(1.2)');
 });
+
+test('dark floating panels keep a restrained near-black preset tint', () => {
+  for (const preset of themePresets) {
+    const tokens = actualPalette(preset, true);
+    const { properties } = apply({}, { dark: true, tokens });
+    const menu = rgb(properties.get('--orbis-menu-surface') ?? '');
+    expect(Math.max(...menu.slice(0, 3))).toBeLessThan(30);
+    expect(menu[3]).toBe(0.78);
+    expect(properties.get('--orbis-menu-filter')).toBe('blur(24px) saturate(1.2)');
+  }
+});

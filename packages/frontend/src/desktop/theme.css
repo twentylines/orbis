@@ -160,7 +160,7 @@ html[data-desktop-wallpaper="tidal"]:has(.orbis-startup) {
 .orbis-theme[data-desktop-wallpaper="canopy"],
 body:has(.orbis-theme[data-desktop-wallpaper="canopy"]),
 html[data-desktop-wallpaper="canopy"]:has(.orbis-startup) {
-  --desktop-wallpaper: url("/wallpapers/forest-v3.webp");
+  --desktop-wallpaper: url("/wallpapers/forest-v4.webp");
 }
 
 html[data-desktop-preset="frost"] {
@@ -522,6 +522,20 @@ body:has(.orbis-theme) .btn:not(.btn-icon) {
 body:has(.orbis-theme) .btn-icon {
   flex-shrink: 0;
 }
+body:has(.orbis-theme) .btn-secondary:not(.btn-outline-primary, .btn-ghost-primary) {
+  --tblr-btn-bg: color-mix(in srgb, var(--desktop-ink) 8%, var(--desktop-surface));
+  --tblr-btn-border-color: var(--desktop-line);
+  --tblr-btn-color: var(--desktop-ink);
+  --tblr-btn-hover-bg: color-mix(in srgb, var(--desktop-ink) 12%, var(--desktop-surface));
+  --tblr-btn-hover-border-color: var(--desktop-line);
+  --tblr-btn-hover-color: var(--desktop-ink);
+  --tblr-btn-active-bg: color-mix(in srgb, var(--desktop-ink) 16%, var(--desktop-surface));
+  --tblr-btn-active-border-color: var(--desktop-line);
+  --tblr-btn-active-color: var(--desktop-ink);
+  --tblr-btn-disabled-bg: var(--desktop-surface);
+  --tblr-btn-disabled-border-color: var(--desktop-line);
+  --tblr-btn-disabled-color: var(--desktop-ink);
+}
 body:has(.orbis-theme) :is(.btn-primary, .btn-success) {
   --tblr-btn-bg: var(--desktop-action);
   --tblr-btn-border-color: var(--desktop-action);
@@ -852,7 +866,7 @@ body:has(.orbis-theme[data-desktop-wallpaper="theme-graphite"]) {
 html[data-desktop-wallpaper="theme-forest"],
 .orbis-theme[data-desktop-wallpaper="theme-forest"],
 body:has(.orbis-theme[data-desktop-wallpaper="theme-forest"]) {
-  --desktop-wallpaper: url("/wallpapers/forest-v3.webp");
+  --desktop-wallpaper: url("/wallpapers/forest-v4.webp");
 }
 html[data-desktop-wallpaper="theme-stone"],
 .orbis-theme[data-desktop-wallpaper="theme-stone"],
@@ -920,7 +934,7 @@ html[data-desktop-preset="burgundy"][data-desktop-mode="dark"] {
 html[data-desktop-wallpaper="theme-burgundy"],
 .orbis-theme[data-desktop-wallpaper="theme-burgundy"],
 body:has(.orbis-theme[data-desktop-wallpaper="theme-burgundy"]) {
-  --desktop-wallpaper: url("/wallpapers/burgundy-v1.webp");
+  --desktop-wallpaper: url("/wallpapers/burgundy-v2.webp");
 }
 
 html[data-desktop-preset="amber"] {
@@ -1030,5 +1044,5 @@ html[data-desktop-preset="orange"][data-desktop-mode="dark"] {
 html[data-desktop-wallpaper="theme-orange"],
 .orbis-theme[data-desktop-wallpaper="theme-orange"],
 body:has(.orbis-theme[data-desktop-wallpaper="theme-orange"]) {
-  --desktop-wallpaper: url("/wallpapers/orange-v1.webp");
+  --desktop-wallpaper: url("/wallpapers/orange-v2.webp");
 }

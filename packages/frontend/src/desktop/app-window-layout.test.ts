@@ -21,7 +21,7 @@ test('resizing from the left or top cannot cross the opposite edge or escape the
 });
 
 test('split panes fill the usable screen with one shared gap and keep both apps usable at extreme ratios', () => {
-  for (const width of [1052, 1392, 2205]) {
+  for (const width of [1052, 1392, 2205, 3792]) {
     const screen = { ...area, width };
     expect(canSplitAppWindows(screen)).toBe(true);
     for (const ratio of [0.01, 0.5, 0.99]) {
@@ -50,4 +50,19 @@ test('window edges trigger snapping in the drag direction without requiring the 
   expect(canSplitAppWindows(narrow)).toBe(false);
   expect(appSnapTarget(narrow, { x: -30, y: 0 }, narrow)).toBeNull();
   expect(clampAppBounds(bounds, narrow)).toEqual(narrow);
+});
+
+test('4K windows use screen insets instead of the centered navigation width', async () => {
+  const { horizontalWindowArea, defaultWindowBounds } = await import('./window-geometry');
+  const horizontal = horizontalWindowArea(3840, 24);
+  expect(horizontal).toEqual({ x: 24, width: 3792 });
+  const screen = { ...horizontal, y: 104, height: 1920 };
+  const floating = defaultWindowBounds(screen);
+  expect(floating.width).toBeGreaterThan(2700);
+  expect(floating.height).toBeGreaterThan(1700);
+  const left = splitAppBounds('left', screen);
+  const right = splitAppBounds('right', screen);
+  expect(left.x).toBe(24);
+  expect(right.x + right.width).toBe(3816);
+  expect(right.x - left.x - left.width).toBe(16);
 });

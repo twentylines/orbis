@@ -1,7 +1,6 @@
 # Wallpaper photos
 
-The six preset wallpapers are natural 16:9 crops of the linked photographs.
-Main images are 3840 × 2160 WebP. Picker previews are 480 × 270 or 640 × 360 WebP. Each photo is bundled under the listed source license.
+Preset wallpapers are natural 16:9 crops of the linked photographs, encoded as WebP. Images retain their source resolution up to 3840 pixels wide, without upscaling. Picker previews are 480 × 270 or 640 × 360 WebP. Each photo is bundled under the listed source license.
 
 | Theme | Files | Photographer | Original photograph and license |
 | --- | --- | --- | --- |
@@ -43,3 +42,13 @@ These wallpapers are cropped from photographs. The full backgrounds are 3840 × 
 | Amber | `amber-v1.webp`, `amber-v1-preview.webp` | Susanne Jutzeler, suju-foto | [Sunflower field](https://www.pexels.com/photo/shallow-focus-photography-of-yellow-sunflower-field-under-sunny-sky-1169084/), [Pexels License](https://www.pexels.com/license/) |
 | Rose | `rose-v1.webp`, `rose-v1-preview.webp` | Michelle Leman | [Pink rose petals](https://www.pexels.com/photo/close-up-of-a-pink-rose-6765595/), [Pexels License](https://www.pexels.com/license/) |
 | Orange | `orange-v1.webp`, `orange-v1-preview.webp` | Fuzail Ahmad | [Orange gerbera](https://www.pexels.com/photo/macro-photography-of-flower-2081700/), [Pexels License](https://www.pexels.com/license/) |
+
+## Updated photographic backgrounds
+
+These defaults use the original photographic colours. Earlier images remain available for saved references.
+
+| Preset | Files | Photographer | Source and licence |
+| --- | --- | --- | --- |
+| Forest (Sage green) | `forest-v4.webp`, `forest-v4-preview.webp` | Andrea Music | [Green trees in forest during daytime](https://unsplash.com/photos/green-trees-in-forest-during-daytime-VvWFhDTAmlU), [Unsplash License](https://unsplash.com/license) |
+| Burgundy | `burgundy-v2.webp`, `burgundy-v2-preview.webp` | Tolga Ahmetler | [Red leaves, İstanbul](https://unsplash.com/photos/a-bunch-of-red-leaves-on-a-tree-3rTUHr0cm_k), [Unsplash License](https://unsplash.com/license) |
+| Orange | `orange-v2.webp`, `orange-v2-preview.webp` | Meriç Dağlı | [Antelope Canyon](https://unsplash.com/photos/a-close-up-of-a-rock-formation-in-the-desert-2RJB9Euaj7M), [Unsplash License](https://unsplash.com/license) |

@@ -1,6 +1,11 @@
 import type { DesktopWindowBounds, DesktopWindowState } from '@runtipi/common/schemas';
 
 export type WindowArea = DesktopWindowBounds;
+export function horizontalWindowArea(viewportWidth: number, inset = 24) {
+  const x = Math.round(Math.max(0, Math.min(inset, viewportWidth / 2)));
+  return { x, width: Math.max(1, Math.floor(viewportWidth - x * 2)) };
+}
+
 export const WINDOW_MIN_WIDTH = 520;
 export const WINDOW_MIN_HEIGHT = 320;
 export const canSnapWindow = (area: WindowArea) => area.width >= WINDOW_MIN_WIDTH * 2 + 16;
@@ -17,8 +22,8 @@ export function clampWindowBounds(bounds: DesktopWindowBounds, area: WindowArea)
 }
 
 export function defaultWindowBounds(area: WindowArea): DesktopWindowBounds {
-  const width = Math.min(1040, Math.round(area.width * 0.86));
-  const height = Math.min(800, Math.round(area.height * 0.9));
+  const width = area.width >= 2200 ? Math.round(area.width * 0.76) : Math.min(1040, Math.round(area.width * 0.86));
+  const height = area.width >= 2200 ? Math.round(area.height * 0.9) : Math.min(800, Math.round(area.height * 0.9));
   return clampWindowBounds({ x: area.x + (area.width - width) / 2, y: area.y + (area.height - height) / 2, width, height }, area);
 }
 

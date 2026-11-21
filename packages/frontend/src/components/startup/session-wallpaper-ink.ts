@@ -86,6 +86,7 @@ export function observeSessionWallpaperInk(element: HTMLDivElement) {
           { left: 0, top: 0, width: 1, height: 1 },
           base,
           false,
+          true,
         ) ?? fallback;
       if (image && (!image.complete || !image.naturalWidth)) return apply(fallback);
       const shade = image && image === wallpaper ? element.querySelector('.desktop-wallpaper-shade') : null;
@@ -111,6 +112,7 @@ export function observeSessionWallpaperInk(element: HTMLDivElement) {
         { left: titleBox.left - imageBox.left, top: titleBox.top - imageBox.top, width: titleBox.width, height: titleBox.height },
         base,
         false,
+        true,
       );
       if (colour) apply(colour);
     } catch {

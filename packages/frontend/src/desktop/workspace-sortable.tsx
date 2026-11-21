@@ -20,11 +20,12 @@ export function useWorkspaceSortable<T extends string>(
   commit: (next: T[], moved: T) => void,
   enabled: boolean,
   strategy: 'insert' | 'swap' = 'insert',
+  activationDistance = 10,
 ) {
   const group = useId();
   const nodes = useRef(new Map<T, HTMLElement>());
-  const callbacks = useRef({ items, commit, enabled, strategy });
-  callbacks.current = { items, commit, enabled, strategy };
+  const callbacks = useRef({ items, commit, enabled, strategy, activationDistance });
+  callbacks.current = { items, commit, enabled, strategy, activationDistance };
   const [draft, setDraft] = useState<T[] | null>(null);
   const order = draft ?? items;
   const orderRef = useRef(order);
@@ -140,8 +141,8 @@ export function useWorkspaceSortable<T extends string>(
       if (id === drag.id) continue;
       const rect = nodes.current.get(id)?.getBoundingClientRect();
       if (!rect) continue;
-      const insetX = Math.min(24, (rect.right - rect.left) * 0.2);
-      const insetY = Math.min(24, (rect.bottom - rect.top) * 0.2);
+      const insetX = Math.min(12, (rect.right - rect.left) * 0.1);
+      const insetY = Math.min(8, (rect.bottom - rect.top) * 0.08);
       if (drag.x > rect.left + insetX && drag.x < rect.right - insetX && drag.y > rect.top + insetY && drag.y < rect.bottom - insetY) {
         target = id;
         break;
@@ -178,7 +179,7 @@ export function useWorkspaceSortable<T extends string>(
       if (!drag || drag.pointerId !== event.pointerId) return;
       drag.x = event.clientX;
       drag.y = event.clientY;
-      if (!drag.active && Math.hypot(drag.x - drag.startX, drag.y - drag.startY) > 10) {
+      if (!drag.active && Math.hypot(drag.x - drag.startX, drag.y - drag.startY) > callbacks.current.activationDistance) {
         drag.active = true;
         nodes.current.get(drag.id)?.style.setProperty('pointer-events', 'none');
         setPicked(drag.id);

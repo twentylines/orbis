@@ -3,7 +3,7 @@ import { workspaceEditingEvent } from '@/desktop/workspace-layout';
 import { RecoveryScene } from '@/components/recovery-progress/recovery-scene';
 import { UpdateDownloadProgress } from '@/components/recovery-progress/update-download-progress';
 import { StartupSurface } from '@/components/startup/startup-surface';
-import { useStartupSession } from '@/components/startup/startup-boundary';
+import { useStartupComplete, useStartupSession } from '@/components/startup/startup-boundary';
 import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
 import { animateSessionExit, rememberLogout } from '@/desktop/session-motion';
 import toast from 'react-hot-toast';
@@ -99,7 +99,8 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     return () => window.removeEventListener(workspaceEditingEvent, receive);
   }, []);
   useDockStartupReveal(desktop, !requiresOnboarding);
-  const preloadNavigation = useNavigationPreload(!requiresOnboarding && !loggingOff);
+  const startupComplete = useStartupComplete();
+  const preloadNavigation = useNavigationPreload(startupComplete && !requiresOnboarding && !loggingOff);
   const warmNavigation = useNavigationWarmup(preloadNavigation);
   useLayoutEffect(() => {
     if (requiresOnboarding) return;

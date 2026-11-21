@@ -30,7 +30,7 @@ import {
 } from '@tabler/icons-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
 import { useDesktopPreferences } from './preferences';
-import { canSnapWindow, clampWindowBounds, defaultWindowBounds, placedWindowBounds, type WindowArea } from './window-geometry';
+import { canSnapWindow, clampWindowBounds, defaultWindowBounds, horizontalWindowArea, placedWindowBounds, type WindowArea } from './window-geometry';
 import { WindowVisibilityContext } from './window-visibility';
 import './route-window.css';
 import { isWindowMinimized, windowSearch } from './window-navigation';
@@ -93,7 +93,9 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
       cancelGesture();
       const bar = document.querySelector<HTMLElement>('.desktop-system-bar');
       const dock = document.querySelector<HTMLElement>('.desktop-dock');
-      const x = bar?.offsetLeft ?? 24;
+      const main = document.querySelector<HTMLElement>('.desktop-main');
+      const inset = main ? Number.parseFloat(getComputedStyle(main).paddingLeft) : 24;
+      const { x, width } = horizontalWindowArea(window.innerWidth, Number.isFinite(inset) ? inset : 24);
       const y = Math.ceil((bar ? Number.parseFloat(getComputedStyle(bar).top) + bar.offsetHeight : 88) + 20);
       const dockTop = dock?.offsetHeight
         ? window.innerHeight - Number.parseFloat(getComputedStyle(dock).bottom) - dock.offsetHeight
@@ -101,7 +103,7 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
       setArea({
         x,
         y,
-        width: Math.floor(window.innerWidth - x * 2),
+        width,
         height: Math.max(1, Math.floor(dockTop - y - 20)),
       });
     };

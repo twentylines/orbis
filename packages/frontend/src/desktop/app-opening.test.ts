@@ -140,3 +140,12 @@ describe('general app window compatibility warnings', () => {
     }
   });
 });
+
+test('new 4K floating apps grow with the available screen while saved sizes remain unchanged', () => {
+  const area = { x: 24, y: 104, width: 3792, height: 1920 };
+  expect(initialAppBounds(area).width).toBeGreaterThan(2800);
+  expect(initialAppBounds(area).height).toBeGreaterThan(1800);
+  expect(initialAppBounds(area, undefined, ['utilities']).width).toBeGreaterThan(1900);
+  const saved = { x: 40, y: 140, width: 900, height: 700 };
+  expect(initialAppBounds(area, saved)).toEqual(saved);
+});

@@ -51,8 +51,12 @@ export function primaryAppAddress(destinations: { url: string }[], origin: strin
 export function initialAppBounds(area: WindowArea, saved?: DesktopWindowBounds, categories: string[] = []) {
   if (saved) return clampAppBounds(saved, area);
   const compact = categories.some((category) => ['utilities', 'security'].includes(category));
-  const width = Math.min(compact ? 940 : 1280, Math.round(area.width * (compact ? 0.84 : 0.92)));
-  const height = Math.min(compact ? 720 : 900, Math.round(area.height * 0.94));
+  const width =
+    area.width >= 2200
+      ? Math.round(area.width * (compact ? 0.52 : 0.76))
+      : Math.min(compact ? 940 : 1280, Math.round(area.width * (compact ? 0.84 : 0.92)));
+  const height =
+    area.width >= 2200 ? Math.round(area.height * (compact ? 0.8 : 0.94)) : Math.min(compact ? 720 : 900, Math.round(area.height * 0.94));
   return clampAppBounds({ ...area, x: area.x + (area.width - width) / 2, y: area.y + (area.height - height) / 2, width, height }, area);
 }
 

@@ -87,8 +87,13 @@ mock.module('@/modules/theme-packs/theme-apply-cover', () => ({ ThemeApplyCover:
 mock.module('@/desktop/motion-setting', () => ({ prefersReducedMotion: () => true }));
 mock.module('@/components/providers/i18n/i18n-provider', () => ({ I18nProvider: ({ children }: { children: unknown }) => children }));
 const { createRoot } = await import('react-dom/client');
-const { StartupBoundary, useStartupReady } = await import('./startup-boundary');
+const { StartupBoundary, useStartupReady, useStartupComplete } = await import('./startup-boundary');
 const { ProviderLoadingBridge } = await import('@/components/providers/providers');
+let startupComplete = false;
+function WarmupProbe() {
+  startupComplete = useStartupComplete();
+  return null;
+}
 let suspended = true;
 let resolve: () => void = () => undefined;
 let waiting = new Promise<void>((done) => {
@@ -143,6 +148,7 @@ let boundaryKey = 0;
 const render = () =>
   root.render(
     <StartupBoundary>
+      <WarmupProbe />
       <Boundary key={boundaryKey}>
         <Suspense fallback={<ProviderLoadingBridge />}>
           <Content />
@@ -160,24 +166,29 @@ const settle = async () => {
 };
 await flush(render);
 expect(covers).toBe(1);
+expect(startupComplete).toBe(false);
 suspended = false;
 await flush(resolve);
 await settle();
 expect(covers).toBe(0);
+expect(startupComplete).toBe(true);
 suspended = true;
 waiting = new Promise<void>((done) => {
   resolve = done;
 });
 await flush(render);
 expect(covers).toBe(1);
+expect(startupComplete).toBe(false);
 suspended = false;
 await flush(resolve);
 await settle();
 expect(covers).toBe(0);
+expect(startupComplete).toBe(true);
 failed = true;
 await flush(render);
 await settle();
 expect(covers).toBe(0);
+expect(startupComplete).toBe(true);
 expect(caught).toHaveLength(1);
 expect(caught[0]).toBeInstanceOf(Error);
 expect((caught[0] as Error).message).toBe('fixture failure');
@@ -186,7 +197,9 @@ boundaryKey++;
 await flush(render);
 await settle();
 expect(covers).toBe(0);
+expect(startupComplete).toBe(true);
 expect(caught).toHaveLength(1);
 await flush(() => root.unmount());
 expect(covers).toBe(0);
+expect(startupComplete).toBe(true);
 process.stdout.write('ready recovered');

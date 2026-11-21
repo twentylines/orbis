@@ -44,7 +44,7 @@
   .orbis-startup-copy
   :is(.orbis-startup-title, .orbis-startup-detail) {
   color: inherit;
-  text-shadow: none;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.65);
 }
 .orbis-startup-session .orbis-session-galaxy {
   grid-template: minmax(0, 1fr) / minmax(0, 1fr);

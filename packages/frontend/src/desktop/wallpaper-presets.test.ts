@@ -18,13 +18,7 @@ import {
 describe('versioned wallpaper photographs', () => {
   test('every preset points to its new full image and preview', () => {
     for (const preset of themePresets) {
-      const version = ['burgundy', 'amber', 'rose', 'orange'].includes(preset)
-        ? 'v1'
-        : preset === 'blush' || preset === 'ocean'
-          ? 'v4'
-          : preset === 'forest'
-            ? 'v3'
-            : 'v2';
+      const version = ['amber', 'rose'].includes(preset) ? 'v1' : preset === 'blush' || preset === 'ocean' || preset === 'forest' ? 'v4' : 'v2';
       expect(presetWallpaperSources[preset]).toBe(`/wallpapers/${preset}-${version}.webp`);
       expect(presetWallpaperPreviews[preset]).toBe(`/wallpapers/${preset}-${version}-preview.webp`);
       expect(Bun.file(new URL(`../../public${presetWallpaperSources[preset]}`, import.meta.url)).size).toBeGreaterThan(0);

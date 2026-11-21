@@ -111,7 +111,7 @@ describe('catalogue-first Store presentation', () => {
     expect(html).toContain('/app-store/community/jellyfin?view=apps&amp;store=community');
     expect(html).toContain('/api/marketplace/apps/jellyfin%3Acommunity/image');
     expect(html).toContain('width="72"');
-    expect(html.match(/loading="lazy"/g)?.length).toBe(1);
+    expect(html.match(/loading="lazy"/g)?.length).toBe(2);
     expect([...html.matchAll(/<img[^>]+src="([^"]+)"/g)].map((match) => match[1])).toEqual([
       '/api/marketplace/apps/jellyfin%3Acommunity/image',
       '/api/marketplace/apps/jellyfin%3Acommunity/image',

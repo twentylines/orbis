@@ -13,7 +13,13 @@ export function SystemToolbar({ actions, children }: { actions: Record<ToolbarAc
     return () => window.removeEventListener(workspaceEditingEvent, receive);
   }, []);
   const enabled = editing && Boolean(workspaceCapabilities?.toolbarOrder);
-  const sortable = useWorkspaceSortable(preferences.toolbarOrder ?? [...toolbarActionIds], (toolbarOrder) => update({ toolbarOrder }), enabled);
+  const sortable = useWorkspaceSortable(
+    preferences.toolbarOrder ?? [...toolbarActionIds],
+    (toolbarOrder) => update({ toolbarOrder }),
+    enabled,
+    'insert',
+    16,
+  );
   return (
     <div className="desktop-system-actions" data-toolbar-editing={enabled || undefined}>
       {children}

@@ -7,12 +7,11 @@ import { useAppLauncher } from '@/desktop/app-launcher';
 import { appDestinations } from '@/desktop/app-destinations';
 import { appOpeningMode, primaryAppAddress } from '@/desktop/app-opening';
 import { useBlockedAppEmbeds } from '@/desktop/app-embedding';
-import { useWallpaperText } from '@/desktop/wallpaper-text';
 import { useDesktopWindows } from '@/desktop/window-viewport';
 import { AppTabIndicator } from '@/desktop/app-tab-indicator';
 import { useAppContext } from '@/context/app-context';
 import { useTasks, taskIsActive, taskLabels, taskStates } from '@/desktop/tasks';
-import { IconApps, IconGripVertical, IconX, IconSettings, IconDownload, IconPencil, IconCheck } from '@tabler/icons-react';
+import { IconApps, IconGripVertical, IconTrash, IconSettings, IconDownload, IconPencil, IconCheck } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -32,6 +31,7 @@ import { HomeSystemStatus } from '../components/home-system-status';
 import { HomeAttention } from '../components/home-attention';
 import { HomeGreeting } from './home-greeting';
 import './home-heading.css';
+import { HomeApplicationsHeading } from './home-applications-heading';
 
 const labels: Record<WidgetId, string> = {
   applications: 'Applications',
@@ -67,14 +67,6 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   const heading = useRef<HTMLHeadingElement>(null);
   const workspaceElement = useRef<HTMLDivElement>(null);
   const editToggle = useRef<HTMLButtonElement>(null);
-  const headingText = useWallpaperText<HTMLHeadingElement>();
-  const setHeading = useCallback(
-    (element: HTMLHeadingElement | null) => {
-      heading.current = element;
-      headingText(element);
-    },
-    [headingText],
-  );
   useEffect(() => {
     if (focusOnMount) heading.current?.focus({ preventScroll: true });
   }, [focusOnMount]);
@@ -137,7 +129,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   const [saveRequested, setSaveRequested] = useState(false);
   const { preferences, update, syncState, workspaceCapabilities } = useDesktopPreferences();
   const { workspace } = preferences;
-  const apps = useQuery({ ...getInstalledAppsOptions(), refetchInterval: 15000 });
+  const apps = useQuery({ ...getInstalledAppsOptions(), staleTime: 15000, refetchInterval: 15000 });
   const containers = useContainerTelemetry();
   const tasks = useTasks();
 
@@ -251,15 +243,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
     applications: (
       <section className="workspace-apps" aria-labelledby="workspace-apps-title">
         <div className="workspace-section-heading">
-          <div className="workspace-app-heading-text">
-            <h2 id="workspace-apps-title">Applications</h2>
-            {apps.data ? (
-              <p className="workspace-app-counts">
-                <span>{installed.length} installed</span>
-                <span>{running} running</span>
-              </p>
-            ) : null}
-          </div>
+          <HomeApplicationsHeading installed={apps.data ? installed.length : undefined} running={running} />
           {editing ? null : (
             <div className="workspace-home-app-actions">
               <Link to="/apps">View all</Link>
@@ -375,7 +359,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
                               aria-label={`Unpin ${info.name}`}
                               onClick={() => unpinApp(info.urn)}
                             >
-                              <IconX size={18} aria-hidden="true" />
+                              <IconTrash size={18} aria-hidden="true" />
                             </button>
                           </div>
                         </div>
@@ -521,7 +505,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
           </button>
         ) : null}
         <button className="workspace-widget-hide" type="button" aria-label={`Hide ${labels[id]}`} onClick={() => hideWidget(id)}>
-          <IconX size={17} aria-hidden="true" />
+          <IconTrash size={17} aria-hidden="true" />
         </button>
       </div>
       <div className="workspace-widget-content">{widgets[id]}</div>
@@ -538,7 +522,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
       data-app-view={layout.appView}
     >
       <div className="workspace-heading">
-        <HomeGreeting headingRef={setHeading} focusable={focusOnMount} />
+        <HomeGreeting headingRef={heading} focusable={focusOnMount} />
         <div className="workspace-actions">
           {editing ? <DashboardEditing workspace={workspace} save={saveWorkspace} reset={resetLayout} /> : null}
           <div className="workspace-edit-controls">

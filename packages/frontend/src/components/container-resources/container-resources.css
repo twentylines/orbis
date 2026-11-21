@@ -70,8 +70,12 @@ body:has(.orbis-theme) .container-resources[tabindex="-1"]:focus {
   font-size: 0.6875rem;
   line-height: 1.5;
 }
+.container-resources-sort {
+  --orbis-selection-fill: var(--desktop-action);
+}
 .container-resources-sort button[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--desktop-preset-tint) 20%, transparent);
+  background: var(--desktop-action);
+  color: var(--desktop-action-ink);
 }
 .container-resources-sort > span {
   margin-left: auto;

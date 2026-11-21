@@ -557,19 +557,6 @@
     border-color 0.18s ease,
     transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 0.22s ease;
-  animation: orbis-app-enter 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-.workspace-app-entry:nth-child(2) > .workspace-app {
-  animation-delay: 0.06s;
-}
-.workspace-app-entry:nth-child(3) > .workspace-app {
-  animation-delay: 0.12s;
-}
-.workspace-app-entry:nth-child(4) > .workspace-app {
-  animation-delay: 0.18s;
-}
-.workspace-app-entry:nth-child(5) > .workspace-app {
-  animation-delay: 0.24s;
 }
 .workspace-app:hover {
   background: color-mix(in srgb, var(--desktop-preset-tint) 22%, transparent);
@@ -1744,4 +1731,15 @@
 .workspace-recent-tasks b[data-status="succeeded"] {
   color: var(--desktop-positive);
   background: color-mix(in srgb, var(--desktop-positive) 11%, transparent);
+}
+
+html[data-desktop-mode="light"] .workspace-apps {
+  box-shadow: 0 24px 58px color-mix(in srgb, var(--desktop-preset-tint) 17%, transparent);
+}
+
+.workspace-heading .workspace-greeting :is(h1, .workspace-subline) {
+  color: #fff;
+  text-shadow:
+    0 1px 4px rgb(0 0 0 / 75%),
+    0 2px 12px rgb(0 0 0 / 35%);
 }

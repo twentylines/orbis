@@ -297,3 +297,21 @@ test('wallpaper text batches initial and scrolling heading reads before colour w
     }
   }
 });
+
+test('white-first session labels stay white on brown stone and switch on a clearly pale background', () => {
+  for (const rgb of [
+    [171, 119, 73],
+    [199, 148, 96],
+    [145, 145, 145],
+  ]) {
+    const image = sample(() => [rgb[0] ?? 0, rgb[1] ?? 0, rgb[2] ?? 0, 255]);
+    expect(wallpaperTextColour(image, viewport, region, base, false, true)).toBe('#ffffff');
+  }
+  for (const rgb of [
+    [245, 245, 245],
+    [239, 224, 196],
+  ]) {
+    const image = sample(() => [rgb[0] ?? 0, rgb[1] ?? 0, rgb[2] ?? 0, 255]);
+    expect(wallpaperTextColour(image, viewport, region, base, false, true)).toBe('#000000');
+  }
+});
