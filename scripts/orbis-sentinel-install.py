@@ -16,17 +16,15 @@ import weakref
 
 OWNER = 0
 PYTHON = Path('/usr/bin/python3')
-TOOLKIT_COMMIT = '936e05fc13d45e68b6c99bb600ff5c5e5f9640d6'
+TOOLKIT_COMMIT = '32e384d9d492d8b5cb1aea562bd86447e2cc04a0'
 TOOLKIT = {
     'activate_release.py': (28644, '0b4645072cb1de6251b27b5e063bdd38163078ea9c6b1ede7161ef89d71c924f'),
     'verify_release.py': (14462, '9461fb041d055bbae13cc3ce48f3daf09ff8835ceedb8a77c4bf15c237137629'),
-    'stage_release.py': (21359, '0920770996fc7cd7c627edbb62bb6a0a8ab51dbae74348988959cabfeaefa142'),
+    'stage_release.py': (23385, '4d4d52bfbfcc5891d6b1d17da9e14c7ff6c1559aa59e19db7aec5ae28adc50b2'),
     'bootstrap_verifier.py': (13977, '965002f855e940446951d27a2bd44a37043efa692d3e4ba56473bd5525de6e6c'),
     'LICENSE': (35149, '3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986'),
 }
-RELEASE = {'version': '0.1.0-dev.11',
-           'sha256': '11c45eec2da2a4a28790ce5b231f72a2256b440bda3abdf42511f5ac7db7ff1a',
-           'sourceCommit': 'c9b44e69cb70fc0f8c7f48f4dd183b2c3f099f3a'}
+RELEASE = {'version': '0.1.0-dev.19', 'sha256': '4a3c29039b768dbae15a562abc64086374f66af9e12b8b490d3aa4466d152f6c', 'sourceCommit': '32e384d9d492d8b5cb1aea562bd86447e2cc04a0'}
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 _PREPARATIONS = weakref.WeakKeyDictionary()
 
