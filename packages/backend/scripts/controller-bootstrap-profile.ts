@@ -31,20 +31,29 @@ const read = (file: string, limit = 1048576) => {
     fs.closeSync(fd);
   }
 };
-const capability = {
-  schema: 'orbis.controller-overlay-startup.v2',
-  version: 2,
+const legacyCapability = {
+  schema: 'orbis.controller-overlay-startup.v1',
+  version: 1,
   preserveNetworkAccess: true,
   preserveRunningApps: true,
   environment: 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1',
-  updateBackupPolicy: 'none',
 };
+const capabilities = [
+  legacyCapability,
+  { ...legacyCapability, schema: 'orbis.controller-overlay-startup.v2', version: 2, updateBackupPolicy: 'none' },
+];
 const codeSha256 = sha(read('/app/main.mjs', 32 * 1024 * 1024));
 if (process.env.ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS === '1' && fs.existsSync('/app/controller-overlay-capability.json')) {
-  const actual = JSON.parse(read('/app/controller-overlay-capability.json', 4096).toString('utf8'));
+  const actual: Record<string, unknown> = JSON.parse(read('/app/controller-overlay-capability.json', 4096).toString('utf8'));
   if (
-    JSON.stringify(Object.keys(actual).sort()) !== JSON.stringify(Object.keys(capability).sort()) ||
-    (Object.keys(capability) as (keyof typeof capability)[]).some((key) => actual[key] !== capability[key])
+    !actual ||
+    Array.isArray(actual) ||
+    typeof actual !== 'object' ||
+    !capabilities.some(
+      (capability) =>
+        JSON.stringify(Object.keys(actual).sort()) === JSON.stringify(Object.keys(capability).sort()) &&
+        Object.entries(capability).every(([key, value]) => actual[key] === value),
+    )
   )
     throw new Error('Unsupported source capability');
   process.stdout.write(

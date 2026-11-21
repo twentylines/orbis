@@ -48,6 +48,7 @@ jobs:
       id-token: write
     env:
       INSTALLER_WORK: ${{ github.workspace }}/.orbis-installer-endpoint
+      INSTALLER_ARTIFACT_NAME: orbis-installer-${{ github.run_id }}-${{ github.run_attempt }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -82,8 +83,11 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         if: steps.installer.outputs.available == 'true'
         with:
+          name: ${{ env.INSTALLER_ARTIFACT_NAME }}
           path: ${{ github.workspace }}/.orbis-installer-endpoint/public
       - name: Publish installer endpoint
         if: steps.installer.outputs.available == 'true'
         id: deployment
         uses: actions/deploy-pages@v5
+        with:
+          artifact_name: ${{ env.INSTALLER_ARTIFACT_NAME }}
