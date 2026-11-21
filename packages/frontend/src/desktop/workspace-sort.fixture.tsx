@@ -182,12 +182,20 @@ try {
         frames.clear();
         await act(async () => frame(16 + i * 16));
         expect(sortable.order).toEqual(['first', 'second', 'third']);
-        expect(sortable.itemProps(target)['data-sortable-over']).toBe(edge ? undefined : true);
+        expect(sortable.itemProps(target)['data-sortable-over']).toBe(true);
         expect(nodes.get('second')?.getBoundingClientRect().top).toBe(step);
       }
     }
     expect(commits).toHaveLength(0);
-    await send('pointerup', edge ? 3 : 50, targetY);
+    if (edge) {
+      await send('pointermove', -12, targetY);
+      const frame = frames.values().next().value;
+      if (!frame) throw new Error('Missing outside drag frame');
+      frames.clear();
+      await act(async () => frame(80));
+      expect(sortable.itemProps(target)['data-sortable-over']).toBeUndefined();
+    }
+    await send('pointerup', edge ? -12 : 50, targetY);
     expect(commits).toEqual(edge ? [] : swap ? [['third', 'second', 'first']] : [['second', 'first', 'third']]);
     expect(nodes.get('second')?.getBoundingClientRect().top).toBe(swap ? step : edge ? step : 0);
     expect(captured).toBe(false);

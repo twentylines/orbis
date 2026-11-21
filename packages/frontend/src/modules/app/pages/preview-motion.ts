@@ -70,11 +70,11 @@ export function animatePreviewTiles(before: PreviewSnapshot): Animation[] {
   });
 }
 
-export function previewPaneMotion(element: HTMLElement, opening: boolean, from?: { opacity: string; transform: string }): Animation {
+export function previewPaneMotion(element: HTMLElement, opening: boolean, from?: { opacity: string; transform: string; filter: string }): Animation {
   return element.animate(
     opening
-      ? [from ?? { opacity: 0, transform: 'translateX(24px)' }, { opacity: 1, transform: 'none' }]
-      : [from ?? { opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(24px)' }],
+      ? [from ?? { opacity: 0, transform: 'translateX(24px)', filter: 'blur(6px)' }, { opacity: 1, transform: 'none', filter: 'blur(0px)' }]
+      : [from ?? { opacity: 1, transform: 'none', filter: 'blur(0px)' }, { opacity: 0, transform: 'translateX(24px)', filter: 'blur(6px)' }],
     timing,
   );
 }

@@ -179,7 +179,11 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
       motion.current?.playState === 'running' && motion.current.effect instanceof KeyframeEffect && motion.current.effect.target === pane.current;
     const visual =
       movingPane && pane.current
-        ? { opacity: getComputedStyle(pane.current).opacity, transform: getComputedStyle(pane.current).transform }
+        ? {
+            opacity: getComputedStyle(pane.current).opacity,
+            transform: getComputedStyle(pane.current).transform,
+            filter: getComputedStyle(pane.current).filter,
+          }
         : undefined;
     motion.current?.cancel();
     motion.current = null;

@@ -332,7 +332,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                           current?.path !== path
                         )
                           return;
-                        if (requestCatalogueReturn(path)) event.preventDefault();
+                        if ((path === '/dashboard' && location.pathname === path) || requestCatalogueReturn(path)) event.preventDefault();
                       }}
                       prefetch={preloadNavigation ? 'render' : 'intent'}
                       onPointerEnter={() => warmNavigation(path)}

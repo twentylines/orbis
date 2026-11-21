@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate } from 'react-router';
+import { Link, useBlocker, useNavigate } from 'react-router';
 import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { convertLegacyToYaml } from '@runtipi/common/schemas/utils/convert-legacy-schema';
@@ -10,10 +10,12 @@ import { Input } from '@/components/ui/Input/Input';
 import { Button } from '@/components/ui/Button';
 import { IconX } from '@tabler/icons-react';
 import type { TranslatableError } from '@/types/error.types';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { type } from 'arktype';
 import { useMultiServiceStore } from '@/stores/multiServiceStore';
 import { confirmDiscard } from '@/desktop/confirmation';
+import { prefersReducedMotion } from '@/desktop/motion-setting';
+import { previewPaneMotion } from './preview-motion';
 import './custom-app-create-page.css';
 
 const RESERVED_APP_NAMES = ['create'];
@@ -26,6 +28,32 @@ export default () => {
   const { composeExtras, setComposeExtras } = useMultiServiceStore();
   const form = useRef<MultiServiceFormHandle>(null);
   const closeIntent = useRef(0);
+  const page = useRef<HTMLDivElement>(null);
+  const motion = useRef<Animation | null>(null);
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => currentLocation.pathname !== nextLocation.pathname && !prefersReducedMotion());
+  useLayoutEffect(() => {
+    if (blocker.state === 'proceeding') return;
+    const element = page.current;
+    if (!element || prefersReducedMotion() || typeof element.animate !== 'function') {
+      if (blocker.state === 'blocked') blocker.proceed();
+      return;
+    }
+    const style = getComputedStyle(element);
+    const from = motion.current ? { opacity: style.opacity, transform: style.transform, filter: style.filter } : undefined;
+    motion.current?.cancel();
+    const animation = previewPaneMotion(element, blocker.state !== 'blocked', from);
+    motion.current = animation;
+    const finish = () => {
+      if (motion.current !== animation) return;
+      if (blocker.state === 'blocked') blocker.proceed();
+      else {
+        motion.current = null;
+        animation.cancel();
+      }
+    };
+    void animation.finished.then(finish, () => undefined);
+  }, [blocker]);
+  useEffect(() => () => motion.current?.cancel(), []);
   useEffect(
     () => () => {
       closeIntent.current += 1;
@@ -78,7 +106,7 @@ export default () => {
   };
 
   return (
-    <div className="custom-app-create-page">
+    <div className="custom-app-create-page" ref={page} inert={blocker.state === 'blocked'}>
       <header className="custom-app-create-header">
         <nav aria-label="breadcrumbs">
           <ol className="custom-app-create-breadcrumbs">

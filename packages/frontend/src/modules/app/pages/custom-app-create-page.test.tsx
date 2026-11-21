@@ -20,6 +20,7 @@ vi.mock('react-router', async () => {
   return {
     ...actual,
     useNavigate: () => navigate,
+    useBlocker: () => ({ state: 'unblocked' }),
   };
 });
 

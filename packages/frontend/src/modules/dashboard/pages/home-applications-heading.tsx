@@ -15,7 +15,6 @@ export function HomeApplicationsHeading({ installed, running }: { installed?: nu
     if (!context) return;
     let active = true;
     let capsuleOffset = 0;
-    const inkOffsets = new Map<HTMLElement, number>();
     let frame = 0;
     const inkCache = new Map<string, { top: number; bottom: number }>();
     const inkBounds = (element: HTMLElement, text: string) => {
@@ -36,7 +35,9 @@ export function HomeApplicationsHeading({ installed, running }: { installed?: nu
     const align = () => {
       if (!active) return;
       const titleInk = inkBounds(title, 'Applications');
-      const values = Array.from(counts.children).filter((element): element is HTMLElement => element instanceof HTMLElement);
+      const line = counts.querySelector<HTMLElement>('.workspace-app-count-line');
+      if (!line) return;
+      const values = Array.from(line.children).filter((element): element is HTMLElement => element instanceof HTMLElement);
       const valueInk = values
         .map((element, index) => inkBounds(element, index === 0 ? `${installed} installed` : `${running} running`))
         .filter((bounds) => bounds !== null);
@@ -44,19 +45,13 @@ export function HomeApplicationsHeading({ installed, running }: { installed?: nu
       const box = counts.getBoundingClientRect();
       const titleBox = title.getBoundingClientRect();
       const center = (box.top + box.bottom) / 2;
-      const adjustments = values.map((element, index) => {
-        const ink = valueInk[index];
-        const bounds = element.getBoundingClientRect();
-        if (!ink) return 0;
-        return (bounds.top + bounds.bottom - ink.top - ink.bottom) / 2;
-      });
+      const lineBox = line.getBoundingClientRect();
+      const textOffset =
+        (lineBox.top + lineBox.bottom - Math.min(...valueInk.map((ink) => ink.top)) - Math.max(...valueInk.map((ink) => ink.bottom))) / 2;
       const sameRow = box.left >= titleBox.right && box.top < titleBox.bottom;
       capsuleOffset = sameRow ? capsuleOffset + (titleInk.top + titleInk.bottom) / 2 - center : 0;
-      values.forEach((element, index) => {
-        const offset = adjustments[index] ?? 0;
-        inkOffsets.set(element, offset);
-        element.style.setProperty('--workspace-count-ink-alignment', `${offset}px`);
-      });
+      // Centre the whole line optically while keeping both counts on the same baseline.
+      line.style.setProperty('--workspace-count-ink-alignment', `${textOffset}px`);
       counts.style.setProperty('--workspace-count-alignment', `${capsuleOffset}px`);
     };
     const schedule = () => {
@@ -80,7 +75,7 @@ export function HomeApplicationsHeading({ installed, running }: { installed?: nu
       cancelAnimationFrame(frame);
       observer.disconnect();
       document.fonts.removeEventListener('loadingdone', fontsChanged);
-      for (const element of inkOffsets.keys()) element.style.removeProperty('--workspace-count-ink-alignment');
+      counts.querySelector<HTMLElement>('.workspace-app-count-line')?.style.removeProperty('--workspace-count-ink-alignment');
       counts.style.removeProperty('--workspace-count-alignment');
     };
   }, [installed, running]);
@@ -93,13 +88,15 @@ export function HomeApplicationsHeading({ installed, running }: { installed?: nu
       </h2>
       {installed !== undefined ? (
         <p className="workspace-app-counts">
-          <span>
-            {installed} installed
-            <InkBaseline />
-          </span>
-          <span>
-            {running} running
-            <InkBaseline />
+          <span className="workspace-app-count-line">
+            <span>
+              {installed} installed
+              <InkBaseline />
+            </span>
+            <span>
+              {running} running
+              <InkBaseline />
+            </span>
           </span>
         </p>
       ) : null}

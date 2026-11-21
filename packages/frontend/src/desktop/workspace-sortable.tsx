@@ -137,15 +137,17 @@ export function useWorkspaceSortable<T extends string>(
     node.style.translate = `${drag.x - rect.left - drag.offsetX}px ${drag.y - rect.top - drag.offsetY}px`;
     // Only the grip captures touch; the rest of each card keeps ordinary page scrolling.
     let target: T | null = null;
+    let closest = Number.POSITIVE_INFINITY;
     for (const id of orderRef.current) {
       if (id === drag.id) continue;
       const rect = nodes.current.get(id)?.getBoundingClientRect();
       if (!rect) continue;
-      const insetX = Math.min(12, (rect.right - rect.left) * 0.1);
-      const insetY = Math.min(8, (rect.bottom - rect.top) * 0.08);
-      if (drag.x > rect.left + insetX && drag.x < rect.right - insetX && drag.y > rect.top + insetY && drag.y < rect.bottom - insetY) {
+      // Accept the full card and the small gap beside it, including its grip.
+      // Resolve overlapping gaps by the nearest centre; never move neighbours until release.
+      const distance = Math.hypot(drag.x - (rect.left + rect.right) / 2, drag.y - (rect.top + rect.bottom) / 2);
+      if (drag.x >= rect.left - 6 && drag.x <= rect.right + 6 && drag.y >= rect.top - 6 && drag.y <= rect.bottom + 6 && distance < closest) {
         target = id;
-        break;
+        closest = distance;
       }
     }
     drag.over = target;

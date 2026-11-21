@@ -28,12 +28,19 @@
   color: var(--desktop-muted);
   background: color-mix(in srgb, var(--desktop-preset-tint) 10%, transparent);
 }
-.workspace-app-counts > span {
+.workspace-app-count-line {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.5rem;
   translate: 0 var(--workspace-count-ink-alignment, 0px);
+  line-height: 1;
+}
+.workspace-app-count-line > span {
   white-space: nowrap;
   line-height: 1;
 }
-.workspace-app-counts > span + span::before {
+.workspace-app-count-line > span + span::before {
   display: inline-block;
   width: 0.25em;
   height: 0.25em;

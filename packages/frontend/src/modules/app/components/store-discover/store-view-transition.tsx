@@ -22,7 +22,8 @@ export function StoreViewTransition({ active, apps, themes }: { active: StoreVie
     if (!element || !visible) return;
     const measure = () => {
       const height = element.getBoundingClientRect().height;
-      const animate = measured.current;
+      // Animate between views; appended catalogue pages must not resize the scrollport in slow motion.
+      const animate = measured.current && previous.current !== active;
       measured.current = true;
       setSize((current) => (current?.height === height ? current : { height, animate }));
     };
