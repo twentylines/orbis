@@ -411,10 +411,11 @@ html[data-orbis-motion="reduced"] .orbis-update-spinning {
   background: #b46f50;
 }
 .desktop-main {
+  --desktop-main-top-gap: 24px;
   width: 100%;
   margin: 0 auto;
-  padding: 24px var(--desktop-inset) max(154px, calc(var(--orbis-dock-height, 78px) + 64px + env(safe-area-inset-bottom, 0px)));
-  min-height: calc(100vh - 78px);
+  padding: var(--desktop-main-top-gap) var(--desktop-inset) max(154px, calc(var(--orbis-dock-height, 78px) + 64px + env(safe-area-inset-bottom, 0px)));
+  min-height: calc(100dvh - var(--orbis-bar-bottom, 88px));
 }
 @media (min-width: 2200px) and (min-height: 640px) {
   .desktop-system-bar {
@@ -1215,7 +1216,8 @@ html[data-orbis-startup-landing="true"] .workspace-widget-attention {
     padding: 0;
   }
   .desktop-main {
-    padding: 22px 24px max(124px, calc(var(--orbis-dock-height, 71px) + 40px + env(safe-area-inset-bottom, 0px)));
+    --desktop-main-top-gap: 22px;
+    padding: var(--desktop-main-top-gap) 24px max(124px, calc(var(--orbis-dock-height, 71px) + 40px + env(safe-area-inset-bottom, 0px)));
   }
   .desktop-view-app {
     padding: 20px;
