@@ -81,10 +81,59 @@ jobs:
       - uses: actions/configure-pages@v6
         if: steps.installer.outputs.available == 'true'
       - uses: actions/upload-pages-artifact@v5
+        id: pages_artifact
         if: steps.installer.outputs.available == 'true'
         with:
           name: ${{ env.INSTALLER_ARTIFACT_NAME }}
           path: ${{ github.workspace }}/.orbis-installer-endpoint/public
+      - name: Wait for the uploaded installer artifact
+        if: steps.installer.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INSTALLER_ARTIFACT_ID: ${{ steps.pages_artifact.outputs.artifact_id }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import time
+
+          artifact_id = os.environ['INSTALLER_ARTIFACT_ID']
+          if not artifact_id.isdecimal():
+              raise SystemExit('The uploaded installer artifact ID is invalid.')
+          endpoint = f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}/artifacts?per_page=100"
+          deadline = time.monotonic() + 60
+          ready_observations = 0
+          while time.monotonic() < deadline:
+              try:
+                  response = subprocess.run(['gh', 'api', endpoint], capture_output=True, text=True,
+                                            timeout=min(15, max(1, deadline - time.monotonic())))
+                  if response.returncode == 0:
+                      value = json.loads(response.stdout)
+                      matches = [item for item in value['artifacts']
+                                 if item['name'] == os.environ['INSTALLER_ARTIFACT_NAME']]
+                      if len(matches) > 1:
+                          raise SystemExit('The installer artifact selection is ambiguous.')
+                      if matches:
+                          item = matches[0]
+                          if (str(item['id']) != artifact_id or item['expired'] is not False
+                                  or item['size_in_bytes'] <= 0
+                                  or item['workflow_run']['head_sha'] != os.environ['GITHUB_SHA']):
+                              raise SystemExit('The uploaded installer artifact does not match this source.')
+                          ready_observations += 1
+                          if ready_observations >= 2:
+                              print('The uploaded installer artifact is ready.')
+                              break
+                      else:
+                          ready_observations = 0
+                  else:
+                      ready_observations = 0
+              except (subprocess.TimeoutExpired, ValueError, KeyError, TypeError):
+                  ready_observations = 0
+              time.sleep(min(2, max(0, deadline - time.monotonic())))
+          else:
+              raise SystemExit('The uploaded installer artifact did not become available in time.')
+          PY
       - name: Publish installer endpoint
         if: steps.installer.outputs.available == 'true'
         id: deployment
