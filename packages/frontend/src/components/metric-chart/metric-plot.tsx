@@ -184,11 +184,10 @@ export function MetricPlot({
           <span>{axisTimes[2]}</span>
         </div>
       </div>
-      {inspecting && selected && summary ? (
+      {hasPlot && selected && summary ? (
         <output className="metric-chart-tooltip" aria-live="off">
-          <time dateTime={selected.at}>
+          <time dateTime={selected.at} title={`${new Date(selected.at).toLocaleString()} – ${new Date(selected.until).toLocaleString()}`}>
             {new Date(selected.at).toLocaleString()}
-            {selected.until !== selected.at ? ` – ${new Date(selected.until).toLocaleTimeString()}` : ''}
           </time>
           {summary.average === null ? (
             <span>Unavailable</span>
@@ -198,11 +197,9 @@ export function MetricPlot({
               {summary.samples > 1 ? ' average' : ''}
             </strong>
           )}
-          {summary.samples > 1 ? (
-            <span>
-              Peak {formatPlotValue(summary.peak, unit)} · {summary.samples} samples
-            </span>
-          ) : null}
+          <span>
+            Peak {formatPlotValue(summary.peak, unit)} · {summary.samples} sample{summary.samples === 1 ? '' : 's'}
+          </span>
           {selected.source ? <span>{selected.source}</span> : null}
           <small>← → inspect samples</small>
         </output>

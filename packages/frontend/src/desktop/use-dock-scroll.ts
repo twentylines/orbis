@@ -90,6 +90,7 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
       element === scrolling ||
       (element instanceof HTMLElement &&
         !element.closest('[hidden], [inert]') &&
+        !element.closest('[data-dock-scroll-ignore]') &&
         /^(auto|scroll|overlay)$/.test(getComputedStyle(element).overflowY));
     const scrollable = (element: Element) =>
       element.clientHeight > 0 && element.scrollHeight - element.clientHeight >= dockScrollMinExtent && scrollSurface(element);
@@ -154,12 +155,19 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
       const pane = target.closest('.store-catalogue-pane, .store-preview-content');
       return pane?.closest('.store-split-desktop[data-preview-open="true"]') && content.contains(pane) && scrollSurface(pane) ? pane : null;
     };
-    const selectPane = (target: EventTarget | null) => {
+    const selectPane = (target: EventTarget | null, gesture = false) => {
       const pane = splitPaneFor(target);
       if (!pane) return false;
+      if (pane === selectedPane) {
+        if (!isPastPaneStart(pane) && hidden) {
+          commit(false);
+          syncProgress(true);
+        }
+        return true;
+      }
       selectedPane = pane;
       activeSource = pane;
-      const next = scrollable(pane) && isPastPaneStart(pane);
+      const next = scrollable(pane) && isPastPaneStart(pane) && (!gesture || hidden);
       states.set(pane, sampleDockScroll(undefined, pane.scrollTop, pane.scrollHeight - pane.clientHeight, next));
       commit(next);
       syncProgress(true);
@@ -212,8 +220,12 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
     for (const element of states.keys()) sizes.observe(element);
     const noteWheel = (event: WheelEvent) => {
       if (event.ctrlKey || event.shiftKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX) || !(event.target instanceof Element)) return;
+      if (event.target.closest('[data-dock-scroll-ignore]')) {
+        wheel = undefined;
+        return;
+      }
       focusedSource = null;
-      selectPane(event.target);
+      selectPane(event.target, true);
       wheel = { target: event.target, direction: event.deltaY > 0 ? 1 : -1, time: event.timeStamp };
       if (chartEntry && wheel.direction === -1 && content.contains(wheel.target)) reveal();
     };
@@ -223,6 +235,7 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
     const receive = (event: Event) => {
       const target = event.target === document ? scrolling : event.target;
       if (!(target instanceof Element) || (target !== scrolling && !content.contains(target))) return;
+      if (target.closest('[data-dock-scroll-ignore]')) return;
       if (!scrollable(target)) {
         if (target === activeSource) refresh();
         return;
@@ -297,6 +310,7 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
     const focusScrollSurface = (event: Event) => {
       focusedSource = null;
       if (!(event.target instanceof Element) || !content.contains(event.target)) return;
+      if (event.target.closest('[data-dock-scroll-ignore]')) return;
       if (selectPane(event.target) || selectedPane) return;
       for (let node: Element | null = event.target; node; node = node.parentElement) {
         if ((node !== scrolling && !content.contains(node)) || !scrollable(node)) continue;
@@ -318,6 +332,7 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
     // Chart alignment is programmatic. Subsequent pointer/keyboard gestures
     // can establish a new scroll baseline on this same destination.
     const manualScroll = (event: Event) => {
+      if (event.target instanceof Element && event.target.closest('[data-dock-scroll-ignore]')) return;
       clearWheel();
       if (event instanceof PointerEvent && event.target instanceof Node && content.contains(event.target)) {
         focusedSource = null;
@@ -337,9 +352,8 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
     // Store's selected app can mount/resize beside an already scrolled catalogue.
     const changes = new MutationObserver((records) => {
       for (const record of records) {
+        if (record.type === 'attributes' && record.target instanceof Element) registerTree(record.target);
         for (const node of record.addedNodes) if (node instanceof Element) registerTree(node);
-        for (let node = record.target instanceof Element ? record.target : null; node && content.contains(node); node = node.parentElement)
-          register(node);
       }
       refresh();
     });

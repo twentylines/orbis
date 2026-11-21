@@ -222,7 +222,7 @@
   align-items: center;
   flex: 0 1 auto;
   width: fit-content;
-  gap: 4px;
+  gap: 8px;
 }
 
 .monitor-history-help {

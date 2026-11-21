@@ -82,6 +82,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
   const alignedSelection = useRef<typeof selection | null>(null);
   const paneBounds = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
   const tileMotion = useRef<Animation[]>([]);
+  const captureTimer = useRef<number | undefined>(undefined);
   const onCardMount = useCallback(
     (card: HTMLAnchorElement | null) => {
       // Composed link refs can reattach on unrelated workspace renders.
@@ -96,6 +97,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
   );
   const capture = useCallback(
     (target?: Element | null) => {
+      window.clearTimeout(captureTimer.current);
       const clicked = target?.closest<HTMLElement>('[data-store-app]');
       if (clicked) opener.current = clicked;
       if (!split || !catalogue.current || !pane.current) return;
@@ -151,6 +153,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
 
   useEffect(
     () => () => {
+      window.clearTimeout(captureTimer.current);
       motion.current?.cancel();
       for (const animation of tileMotion.current) animation.cancel();
     },
@@ -169,6 +172,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
   }, [split]);
 
   useLayoutEffect(() => {
+    window.clearTimeout(captureTimer.current);
     const last = previous.current;
     previous.current = selected;
     const lastSuggestionKind = previousSuggestionKind.current;
@@ -300,7 +304,16 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
           onScroll={() => {
             if (split && catalogue.current) {
               scroll.current = catalogue.current.scrollTop;
-              if (selected) capture();
+              if (selected) {
+                // Keep the return anchor current without measuring every card and word during a gesture.
+                const link = resolvePreviewCard(catalogue.current, selected, opener.current, suggestionKind);
+                const viewport = catalogue.current.getBoundingClientRect();
+                if (link) anchor.current = { urn: selected, top: link.getBoundingClientRect().top - viewport.top, element: link };
+                capturedCatalogueWidth.current = viewport.width;
+                snapshot.current = [];
+                window.clearTimeout(captureTimer.current);
+                captureTimer.current = window.setTimeout(capture, 120);
+              }
             }
           }}
         >

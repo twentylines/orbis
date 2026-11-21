@@ -50,6 +50,7 @@
   margin: 0;
   padding: 18px;
   overflow: auto;
+  overscroll-behavior: contain;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   color: inherit;

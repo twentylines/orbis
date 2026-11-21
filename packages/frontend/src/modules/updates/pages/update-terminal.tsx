@@ -24,6 +24,7 @@ export function UpdateTerminal({ output, state }: { output?: Output; state: stri
       <pre
         ref={terminal}
         role="log"
+        data-dock-scroll-ignore
         aria-label="APT terminal output"
         aria-live="off"
         tabIndex={0}

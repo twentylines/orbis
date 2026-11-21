@@ -1,7 +1,7 @@
 import type { HostTelemetry } from '@runtipi/common/schemas';
 import { useServerPath } from '@/desktop/cluster-data';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { IconArrowLeft } from '@tabler/icons-react';
 import { Tooltip } from 'react-tooltip';
 import { createPortal } from 'react-dom';
@@ -53,9 +53,10 @@ export type OpenDeviceHistory = (device: HostHistorySelection, opener: HTMLButto
 
 export function HistoryHelp({ label, children }: { label: string; children: ReactNode }) {
   const id = useId();
-  const [pointer, setPointer] = useState<{ x: number; y: number }>();
-  const trackPointer = (event: PointerEvent<HTMLButtonElement>) => {
-    setPointer(event.pointerType === 'mouse' ? { x: event.clientX, y: event.clientY } : undefined);
+  const [anchor, setAnchor] = useState<{ x: number; y: number; offset: number }>();
+  const positionHelp = (button: HTMLButtonElement) => {
+    const bounds = button.querySelector('.form-help')?.getBoundingClientRect();
+    if (bounds) setAnchor({ x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2, offset: bounds.height / 2 + 10 });
   };
   return (
     <>
@@ -64,9 +65,9 @@ export function HistoryHelp({ label, children }: { label: string; children: Reac
         type="button"
         aria-label={label}
         data-tooltip-id={id}
-        onPointerEnter={trackPointer}
-        onPointerMove={trackPointer}
-        onFocus={() => setPointer(undefined)}
+        onPointerEnter={(event) => positionHelp(event.currentTarget)}
+        onFocus={(event) => positionHelp(event.currentTarget)}
+        onClick={(event) => positionHelp(event.currentTarget)}
       >
         <span className="form-help" aria-hidden="true">
           ?
@@ -79,7 +80,9 @@ export function HistoryHelp({ label, children }: { label: string; children: Reac
               id={id}
               className="tooltip monitor-history-tooltip"
               positionStrategy="fixed"
-              position={pointer}
+              place="top"
+              position={anchor}
+              offset={anchor?.offset ?? 10}
               openEvents={{ mouseenter: true, focus: true, click: true }}
               closeEvents={{ mouseleave: true, blur: true }}
               globalCloseEvents={{ escape: true, clickOutsideAnchor: true, scroll: true, resize: true }}
