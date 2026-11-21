@@ -6,33 +6,16 @@
   align-items: stretch;
   gap: var(--orbis-control-gap, 12px);
 }
-.orbis-selection-layer {
-  position: absolute;
-  inset: 0;
-  overflow: clip;
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: 0;
-}
-.orbis-selection-background {
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 0;
-  pointer-events: none;
-  border-radius: var(--orbis-selection-radius, 9px);
-  background: var(--orbis-selection-fill, color-mix(in srgb, var(--desktop-preset-tint) 20%, var(--desktop-surface)));
-}
 .orbis-selection-group > button {
   position: relative;
-  z-index: 1;
 }
 body:has(.orbis-theme)
-  .orbis-selection-group[data-selection-ready="true"]
+  .orbis-selection-group
   > button:is([aria-selected="true"], [aria-pressed="true"], [data-state="active"], [data-selection-active="true"]) {
-  background: transparent;
+  background: var(--orbis-selection-fill, color-mix(in srgb, var(--desktop-preset-tint) 20%, var(--desktop-surface)));
   box-shadow: none;
   border-color: transparent;
+  transition: none;
 }
 body:has(.orbis-theme) .orbis-selection-group > button:focus-visible {
   outline: none;
@@ -41,8 +24,11 @@ body:has(.orbis-theme) .orbis-selection-group > button:focus-visible {
   background: color-mix(in srgb, var(--desktop-ink) 12%, transparent);
 }
 @media (forced-colors: active) {
-  .orbis-selection-background {
-    border: 2px solid Highlight;
+  body:has(.orbis-theme)
+    .orbis-selection-group
+    > button:is([aria-selected="true"], [aria-pressed="true"], [data-state="active"], [data-selection-active="true"]) {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
   }
   body:has(.orbis-theme) .orbis-selection-group > button:focus-visible {
     outline: 2px solid Highlight;

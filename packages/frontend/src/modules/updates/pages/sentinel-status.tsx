@@ -1,11 +1,50 @@
 import { IconShield } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
-import { useId, type PropsWithChildren } from 'react';
+import { useEffect, useId, type PropsWithChildren } from 'react';
+import { sentinelUpdateActive } from '@runtipi/common/schemas/sentinel-update-progress';
+import { RecoveryProgressBar } from '@/components/recovery-progress/recovery-progress';
+import { describeSentinelUpdate, type SentinelUpdateView } from '../sentinel-update-progress';
 import { SentinelStatusError, sentinelStatusLabel, sentinelStatusOptions } from '../sentinel-status';
 
-export function SentinelStatus({ active, children }: PropsWithChildren<{ active: boolean }>) {
+function SentinelUpdateStatus({ jobs, pending, unavailable }: SentinelUpdateView) {
+  const sorted = [...jobs].sort((a, b) => b.updatedAt - a.updatedAt);
+  const activeJobs = sorted.filter(sentinelUpdateActive);
+  const visibleJobs = activeJobs.length ? activeJobs : sorted.slice(0, 1);
+  return (
+    <div className="desktop-sentinel-connection">
+      <h3>Sentinel update</h3>
+      {unavailable ? <output>Sentinel update progress is unavailable.</output> : null}
+      {pending ? <output>Checking Sentinel update progress…</output> : null}
+      {!unavailable && !pending && !visibleJobs.length ? <output>No Sentinel installer activity reported.</output> : null}
+      {visibleJobs.map((job) => {
+        const { status, detail, percentage } = describeSentinelUpdate(job);
+        return (
+          <div className="desktop-sentinel-update-job" key={job.id}>
+            <output>
+              {status} · {job.version}
+            </output>
+            {detail ? <p>{detail}</p> : null}
+            {sentinelUpdateActive(job) ? <RecoveryProgressBar label={status} percentage={percentage} /> : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function SentinelStatus({
+  active,
+  operator = false,
+  updateProgress,
+  children,
+}: PropsWithChildren<{ active: boolean; operator?: boolean; updateProgress?: SentinelUpdateView }>) {
   const heading = useId();
   const status = useQuery(sentinelStatusOptions(active));
+  const lastComplete = updateProgress?.jobs.reduce((latest, job) => (job.phase === 'complete' ? Math.max(latest, job.updatedAt) : latest), 0);
+  const refetchStatus = status.refetch;
+  useEffect(() => {
+    if (active && lastComplete) void refetchStatus({ cancelRefetch: false });
+  }, [active, lastComplete, refetchStatus]);
   const current = status.isError ? undefined : status.data;
   return (
     <section className="desktop-updates-card desktop-updates-sentinel" aria-labelledby={heading}>
@@ -34,6 +73,7 @@ export function SentinelStatus({ active, children }: PropsWithChildren<{ active:
             </div>
           ) : null}
         </dl>
+        {operator && updateProgress ? <SentinelUpdateStatus {...updateProgress} /> : null}
         {children}
       </div>
       {status.isError ? (

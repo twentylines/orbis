@@ -37,9 +37,7 @@
   font-weight: 650;
   line-height: 1.4;
   cursor: pointer;
-  transition:
-    color 180ms ease,
-    background-color 180ms ease;
+  transition: color 180ms ease;
 }
 .desktop-updates-tabs button > svg {
   flex: none;
@@ -1251,4 +1249,16 @@ body:has(.orbis-theme) .desktop-update-review-dialog > .modal-body:focus-visible
 .desktop-critical-update p {
   margin: 4px 0 0;
   line-height: 1.5;
+}
+
+.desktop-sentinel-update-job {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  margin-block-start: 0.45rem;
+  overflow-wrap: break-word;
+}
+.desktop-sentinel-update-job output {
+  color: var(--desktop-ink);
+  font-weight: 600;
 }

@@ -1,9 +1,11 @@
 import { chmodSync, mkdtempSync, rmSync, symlinkSync, unlinkSync } from 'node:fs';
 import { lstat } from 'node:fs/promises';
 import http from 'node:http';
+import { GUARDS_METADATA, PATH_METADATA } from '@nestjs/common/constants';
+import type { Request } from 'express';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SentinelService } from './sentinel.service';
 
 const unknown = { installedVersion: null, availableVersion: null, state: 'unknown' };
@@ -25,6 +27,23 @@ class TestService extends SentinelService {
     return info;
   }
 }
+
+it('requires an authenticated operator before Main reads the Host progress route', async () => {
+  const { SystemController } = await import('./system.controller');
+  const { AuthGuard } = await import('../auth/auth.guard');
+  const route = SystemController.prototype.sentinelUpdateProgress;
+  expect(Reflect.getMetadata(GUARDS_METADATA, route)).toEqual([AuthGuard]);
+  expect(Reflect.getMetadata(PATH_METADATA, route)).toBe('/sentinel/update-progress');
+  const result = { version: 1, available: true, jobs: [] };
+  const readUpdateProgress = vi.fn().mockResolvedValue(result);
+  const controller = { sentinel: { readUpdateProgress } } as unknown as InstanceType<typeof SystemController>;
+  for (const user of [undefined, { operator: false }, { operator: 'true' }]) {
+    expect(() => route.call(controller, { user } as unknown as Request)).toThrow('An operator session is required.');
+  }
+  expect(readUpdateProgress).not.toHaveBeenCalled();
+  await expect(route.call(controller, { user: { operator: true } } as Request)).resolves.toEqual(result);
+  expect(readUpdateProgress).toHaveBeenCalledOnce();
+});
 
 describe('SentinelService local status', () => {
   let directory: string;
@@ -95,6 +114,38 @@ describe('SentinelService local status', () => {
     expect(results).toEqual(Array(2).fill({ available: true, ...payload().components.sentinel }));
     expect(calls).toBe(1);
     expect(service.inspections).toBe(2);
+  });
+
+  it('reads only the authorized progress socket route and discards old, malformed and replaced helpers', async () => {
+    process.env.ORBIS_HOST_SOCKET = socketPath;
+    let status = 404;
+    const job = { id: 'a'.repeat(32), version: '1.2.3', phase: 'installing', startedAt: 100, updatedAt: 200, download: null };
+    const snapshot = { version: 1, available: true, jobs: [job] };
+    let body: unknown = snapshot;
+    await start((req, res) => {
+      expect(req.method).toBe('GET');
+      expect(req.url).toBe('/v1/sentinel/update-progress');
+      expect(req.headers['content-length']).toBeUndefined();
+      res.statusCode = status;
+      res.end(JSON.stringify(body));
+    });
+    const missing = { version: 1, available: false, jobs: [] };
+    const service = new TestService();
+    expect(await service.readUpdateProgress()).toEqual(missing);
+    status = 200;
+    expect(await service.readUpdateProgress()).toEqual(snapshot);
+    for (body of [
+      { ...snapshot, jobs: [{ ...job, pid: 123, path: '/private' }] },
+      { ...snapshot, jobs: [job, job] },
+      { ...snapshot, jobs: Array(17).fill(job) },
+      { ...snapshot, version: 2 },
+      'a'.repeat(8192),
+    ])
+      expect(await service.readUpdateProgress()).toEqual(missing);
+    body = snapshot;
+    const replaced = new TestService();
+    replaced.replace = true;
+    expect(await replaced.readUpdateProgress()).toEqual(missing);
   });
 
   it('keeps older helpers and invalid host envelopes unavailable', async () => {

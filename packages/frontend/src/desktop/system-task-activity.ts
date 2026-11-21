@@ -1,13 +1,15 @@
 import type { SettingsBackupJob } from '@runtipi/common/schemas/settings-backup';
 import type { SettingsBackupImportJob, SettingsBackupRestoreJob } from '@runtipi/common/schemas/settings-backup-import';
 import type { TimeMachineList } from '@runtipi/common/schemas/time-machine';
+import { sentinelUpdateActive, type SentinelUpdateJob } from '@runtipi/common/schemas/sentinel-update-progress';
+import { describeSentinelUpdate } from '@/modules/updates/sentinel-update-progress';
 import { coreJobIsActive, validCoreUpdate, type CoreUpdateStatus } from './core-update-state';
 import { readDownloadProgress } from './download-progress';
 
 export type SystemActivityBucket = 'active' | 'review' | 'recent';
 export type SystemActivityRecord = {
   key: string;
-  feed: 'exports' | 'imports' | 'restore' | 'core' | 'points';
+  feed: 'exports' | 'imports' | 'restore' | 'core' | 'points' | 'sentinel';
   title: string;
   status: string;
   state?: string;
@@ -41,6 +43,7 @@ export function systemActivityRecords(input: {
   core?: CoreUpdateStatus;
   coreStale?: boolean;
   points?: TimeMachineList;
+  sentinel?: SentinelUpdateJob[];
 }) {
   const records: SystemActivityRecord[] = [];
   for (const job of input.exports ?? []) {
@@ -136,6 +139,21 @@ export function systemActivityRecords(input: {
       path: '/updates',
       action: 'View update',
       stale: input.coreStale,
+    });
+  }
+  for (const job of input.sentinel ?? []) {
+    const { status, detail } = describeSentinelUpdate(job);
+    records.push({
+      key: `sentinel:${job.id}`,
+      feed: 'sentinel',
+      state: job.phase,
+      title: `Sentinel ${job.version}`,
+      status,
+      message: detail,
+      bucket: sentinelUpdateActive(job) ? 'active' : ['prepared', 'complete'].includes(job.phase) ? 'recent' : 'review',
+      time: job.updatedAt,
+      path: '/updates',
+      action: 'View Sentinel update',
     });
   }
   for (const point of input.points?.available ? input.points.points : []) {

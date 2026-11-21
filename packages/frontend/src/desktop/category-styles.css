@@ -1,0 +1,11 @@
+/* Category chrome belongs to the persistent desktop so cached route modules
+   never mount their controls before their stylesheet has returned. */
+@import "../components/ui/SelectionGroup/selection-group.css";
+@import "../modules/dashboard/pages/dashboard.css";
+@import "../modules/dashboard/pages/monitor.css";
+@import "../modules/settings/pages/settings-page.css";
+@import "../modules/updates/pages/updates.css";
+@import "../styles/app-grid.css";
+@import "../modules/app/pages/app-store-page.css";
+@import "../modules/app/pages/store-preview.css";
+@import "../modules/tasks/pages/tasks.css";

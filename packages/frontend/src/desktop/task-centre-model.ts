@@ -40,6 +40,7 @@ const systemSources = {
   imports: 'Settings imports',
   restore: 'Settings restore',
   core: 'Orbis updates',
+  sentinel: 'Sentinel updates',
   points: 'Time Machine',
 };
 const dateValue = (record: TaskCentreRecord) => record.time ?? 0;
@@ -49,6 +50,7 @@ function systemOutcome(record: SystemActivityRecord): TaskCentreOutcome {
   if (record.bucket === 'active') return 'active';
   if (record.state === 'failed' || /failed/i.test(record.status)) return 'failed';
   if (record.state === 'interrupted') return 'interrupted';
+  if (record.feed === 'sentinel' && record.state === 'prepared') return 'unconfirmed';
   if (['cancelled', 'rejected', 'expired'].includes(record.state ?? '')) return 'cancelled';
   return record.bucket === 'review' ? 'review' : 'succeeded';
 }

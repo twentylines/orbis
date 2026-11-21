@@ -1,15 +1,20 @@
 """Prepare trusted Sentinel tooling and activate its independently signed package."""
 
 import argparse
+import fcntl
+from contextlib import ExitStack, contextmanager
+from contextvars import ContextVar
 import hashlib
 import json
 import os
 from pathlib import Path
 import platform
 import re
+import socket
 import stat
 import subprocess
 import sys
+import time
 import uuid
 import weakref
 
@@ -120,6 +125,253 @@ def require_host():
         pass
 
 
+# Observation is best effort and never grants installation or activation authority.
+PROGRESS_ROOT = Path('/run/orbis-sentinel-update-progress')
+PROGRESS_SLOTS = 16
+PROGRESS_MAX = 72 * 1024 * 1024
+_PROGRESS = ContextVar('sentinel_update_progress', default=None)
+_ACTIVE_PHASES = {'preparing', 'downloading', 'verifying', 'staging', 'installing', 'rolling-back'}
+_FINAL_PHASES = {'prepared', 'complete', 'failed', 'rolled-back', 'recovery-required', 'interrupted'}
+_TOOLKIT_DOWNLOADS = {
+    'activate_release.py': 'activation-tool', 'verify_release.py': 'verification-tool',
+    'stage_release.py': 'staging-tool', 'bootstrap_verifier.py': 'verifier-bootstrap', 'LICENSE': 'toolkit-license',
+}
+_DOWNLOAD_FILES = {*_TOOLKIT_DOWNLOADS.values(), 'verifier', 'release', 'signature'}
+
+
+def _process_identity(pid):
+    try:
+        proc = Path('/proc') / str(pid)
+        if proc.stat().st_uid != OWNER:
+            return None
+        stat_fields = (proc / 'stat').read_text().rsplit(') ', 1)[1].split()
+        if stat_fields[0] in {'Z', 'X', 'x'}:
+            return None
+        return f"{Path('/proc/sys/kernel/random/boot_id').read_text().strip()}:{int(stat_fields[19])}"
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _read_progress(directory, slot):
+    try:
+        descriptor = os.open(f'job-{slot}.json', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
+                             dir_fd=directory.fd)
+    except FileNotFoundError:
+        return None
+    with os.fdopen(descriptor, 'rb') as stream:
+        info = os.fstat(stream.fileno())
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != OWNER or info.st_nlink > 1
+                or stat.S_IMODE(info.st_mode) != 0o600 or not 0 < info.st_size <= 1024):
+            raise ValueError('Invalid Sentinel progress file')
+        body = stream.read(1025)
+        if len(body) != info.st_size:
+            raise ValueError('Invalid Sentinel progress length')
+    record = _json(body)
+    if not isinstance(record, dict) or set(record) != {'job', 'pid', 'incarnation'}:
+        raise ValueError('Invalid Sentinel progress envelope')
+    pid, incarnation, job = record['pid'], record['incarnation'], record['job']
+    if (type(pid) is not int or not 1 <= pid <= 2**31 - 1 or not isinstance(incarnation, str)
+            or not re.fullmatch(r'[a-f0-9-]{36}:[0-9]{1,20}', incarnation)
+            or not isinstance(job, dict) or set(job) != {'id', 'version', 'phase', 'startedAt', 'updatedAt', 'download'}):
+        raise ValueError('Invalid Sentinel progress identity')
+    if (not isinstance(job['id'], str) or not re.fullmatch(r'[a-f0-9]{32}', job['id'])
+            or not isinstance(job['phase'], str) or job['phase'] not in _ACTIVE_PHASES | _FINAL_PHASES
+            or type(job['startedAt']) is not int or type(job['updatedAt']) is not int
+            or not 0 < job['startedAt'] <= job['updatedAt'] <= 2**53 - 1):
+        raise ValueError('Invalid Sentinel progress phase')
+    # Reuse the installer version grammar. No digest or path is returned to callers.
+    _release_identity({'version': job['version'], 'sha256': '0' * 64, 'sourceCommit': '0' * 40})
+    if job['phase'] == 'downloading':
+        if _download_progress(job['download']) is None:
+            raise ValueError('Invalid Sentinel byte counts')
+    elif job['download'] is not None:
+        raise ValueError('Unexpected Sentinel byte counts')
+    return record
+
+
+def _download_progress(value):
+    if not isinstance(value, dict) or set(value) != {'file', 'currentBytes', 'totalBytes'}:
+        return None
+    filename, count, total = value['file'], value['currentBytes'], value['totalBytes']
+    if (not isinstance(filename, str) or filename not in _DOWNLOAD_FILES or type(count) is not int
+            or not 0 <= count <= PROGRESS_MAX
+            or (total is not None and (type(total) is not int or not max(1, count) <= total <= PROGRESS_MAX))):
+        return None
+    return value
+
+
+def read_update_progress():
+    jobs = []
+    available = True
+    try:
+        with Directory(PROGRESS_ROOT, private=True) as directory:
+            if os.fstat(directory.fd).st_uid != OWNER:
+                raise ValueError('Untrusted Sentinel progress directory')
+            for slot in range(PROGRESS_SLOTS):
+                try:
+                    record = _read_progress(directory, slot)
+                except (OSError, ValueError):
+                    available = False
+                    continue
+                if record is None:
+                    continue
+                job = record['job']
+                if job['phase'] in _ACTIVE_PHASES and _process_identity(record['pid']) != record['incarnation']:
+                    # Prefer a terminal write that raced the process exit.
+                    try:
+                        latest = _read_progress(directory, slot)
+                    except (OSError, ValueError):
+                        latest = None
+                    if latest and latest['job']['id'] == job['id'] and latest['job']['phase'] in _FINAL_PHASES:
+                        job = latest['job']
+                    else:
+                        job = {**job, 'phase': 'interrupted', 'download': None}
+                jobs.append(job)
+            directory.check()
+    except FileNotFoundError:
+        # A current helper can observe progress before the first installer run.
+        pass
+    except (OSError, ValueError):
+        return {'version': 1, 'available': False, 'jobs': []}
+    return {'version': 1, 'available': available, 'jobs': jobs}
+
+
+class UpdateProgress:
+    def __init__(self, directory, slot, version, incarnation, previous):
+        timestamp = time.time_ns() // 1_000_000
+        self.directory, self.slot = directory, slot
+        self.incarnation = incarnation
+        timestamp = max(timestamp, previous['updatedAt']) if previous else timestamp
+        self.job = {'id': previous['id'] if previous else uuid.uuid4().hex, 'version': version,
+                    'startedAt': previous['startedAt'] if previous else timestamp, 'updatedAt': timestamp}
+        self.activation_phase = None
+
+    def publish(self, phase, download=None):
+        self.job.update(phase=phase, download=download,
+                        updatedAt=max(self.job['updatedAt'], time.time_ns() // 1_000_000))
+        scratch = f'job-{self.slot}.new'
+        try:
+            self.directory.check()
+            descriptor = os.open(scratch, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+                                 0o600, dir_fd=self.directory.fd)
+            try:
+                with os.fdopen(descriptor, 'wb') as output:
+                    os.fchmod(output.fileno(), 0o600)
+                    output.write(json.dumps({'job': self.job, 'pid': os.getpid(),
+                                             'incarnation': self.incarnation}).encode())
+                os.replace(scratch, f'job-{self.slot}.json', src_dir_fd=self.directory.fd, dst_dir_fd=self.directory.fd)
+            finally:
+                try:
+                    os.unlink(scratch, dir_fd=self.directory.fd)
+                except FileNotFoundError:
+                    pass
+        except (OSError, ValueError):
+            pass
+
+    def observe(self, name, payload):
+        if name.startswith('download-'):
+            current = self.job['download']
+            if not current or not isinstance(payload, list) or len(payload) != 2 or type(payload[0]) is not int:
+                return
+            count, total = payload
+            if count < current['currentBytes'] or (current['totalBytes'] is not None and current['totalBytes'] != total):
+                return
+            download = _download_progress({'file': current['file'], 'currentBytes': count, 'totalBytes': total})
+            if download is not None:
+                self.publish('downloading', download)
+        elif name == 'verify-package' and payload == 'staging':
+            self.publish('staging')
+        elif payload in ('rolling-back', 'rolled-back', 'recovery-required'):
+            self.activation_phase = payload
+            if payload == 'rolling-back':
+                self.publish('rolling-back')
+
+    def failure(self):
+        if self.activation_phase == 'rolled-back':
+            return 'rolled-back'
+        if self.activation_phase in {'rolling-back', 'recovery-required'}:
+            return 'recovery-required'
+        return 'failed'
+
+
+def _reserve_progress(stack, version, previous):
+    incarnation = _process_identity(os.getpid())
+    if incarnation is None:
+        return None
+    with Directory(PROGRESS_ROOT.parent) as parent:
+        parent.mkdir(PROGRESS_ROOT.name, existing=True)
+    directory = stack.enter_context(Directory(PROGRESS_ROOT, private=True))
+    if os.fstat(directory.fd).st_uid != OWNER:
+        return None
+    candidates = []
+    for slot in range(PROGRESS_SLOTS):
+        try:
+            record = _read_progress(directory, slot)
+            job = record['job'] if record else None
+        except (OSError, ValueError):
+            job = None
+        preferred = previous is not None and job is not None and job['id'] == previous['id'] and job['phase'] == 'prepared'
+        candidates.append((not preferred, job['updatedAt'] if job else 0, slot, job))
+    for _, _, slot, observed in sorted(candidates):
+        descriptor = os.open(f'job-{slot}.lock', os.O_RDONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
+                             0o600, dir_fd=directory.fd)
+        try:
+            info = os.fstat(descriptor)
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != OWNER or info.st_nlink != 1
+                    or stat.S_IMODE(info.st_mode) != 0o600):
+                continue
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                continue
+            # Recheck the snapshot after acquiring the exclusive observation slot.
+            try:
+                record = _read_progress(directory, slot)
+            except (OSError, ValueError):
+                record = None
+            job = record['job'] if record else None
+            continuation = job if previous and job and job['id'] == previous['id'] and job['phase'] == 'prepared' else None
+            if job != observed:
+                continue
+            try:
+                os.unlink(f'job-{slot}.new', dir_fd=directory.fd)
+            except FileNotFoundError:
+                pass
+            stack.callback(os.close, descriptor)
+            descriptor = None
+            return UpdateProgress(directory, slot, version, incarnation, continuation)
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+    return None
+
+
+@contextmanager
+def _observe_update(version, phase, *, previous=None):
+    with ExitStack() as stack:
+        try:
+            progress = _reserve_progress(stack, version, previous)
+        except (OSError, ValueError):
+            progress = None
+        token = _PROGRESS.set(progress)
+        if progress:
+            progress.publish(phase)
+        try:
+            yield progress
+        except BaseException as failure:
+            if progress:
+                phase = progress.failure()
+                progress.publish('interrupted' if isinstance(failure, KeyboardInterrupt) and phase == 'failed' else phase)
+            raise
+        finally:
+            _PROGRESS.reset(token)
+
+
+def _progress_phase(phase):
+    progress = _PROGRESS.get()
+    if progress:
+        progress.publish(phase)
+
 def _file(path, size, digest, *, mode=0o600, expected=None, maximum=None):
     with Directory(path.parent) as parent:
         descriptor = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=parent.fd)
@@ -163,12 +415,111 @@ def _environment(work):
             'PYTHONDONTWRITEBYTECODE': '1'}
 
 
+_REPORTER = """
+import json as _progress_json, os as _progress_os, socket as _progress_socket, sys as _progress_sys
+_progress_channel = _progress_socket.socket(fileno=int(_progress_sys.argv.pop()))
+_progress_channel.setblocking(False)
+_progress_os.set_inheritable(_progress_channel.fileno(), False)
+def _report(value):
+    try:
+        _progress_channel.send(_progress_json.dumps(value).encode())
+    except OSError:
+        pass
+"""
+
+# The immutable toolkit commits its journal in persist(), under its own activation lock.
+# Observe this child's committed phase in-process, never a sibling's global journal.
+# If the toolkit shape changes we still report the grouped install and its confirmed outcome.
+_TOOLKIT_OBSERVER = """
+def _observe_activation_refusal(frame, event, value):
+    if (frame.f_code.co_filename != _progress_sys.argv[0]
+            or frame.f_code.co_name != 'activate_release'):
+        return None
+    if (event == 'exception' and isinstance(value, tuple) and len(value) == 3
+            and type(value[1]) is frame.f_globals.get('RecoveryRequired')):
+        _report('recovery-required')
+    return _observe_activation_refusal
+
+def _observe_toolkit(frame, event, _):
+    if _progress_observation == 'verify-package':
+        if (event == 'call' and frame.f_code.co_name == 'stage_release'
+                and frame.f_back and frame.f_back.f_code.co_name == 'verify_release'
+                and frame.f_back.f_code.co_filename == _progress_sys.argv[0]
+                and frame.f_code.co_filename == _progress_os.path.join(
+                    _progress_os.path.dirname(_progress_sys.argv[0]), 'stage_release.py')):
+            _report('staging')
+        return
+    if (event == 'return' and frame.f_code.co_name == 'persist'
+            and frame.f_code.co_filename == _progress_sys.argv[0]):
+        phase = frame.f_locals.get('phase')
+        body = frame.f_locals.get('body')
+        if phase in ('rolling-back', 'rolled-back', 'recovery-required') and isinstance(body, bytes) and body == frame.f_locals.get('journal'):
+            _report(phase)
+"""
+
+
+def _observed_command(command, options, progress, name, timeout):
+    try:
+        incoming, outgoing = socket.socketpair(type=socket.SOCK_DGRAM)
+    except OSError:
+        return subprocess.run(command, **options, capture_output=True, timeout=timeout)
+    with incoming, outgoing:
+        incoming.setblocking(False)
+        prefix = _REPORTER
+        if name in ('verify-package', 'activate-sentinel'):
+            prefix += f'_progress_observation = {name!r}\n' + _TOOLKIT_OBSERVER
+            prefix += '_progress_sys.setprofile(_observe_toolkit)\n'
+            if name == 'activate-sentinel':
+                prefix += '_progress_sys.settrace(_observe_activation_refusal)\n'
+        else:
+            prefix += '_download_report = _report\n'
+        configured = [*command[:4], prefix + command[4], *command[5:], str(outgoing.fileno())]
+
+        def drain():
+            # The child never blocks on progress and sends only a bounded scalar frame.
+            for _ in range(128):
+                try:
+                    payload = incoming.recv(128)
+                except OSError:
+                    break
+                try:
+                    progress.observe(name, json.loads(payload))
+                except (ValueError, UnicodeError):
+                    continue
+
+        with subprocess.Popen(configured, **{**options, 'pass_fds': (*options['pass_fds'], outgoing.fileno())},
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child:
+            outgoing.close()
+            deadline = time.monotonic() + timeout if timeout is not None else None
+            try:
+                while True:
+                    remaining = deadline - time.monotonic() if deadline is not None else 0.2
+                    if deadline is not None and remaining <= 0:
+                        raise subprocess.TimeoutExpired(command, timeout)
+                    try:
+                        stdout, stderr = child.communicate(timeout=min(0.2, remaining))
+                        break
+                    except subprocess.TimeoutExpired:
+                        drain()
+            except BaseException:
+                child.kill()
+                child.communicate()
+                raise
+            finally:
+                drain()
+            return subprocess.CompletedProcess(command, child.returncode, stdout, stderr)
+
+
 def _run(work, name, code, arguments, *, timeout=60, descriptors=()):
     interpreter, identity = _python()
     with Directory(work, private=True) as directory:
-        result = subprocess.run([str(interpreter), '-I', '-B', '-c', code, *map(str, arguments)],
-            cwd=work, env=_environment(work), stdin=subprocess.DEVNULL, capture_output=True,
-            timeout=timeout, pass_fds=descriptors)
+        command = [str(interpreter), '-I', '-B', '-c', code, *map(str, arguments)]
+        options = dict(cwd=work, env=_environment(work), stdin=subprocess.DEVNULL, pass_fds=descriptors)
+        progress = _PROGRESS.get()
+        if progress and (name.startswith('download-') or name in {'verify-package', 'activate-sentinel'}):
+            result = _observed_command(command, options, progress, name, timeout)
+        else:
+            result = subprocess.run(command, **options, capture_output=True, timeout=timeout)
         directory.check()
         if _seal(interpreter.lstat()) != identity:
             raise SentinelInstallError('The system Python interpreter changed')
@@ -188,31 +539,53 @@ def _run(work, name, code, arguments, *, timeout=60, descriptors=()):
 
 
 DOWNLOAD = r'''
-import hashlib, os, sys
+import hashlib, os, sys, time
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 url, descriptor, maximum, size, expected = sys.argv[1:]
 descriptor, maximum, size = int(descriptor), int(maximum), int(size)
 assert urlsplit(url).scheme == 'https'
 digest, count = hashlib.sha256(), 0
+report = globals().get('_download_report')
+last_report = 0
 with urlopen(Request(url, headers={'User-Agent': 'Orbis-Sentinel-installer/1'}), timeout=15) as response:
     assert response.status == 200
     final = urlsplit(response.geturl())
     assert final.scheme == 'https' and final.hostname in {
         'raw.githubusercontent.com', 'github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com'}
+    total = size or None
+    if report:
+        lengths = response.headers.get_all('Content-Length', [])
+        if (total is None and not response.headers.get('Transfer-Encoding') and len(lengths) == 1
+                and lengths[0].isascii() and lengths[0].isdigit() and len(lengths[0]) <= 9):
+            length = int(lengths[0])
+            total = length if 0 < length <= maximum else None
+        report([0, total])
     with os.fdopen(descriptor, 'wb', closefd=False) as output:
         while chunk := response.read(65536):
             count += len(chunk)
             assert count <= maximum
             digest.update(chunk)
             output.write(chunk)
-        assert count > 0 and (size == 0 or count == size) and (not expected or digest.hexdigest() == expected)
+            if report and time.monotonic() - last_report >= 0.15:
+                output.flush()
+                report([os.fstat(descriptor).st_size, total])
+                last_report = time.monotonic()
+        assert count > 0 and (size == 0 or count == size) and (total is None or count == total) and (not expected or digest.hexdigest() == expected)
         output.flush()
         os.fsync(output.fileno())
+        if report:
+            report([count, total])
 '''
 
 
 def _download(work, path, url, maximum, *, size=0, digest=''):
+    progress = _PROGRESS.get()
+    if progress:
+        filename = _TOOLKIT_DOWNLOADS.get(path.name)
+        if filename is None:
+            filename = 'verifier' if path.name == 'github-cli.tar.gz' else 'signature' if path.name.endswith('.sigstore.json') else 'release'
+        progress.publish('downloading', {'file': filename, 'currentBytes': 0, 'totalBytes': size or None})
     with Directory(path.parent, private=True) as parent:
         descriptor = os.open(path.name, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
                              0o600, dir_fd=parent.fd)
@@ -227,6 +600,7 @@ def _download(work, path, url, maximum, *, size=0, digest=''):
                 raise SentinelInstallError('Sentinel download destination changed')
         finally:
             os.close(descriptor)
+    _progress_phase('preparing')
     return _file(path, size, digest, maximum=maximum)
 
 
@@ -286,6 +660,15 @@ def _preparation_identity(prepared):
 
 def _prepare(state_dir, release, *, pinned):
     require_host()
+    with _observe_update(release['version'], 'preparing') as progress:
+        prepared = _prepare_files(state_dir, release, pinned=pinned)
+        if progress:
+            progress.publish('prepared')
+            prepared.progress = dict(progress.job)
+        return prepared
+
+
+def _prepare_files(state_dir, release, *, pinned):
     with Directory(state_dir, private=True) as state:
         work = state.mkdir('sentinel-install-' + uuid.uuid4().hex)
         verifiers = state.mkdir('sentinel-verifiers', existing=True)
@@ -322,6 +705,7 @@ def _prepare(state_dir, release, *, pinned):
         url = 'https://github.com/twentylines/orbis-sentinel/releases/download/v' + release['version'] + '/' + filename
         files.append(_download(work, work / 'inputs' / filename, url, 72 * 1024 * 1024, digest=release['sha256']))
         files.append(_download(work, work / 'inputs' / (filename + '.sigstore.json'), url + '.sigstore.json', 4 * 1024 * 1024))
+        _progress_phase('verifying')
         _check_files(files)
         validated = _json(_run(work, 'verify-package',
             "import runpy,sys;sys.path.insert(0,sys.argv[1]);sys.argv=sys.argv[2:];runpy.run_path(sys.argv[0],run_name='__main__')",
@@ -356,6 +740,13 @@ def activate(prepared):
         raise SentinelInstallError('Prepared Sentinel identity changed') from None
     if sealed is None or current != sealed[0] or (sealed[1] and prepared.release != RELEASE):
         raise SentinelInstallError('Prepared Sentinel identity changed')
+    with _observe_update(prepared.release['version'], 'installing', previous=getattr(prepared, 'progress', None)):
+        result = _activate_files(prepared)
+        _progress_phase('complete')
+        return result
+
+
+def _activate_files(prepared):
     with Directory(prepared.work, private=True) as directory:
         if directory.identity() != prepared.identity:
             raise SentinelInstallError('Prepared Sentinel namespace changed')

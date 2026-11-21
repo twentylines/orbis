@@ -1,5 +1,5 @@
-import { BadRequestException, Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
-import type { Response } from 'express';
+import { BadRequestException, Controller, ForbiddenException, Get, Header, Query, Req, Res, UseGuards } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { LoadDto } from './dto/system.dto';
 import { SystemService } from './system.service';
@@ -123,6 +123,14 @@ export class SystemController {
   @Get('/sentinel')
   sentinelStatus() {
     return this.sentinel.read();
+  }
+
+  @UseGuards(AuthGuard)
+  @Header('Cache-Control', 'no-store')
+  @Get('/sentinel/update-progress')
+  sentinelUpdateProgress(@Req() request: Request) {
+    if (request.user?.operator !== true) throw new ForbiddenException('An operator session is required.');
+    return this.sentinel.readUpdateProgress();
   }
 
   @UseGuards(AuthGuard)

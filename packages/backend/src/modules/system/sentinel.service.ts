@@ -3,9 +3,16 @@ import type { Stats } from 'node:fs';
 import { lstat } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
+import {
+  parseSentinelUpdateProgress,
+  sentinelUpdateProgressMaxBytes,
+  type SentinelUpdateProgress,
+} from '@runtipi/common/schemas/sentinel-update-progress';
 
 const ENDPOINT = '/sentinel/api/v1/status';
 const HOST_ENDPOINT = '/v1/sentinel/status';
+const UPDATE_PROGRESS_ENDPOINT = '/v1/sentinel/update-progress';
+type ReadEndpoint = typeof ENDPOINT | typeof HOST_ENDPOINT | typeof UPDATE_PROGRESS_ENDPOINT;
 const MAX_BYTES = 64 * 1024;
 const VERSION = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?(?![\s\S])/;
 const STATES = ['unknown', 'healthy', 'unavailable', 'updating', 'recovering'] as const;
@@ -86,30 +93,43 @@ export class SentinelService {
     return promise.then((value) => ({ ...value }));
   }
 
+  async readUpdateProgress(): Promise<SentinelUpdateProgress> {
+    const value = await this.readProtected(process.env.ORBIS_HOST_SOCKET, UPDATE_PROGRESS_ENDPOINT, sentinelUpdateProgressMaxBytes);
+    return parseSentinelUpdateProgress(value) ?? { version: 1, available: false, jobs: [] };
+  }
+
   private async readOnce(socketPath: string | undefined, endpoint: typeof ENDPOINT | typeof HOST_ENDPOINT): Promise<SentinelStatus> {
-    if (!socketPath || !path.isAbsolute(socketPath) || socketPath.includes('\0') || Buffer.byteLength(socketPath) > 107) return unavailable();
+    try {
+      const value = await this.readProtected(socketPath, endpoint, MAX_BYTES);
+      if (endpoint === ENDPOINT) return parseStatus(value);
+      if (!exactObject(value, ['version', 'available', 'status']) || value.version !== 1) return unavailable();
+      return value.available === true ? parseStatus(value.status) : unavailable();
+    } catch {
+      return unavailable();
+    }
+  }
+
+  private async readProtected(socketPath: string | undefined, endpoint: ReadEndpoint, maxBytes: number): Promise<unknown> {
+    if (!socketPath || !path.isAbsolute(socketPath) || socketPath.includes('\0') || Buffer.byteLength(socketPath) > 107) return undefined;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<SentinelStatus>((resolve) => {
+    const timeout = new Promise<undefined>((resolve) => {
       timer = setTimeout(() => {
         controller.abort();
-        resolve(unavailable());
+        resolve(undefined);
       }, 2000);
     });
     const work = (async () => {
       try {
         const before = await this.socketInfo(socketPath);
-        if (controller.signal.aborted || !safeSocket(before)) return unavailable();
-        const body = await this.request(socketPath, endpoint, controller.signal);
-        if (controller.signal.aborted) return unavailable();
+        if (controller.signal.aborted || !safeSocket(before)) return undefined;
+        const body = await this.request(socketPath, endpoint, controller.signal, maxBytes);
+        if (controller.signal.aborted) return undefined;
         const after = await this.socketInfo(socketPath);
-        if (controller.signal.aborted || !safeSocket(after) || !sameSocket(before, after)) return unavailable();
-        const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body));
-        if (endpoint === ENDPOINT) return parseStatus(value);
-        if (!exactObject(value, ['version', 'available', 'status']) || value.version !== 1) return unavailable();
-        return value.available === true ? parseStatus(value.status) : unavailable();
+        if (controller.signal.aborted || !safeSocket(after) || !sameSocket(before, after)) return undefined;
+        return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body)) as unknown;
       } catch {
-        return unavailable();
+        return undefined;
       }
     })();
     try {
@@ -119,7 +139,7 @@ export class SentinelService {
     }
   }
 
-  private request(socketPath: string, endpoint: typeof ENDPOINT | typeof HOST_ENDPOINT, signal: AbortSignal): Promise<Buffer> {
+  private request(socketPath: string, endpoint: ReadEndpoint, signal: AbortSignal, maxBytes: number): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const req = http.request({ socketPath, path: endpoint, method: 'GET', agent: false, signal }, (res) => {
         if (res.statusCode !== 200) {
@@ -131,7 +151,7 @@ export class SentinelService {
         const chunks: Buffer[] = [];
         res.on('data', (chunk: Buffer) => {
           size += chunk.length;
-          if (size > MAX_BYTES) {
+          if (size > maxBytes) {
             res.destroy();
             req.destroy();
             reject(new Error('Response too large'));

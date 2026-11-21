@@ -39,8 +39,12 @@ export function parseSentinelStatus(value: unknown): SentinelStatus {
   };
 }
 
-export async function readSentinelStatus(signal: AbortSignal): Promise<SentinelStatus> {
-  const response = await fetch('/api/system/sentinel', {
+export async function readSentinelJson(
+  endpoint: '/api/system/sentinel' | '/api/system/sentinel/update-progress',
+  signal: AbortSignal,
+  maxBytes = 4096,
+): Promise<unknown> {
+  const response = await fetch(endpoint, {
     method: 'GET',
     credentials: 'same-origin',
     cache: 'no-store',
@@ -57,17 +61,21 @@ export async function readSentinelStatus(signal: AbortSignal): Promise<SentinelS
       const part = await reader.read();
       if (part.done) break;
       bytes += part.value.byteLength;
-      if (bytes > 4096) {
+      if (bytes > maxBytes) {
         await reader.cancel();
         throw new SentinelStatusError();
       }
       text += decoder.decode(part.value, { stream: true });
     }
     text += decoder.decode();
-    return parseSentinelStatus(JSON.parse(text));
+    return JSON.parse(text) as unknown;
   } finally {
     reader.releaseLock();
   }
+}
+
+export async function readSentinelStatus(signal: AbortSignal): Promise<SentinelStatus> {
+  return parseSentinelStatus(await readSentinelJson('/api/system/sentinel', signal));
 }
 
 export const sentinelStatusOptions = (active: boolean) =>

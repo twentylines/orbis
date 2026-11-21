@@ -188,14 +188,14 @@ try {
     }
     expect(commits).toHaveLength(0);
     if (edge) {
-      await send('pointermove', -12, targetY);
+      await send('pointermove', -80, targetY);
       const frame = frames.values().next().value;
       if (!frame) throw new Error('Missing outside drag frame');
       frames.clear();
       await act(async () => frame(80));
       expect(sortable.itemProps(target)['data-sortable-over']).toBeUndefined();
     }
-    await send('pointerup', edge ? -12 : 50, targetY);
+    await send('pointerup', edge ? -80 : 50, targetY);
     expect(commits).toEqual(edge ? [] : swap ? [['third', 'second', 'first']] : [['second', 'first', 'third']]);
     expect(nodes.get('second')?.getBoundingClientRect().top).toBe(swap ? step : edge ? step : 0);
     expect(captured).toBe(false);

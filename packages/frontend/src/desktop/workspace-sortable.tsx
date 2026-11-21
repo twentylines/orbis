@@ -1,4 +1,5 @@
 import { useCallback, useId, useLayoutEffect, useRef, useState, type PointerEvent, type KeyboardEvent } from 'react';
+import { workspaceDropTarget } from './workspace-drop-target';
 
 export function reorderAt<T>(items: readonly T[], source: T, target: T, strategy: 'insert' | 'swap' = 'insert'): T[] {
   const from = items.indexOf(source);
@@ -51,6 +52,7 @@ export function useWorkspaceSortable<T extends string>(
     active: boolean;
     frame: number;
     over: T | null;
+    index: number | null;
   } | null>(null);
   const capture = () => {
     previous.current = new Map(Array.from(nodes.current, ([id, node]) => [id, node.getBoundingClientRect()]));
@@ -136,22 +138,14 @@ export function useWorkspaceSortable<T extends string>(
     const rect = node.getBoundingClientRect();
     node.style.translate = `${drag.x - rect.left - drag.offsetX}px ${drag.y - rect.top - drag.offsetY}px`;
     // Only the grip captures touch; the rest of each card keeps ordinary page scrolling.
-    let target: T | null = null;
-    let closest = Number.POSITIVE_INFINITY;
-    for (const id of orderRef.current) {
-      if (id === drag.id) continue;
-      const rect = nodes.current.get(id)?.getBoundingClientRect();
-      if (!rect) continue;
-      // Accept the full card and the small gap beside it, including its grip.
-      // Resolve overlapping gaps by the nearest centre; never move neighbours until release.
-      const distance = Math.hypot(drag.x - (rect.left + rect.right) / 2, drag.y - (rect.top + rect.bottom) / 2);
-      if (drag.x >= rect.left - 6 && drag.x <= rect.right + 6 && drag.y >= rect.top - 6 && drag.y <= rect.bottom + 6 && distance < closest) {
-        target = id;
-        closest = distance;
-      }
-    }
-    drag.over = target;
-    setOver(target);
+    const boxes = orderRef.current.flatMap((id) => {
+      const bounds = id === drag.id ? rect : nodes.current.get(id)?.getBoundingClientRect();
+      return bounds ? [{ id, left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom }] : [];
+    });
+    const target = workspaceDropTarget(callbacks.current.items, drag.id, boxes, drag.x, drag.y, callbacks.current.strategy === 'swap');
+    drag.over = target?.target ?? null;
+    drag.index = target?.index ?? null;
+    setOver(drag.over);
   };
   const tick = () => {
     const drag = pointer.current;
@@ -196,7 +190,14 @@ export function useWorkspaceSortable<T extends string>(
       drag.y = event.clientY;
       if (drag.active) {
         movePointer();
-        if (drag.over) preview(reorderAt(callbacks.current.items, drag.id, drag.over, callbacks.current.strategy));
+        if (drag.over && drag.index !== null) {
+          if (callbacks.current.strategy === 'swap') preview(reorderAt(callbacks.current.items, drag.id, drag.over, 'swap'));
+          else {
+            const next = callbacks.current.items.filter((id) => id !== drag.id);
+            next.splice(drag.index, 0, drag.id);
+            preview(next);
+          }
+        }
       }
       finish(true);
     },
@@ -259,6 +260,7 @@ export function useWorkspaceSortable<T extends string>(
           active: false,
           frame: 0,
           over: null,
+          index: null,
         };
       },
       onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => {

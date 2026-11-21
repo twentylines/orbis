@@ -2542,6 +2542,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return data
 
     def do_GET(self) -> None:
+        if self.path == '/v1/sentinel/update-progress':
+            self.close_connection = True
+            if not trusted_capture_peer(self.connection):
+                self.send_json(403, {'error': 'Sentinel update progress is unavailable.'})
+                return
+            if (self.headers.get_all('Content-Length', []) not in ([], ['0'])
+                    or any(header in self.headers for header in ('Transfer-Encoding', 'Content-Encoding', 'Content-Type'))):
+                self.send_json(400, {'error': 'Sentinel update progress does not accept a request body.'})
+                return
+            try:
+                installer = load_script('orbis-sentinel-install.py', 'orbis_sentinel_update_observer')
+                progress = installer.read_update_progress()
+            except (OSError, ValueError, AttributeError, ImportError):
+                progress = {'version': 1, 'available': False, 'jobs': []}
+            self.send_json(200, progress)
+            return
         if self.path == '/v1/sentinel/status':
             if not trusted_capture_peer(self.connection):
                 self.send_json(403, {'error': 'Sentinel status is unavailable.'})

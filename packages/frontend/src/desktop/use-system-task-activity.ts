@@ -3,6 +3,7 @@ import { useLocation } from 'react-router';
 import { useAppContext } from '@/context/app-context';
 import { useUserContext } from '@/context/user-context';
 import { readSettingsExports, readSettingsImports, readSettingsRestore, SettingsBundleApiError } from '@/modules/system-backups/settings-bundle-api';
+import { useSentinelUpdateProgress } from '@/modules/updates/sentinel-update-progress';
 import { readTimeMachinePoints } from '@/modules/time-machine/time-machine-api';
 import { useWindowVisible } from './window-visibility';
 import { useHostUpdateWatch } from './host-update-watch';
@@ -83,6 +84,7 @@ export function useSystemTaskActivity(open: boolean, surface: 'popup' | 'page' =
     retry: false,
   });
   const host = useHostUpdateWatch();
+  const sentinel = useSentinelUpdateProgress(open);
   if (user.operator !== true || sessionAbortSignal.aborted)
     return {
       records: [],
@@ -117,6 +119,7 @@ export function useSystemTaskActivity(open: boolean, surface: 'popup' | 'page' =
       },
     });
   }
+  if (sentinel.unavailable) notices.push({ message: 'Sentinel update progress is unavailable.' });
   if (points.isError || (points.data && !points.data.available)) {
     notices.push({ message: 'Saved-point history could not be refreshed. Open Time Machine to check it.', retry: retryRead(points.refetch) });
   }
@@ -127,6 +130,7 @@ export function useSystemTaskActivity(open: boolean, surface: 'popup' | 'page' =
     core: host.core,
     coreStale: updateStatusUnavailable,
     points: points.data,
+    sentinel: sentinel.jobs,
   });
   return {
     records: records.map((record) => ({
@@ -144,7 +148,9 @@ export function useSystemTaskActivity(open: boolean, surface: 'popup' | 'page' =
                 : false),
     })),
     notices,
-    loading: enabled && (exports.isPending || imports.isPending || restore.isPending || points.isPending || (!host.core && !host.unavailable)),
+    loading:
+      enabled &&
+      (exports.isPending || imports.isPending || restore.isPending || sentinel.pending || points.isPending || (!host.core && !host.unavailable)),
     incomplete: notices.length > 0 || (!host.core && !enabled),
   };
 }

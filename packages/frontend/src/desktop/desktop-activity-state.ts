@@ -1,3 +1,5 @@
+import { sentinelUpdateActive, type SentinelUpdateJob } from '@runtipi/common/schemas/sentinel-update-progress';
+import { describeSentinelUpdate } from '@/modules/updates/sentinel-update-progress';
 import type { TaskRecord } from '@runtipi/common/schemas';
 import { coreUpdateTitle, coreWatchIsActive, type CoreUpdateWatch } from './core-update-state';
 import { formatOrbisVersion } from './orbis-version';
@@ -6,7 +8,7 @@ import { taskProgressLabel } from './task-progress';
 export type PackageActivityJob = { id: string; kind?: 'refresh' | 'smart-tools'; state: string; operationCount?: number; message?: string };
 export type DesktopActivityItem = {
   id: string;
-  kind: 'app' | 'core' | 'packages' | 'time-machine';
+  kind: 'app' | 'core' | 'packages' | 'time-machine' | 'sentinel';
   title: string;
   detail: string;
   state: string;
@@ -129,6 +131,7 @@ export function desktopActivityGroups(
   packages: PackageActivityJob | null,
   checks: Parameters<typeof desktopActivity>[4] = [],
   capture?: { id: string; title: string; detail: string; stage: string; percentage?: number } | null,
+  sentinel: SentinelUpdateJob[] = [],
 ) {
   const groups: (DesktopActivity & { category: string })[] = [];
   const add = (category: string, activity: DesktopActivity | null) => {
@@ -162,6 +165,28 @@ export function desktopActivityGroups(
       count: 1,
       items: [{ id: capture.id, kind: 'time-machine', title: 'Time Machine capture', detail: capture.stage, state: 'running' }],
     });
+  const sentinelJobs = sentinel.filter(sentinelUpdateActive).sort((a, b) => b.updatedAt - a.updatedAt);
+  const latestSentinel = sentinelJobs[0];
+  if (latestSentinel) {
+    const progress = describeSentinelUpdate(latestSentinel);
+    add('sentinel', {
+      title: 'Updating Sentinel',
+      detail: progress.status,
+      kind: 'sentinel',
+      count: sentinelJobs.length,
+      percentage: sentinelJobs.length === 1 ? progress.percentage : undefined,
+      items: sentinelJobs.map((job) => {
+        const { status, detail } = describeSentinelUpdate(job);
+        return {
+          id: job.id,
+          kind: 'sentinel',
+          title: `Sentinel ${job.version}`,
+          detail: detail ? `${status} · ${detail}` : status,
+          state: job.phase,
+        };
+      }),
+    });
+  }
   const actions = new Set(tasks.filter((task) => ['queued', 'running'].includes(task.status)).map((task) => task.action));
   for (const action of actions)
     add(

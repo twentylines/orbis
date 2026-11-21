@@ -44,6 +44,7 @@ import { useReviewExpired } from '@/desktop/use-review-expired';
 import { orbisReleaseChannelsOptions, releaseChannelErrorMessage } from '@/desktop/release-channels';
 import { formatOrbisVersion } from '@/desktop/orbis-version';
 import { SentinelStatus } from './sentinel-status';
+import { useSentinelUpdateProgress } from '../sentinel-update-progress';
 import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
 import debianLogo from './debian-open-use.svg';
 
@@ -213,6 +214,7 @@ function LocalUpdates() {
   const entry = useLocation().key;
   const lastEntry = useRef(entry);
   const visible = useWindowVisible();
+  const sentinelProgress = useSentinelUpdateProgress(visible && section === 'system');
   const { user, version } = useAppContext();
   const { watch, restart, restartError } = useHostUpdateWatch();
   const queryClient = useQueryClient();
@@ -1305,7 +1307,7 @@ function LocalUpdates() {
               </details>
             ) : null}
           </section>
-          <SentinelStatus active={visible && section === 'system'}>
+          <SentinelStatus active={visible && section === 'system'} operator={user?.operator === true} updateProgress={sentinelProgress}>
             {user.operator ? (
               <div id={`${tabsId}-host-help`} className="desktop-sentinel-connection">
                 <h3>System connection</h3>

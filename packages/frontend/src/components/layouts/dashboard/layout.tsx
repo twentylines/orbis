@@ -45,6 +45,7 @@ import { IconLogout, IconMoon, IconSun } from '@tabler/icons-react';
 import { QueryErrorResetBoundary } from '@tanstack/react-query';
 import { lazy, Suspense, useLayoutEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { Link, useLocation, useMatches, useNavigation, useNavigate } from 'react-router';
+import '@/desktop/category-styles.css';
 import './layout.css';
 import '@/desktop/density.css';
 

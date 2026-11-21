@@ -3,8 +3,9 @@ import { orbisReleaseChannelStatus } from '@runtipi/common/schemas/orbis-release
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
-import { appContextQueryKey, getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
+import { appContextQueryKey, getInstalledAppsOptions, userContextQueryKey } from '@/api-client/@tanstack/react-query.gen';
 import { AppContextProvider } from '@/context/app-context';
+import { UserContextProvider } from '@/context/user-context';
 import { ClusterContext } from '@/desktop/cluster-context';
 import { installedOrbisBuildOptions, orbisPublishedReleasesOptions, orbisReleasesOptions } from '@/desktop/orbis-release';
 import { orbisReleaseChannelsOptions } from '@/desktop/release-channels';
@@ -164,6 +165,7 @@ function renderLocalUpdates({
     available: true,
     job: jobState ? { id: 'job', state: jobState, message: 'Recorded package operation' } : null,
   });
+  client.setQueryData(userContextQueryKey(), { isLoggedIn: true });
   client.setQueryData(sentinelStatusOptions(true).queryKey, {
     available: true,
     state: 'healthy',
@@ -190,22 +192,24 @@ function renderLocalUpdates({
   const markup = renderToStaticMarkup(
     <MemoryRouter>
       <QueryClientProvider client={client}>
-        <AppContextProvider>
-          <ClusterContext.Provider
-            value={{
-              data: undefined,
-              selectedId: 'local',
-              selectedServer: undefined,
-              merged: false,
-              select: () => undefined,
-              isPending: false,
-              isError: false,
-              refetch: async () => undefined,
-            }}
-          >
-            <Updates />
-          </ClusterContext.Provider>
-        </AppContextProvider>
+        <UserContextProvider>
+          <AppContextProvider>
+            <ClusterContext.Provider
+              value={{
+                data: undefined,
+                selectedId: 'local',
+                selectedServer: undefined,
+                merged: false,
+                select: () => undefined,
+                isPending: false,
+                isError: false,
+                refetch: async () => undefined,
+              }}
+            >
+              <Updates />
+            </ClusterContext.Provider>
+          </AppContextProvider>
+        </UserContextProvider>
       </QueryClientProvider>
     </MemoryRouter>,
   );

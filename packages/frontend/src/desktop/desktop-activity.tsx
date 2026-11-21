@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useMutationState } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import * as Dialog from '@radix-ui/react-dialog';
-import { IconApps, IconMinus, IconPackage, IconServerCog, IconHistory } from '@tabler/icons-react';
+import { IconApps, IconMinus, IconPackage, IconServerCog, IconHistory, IconShield } from '@tabler/icons-react';
 import { Link } from 'react-router';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { useAppContext } from '@/context/app-context';
@@ -16,6 +16,7 @@ import { desktopActivityGroups, type DesktopActivity, type DesktopActivityItem }
 import { DockCompanion } from './dock-companion';
 import { dockNavigationFocusTarget } from './dock-scroll-reveal';
 import { useTimeMachineActivity } from '@/modules/time-machine/use-time-machine-activity';
+import { useSentinelUpdateProgress } from '@/modules/updates/sentinel-update-progress';
 import { RecoveryProgressBar } from '@/components/recovery-progress/recovery-progress';
 import './desktop-activity.css';
 
@@ -27,7 +28,7 @@ function focusDock() {
 
 function ActivityIcon({ kind, appUrn }: Pick<DesktopActivityItem, 'kind' | 'appUrn'>) {
   if (kind === 'app' && appUrn) return <AppLogo urn={appUrn} size={28} alt="" />;
-  const Icon = kind === 'core' ? IconServerCog : kind === 'packages' ? IconPackage : kind === 'time-machine' ? IconHistory : IconApps;
+  const Icon = { app: IconApps, core: IconServerCog, packages: IconPackage, 'time-machine': IconHistory, sentinel: IconShield }[kind];
   return <Icon size={22} stroke={1.7} aria-hidden="true" />;
 }
 
@@ -35,6 +36,7 @@ export function DockActivity() {
   const { apps } = useAppContext();
   const tasks = useTasks();
   const capture = useTimeMachineActivity();
+  const sentinel = useSentinelUpdateProgress(true, true);
   const { watch, packageJob } = useHostUpdateWatch();
   const desktop = useDesktopWindows();
   const names = useMemo(() => new Map(apps.map((app) => [app.urn, app.name])), [apps]);
@@ -56,7 +58,7 @@ export function DockActivity() {
       };
     },
   });
-  const groups = desktopActivityGroups(tasks.data?.tasks ?? [], names, watch, packageJob, checks, capture.activity);
+  const groups = desktopActivityGroups(tasks.data?.tasks ?? [], names, watch, packageJob, checks, capture.activity, sentinel.jobs);
   const retainedGroups = useRef(new Map<string, (typeof groups)[number]>());
   for (const group of groups) retainedGroups.current.set(group.category, group);
   const activeCategories = new Set(groups.map((group) => group.category));
@@ -211,7 +213,12 @@ function ActivityPill({ activity, desktop }: { activity: DesktopActivity; deskto
                 <span className="desktop-activity-summary">
                   <strong data-initialising={displayed.items[0]?.state === 'initialising' || undefined}>{displayed.title}</strong>
                   <small>{displayed.detail}</small>
-                  {displayed.kind === 'time-machine' ? <RecoveryProgressBar label="Time Machine capture" percentage={displayed.percentage} /> : null}
+                  {displayed.kind === 'time-machine' || displayed.kind === 'sentinel' ? (
+                    <RecoveryProgressBar
+                      label={displayed.kind === 'sentinel' ? displayed.detail : 'Time Machine capture'}
+                      percentage={displayed.percentage}
+                    />
+                  ) : null}
                 </span>
                 {hasActivity ? <span className="desktop-activity-loading" aria-hidden="true" /> : null}
               </button>
@@ -277,7 +284,7 @@ function ActivityPill({ activity, desktop }: { activity: DesktopActivity; deskto
                           <Link to="/tasks" onClick={() => setOpen(false)}>
                             Task centre
                           </Link>
-                          {displayed.items.some((item) => item.kind === 'core' || item.kind === 'packages') ? (
+                          {displayed.items.some((item) => item.kind === 'core' || item.kind === 'packages' || item.kind === 'sentinel') ? (
                             <Link to="/updates" onClick={() => setOpen(false)}>
                               Updates
                             </Link>
