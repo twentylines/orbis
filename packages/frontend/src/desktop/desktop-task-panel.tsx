@@ -414,9 +414,10 @@ export function DesktopTaskPanel({
     [tasks, names, systemActivity?.records, capture, captureFailed, restoreRequests?.snapshot],
   );
   const visibleRecords = records.filter((record) => !activityIsHidden(record, visibility.state));
-  const clearable = visibleRecords.some(completedActivity);
   const allGroups = useMemo(() => groupTaskCentreAttempts(records), [records]);
   const filtered = filterTaskCentreRecords(view === 'history' ? records : visibleRecords, { view, query, source, outcome, days });
+  const clearable = filtered.some(completedActivity);
+  const attentionClearable = filtered.some((record) => record.bucket === 'review' && canDismissActivity(record));
   const rows = groupTaskCentreAttempts(filtered);
   const latestRows = useRef(rows);
   latestRows.current = rows;
@@ -525,8 +526,8 @@ export function DesktopTaskPanel({
       if (target === next) target?.scrollIntoView({ block: 'nearest' });
     });
   };
-  const clearCompleted = () => {
-    visibility.clear(visibleRecords);
+  const clearActivity = (bucket: 'recent' | 'review') => {
+    visibility.clear(filtered, bucket);
     requestAnimationFrame(() => {
       const undo = body.current?.querySelector<HTMLButtonElement>('[data-present="true"] [data-activity-undo]');
       undo?.focus({ preventScroll: true });
@@ -719,7 +720,7 @@ export function DesktopTaskPanel({
                 ) : null}
                 {visibility.undoAvailable && view !== 'history' ? (
                   <output className="task-centre-undo">
-                    <span className="task-centre-undo-copy">Recent activity hidden. Records are still in History.</span>
+                    <span className="task-centre-undo-copy">Activity hidden. Records are still in History.</span>
                     <button
                       type="button"
                       data-activity-undo
@@ -758,8 +759,17 @@ export function DesktopTaskPanel({
                               {bucket === 'active' ? 'Running' : bucket === 'review' ? 'Needs attention' : 'Recent activity'}
                               <span>{matching.reduce((count, record) => count + record.attempts.length, 0)}</span>
                             </h3>
-                            {bucket === 'recent' && visibility.enabled && clearable ? (
-                              <button type="button" onClick={clearCompleted} title="Hide recent activity from this feed">
+                            {bucket !== 'active' && visibility.enabled && (bucket === 'review' ? attentionClearable : clearable) ? (
+                              <button
+                                type="button"
+                                onClick={() => clearActivity(bucket)}
+                                aria-label={bucket === 'review' ? 'Clear all dismissible needs-attention activity' : 'Clear all recent activity'}
+                                title={
+                                  bucket === 'review'
+                                    ? 'Hide dismissible alerts; pending reviews remain available'
+                                    : 'Hide recent activity from this feed'
+                                }
+                              >
                                 Clear all
                               </button>
                             ) : null}
@@ -779,6 +789,16 @@ export function DesktopTaskPanel({
                           {view === 'active' ? 'Running' : view === 'review' ? 'Needs attention' : 'History'}
                           <span>{filtered.length} records</span>
                         </h3>
+                        {view === 'review' && visibility.enabled && attentionClearable ? (
+                          <button
+                            type="button"
+                            onClick={() => clearActivity('review')}
+                            aria-label="Clear all dismissible needs-attention activity"
+                            title="Hide dismissible alerts; pending reviews remain available"
+                          >
+                            Clear all
+                          </button>
+                        ) : null}
                       </div>
                       <ol>
                         {rows.map((record) => (

@@ -4,6 +4,7 @@ import {
   activityRevision,
   activityVisibilityKey,
   canDismissActivity,
+  clearAttentionActivity,
   clearCompletedActivity,
   dismissActivity,
   readActivityVisibility,
@@ -105,9 +106,9 @@ export function useTaskCentreVisibility(owner?: string) {
         : undefined;
       update(revisions, retainedUndo?.added.length ? retainedUndo : undefined);
     },
-    clear: (records: TaskCentreRecord[]) => {
+    clear: (records: TaskCentreRecord[], bucket: 'recent' | 'review' = 'recent') => {
       const latest = snapshot(key);
-      const next = clearCompletedActivity(readActivityVisibility(latest.value), records);
+      const next = (bucket === 'review' ? clearAttentionActivity : clearCompletedActivity)(readActivityVisibility(latest.value), records);
       if (!next.undo.added.length) return;
       const previous = latest.undo && latest.undo.expiresAt > Date.now() ? latest.undo.added : [];
       update(next.state, { ...next.undo, added: [...previous, ...next.undo.added] });

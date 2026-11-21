@@ -343,6 +343,7 @@
   margin: 0;
 }
 .task-centre-group-heading button {
+  margin-inline-start: auto;
   font-size: 0.8125rem;
 }
 .task-centre-undo {

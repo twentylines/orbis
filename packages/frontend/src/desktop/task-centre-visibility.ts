@@ -61,8 +61,20 @@ export function dismissActivity(state: ActivityVisibility, records: TaskCentreRe
 }
 
 export function clearCompletedActivity(state: ActivityVisibility, records: TaskCentreRecord[], now = Date.now()) {
-  // Hide the recent records available to this view. Keep reading older saved cutoffs for compatibility.
-  const added = records.filter((record) => completedActivity(record) && !activityIsHidden(record, state)).map(activityRevision);
+  return clearActivity(state, records.filter(completedActivity), now);
+}
+
+export function clearAttentionActivity(state: ActivityVisibility, records: TaskCentreRecord[], now = Date.now()) {
+  return clearActivity(
+    state,
+    records.filter((record) => record.bucket === 'review' && canDismissActivity(record)),
+    now,
+  );
+}
+
+function clearActivity(state: ActivityVisibility, records: TaskCentreRecord[], now: number) {
+  // Hide the known records available to this view. Keep reading older saved cutoffs for compatibility.
+  const added = records.filter((record) => !activityIsHidden(record, state)).map(activityRevision);
   return {
     state: { ...state, hidden: [...new Set([...state.hidden, ...added])] },
     undo: { added, expiresAt: now + undoDuration } satisfies ActivityClearUndo,

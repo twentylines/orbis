@@ -4,6 +4,7 @@ import {
   activityIsHidden,
   activityVisibilityKey,
   canDismissActivity,
+  clearAttentionActivity,
   clearCompletedActivity,
   dismissActivity,
   emptyActivityVisibility as empty,
@@ -79,6 +80,32 @@ test('preexisting bulk cutoff is still respected and cannot hide needs-attention
   const { undo } = clearCompletedActivity(state, [record()], 1000);
   expect(undo.added).toEqual([]);
   expect(undoCompletedActivity(state, undo)).toEqual(state);
+});
+
+test('Needs attention Clear all dismisses terminal alerts and preserves unresolved, active, stale and recent records', () => {
+  const failed = record({ key: 'failed', bucket: 'review', outcome: 'failed' });
+  const cancelled = record({ key: 'cancelled', bucket: 'review', outcome: 'cancelled' });
+  const kept = [
+    record(),
+    record({ key: 'running', bucket: 'active', outcome: 'active' }),
+    ...(['review', 'interrupted', 'unconfirmed'] as const).map((outcome) => record({ key: outcome, bucket: 'review', outcome })),
+    record({ key: 'stale', bucket: 'review', outcome: 'failed', stale: true }),
+  ];
+  const result = clearAttentionActivity(empty, [failed, cancelled, ...kept], 1000);
+  expect(activityIsHidden(failed, result.state)).toBe(true);
+  expect(activityIsHidden(cancelled, result.state)).toBe(true);
+  for (const item of kept) expect(activityIsHidden(item, result.state)).toBe(false);
+  expect(activityIsHidden({ ...failed, finishedAt: 101 }, result.state)).toBe(false);
+  expect(result.undo.expiresAt).toBe(11_000);
+  expect(undoCompletedActivity(result.state, result.undo)).toEqual(empty);
+});
+
+test('Needs attention bulk dismissal only covers the supplied matching records, not unseen alerts', () => {
+  const shown = record({ key: 'shown', bucket: 'review', outcome: 'failed' });
+  const unseen = record({ key: 'unseen', bucket: 'review', outcome: 'failed' });
+  const result = clearAttentionActivity(empty, [shown], 1000);
+  expect(activityIsHidden(shown, result.state)).toBe(true);
+  expect(activityIsHidden(unseen, result.state)).toBe(false);
 });
 
 test('an active task that began before clearing reappears when it completes afterward; updated revisions are not hidden', () => {
