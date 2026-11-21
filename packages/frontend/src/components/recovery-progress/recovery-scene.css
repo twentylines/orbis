@@ -27,7 +27,7 @@ body:has(.orbis-theme) .orbis-dialog-content.recovery-scene {
 }
 .recovery-scene-content {
   display: grid;
-  gap: 20px;
+  gap: var(--recovery-content-gap, 20px);
   justify-items: center;
   width: min(100% - 48px, 580px);
   max-height: calc(100svh - 48px);
@@ -39,12 +39,20 @@ body:has(.orbis-theme) .orbis-dialog-content.recovery-scene {
 .recovery-scene-content .modal-title {
   margin: 0;
   color: inherit;
-  font-size: clamp(2rem, 4vw, 2.75rem);
+  font-size: var(--recovery-title-size, clamp(2rem, 4vw, 2.75rem));
   line-height: 1.15;
+}
+.recovery-scene:is([data-variant="update"], [data-variant="downgrade"]) {
+  --recovery-content-gap: 16px;
+  --recovery-title-size: clamp(1.375rem, 2.5vw, 1.875rem);
+  --recovery-status-size: 1rem;
+}
+.recovery-scene:is([data-visible="false"], [data-reduced="true"], [data-solid="true"]) .orbis-interstellar > :is(img, svg) {
+  animation-play-state: paused;
 }
 .recovery-scene-content output {
   color: #d7dde4;
-  font-size: 1.25rem;
+  font-size: var(--recovery-status-size, 1.25rem);
   line-height: 1.4;
 }
 .recovery-scene-content p {

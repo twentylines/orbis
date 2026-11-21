@@ -260,6 +260,22 @@ class InstallerPresentationTests(unittest.TestCase):
         self.assertNotIn("Step ", output.getvalue())
         self.assertIn("[ok]", ui.frame("Done", 0, status="[ok]"))
 
+    def test_final_completed_stage_retains_the_fully_formed_scene_only_on_success(self):
+        for total, succeeds, expected_scene in ((1, True, True), (2, True, False), (1, False, False), (None, True, False)):
+            with self.subTest(total=total, succeeds=succeeds):
+                output = TerminalStream()
+                ui = UI.Presentation(stream=output, environ={"TERM": "xterm"}, color=False)
+                ui.total = total
+                frames = []
+                with mock.patch.object(ui, "scene", side_effect=lambda tick: [f"formation={ui.installation_progress()}"]), mock.patch.object(
+                    ui, "redraw", side_effect=lambda rows, lines: frames.append(lines) or len(lines)
+                ):
+                    with ui.step("Starting Orbis", completed=lambda: succeeds):
+                        pass
+                self.assertEqual(frames[-1][0] == "formation=1", expected_scene)
+                self.assertIn("[ok]" if succeeds else "[stopped]", frames[-1][-1])
+                self.assertTrue(output.getvalue().endswith("\033[?25h\n"))
+
     def test_plain_output_uses_the_same_bracketed_stage_label(self):
         output = io.StringIO()
         ui = UI.Presentation(stream=output)
@@ -327,6 +343,8 @@ class SpaceflightTests(unittest.TestCase):
     def test_large_field_starts_at_the_terminal_gutter_and_colored_output_preserves_cells(self):
         plain = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"}, color=False)
         colored = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"})
+        plain.total = colored.total = 4
+        plain.completed = colored.completed = 4
         for width in (40, 80, 120, 160):
             with mock.patch.object(plain, "width", return_value=width), mock.patch.object(colored, "width", return_value=width), mock.patch.object(plain, "height", return_value=24), mock.patch.object(colored, "height", return_value=24):
                 rows = plain.scene(20)
@@ -404,20 +422,42 @@ class OrbisLogoTests(unittest.TestCase):
                     if not unicode:
                         self.assertTrue(set("".join(rows)) <= {" ", "*"})
 
-    def test_scene_does_not_restart_logo_formation_between_installer_stages(self):
+    def test_scene_growth_tracks_completed_work_instead_of_elapsed_time(self):
         ui = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"}, color=False)
         ui.unicode = True
         clock = [10.0]
+        def mark(rows):
+            return [line[26:53] for line in rows]
         with mock.patch.object(UI.time, "monotonic", side_effect=lambda: clock[0]), mock.patch.object(ui, "width", return_value=80), mock.patch.object(ui, "height", return_value=25):
-            initial = ui.scene(0)
-            clock[0] += 2
-            settled = ui.scene(0)
-            self.assertNotEqual(initial, settled)
-            clock[0] += 1
-            following_stage = ui.scene(0)
-            def mark(rows):
-                return [line[26:53] for line in rows]
-            self.assertEqual(mark(settled), mark(following_stage))
+            initial = mark(ui.scene(0))
+            clock[0] += 60
+            self.assertEqual(initial, mark(ui.scene(600)))
+            ui.set_remaining_steps(4)
+            self.assertEqual(initial, mark(ui.scene(0)))
+            ui.completed = 1
+            first = mark(ui.scene(0))
+            self.assertNotEqual(initial, first)
+            midway = mark(ui.scene(0, fraction=0.5))
+            self.assertNotEqual(first, midway)
+            clock[0] += 60
+            self.assertEqual(midway, mark(ui.scene(1200, fraction=0.5)))
+            ui.completed = 2
+            second = mark(ui.scene(0))
+            self.assertNotEqual(midway, second)
+            ui.completed = ui.total
+            self.assertEqual(mark(ui.scene(0)), UI.logo_frame(27, 13, unicode=True, progress=1))
+
+    def test_unknown_or_invalid_stage_progress_cannot_advance_the_logo(self):
+        ui = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"}, color=False)
+        self.assertEqual(ui.installation_progress(1), 0)
+        ui.set_remaining_steps(4)
+        ui.completed = 1
+        for fraction in (None, float('nan'), float('inf'), -1, 'complete', True):
+            self.assertEqual(ui.installation_progress(fraction), 0.25)
+        self.assertEqual(ui.installation_progress(0.5), 0.375)
+        self.assertEqual(ui.installation_progress(2), 0.5)
+        ui.completed = 2
+        self.assertEqual(ui.installation_progress(0), 0.5)
 
 
 if __name__ == "__main__":

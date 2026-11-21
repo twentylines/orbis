@@ -142,8 +142,8 @@ _LOGO_POINTS = _logo_points()
 _BRAILLE = ((1, 8), (2, 16), (4, 32), (64, 128))
 
 
-def logo_frame(width, height, tick=12, unicode=False):
-    """Form the actual mark; the animation does not represent installation progress."""
+def logo_frame(width, height, tick=12, unicode=False, *, progress=None):
+    """Rasterize the mark at the supplied installation progress, or its introductory formation position."""
     width, height = max(1, min(48, width)), max(1, min(16, height))
     columns, rows = (width * 2, height * 4) if unicode else (width, height)
     scale_x, scale_y = (columns - 1) / 64, (rows - 1) / 64
@@ -152,7 +152,7 @@ def logo_frame(width, height, tick=12, unicode=False):
         scale_y = scale_x / 2
     else:
         scale_x = scale_y = min(scale_x, scale_y)
-    amount = 1 - (1 - min(1, max(0, tick) / 12)) ** 3
+    amount = min(1, max(0, progress)) if progress is not None else 1 - (1 - min(1, max(0, tick) / 12)) ** 3
     twist = (1 - amount) * 1.4
     dots = [[0] * columns for _ in range(rows)]
     for x, y, radius in _LOGO_POINTS:
@@ -193,6 +193,7 @@ class Presentation:
         self._frame_lines = []
         self._frame_width = None
         self._scene_started = None
+        self._scene_logo = None
         self.unicode = "utf" in (getattr(self.stream, "encoding", None) or env.get("LC_ALL") or env.get("LANG", "")).lower()
 
     def paint(self, value, code):
@@ -260,7 +261,13 @@ class Presentation:
             return
         self.write(self.paint("Orbis", "1;36") + f"  {release}\n")
 
-    def scene(self, tick):
+    def installation_progress(self, fraction=None):
+        if self.total is None:
+            return 0.0
+        partial = min(1, max(0, fraction)) if type(fraction) in (int, float) and math.isfinite(fraction) else 0
+        return min(1, max(0, (self.completed + partial) / self.total))
+
+    def scene(self, tick, *, fraction=None):
         width, height = self.width(), self.height()
         if width < 40 or height < 18:
             return []
@@ -271,7 +278,11 @@ class Presentation:
         field_height = min(13, height - 12)
         lines = [line.ljust(field_width) for line in spaceflight(field_width, tick, field_height, self.unicode)]
         mark_width = min(field_width, field_height * 2 + field_width % 2)
-        mark = logo_frame(mark_width, field_height, tick, self.unicode)
+        position = self.installation_progress(fraction)
+        key = (mark_width, field_height, self.unicode, position)
+        if self._scene_logo is None or self._scene_logo[0] != key:
+            self._scene_logo = (key, logo_frame(mark_width, field_height, unicode=self.unicode, progress=position))
+        mark = self._scene_logo[1]
         inset = (field_width - mark_width) // 2
         def color_run(match):
             value = match.group(0)
@@ -324,7 +335,7 @@ class Presentation:
             tick = 1
             while not stopped.wait(0.1):
                 summary = detail() if detail else None
-                scene = self.scene(tick)
+                scene = self.scene(tick, fraction=getattr(detail, "fraction", None))
                 rows = self.redraw(rows, [*scene, self.frame(label, tick, time.monotonic() - started, detail=summary, fraction=getattr(detail, "fraction", None))])
                 tick += 1
 
@@ -351,5 +362,6 @@ class Presentation:
                 self.completed += 1
             # Keep the cursor usable after failure, cancellation or interruption.
             status = "[ok]" if success else "[stopped]"
-            self.redraw(rows, [self.frame(label, 0, time.monotonic() - started, status)])
+            final_scene = self.scene(0) if success and self.total and self.completed >= self.total else []
+            self.redraw(rows, [*final_scene, self.frame(label, 0, time.monotonic() - started, status)])
             self.write("\033[?25h\n")

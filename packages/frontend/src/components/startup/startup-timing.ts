@@ -6,7 +6,7 @@ export function waitForStartupFormation(surface: HTMLElement | null, complete: (
   let active = true;
   const wait = () => {
     if (!active) return;
-    const clusters = surface?.querySelectorAll?.('.orbis-startup-mark .orbis-logo-dot-group') ?? [];
+    const clusters = surface?.querySelectorAll?.('.orbis-startup-mark .orbis-logo-dot-layer, .orbis-startup-mark .orbis-logo-dot-group') ?? [];
     const animations = Array.from(clusters).flatMap((cluster) => cluster.getAnimations?.() ?? []);
     if (animations.length)
       void Promise.allSettled(animations.map((animation) => animation.finished)).then((results) => {

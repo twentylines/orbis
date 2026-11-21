@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { useReducedMotion, useReducedTransparency } from '@/desktop/motion-preferences';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { StartupMark } from '@/components/startup/startup-mark';
+import { InterstellarBackdrop } from '@/components/startup/interstellar-backdrop';
 import { DepthTravel } from './depth-travel';
 import { RecoveryProgressBar } from './recovery-progress';
 import { formationProgress } from '@/components/startup/dot-formation';
@@ -21,9 +22,9 @@ function RecoverySpace({
   sharedBackdrop: boolean;
 }) {
   const open = useContext(DialogOpenContext);
-  return sharedBackdrop ? null : (
-    <DepthTravel active={active} departing={departing} distance={open ? 1 : 0} variant={variant} className="loading-galaxy-space" />
-  );
+  if (sharedBackdrop) return null;
+  if (variant === 'update' || variant === 'downgrade') return <InterstellarBackdrop className="loading-galaxy-space" />;
+  return <DepthTravel active={active} departing={departing} distance={open ? 1 : 0} variant={variant} className="loading-galaxy-space" />;
 }
 
 export function RecoveryScene({
@@ -80,7 +81,7 @@ export function RecoveryScene({
       >
         <RecoverySpace active={visible && (active || departing)} departing={departing} variant={variant} sharedBackdrop={sharedBackdrop} />
         <div className="recovery-scene-content">
-          {progressContent ? null : <StartupMark label={status ?? title} />}
+          {progressContent || variant === 'update' || variant === 'downgrade' ? null : <StartupMark label={status ?? title} />}
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className="visually-hidden">Recovery status</DialogDescription>
           {status ? <output aria-live="polite">{status}</output> : null}

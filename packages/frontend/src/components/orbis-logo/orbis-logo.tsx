@@ -100,6 +100,49 @@ export function OrbisLogo({
   const identity = `orbis-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const percentage = formationProgress(progress);
   const particles = (dots || animated || percentage !== undefined) && size >= 48;
+  if (particles)
+    return (
+      <span
+        className={`orbis-logo orbis-logo-particles ${className}`.trim()}
+        style={{ '--orbis-logo-size': `${size}px` } as CSSProperties}
+        aria-hidden="true"
+        data-plain={plain || undefined}
+        data-animated={animated || undefined}
+        data-progress={percentage}
+      >
+        {particlePaths.map((d, index) => (
+          <span
+            key={d}
+            className="orbis-logo-dot-layer"
+            style={
+              {
+                '--orbis-dot-scale': 1.4 + index * 0.025,
+                '--orbis-dot-turn': '-12deg',
+                animationDelay: `${index * 25 - animationElapsed}ms`,
+                ...(percentage === undefined
+                  ? {}
+                  : {
+                      transform: `rotate(${-12 * (1 - formationAmount(percentage, index))}deg) scale(${1 + (0.4 + index * 0.025) * (1 - formationAmount(percentage, index))})`,
+                      opacity: 0.08 + 0.92 * formationAmount(percentage, index),
+                    }),
+              } as CSSProperties
+            }
+          >
+            <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+              <defs>
+                <radialGradient id={`${identity}-${index}-arm`} gradientUnits="userSpaceOnUse" cx="32" cy="32" r="28">
+                  <stop offset="0" stopColor="var(--orbis-logo-light)" />
+                  <stop offset="0.3" stopColor="var(--orbis-logo-light)" />
+                  <stop offset="0.65" stopColor="var(--orbis-logo-colour)" />
+                  <stop offset="1" stopColor="var(--orbis-logo-colour)" stopOpacity="0.2" />
+                </radialGradient>
+              </defs>
+              <path className="orbis-logo-dot-group" d={d} fill={`url(#${identity}-${index}-arm)`} />
+            </svg>
+          </span>
+        ))}
+      </span>
+    );
   return (
     <svg
       className={`orbis-logo ${className}`.trim()}
@@ -121,40 +164,15 @@ export function OrbisLogo({
           <stop offset="1" stopColor="var(--orbis-logo-colour)" stopOpacity="0.2" />
         </radialGradient>
       </defs>
-      {particles ? (
-        <g fill={`url(#${identity}-arm)`}>
-          {particlePaths.map((d, index) => (
-            <path
-              key={d}
-              className="orbis-logo-dot-group"
-              d={d}
-              style={
-                {
-                  '--orbis-dot-scale': 1.4 + index * 0.025,
-                  '--orbis-dot-turn': '-12deg',
-                  animationDelay: `${index * 25 - animationElapsed}ms`,
-                  ...(percentage === undefined
-                    ? {}
-                    : {
-                        transform: `rotate(${-12 * (1 - formationAmount(percentage, index))}deg) scale(${1 + (0.4 + index * 0.025) * (1 - formationAmount(percentage, index))})`,
-                        opacity: 0.08 + 0.92 * formationAmount(percentage, index),
-                      }),
-                } as CSSProperties
-              }
-            />
-          ))}
-        </g>
-      ) : (
-        <>
-          <g className="orbis-logo-galaxy" fill="none" stroke={`url(#${identity}-arm)`} strokeWidth={plain ? 3.2 : 3.6} strokeLinecap="round">
-            {[0, 120, 240].map((angle) => (
-              <path key={angle} className="orbis-logo-arm" pathLength={1} d={spiralArm} transform={`rotate(${angle} 32 32)`} />
-            ))}
-          </g>
-          <circle className="orbis-logo-core" cx="32" cy="32" r="3.2" fill="var(--orbis-logo-light)" />
-        </>
-      )}
-      {!particles && size >= 48 ? (
+
+      <g className="orbis-logo-galaxy" fill="none" stroke={`url(#${identity}-arm)`} strokeWidth={plain ? 3.2 : 3.6} strokeLinecap="round">
+        {[0, 120, 240].map((angle) => (
+          <path key={angle} className="orbis-logo-arm" pathLength={1} d={spiralArm} transform={`rotate(${angle} 32 32)`} />
+        ))}
+      </g>
+      <circle className="orbis-logo-core" cx="32" cy="32" r="3.2" fill="var(--orbis-logo-light)" />
+
+      {size >= 48 ? (
         <g className="orbis-logo-stars" fill="var(--orbis-logo-light)">
           <circle cx="20" cy="11" r="0.7" />
           <circle cx="52" cy="24" r="0.9" />
