@@ -115,8 +115,8 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     let barBottom = 0;
     let viewportWidth = innerWidth;
     let viewportHeight = innerHeight;
-    const measure = () => {
-      const nextHeight = element.offsetHeight;
+    const measure = (height = element.offsetHeight) => {
+      const nextHeight = height;
       const nextBottom = bar?.offsetHeight ? Math.ceil(Number.parseFloat(getComputedStyle(bar).top) + bar.offsetHeight) : 0;
       const heightChanged = nextHeight > 0 && nextHeight !== dockHeight;
       const bottomChanged = nextBottom > 0 && nextBottom !== barBottom;
@@ -136,13 +136,17 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
       if (active instanceof HTMLElement && active.closest('#desktop-content')) revealPageFocus(active);
     };
     measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
+    const observer = new ResizeObserver((entries) => {
+      const dockEntry = entries.find((entry) => entry.target === element);
+      measure(dockEntry ? (dockEntry.borderBoxSize?.[0]?.blockSize ?? element.offsetHeight) : dockHeight);
+    });
+    observer.observe(element, { box: 'border-box' });
     if (bar) observer.observe(bar);
-    window.addEventListener('resize', measure);
+    const onResize = () => measure(dockHeight);
+    window.addEventListener('resize', onResize);
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', measure);
+      window.removeEventListener('resize', onResize);
       if (previous) root.style.setProperty(property, previous);
       else root.style.removeProperty(property);
       if (previousBar) root.style.setProperty(barProperty, previousBar);

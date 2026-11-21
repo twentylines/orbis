@@ -1,5 +1,6 @@
 .home-attention {
   --attention-tone: var(--desktop-accent);
+  container: home-attention-inline / inline-size;
   background: color-mix(in srgb, var(--attention-tone) 5%, var(--desktop-home-surface));
 }
 .home-attention[data-attention="true"] {
@@ -126,7 +127,7 @@
   outline: 3px solid var(--desktop-focus);
   outline-offset: 2px;
 }
-@media (max-width: 380px) {
+@container home-attention-inline (max-width: 17rem) {
   .home-attention .home-attention-list a {
     flex-wrap: wrap;
   }
@@ -134,7 +135,7 @@
     min-width: min(8em, 100%);
   }
   .home-attention-action {
-    margin-left: auto;
+    margin-inline-start: auto;
   }
 }
 

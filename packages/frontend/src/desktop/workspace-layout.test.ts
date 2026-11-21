@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import {
   defaultWorkspaceLayout,
   legacyWidgetSize,
+  mergeWorkspaceOrder,
   preferencePayload,
   resizeWidget,
   toolbarActionIds,
@@ -51,4 +52,21 @@ test('pointer and keyboard placement keep identities and handle either direction
   expect(reorderAt(ids, 'attention', 'activity')).toEqual(['applications', 'attention', 'activity', 'storage']);
   expect(reorderAt(ids, 'outside', 'activity')).toEqual(ids);
   expect(ids).toEqual(['applications', 'activity', 'storage', 'attention']);
+});
+
+test('Home reorders visible widgets while retaining the fixed and hidden positions', () => {
+  const saved = ['applications', 'activity', 'storage', 'attention'];
+  expect(mergeWorkspaceOrder(saved, ['applications', 'attention'], ['attention', 'applications'])).toEqual([
+    'attention',
+    'activity',
+    'storage',
+    'applications',
+  ]);
+  expect(mergeWorkspaceOrder(saved, ['applications', 'storage', 'attention'], ['attention', 'activity', 'applications'])).toEqual([
+    'attention',
+    'activity',
+    'applications',
+    'storage',
+  ]);
+  expect(saved).toEqual(['applications', 'activity', 'storage', 'attention']);
 });

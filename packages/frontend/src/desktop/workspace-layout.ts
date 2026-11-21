@@ -6,6 +6,7 @@ export type WorkspaceCapabilities = { toolbarOrder: boolean; workspaceLayout: bo
 export const unavailableWorkspaceCapabilities: WorkspaceCapabilities = { toolbarOrder: false, workspaceLayout: false };
 export const defaultWorkspaceLayout: WorkspaceLayout = { version: 1, appView: 'cards', widgets: {} };
 export const workspaceEditingEvent = 'orbis-workspace-editing';
+export const workspaceWidgetHeight = { min: 240, max: 960 } as const;
 
 export function workspaceCapabilities(header: string | null): WorkspaceCapabilities {
   const capabilities = new Set(header?.split(/\s+/));
@@ -43,8 +44,8 @@ export function validWorkspaceLayout(value: unknown): value is WorkspaceLayout {
         Object.keys(size).every((key) => ['columns', 'height'].includes(key)) &&
         [2, 3, 4].includes(size.columns) &&
         Number.isInteger(size.height) &&
-        size.height >= 240 &&
-        size.height <= 960,
+        size.height >= workspaceWidgetHeight.min &&
+        size.height <= workspaceWidgetHeight.max,
     )
   );
 }
@@ -57,7 +58,7 @@ export function workspaceWidgetSize(layout: WorkspaceLayout | undefined, id: str
 export function resizeWidget(size: WidgetSize, dx: number, dy: number, columnWidth: number): WidgetSize {
   return {
     columns: Math.max(2, Math.min(4, size.columns + Math.round(dx / Math.max(1, columnWidth)))) as WidgetSize['columns'],
-    height: Math.max(240, Math.min(960, Math.round((size.height + dy) / 40) * 40)),
+    height: Math.max(workspaceWidgetHeight.min, Math.min(workspaceWidgetHeight.max, Math.round((size.height + dy) / 40) * 40)),
   };
 }
 type CompatiblePreferencePayload<T extends { workspace: { layout?: WorkspaceLayout } }> = Omit<T, 'toolbarOrder' | 'workspace'> & {
@@ -72,4 +73,11 @@ export function preferencePayload<T extends { toolbarOrder?: ToolbarActionId[]; 
   if (!capabilities.toolbarOrder) delete next.toolbarOrder;
   if (!capabilities.workspaceLayout) delete next.workspace.layout;
   return next as CompatiblePreferencePayload<T>;
+}
+
+export function mergeWorkspaceOrder<T>(saved: readonly T[], movable: readonly T[], proposed: readonly T[]): T[] {
+  const positions = new Set(movable);
+  const order = new Set([...proposed.filter((id) => positions.has(id)), ...movable]);
+  const reordered = order.values();
+  return saved.map((id) => (positions.has(id) ? (reordered.next().value ?? id) : id));
 }

@@ -4,6 +4,7 @@ import * as ContextMenuPrimitive from '@radix-ui/react-context-menu';
 import { IconCheck, IconChevronRight, IconCircle } from '@tabler/icons-react';
 import clsx from 'clsx';
 import type * as React from 'react';
+import '../dropdown.css';
 
 const ContextMenu = ContextMenuPrimitive.Root;
 
@@ -25,19 +26,19 @@ const ContextMenuSubTrigger = ({
 }: React.ComponentProps<typeof ContextMenuPrimitive.SubTrigger> & {
   inset?: boolean;
 }) => (
-  <ContextMenuPrimitive.SubTrigger className={clsx('', inset && 'ps-2', className)} {...props}>
+  <ContextMenuPrimitive.SubTrigger className={clsx('dropdown-item orbis-menu-item', inset && 'ps-2', className)} {...props}>
     {children}
-    <IconChevronRight className="" />
+    <IconChevronRight className="orbis-menu-sub-chevron" aria-hidden="true" />
   </ContextMenuPrimitive.SubTrigger>
 );
 
 const ContextMenuSubContent = ({ className, ...props }: React.ComponentProps<typeof ContextMenuPrimitive.SubContent>) => (
-  <ContextMenuPrimitive.SubContent className={clsx('', className)} {...props} />
+  <ContextMenuPrimitive.SubContent className={clsx('orbis-dropdown-menu', className)} {...props} />
 );
 
 const ContextMenuContent = ({ className, ...props }: React.ComponentProps<typeof ContextMenuPrimitive.Content>) => (
   <ContextMenuPrimitive.Portal>
-    <ContextMenuPrimitive.Content className={clsx('dropdown-menu dropdown-menu-demo', className)} style={{ display: 'block' }} {...props} />
+    <ContextMenuPrimitive.Content className={clsx('orbis-dropdown-menu', className)} {...props} />
   </ContextMenuPrimitive.Portal>
 );
 
@@ -47,7 +48,7 @@ const ContextMenuItem = ({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Item> & {
   inset?: boolean;
-}) => <ContextMenuPrimitive.Item className={clsx('dropdown-item cursor-pointer', inset && 'ps-2', className)} {...props} />;
+}) => <ContextMenuPrimitive.Item className={clsx('dropdown-item orbis-menu-item cursor-pointer', inset && 'ps-2', className)} {...props} />;
 
 const ContextMenuCheckboxItem = ({ className, children, checked, ...props }: React.ComponentProps<typeof ContextMenuPrimitive.CheckboxItem>) => (
   <ContextMenuPrimitive.CheckboxItem className={clsx('', className)} checked={checked} {...props}>
@@ -80,7 +81,7 @@ const ContextMenuLabel = ({
 }) => <ContextMenuPrimitive.Label className={clsx('', { 'ps-2': inset }, className)} {...props} />;
 
 const ContextMenuSeparator = ({ className, ...props }: React.ComponentProps<typeof ContextMenuPrimitive.Separator>) => (
-  <ContextMenuPrimitive.Separator className={clsx('', className)} {...props} />
+  <ContextMenuPrimitive.Separator className={clsx('dropdown-divider', className)} {...props} />
 );
 
 const ContextMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {

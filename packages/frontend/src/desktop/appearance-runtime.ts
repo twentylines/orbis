@@ -92,6 +92,7 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
     'glass-chrome-blur',
     'tray-chrome-filter',
     'menu-surface',
+    'menu-filter',
     'menu-muted',
     'theme-ink',
     'theme-tint',
@@ -249,13 +250,12 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
     set('tray-chrome-filter', 'var(--desktop-glass-chrome-filter)');
   }
   const chromeBackgrounds = controlBackgrounds(tintedChrome, brightness, highlight);
-  const menuSurface: Rgba = darkChrome
-    ? tintedChrome
-    : ([...tintedSurface.slice(0, 3), solid ? 1 : Math.max(0.74, Math.min(0.78, tintedSurface[3]))] as Rgba);
+  // Popups need their own glass: dark navigation's brightness guard erases
+  // backdrop detail, and Bar and Dock controls should not disable menu blur.
+  const menuSurface = [...tintedSurface.slice(0, 3), solid ? 1 : Math.max(0.74, Math.min(0.78, tintedSurface[3]))] as Rgba;
   set('menu-surface', css(menuSurface));
-  const menuBackgrounds = darkChrome
-    ? [menuSurface, mix(menuSurface, preset, 0.2)].flatMap((background) => backgrounds(background, 255 * brightness))
-    : [menuSurface, mix(menuSurface, preset, 0.2), mix(surface, paneInk, 0.12)].flatMap((background) => backgrounds(background));
+  set('menu-filter', solid ? 'none' : 'blur(24px) saturate(1.2)');
+  const menuBackgrounds = [menuSurface, mix(menuSurface, preset, 0.2), mix(surface, paneInk, 0.12)].flatMap((background) => backgrounds(background));
   set('menu-muted', css(readable(base('muted'), menuBackgrounds, dark)));
   if (materialChanged) {
     set('surface', css(tintedSurface));

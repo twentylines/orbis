@@ -8,12 +8,13 @@ import { appDestinations } from '@/desktop/app-destinations';
 import { appOpeningMode, primaryAppAddress } from '@/desktop/app-opening';
 import { useBlockedAppEmbeds } from '@/desktop/app-embedding';
 import { useWallpaperText } from '@/desktop/wallpaper-text';
+import { useDesktopWindows } from '@/desktop/window-viewport';
 import { AppTabIndicator } from '@/desktop/app-tab-indicator';
 import { useAppContext } from '@/context/app-context';
 import { useTasks, taskIsActive, taskLabels, taskStates } from '@/desktop/tasks';
 import { IconApps, IconGripVertical, IconX, IconSettings, IconDownload, IconPencil, IconCheck } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, lazy, Suspense } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import './dashboard.css';
 import { useCluster } from '@/desktop/cluster';
@@ -23,10 +24,10 @@ import { homeApps } from '@/desktop/workspace-apps';
 import { useWorkspaceSortable } from '@/desktop/workspace-sortable';
 import { prefersReducedMotion } from '@/desktop/motion-setting';
 import { sectionMotionEasing } from '@/desktop/section-motion-geometry';
-import { defaultWorkspaceLayout, toolbarActionIds, workspaceEditingEvent } from '@/desktop/workspace-layout';
+import { defaultWorkspaceLayout, mergeWorkspaceOrder, toolbarActionIds, workspaceEditingEvent } from '@/desktop/workspace-layout';
 import './dashboard-editing.css';
 import { ApplicationResize } from './application-resize';
-const DashboardEditing = lazy(() => import('./dashboard-editing'));
+import { DashboardEditing, ApplicationEditing } from './dashboard-editing';
 
 import { HomeSystemStatus } from '../components/home-system-status';
 import { HomeAttention } from '../components/home-attention';
@@ -65,7 +66,8 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
     }
   });
   const heading = useRef<HTMLHeadingElement>(null);
-  const editorMenu = useRef<HTMLDetailsElement>(null);
+  const workspaceElement = useRef<HTMLDivElement>(null);
+  const editToggle = useRef<HTMLButtonElement>(null);
   const headingText = useWallpaperText<HTMLHeadingElement>();
   const setHeading = useCallback(
     (element: HTMLHeadingElement | null) => {
@@ -130,87 +132,9 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
     };
   }, [editing]);
   const hasEdited = useRef(false);
-  useEffect(() => {
-    if (!editing) return;
-    let pointerWithinMenu = false;
-    let pointerRelease: number | null = null;
-    const clearPointer = () => {
-      pointerWithinMenu = false;
-      if (pointerRelease !== null) cancelAnimationFrame(pointerRelease);
-      pointerRelease = null;
-    };
-    const closeUnfocused = () => {
-      if (pointerWithinMenu) return;
-      const menu = editorMenu.current;
-      if (menu?.open && !menu.contains(document.activeElement)) menu.open = false;
-    };
-    const close = (event: globalThis.PointerEvent) => {
-      clearPointer();
-      const menu = editorMenu.current;
-      pointerWithinMenu = Boolean(menu && event.target instanceof Node && menu.contains(event.target));
-      if (menu?.open && !pointerWithinMenu) menu.open = false;
-    };
-    // A label can focus the page before forwarding its click to the switch.
-    const clicked = () => {
-      if (!pointerWithinMenu || pointerRelease !== null) return;
-      pointerRelease = requestAnimationFrame(() => {
-        pointerRelease = null;
-        pointerWithinMenu = false;
-        closeUnfocused();
-      });
-    };
-    document.addEventListener('pointerdown', close, true);
-    document.addEventListener('click', clicked, true);
-    document.addEventListener('focusin', closeUnfocused);
-    document.addEventListener('keydown', clearPointer, true);
-    document.addEventListener('pointercancel', clearPointer, true);
-    return () => {
-      document.removeEventListener('pointerdown', close, true);
-      document.removeEventListener('click', clicked, true);
-      document.removeEventListener('focusin', closeUnfocused);
-      document.removeEventListener('keydown', clearPointer, true);
-      document.removeEventListener('pointercancel', clearPointer, true);
-      clearPointer();
-    };
-  }, [editing]);
-  useLayoutEffect(() => {
-    if (!editing) return;
-    let headings: HTMLElement[] = [];
-    const align = () => {
-      for (const title of headings) {
-        const widget = title.closest<HTMLElement>('.workspace-widget');
-        if (!widget) continue;
-        const box = title.getBoundingClientRect();
-        const bounds = widget.getBoundingClientRect();
-        const gutter = box.left - bounds.left;
-        widget.style.setProperty('--workspace-editbar-top', `${box.top - bounds.top + box.height / 2 - 22}px`);
-        widget.style.setProperty('--workspace-grip-left', `${Math.max(0, gutter - 18)}px`);
-        widget.style.setProperty('--workspace-grip-size', `${Math.max(8, Math.min(12, gutter - 4))}px`);
-      }
-    };
-    const observer = new ResizeObserver(align);
-    const bind = () => {
-      observer.disconnect();
-      headings = Array.from(document.querySelectorAll<HTMLElement>('.workspace-widget-content')).flatMap((content) => {
-        const title = content.querySelector<HTMLElement>('h2, h3');
-        return title ? [title] : [];
-      });
-      align();
-      for (const title of headings) observer.observe(title);
-    };
-    bind();
-    const structure = new MutationObserver(bind);
-    const grid = document.querySelector('.workspace-grid');
-    if (grid) structure.observe(grid, { childList: true, subtree: true });
-    return () => {
-      structure.disconnect();
-      observer.disconnect();
-      for (const title of headings) {
-        const style = title.closest<HTMLElement>('.workspace-widget')?.style;
-        for (const name of ['--workspace-editbar-top', '--workspace-grip-left', '--workspace-grip-size']) style?.removeProperty(name);
-      }
-    };
-  }, [editing]);
+  const [appSearch, setAppSearch] = useState('');
+  const [appChooserOpen, setAppChooserOpen] = useState(false);
+  const roomy = useDesktopWindows();
   const [saveRequested, setSaveRequested] = useState(false);
   const [appRegion, setAppRegion] = useState<HTMLElement | null>(null);
   const [scrollApps, setScrollApps] = useState(false);
@@ -252,27 +176,43 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
 
   const saveWorkspace = (next: WorkspacePreferences) => update({ workspace: next });
   const unpinApp = (urn: string) => {
+    const position = appSort.order.indexOf(urn);
     saveWorkspace({ ...workspace, pinnedApps: workspace.pinnedApps.filter((pin) => pin !== urn) });
     requestAnimationFrame(() => {
-      const entries = Array.from(document.querySelectorAll<HTMLElement>('.workspace-app-entry'));
-      const surviving = entries.find((entry) => entry.dataset.sortableId === urn) ?? entries[0];
+      const entries = Array.from(workspaceElement.current?.querySelectorAll<HTMLElement>('.workspace-app-entry') ?? []);
+      const surviving = entries.find((entry) => entry.dataset.sortableId === urn) ?? entries[Math.min(position, entries.length - 1)];
       (
-        surviving?.querySelector<HTMLButtonElement>('.workspace-app-grip') ?? document.querySelector<HTMLElement>('.workspace-app-chooser summary')
+        surviving?.querySelector<HTMLButtonElement>('.workspace-app-grip') ??
+        workspaceElement.current?.querySelector<HTMLElement>('.workspace-app-chooser summary')
       )?.focus({ preventScroll: true });
     });
   };
   const hideWidget = (id: WidgetId) => {
-    const next = workspace.order.find((widget) => widget !== id && !workspace.hidden.includes(widget));
+    const position = orderedWidgets.indexOf(id);
+    const next = orderedWidgets[position + 1] ?? orderedWidgets[position - 1] ?? orderedWidgets[0];
     saveWorkspace({ ...workspace, hidden: [...workspace.hidden, id] });
     requestAnimationFrame(() => {
-      const target = next ? document.querySelector<HTMLButtonElement>(`.workspace-widget[data-sortable-id="${next}"] .workspace-drag-grip`) : null;
-      (target ?? document.querySelector<HTMLButtonElement>('.workspace-edit-toggle'))?.focus({ preventScroll: true });
+      const target = next
+        ? workspaceElement.current?.querySelector<HTMLButtonElement>(`.workspace-widget[data-sortable-id="${next}"] .workspace-drag-grip`)
+        : null;
+      (target ?? workspaceElement.current?.querySelector<HTMLElement>('.workspace-widget-chooser summary') ?? editToggle.current)?.focus({
+        preventScroll: true,
+      });
     });
   };
 
-  const widgetSort = useWorkspaceSortable(workspace.order, (order) => saveWorkspace({ ...workspace, order }), editing, 'swap');
-  const [primaryWidget = 'applications', sideWidget = 'activity', ...auxiliaryWidgets] = widgetSort.order;
-  const mainWidgetsVisible = [primaryWidget, ...auxiliaryWidgets].some((id) => !workspace.hidden.includes(id));
+  const movableWidgets = workspace.order.filter((id) => !workspace.hidden.includes(id) && (!roomy || id !== 'activity'));
+  const widgetSort = useWorkspaceSortable(
+    movableWidgets,
+    (order, moved) => {
+      if (movableWidgets.includes(moved)) saveWorkspace({ ...workspace, order: mergeWorkspaceOrder(workspace.order, movableWidgets, order) });
+    },
+    editing,
+    'swap',
+  );
+  const orderedWidgets = mergeWorkspaceOrder(movableWidgets, movableWidgets, widgetSort.order);
+  const mainWidgets = orderedWidgets.filter((id) => id !== 'activity');
+  const statusVisible = !workspace.hidden.includes('activity');
   const visibleAppIds = visibleInstalled.map(({ info }) => info.urn);
   const visibleAppById = new Map(visibleInstalled.map((entry) => [entry.info.urn, entry]));
   const appSort = useWorkspaceSortable(
@@ -292,6 +232,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
     if (syncState === 'saved' || syncState === 'local') {
       changeEditing(false);
       setSaveRequested(false);
+      editToggle.current?.focus({ preventScroll: true });
     } else if (syncState === 'error') setSaveRequested(false);
   }, [saveRequested, syncState, changeEditing]);
 
@@ -299,6 +240,9 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
     if (saveRequested) return;
     if (!editing) {
       hasEdited.current = true;
+      setAppSearch('');
+      setAppChooserOpen(false);
+      editToggle.current?.focus({ preventScroll: true });
       return changeEditing(true);
     }
     setSaveRequested(true);
@@ -331,10 +275,27 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
               </p>
             ) : null}
           </div>
-          <div className="workspace-home-app-actions">
-            <Link to="/apps">View all</Link>
-          </div>
+          {editing ? null : (
+            <div className="workspace-home-app-actions">
+              <Link to="/apps">View all</Link>
+            </div>
+          )}
         </div>
+        {editing ? (
+          <ApplicationEditing
+            workspace={workspace}
+            capabilities={workspaceCapabilities}
+            apps={installed}
+            appsReady={apps.isSuccess}
+            appsFailed={apps.isError}
+            search={appSearch}
+            setSearch={setAppSearch}
+            chooserOpen={appChooserOpen}
+            setChooserOpen={setAppChooserOpen}
+            canResize={roomy}
+            save={saveWorkspace}
+          />
+        ) : null}
         {apps.isError ? (
           <div className="workspace-message" role="alert">
             Applications could not be loaded.{' '}
@@ -403,12 +364,20 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
                 return (
                   <div className="workspace-app-entry" key={info.urn} {...appSort.itemProps(info.urn)}>
                     {editing ? (
-                      <button className="workspace-drag-grip workspace-app-grip" type="button" {...appSort.gripProps(info.urn, info.name)}>
-                        <IconGripVertical size={18} aria-hidden="true" />
-                      </button>
+                      <div className="workspace-app-editbar">
+                        <button className="workspace-drag-grip workspace-app-grip" type="button" {...appSort.gripProps(info.urn, info.name)}>
+                          <IconGripVertical size={18} aria-hidden="true" />
+                        </button>
+                        {workspace.pinnedApps.includes(info.urn) ? (
+                          <button type="button" className="workspace-app-unpin" aria-label={`Unpin ${info.name}`} onClick={() => unpinApp(info.urn)}>
+                            <IconX size={18} aria-hidden="true" />
+                          </button>
+                        ) : null}
+                      </div>
                     ) : null}
                     <Link
                       draggable={false}
+                      tabIndex={editing ? -1 : undefined}
                       to={launchUrl ?? `/apps/${storeId}/${appId}`}
                       target={launchUrl ? '_blank' : undefined}
                       rel={launchUrl ? 'noopener noreferrer' : undefined}
@@ -441,11 +410,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
                         <DockerHealth summary appUrn={info.urn} telemetry={containers.data} stale={containers.isError} />
                       </span>
                     </Link>
-                    {editing && workspace.pinnedApps.includes(info.urn) ? (
-                      <button type="button" className="workspace-app-unpin" aria-label={`Unpin ${info.name}`} onClick={() => unpinApp(info.urn)}>
-                        <IconX size={17} aria-hidden="true" />
-                      </button>
-                    ) : (
+                    {editing ? null : (
                       <Link
                         className="workspace-app-manage"
                         to={`/apps/${storeId}/${appId}`}
@@ -519,8 +484,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
     hasEdited.current = true;
     changeEditing(false);
     setSaveRequested(false);
-    if (editorMenu.current) editorMenu.current.open = false;
-    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.workspace-edit-toggle')?.focus({ preventScroll: true }));
+    editToggle.current?.focus({ preventScroll: true });
     update({
       toolbarOrder: [...toolbarActionIds],
       workspace: {
@@ -538,27 +502,28 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
       key={id}
       style={
         {
-          '--workspace-widget-order': widgetSort.order.indexOf(id),
           ...(layout.widgets[id] ? { '--workspace-widget-height': `${layout.widgets[id]?.height}px` } : {}),
         } as CSSProperties
       }
-      data-workspace-slot={widgetSort.order.indexOf(id)}
-      {...widgetSort.itemProps(id)}
+      data-workspace-slot={workspace.order.indexOf(id)}
+      {...(movableWidgets.includes(id) ? widgetSort.itemProps(id) : {})}
     >
       {editing ? (
         <div className="workspace-widget-editbar">
-          <button className="workspace-drag-grip" type="button" {...widgetSort.gripProps(id, labels[id])}>
-            <IconGripVertical size={18} aria-hidden="true" />
-            <span>{labels[id]}</span>
-          </button>
+          {movableWidgets.includes(id) ? (
+            <button className="workspace-drag-grip" type="button" {...widgetSort.gripProps(id, labels[id])}>
+              <IconGripVertical size={18} aria-hidden="true" />
+            </button>
+          ) : null}
           <button className="workspace-widget-hide" type="button" aria-label={`Hide ${labels[id]}`} onClick={() => hideWidget(id)}>
             <IconX size={17} aria-hidden="true" />
           </button>
         </div>
       ) : null}
       <div className="workspace-widget-content">{widgets[id]}</div>
-      {editing && id === 'applications' && workspaceCapabilities?.workspaceLayout ? (
+      {editing && roomy && id === 'applications' && workspaceCapabilities?.workspaceLayout && !appChooserOpen ? (
         <ApplicationResize
+          savedHeight={layout.widgets.applications?.height}
           save={(height) =>
             saveWorkspace({
               ...workspace,
@@ -573,6 +538,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   return (
     <div
       className="workspace"
+      ref={workspaceElement}
       data-startup-ready={!apps.isPending}
       data-editing={editing || undefined}
       data-arranged={hasEdited.current || undefined}
@@ -587,48 +553,15 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
             </button>
           ) : null}
           <div className="workspace-edit-controls">
-            {editing ? (
-              <details
-                className="workspace-editor-menu"
-                ref={editorMenu}
-                onKeyDown={(event) => {
-                  const menu = event.currentTarget;
-                  if (event.key !== 'Escape' || !menu.open) return;
-                  const focused = event.target instanceof Element ? event.target.closest<HTMLDetailsElement>('details[open]') : null;
-                  const nested = focused && focused !== menu ? focused : [...menu.querySelectorAll<HTMLDetailsElement>('details[open]')].at(-1);
-                  const opened = nested ?? menu;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  opened.open = false;
-                  opened.querySelector('summary')?.focus();
-                }}
-              >
-                <summary title="Layout options">
-                  <IconSettings size={18} aria-hidden="true" />
-                  <span className="visually-hidden">Layout options</span>
-                </summary>
-                <div className="workspace-editor-popover">
-                  <Suspense fallback={<p>Loading workspace controls…</p>}>
-                    <DashboardEditing
-                      workspace={workspace}
-                      capabilities={workspaceCapabilities}
-                      apps={installed}
-                      appsReady={apps.isSuccess}
-                      appsFailed={apps.isError}
-                      save={saveWorkspace}
-                      syncState={syncState}
-                    />
-                  </Suspense>
-                </div>
-              </details>
-            ) : null}
             <button
               type="button"
               className="workspace-edit-toggle"
               title={editing ? (saveRequested ? 'Saving workspace' : 'Save workspace') : 'Edit workspace'}
               aria-label={editing ? (saveRequested ? 'Saving workspace' : 'Save workspace') : 'Edit workspace'}
               aria-pressed={editing}
-              aria-controls="workspace-grid"
+              ref={editToggle}
+              aria-expanded={editing}
+              aria-controls={editing ? 'workspace-editor workspace-grid' : 'workspace-grid'}
               onClick={finishEditing}
               aria-disabled={saveRequested}
               aria-busy={saveRequested}
@@ -638,6 +571,8 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
           </div>
         </div>
       </div>
+
+      {editing ? <DashboardEditing workspace={workspace} capabilities={workspaceCapabilities} save={saveWorkspace} syncState={syncState} /> : null}
 
       <span className="visually-hidden" id="workspace-move-help">
         Drag a widget or toolbar control to move it. Keyboard: Space, arrows, Enter. Escape cancels.
@@ -649,20 +584,15 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
         {appSort.announcement}
       </output>
 
-      <div
-        className="workspace-grid"
-        id="workspace-grid"
-        data-default-columns="true"
-        data-status-visible={!workspace.hidden.includes(sideWidget)}
-        data-main-visible={mainWidgetsVisible}
-      >
-        {mainWidgetsVisible ? (
-          <div className="workspace-main-stack">
-            {workspace.hidden.includes(primaryWidget) ? null : renderWidget(primaryWidget)}
-            <div className="workspace-auxiliary">{auxiliaryWidgets.filter((id) => !workspace.hidden.includes(id)).map(renderWidget)}</div>
-          </div>
-        ) : null}
-        {workspace.hidden.includes(sideWidget) ? null : renderWidget(sideWidget)}
+      <div className="workspace-grid" id="workspace-grid" data-side-status={roomy && statusVisible && mainWidgets.length > 0}>
+        {roomy ? (
+          <>
+            {mainWidgets.length ? <div className="workspace-main-stack">{mainWidgets.map(renderWidget)}</div> : null}
+            {statusVisible ? renderWidget('activity') : null}
+          </>
+        ) : (
+          orderedWidgets.map(renderWidget)
+        )}
         {workspace.hidden.length === workspace.order.length ? (
           <div className="workspace-all-hidden">
             <strong>All widgets are hidden</strong>

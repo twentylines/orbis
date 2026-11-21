@@ -1,10 +1,10 @@
 import { useCallback, useId, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
 import { IconArrowsVertical } from '@tabler/icons-react';
-import { resizeWidget } from '@/desktop/workspace-layout';
+import { resizeWidget, workspaceWidgetHeight } from '@/desktop/workspace-layout';
 
 type Drag = { widget: HTMLElement; control: HTMLButtonElement; pointerId: number; y: number; height: number; value: number; original: string };
 
-export function ApplicationResize({ save }: { save: (height: number) => void }) {
+export function ApplicationResize({ savedHeight, save }: { savedHeight?: number; save: (height: number) => void }) {
   const helpId = useId();
   const drag = useRef<Drag | null>(null);
   const saveRef = useRef(save);
@@ -50,7 +50,7 @@ export function ApplicationResize({ save }: { save: (height: number) => void }) 
           const widget = event.currentTarget.closest<HTMLElement>('.workspace-widget');
           const panel = widget?.querySelector<HTMLElement>('.workspace-apps');
           if (!widget || !panel) return;
-          const value = Math.round(panel.getBoundingClientRect().height);
+          const value = savedHeight ?? Math.round(panel.getBoundingClientRect().height);
           drag.current = {
             widget,
             control: event.currentTarget,
@@ -85,11 +85,16 @@ export function ApplicationResize({ save }: { save: (height: number) => void }) 
           if (!panel) return;
           event.preventDefault();
           event.stopPropagation();
-          const current = Math.round(panel.getBoundingClientRect().height);
-          const change = event.key === 'Home' ? -960 : event.key === 'End' ? 960 : event.key === 'ArrowUp' ? -40 : 40;
-          const next = resizeWidget({ columns: 4, height: current }, 0, change, 1).height;
+          const current = savedHeight ?? Math.round(panel.getBoundingClientRect().height);
+          const next =
+            event.key === 'Home'
+              ? workspaceWidgetHeight.min
+              : event.key === 'End'
+                ? workspaceWidgetHeight.max
+                : resizeWidget({ columns: 4, height: current }, 0, event.key === 'ArrowUp' ? -40 : 40, 1).height;
+          if ((event.key === 'ArrowDown' && next < current) || (event.key === 'ArrowUp' && next > current)) return;
           setHeight(next);
-          if (next !== current) saveRef.current(next);
+          if (next !== current || savedHeight === undefined) saveRef.current(next);
         }}
       >
         <IconArrowsVertical size={20} aria-hidden="true" />

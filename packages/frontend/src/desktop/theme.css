@@ -26,7 +26,7 @@
   --desktop-chrome-filter: var(--orbis-chrome-filter, var(--orbis-glass-filter, var(--desktop-default-chrome-filter, blur(16px) saturate(1.45))));
   --desktop-glass-chrome-blur: var(--orbis-glass-chrome-blur, var(--desktop-chrome-filter));
   --desktop-glass-chrome-filter: var(--desktop-glass-chrome-blur) var(--orbis-chrome-backdrop-brightness, );
-  --desktop-menu-filter: var(--desktop-chrome-filter);
+  --desktop-menu-filter: var(--orbis-menu-filter, blur(24px) saturate(1.2));
   --desktop-search-menu-filter: var(--desktop-glass-filter);
   --desktop-menu-surface: var(--orbis-menu-surface, var(--desktop-surface));
   --desktop-menu-muted: var(--orbis-menu-muted, var(--desktop-muted));
@@ -254,10 +254,9 @@ html[data-desktop-preset="blush"] {
 }
 
 html[data-desktop-mode="dark"] {
-  --desktop-menu-filter: var(--desktop-glass-chrome-filter);
   --desktop-search-menu-filter: var(--desktop-glass-chrome-filter);
   --desktop-default-chrome-filter: blur(14px) saturate(1.2);
-  --desktop-menu-surface: var(--desktop-chrome);
+  --desktop-menu-surface: var(--orbis-menu-surface, var(--desktop-surface));
   --desktop-menu-muted: var(--orbis-menu-muted, var(--desktop-chrome-ink));
   --desktop-status-background: linear-gradient(
     125deg,

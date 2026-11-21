@@ -143,6 +143,7 @@ describe('saved appearance applied before hydration and to live materials', () =
       '--orbis-focus',
       '--orbis-home-surface',
       '--orbis-info',
+      '--orbis-menu-filter',
       '--orbis-menu-muted',
       '--orbis-menu-surface',
       '--orbis-muted',
@@ -326,11 +327,11 @@ describe('saved appearance applied before hydration and to live materials', () =
         const { properties } = apply({}, { dark, tokens });
         const menu = rgb(properties.get('--orbis-menu-surface') ?? '');
         const chrome = rgb(properties.get('--orbis-chrome') ?? tokens['--desktop-base-chrome'] ?? '');
-        expect(menu[3]).toBe(dark ? 0.28 : 0.78);
+        expect(menu[3]).toBe(0.78);
         expect(chrome[3]).toBeLessThanOrEqual(dark ? 0.28 : 0.8);
         if (!dark) expect(properties.has('--orbis-chrome-backdrop-brightness')).toBe(false);
         for (const wallpaper of [0, 255]) {
-          const behind = composite(menu, dark ? chromeBackdrop(properties, wallpaper) : wallpaper);
+          const behind = composite(menu, wallpaper);
           expect(contrast(rgb(tokens['--desktop-ink'] ?? ''), behind)).toBeGreaterThanOrEqual(4.5);
           expect(contrast(rgb(properties.get('--orbis-menu-muted') ?? ''), behind)).toBeGreaterThanOrEqual(4.5);
           const selected = composite(chrome, chromeBackdrop(properties, wallpaper)).map((channel) => channel * 0.8 + 255 * 0.2);
@@ -407,8 +408,18 @@ describe('saved appearance applied before hydration and to live materials', () =
       const { properties } = apply(options, { dark: true });
       expect(rgb(properties.get('--orbis-menu-surface') ?? '')[3]).toBe(1);
       expect(properties.get('--orbis-chrome-filter')).toBe('none');
+      expect(properties.get('--orbis-menu-filter')).toBe('none');
     }
     expect(rgb(apply({ chromeOpacity: 100 }).properties.get('--orbis-chrome') ?? '')[3]).toBe(1);
+  });
+  test('dropdown blur and translucency are independent of Bar and Dock opacity and blur', () => {
+    for (const dark of [false, true])
+      for (const chromeOpacity of [0, 28, 100])
+        for (const chromeBlur of [0, 64]) {
+          const { properties } = apply({ chromeOpacity, chromeBlur }, { dark });
+          expect(properties.get('--orbis-menu-filter')).toBe('blur(24px) saturate(1.2)');
+          expect(rgb(properties.get('--orbis-menu-surface') ?? '')[3]).toBe(0.78);
+        }
   });
   test.each([
     ['#fdf7faf7', [253, 247, 250]],
@@ -486,9 +497,7 @@ test('menu labels stay readable on tinted cards and selected menu items across e
       const tint = rgb(tokens['--desktop-preset-tint'] ?? '');
       for (const wallpaper of [0, 255])
         for (const amount of [0, 0.07, 0.16, 0.2]) {
-          const background = composite(menu, dark ? chromeBackdrop(properties, wallpaper) : wallpaper).map(
-            (value, index) => value * (1 - amount) + (tint[index] ?? 0) * amount,
-          );
+          const background = composite(menu, wallpaper).map((value, index) => value * (1 - amount) + (tint[index] ?? 0) * amount);
           expect(contrast(muted, background)).toBeGreaterThanOrEqual(4.5);
         }
     }
@@ -554,7 +563,7 @@ test('legacy chrome stays in Dark on first paint and explicit mode profiles reta
   expect(rgb(light.get('--orbis-chrome') ?? '')[3]).not.toBe(0.1);
   expect(light.has('--orbis-chrome-filter')).toBe(false);
   expect(rgb(dark.get('--orbis-chrome') ?? '')[3]).toBe(0.1);
-  expect(rgb(dark.get('--orbis-menu-surface') ?? '')[3]).toBe(0.1);
+  expect(rgb(dark.get('--orbis-menu-surface') ?? '')[3]).toBe(0.78);
   expect(dark.get('--orbis-chrome-filter')).toBe('blur(7px) saturate(1.2)');
   expect(dark.get('--orbis-glass-filter')).toBe('blur(40px) saturate(1.2)');
   expect(chromeBackdrop(dark, 1)).toBeGreaterThan(0.22);
@@ -569,7 +578,9 @@ test('legacy chrome stays in Dark on first paint and explicit mode profiles reta
   expect(rgb(firstPaint(split, false).get('--orbis-chrome') ?? '')[3]).toBe(0.85);
   expect(firstPaint(split, false).get('--orbis-chrome-filter')).toBe('blur(18px) saturate(1.2)');
   const zero = firstPaint(split, true);
-  for (const token of ['chrome', 'menu-surface']) expect(rgb(zero.get(`--orbis-${token}`) ?? '')[3]).toBe(0);
+  expect(rgb(zero.get('--orbis-chrome') ?? '')[3]).toBe(0);
+  expect(rgb(zero.get('--orbis-menu-surface') ?? '')[3]).toBe(0.78);
+  expect(zero.get('--orbis-menu-filter')).toBe('blur(24px) saturate(1.2)');
   expect(zero.get('--orbis-chrome-filter')).toBe('none');
   expect(zero.get('--orbis-glass-chrome-blur')).toBe('blur(0px)');
   expect(zero.get('--orbis-glass-filter')).toBe('blur(36px) saturate(1.2)');
