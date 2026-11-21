@@ -70,7 +70,7 @@ REQUIRED |= {
     "scripts/orbis-host-core-capture-abort.py", "scripts/orbis-host-core-capture-empty-abort.py", "scripts/orbis-host-core-capture-unused-abort.py",
 }
 
-REQUIRED |= {"scripts/orbis-sentinel-install.py"}
+REQUIRED |= {"scripts/orbis-sentinel-install.py", "scripts/orbis-host-docker-socket-recovery.py"}
 
 BUILD_ONLY = {"scripts/orbis-installer-bundle.py", "scripts/orbis-migration-fingerprint.py",
               "scripts/orbis-release-metadata.py", "scripts/orbis-release-watermark.py"}

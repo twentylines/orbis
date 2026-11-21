@@ -130,6 +130,7 @@ SCRIPTS = (
     "orbis-install-restore.py",
     "orbis-install-transaction.py",
     "orbis-host-service.py",
+    "orbis-host-docker-socket-recovery.py",
     "orbis-host-sentinel-observer.py",
     "orbis-host-core-capture-progress.py",
     "orbis-host-packages.py",

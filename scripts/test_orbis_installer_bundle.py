@@ -31,6 +31,25 @@ class BundleTests(unittest.TestCase):
         self.manifest = json.loads(self.assets[BUILD.MANIFEST])
         self.identity = {"tag": self.release["tag"], "commit": self.release["commit"], "manifestSha256": BUILD.sha(self.assets[BUILD.MANIFEST])}
 
+    def test_socket_recovery_is_required_by_new_producers_without_changing_historical_readers(self):
+        name = 'scripts/orbis-host-docker-socket-recovery.py'
+        self.assertIn(name, BUILD.REQUIRED)
+        self.assertIn(name, self.manifest['files'])
+        self.assertEqual(BOOT.verify_files(self.assets[BUILD.ARCHIVE], self.manifest)[name], self.files[name])
+        with self.assertRaises(ValueError):
+            BUILD.build({key: value for key, value in self.files.items() if key != name}, self.release_bytes)
+        # Earlier v3 packages did not have this helper. Their original member
+        # requirements and ceiling still apply when reading their pinned bytes.
+        old_files = {key: value for key, value in self.files.items() if key != name}
+        old_archive = BUILD.archive(old_files)
+        old_manifest = {**self.manifest, 'schema': 'orbis.installer-bundle.v3',
+                        'files': BUILD.file_records(old_files), 'archiveBytes': len(old_archive),
+                        'archiveSha256': BUILD.sha(old_archive)}
+        body = json.dumps(old_manifest).encode()
+        identity = {**self.identity, 'manifestSha256': BUILD.sha(body)}
+        verified = BOOT.verify_manifest(body, identity)
+        self.assertEqual(BOOT.verify_files(old_archive, verified), old_files)
+
     def test_native_app_driver_dependencies_are_required_and_retained_in_bundle(self):
         names = {'orbis-host-retained-app-driver.py', 'orbis-host-retained-app-effects.py', 'orbis-host-app-create-intent.py',
                  'orbis-host-app-port-policy.py', 'orbis-host-app-port-observer.py', 'orbis-host-app-inet-diag.py',

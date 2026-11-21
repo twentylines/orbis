@@ -3566,14 +3566,27 @@ def serve(socket_path: Path, service: HostService) -> None:
     finally:
         os.umask(old_umask)
     server.service = service
+    recovery_stop = threading.Event()
+    recovery_thread = None
     try:
         os.chmod(socket_path, 0o600)
         service.resume_pending_retained_restore()
+        socket_recovery = load_script("orbis-host-docker-socket-recovery.py", "orbis_docker_socket_recovery")
+        docker_runtime = load_script("orbis-host-retained-restore-runtime.py", "orbis_socket_recovery_proc")
+        docker = socket_recovery.LocalDocker(service, docker_runtime.DockerRestoreRuntime.socket_in_root)
+        recovery = socket_recovery.Recovery(service, docker, package_locks, read_capture_job, write_private, boot_id)
+        recovery_thread = threading.Thread(
+            target=socket_recovery.supervise, name="orbis-docker-socket-recovery", daemon=True,
+            args=(recovery, recovery_stop, lambda result: print(f"Orbis Docker socket recovery: {result}", file=sys.stderr)))
+        recovery_thread.start()
         try:
             server.serve_forever(poll_interval=0.5)
         except KeyboardInterrupt:
             pass
     finally:
+        recovery_stop.set()
+        if recovery_thread is not None and recovery_thread.ident is not None:
+            recovery_thread.join(timeout=2)
         service.discovery.disable()
         server.server_close()
         socket_path.unlink(missing_ok=True)
