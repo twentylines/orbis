@@ -232,7 +232,7 @@ export function StartupSurface({
       ) : (!setupSpace || prepareWallpaper || landing || morph) && current ? (
         <WallpaperLayer choice={current} />
       ) : null}
-      {morph ? null : <InterstellarBackdrop />}
+      {morph ? null : <InterstellarBackdrop variant={setupSpace || setupSigningIn ? 'nebula' : 'starfield'} />}
       <div className="orbis-startup-content">
         <div
           ref={galaxy}

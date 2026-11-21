@@ -57,9 +57,6 @@
   padding: 8px 12px;
   margin-inline: -12px;
 }
-:where(.orbis-setup-stage) {
-  scrollbar-width: thin;
-}
 .orbis-setup-step {
   display: grid;
   gap: 28px;

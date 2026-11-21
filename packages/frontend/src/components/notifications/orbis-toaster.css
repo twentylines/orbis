@@ -15,7 +15,6 @@
   margin: -6px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
   scrollbar-color: var(--desktop-line) transparent;
   pointer-events: none;
   background: transparent;

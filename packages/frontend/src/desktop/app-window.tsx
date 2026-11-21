@@ -3,7 +3,7 @@ import {
   IconArrowsMinimize,
   IconArrowsMove,
   IconAlertTriangle,
-  IconBrowserPlus,
+  IconExternalLink,
   IconLayoutColumns,
   IconLayoutSidebar,
   IconLayoutSidebarRight,
@@ -559,7 +559,7 @@ export function AppWindow({
               title="Open in new tab and close this window"
               onClick={onTab}
             >
-              <IconBrowserPlus size={19} aria-hidden="true" />
+              <IconExternalLink size={19} aria-hidden="true" />
             </Button>
             <Button
               className="app-launcher-close"

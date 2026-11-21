@@ -8,7 +8,6 @@
   [data-pane-scroll-enhanced] > .pane-scroll-progress {
     position: sticky;
     z-index: 2;
-    display: block;
     inline-size: 0;
     block-size: 0;
     margin-inline-start: auto;

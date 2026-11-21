@@ -541,7 +541,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
       <AuthLayout
         busy={saving}
         setup
-        scene={<SetupSpace className="orbis-setup-space" />}
+        scene={<SetupSpace className="orbis-setup-space" variant="nebula" />}
         progress={
           <header className="orbis-setup-header">
             <div className="orbis-setup-progress-label">

@@ -76,3 +76,9 @@
 .desktop-auth-setup .desktop-auth-brand > .orbis-logo {
   flex: none;
 }
+
+.desktop-auth:not(.desktop-auth-setup)[data-auth-glass="true"] .card {
+  background: rgb(from var(--desktop-surface) r g b / var(--orbis-auth-opacity, 0.9));
+  backdrop-filter: var(--desktop-glass-filter, blur(24px));
+  -webkit-backdrop-filter: var(--desktop-glass-filter, blur(24px));
+}

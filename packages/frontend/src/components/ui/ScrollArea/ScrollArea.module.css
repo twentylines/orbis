@@ -16,7 +16,7 @@
 }
 
 .scrollbar {
-  display: flex;
+  display: none;
   touch-action: none;
   user-select: none;
   transition: color 0.3s ease;

@@ -6,13 +6,13 @@ import { DesktopWallpaper } from '@/desktop/wallpaper';
 import { InterstellarBackdrop } from '@/components/startup/interstellar-backdrop';
 import { RefractiveScene } from '@/components/startup/refractive-scene';
 import { useReducedTransparency } from '@/desktop/motion-preferences';
-import { useLayoutEffect, useRef, useSyncExternalStore, type PropsWithChildren, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useSyncExternalStore, type CSSProperties, type PropsWithChildren, type ReactNode } from 'react';
 import { prefersReducedMotion } from '@/desktop/motion-setting';
 import { hasActiveSessionMorph, noSessionMorph, subscribeSessionMorph } from '@/components/startup/session-morph';
 import './layout.css';
 
 export function authLayoutScene(setup: boolean, scene?: ReactNode) {
-  return scene ?? (setup ? <InterstellarBackdrop className="orbis-setup-space" /> : <DesktopWallpaper />);
+  return scene ?? (setup ? <InterstellarBackdrop className="orbis-setup-space" variant="nebula" /> : <DesktopWallpaper />);
 }
 
 function revealAuthFocus(target: EventTarget) {
@@ -81,19 +81,21 @@ export const AuthLayout = ({
   const { preferences, resolvedMode } = useDesktopPreferences();
   const reducedTransparency = useReducedTransparency();
   const material = desktopMaterialForMode(preferences.appearance, resolvedMode);
-  const glass =
-    setup &&
+  const glassAllowed =
     !preferences.appearance.lowEffects &&
     material.glassBlur !== 0 &&
     !(resolvedMode === 'dark' && preferences.appearance.oledDark) &&
     (material.transparency === 'glass' || (material.transparency === 'system' && !reducedTransparency));
+  const glass = setup && glassAllowed;
+  const signInOpacity = material.materialMode === 'custom' ? (material.surfaceOpacity ?? 90) / 100 : 0.9;
   return (
     <div
+      style={!setup && glassAllowed ? ({ '--orbis-auth-opacity': signInOpacity } as CSSProperties) : undefined}
       className={`page page-center desktop-auth orbis-theme${setup ? ' desktop-auth-setup' : ''}`}
       data-desktop-preset={preferences.preset}
       data-desktop-mode={resolvedMode}
       data-desktop-wallpaper={resolveWallpaperKey(preferences)}
-      data-auth-glass={glass || undefined}
+      data-auth-glass={glassAllowed || undefined}
       data-setup-saving={(setup && busy) || undefined}
       inert={!setup && morphing}
       onFocusCapture={(event) => revealAuthFocus(event.target)}

@@ -521,7 +521,6 @@
   .workspace-pin-order {
     max-height: 52dvh;
     overflow-y: auto;
-    scrollbar-width: thin;
     scrollbar-color: var(--desktop-line) transparent;
     scroll-padding-block: 8px;
     padding: 4px;
@@ -1327,7 +1326,6 @@
 .workspace-attention-apps {
   max-height: min(30rem, 42dvh);
   overflow-y: auto;
-  scrollbar-width: thin;
   scroll-padding-block: 4px;
 }
 .workspace-recent-tasks a:focus-visible,

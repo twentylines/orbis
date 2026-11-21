@@ -4,12 +4,12 @@ import { InterstellarBackdrop } from '@/components/startup/interstellar-backdrop
 import { DesktopWallpaper } from '@/desktop/wallpaper';
 import { authLayoutScene } from './layout';
 
-test('setup auth shares the startup image while ordinary auth keeps the selected wallpaper', () => {
+test('setup auth keeps its nebula while ordinary auth keeps the selected wallpaper', () => {
   const setup = authLayoutScene(true);
   expect(isValidElement(setup)).toBe(true);
   if (!isValidElement(setup)) throw new Error('Setup background missing');
   expect(setup.type).toBe(InterstellarBackdrop);
-  expect(setup.props).toMatchObject({ className: 'orbis-setup-space' });
+  expect(setup.props).toMatchObject({ className: 'orbis-setup-space', variant: 'nebula' });
 
   const login = authLayoutScene(false);
   expect(isValidElement(login)).toBe(true);

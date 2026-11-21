@@ -100,6 +100,7 @@ test('initial loading uses the animated interstellar scene and shared scanning l
   expect(loading).toContain('data-desktop-mode="light"');
   expect(loading).not.toContain('depth-travel');
   expect(loading).toContain('orbis-interstellar');
+  expect(loading).toContain('/startup/starfield-v1.svg');
   expect(loading).toContain('orbis-startup-scan');
   expect(loading).toContain('data-known="false"');
   expect(loading).not.toContain('loading-galaxy-particles');
@@ -280,7 +281,7 @@ test('the setup handoff keeps one space scene while the existing mark becomes th
   expect(circle).toContain('Signing in');
   expect(circle).toContain('data-variation="session"');
   expect(circle).toContain('orbis-startup-orbit');
-  expect(circle).toContain('/startup/interstellar-v2-1920.webp');
+  expect(circle).toContain('/startup/interstellar-v1.webp');
   expect(circle).not.toContain('orbis-startup-scan');
 });
 

@@ -334,7 +334,6 @@
 .tm-saved-grid[data-versioned-layout] > .tm-saved-widget[data-custom-size] {
   height: var(--tm-saved-widget-height);
   overflow: auto;
-  scrollbar-width: thin;
   scroll-padding: 12px;
 }
 .tm-historical-home[data-app-view="icons"] .tm-saved-apps {
