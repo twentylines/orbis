@@ -280,7 +280,7 @@ test('the setup handoff keeps one space scene while the existing mark becomes th
   expect(circle).toContain('Signing in');
   expect(circle).toContain('data-variation="session"');
   expect(circle).toContain('orbis-startup-orbit');
-  expect(circle).toContain('/startup/interstellar-v1.webp');
+  expect(circle).toContain('/startup/interstellar-v2-1920.webp');
   expect(circle).not.toContain('orbis-startup-scan');
 });
 

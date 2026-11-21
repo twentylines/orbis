@@ -4,6 +4,7 @@
   overflow: hidden;
   background: #05080e;
   pointer-events: none;
+  isolation: isolate;
 }
 .orbis-interstellar > img,
 .orbis-interstellar-near {
@@ -20,15 +21,16 @@
   animation: orbis-interstellar-clouds 28s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
   animation-delay: var(--orbis-interstellar-delay, 0ms);
   object-fit: cover;
+  filter: brightness(0.65);
   object-position: center;
 }
 .orbis-interstellar::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--desktop-base-accent, #5e7098) 26%, transparent);
+  background: color-mix(in srgb, var(--desktop-base-preset-tint, #88aaa0) 40%, #6f7b82);
   mix-blend-mode: color;
-  opacity: 0.65;
+  opacity: 0.85;
   transition: background-color 440ms ease;
 }
 @media (forced-colors: active) {
@@ -58,13 +60,43 @@
     transform: translate3d(-1.2%, 0.8%, 0) scale(1.18);
   }
 }
-:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"]) .orbis-interstellar > :is(img, svg) {
-  animation: none;
-  will-change: auto;
-}
 @media (prefers-reduced-motion: reduce) {
   .orbis-interstellar > :is(img, svg) {
     animation: none;
     will-change: auto;
   }
+}
+
+.orbis-interstellar-credit {
+  position: absolute;
+  z-index: 1;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  max-width: calc(100% - 32px);
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: rgb(5 8 14 / 65%);
+  color: #f4f6f8;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: end;
+  text-decoration: none;
+  pointer-events: auto;
+}
+.orbis-interstellar-credit span {
+  display: block;
+  font-size: 11px;
+}
+.orbis-interstellar-credit:is(:hover, :focus-visible) {
+  color: #fff;
+  text-decoration: underline;
+}
+@media (forced-colors: active) {
+  .orbis-interstellar-credit {
+    display: none;
+  }
+}
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"]) .orbis-interstellar > :is(img, svg) {
+  animation: none;
+  will-change: auto;
 }

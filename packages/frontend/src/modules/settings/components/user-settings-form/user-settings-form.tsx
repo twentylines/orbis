@@ -177,61 +177,61 @@ export const UserSettingsForm = (props: IProps) => {
   };
 
   return (
-    <form className="flex flex-col mt-2" onSubmit={(event) => event.preventDefault()}>
+    <form className="settings-general-form flex flex-col mt-2" onSubmit={(event) => event.preventDefault()}>
       <fieldset className="settings-save-fields">
-        <div className="settings-guest-dashboard mb-3">
-          <AutosavedSettingSwitch
-            id="setting-guestDashboard"
-            toggle={guestDashboard}
-            label={
-              <>
-                {t('SETTINGS_GENERAL_GUEST_DASHBOARD')}
-                <Tooltip className="tooltip" anchorSelect=".guest-dashboard-hint">
-                  {t('SETTINGS_GENERAL_GUEST_DASHBOARD_HINT')}
-                </Tooltip>
-                <span className={clsx('ms-1 form-help guest-dashboard-hint')}>?</span>
-              </>
-            }
-          />
-          {guestDashboardEnabled && guestDashboard.checked && (
-            <Button asChild variant="outline">
-              <Link to="/apps" aria-label="Manage shared applications">
-                Manage
-              </Link>
-            </Button>
-          )}
-        </div>
-        <div className="mb-3">
-          <AutosavedSettingSwitch
-            id="setting-allowErrorMonitoring"
-            className="mb-3"
-            toggle={toggles['error-monitoring']}
-            label={
-              <>
-                {t('SETTINGS_GENERAL_ALLOW_ERROR_MONITORING')}
-                <Tooltip className="tooltip" anchorSelect=".allow-errors-hint">
-                  {t('SETTINGS_GENERAL_ALLOW_ERROR_MONITORING_HINT')}
-                </Tooltip>
-                <span className={clsx('ms-1 form-help allow-errors-hint')}>?</span>
-              </>
-            }
-          />
-        </div>
-        <div className="mb-3">
-          <AutosavedSettingSwitch
-            id="setting-advancedSettings"
-            className="mb-3"
-            toggle={toggles['advanced-settings']}
-            label={
-              <>
-                {t('SETTINGS_GENERAL_ADVANCED_SETTINGS_TITLE')}
-                <Tooltip className="tooltip" anchorSelect=".advanced-settings-hint">
-                  {t('SETTINGS_GENERAL_ADVANCED_SETTINGS_SUBTITLE')}
-                </Tooltip>
-                <span className={clsx('ms-1 form-help advanced-settings-hint')}>?</span>
-              </>
-            }
-          />
+        <div className="settings-general-toggles">
+          <div className="settings-guest-dashboard">
+            <AutosavedSettingSwitch
+              id="setting-guestDashboard"
+              toggle={guestDashboard}
+              label={
+                <>
+                  {t('SETTINGS_GENERAL_GUEST_DASHBOARD')}
+                  <Tooltip className="tooltip" anchorSelect=".guest-dashboard-hint">
+                    {t('SETTINGS_GENERAL_GUEST_DASHBOARD_HINT')}
+                  </Tooltip>
+                  <span className={clsx('ms-1 form-help guest-dashboard-hint')}>?</span>
+                </>
+              }
+            />
+            {guestDashboardEnabled && guestDashboard.checked && (
+              <Button asChild variant="outline">
+                <Link to="/apps" aria-label="Manage shared applications">
+                  Manage
+                </Link>
+              </Button>
+            )}
+          </div>
+          <div>
+            <AutosavedSettingSwitch
+              id="setting-allowErrorMonitoring"
+              toggle={toggles['error-monitoring']}
+              label={
+                <>
+                  {t('SETTINGS_GENERAL_ALLOW_ERROR_MONITORING')}
+                  <Tooltip className="tooltip" anchorSelect=".allow-errors-hint">
+                    {t('SETTINGS_GENERAL_ALLOW_ERROR_MONITORING_HINT')}
+                  </Tooltip>
+                  <span className={clsx('ms-1 form-help allow-errors-hint')}>?</span>
+                </>
+              }
+            />
+          </div>
+          <div>
+            <AutosavedSettingSwitch
+              id="setting-advancedSettings"
+              toggle={toggles['advanced-settings']}
+              label={
+                <>
+                  {t('SETTINGS_GENERAL_ADVANCED_SETTINGS_TITLE')}
+                  <Tooltip className="tooltip" anchorSelect=".advanced-settings-hint">
+                    {t('SETTINGS_GENERAL_ADVANCED_SETTINGS_SUBTITLE')}
+                  </Tooltip>
+                  <span className={clsx('ms-1 form-help advanced-settings-hint')}>?</span>
+                </>
+              }
+            />
+          </div>
         </div>
         <div className="mb-3">
           <Input

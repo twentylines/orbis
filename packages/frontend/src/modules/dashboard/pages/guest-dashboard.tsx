@@ -20,7 +20,7 @@ const Tile = ({ data, localDomain, sslPort }: { data: GuestAppsDto['installed'][
 
   if (destinations.length === 0) {
     return (
-      <div className="col-sm-6 col-lg-4 app-link p-2 pt-0 pb-0 mb-0">
+      <div className="app-link guest-app-tile">
         {tile}
         <div className="guest-app-unavailable">No launch address available</div>
       </div>
@@ -30,7 +30,7 @@ const Tile = ({ data, localDomain, sslPort }: { data: GuestAppsDto['installed'][
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <button type="button" className="col-sm-6 col-lg-4 app-link guest-app-trigger p-2 pt-0 pb-0 mb-0" aria-label={`Open ${info.name}`}>
+        <button type="button" className="app-link guest-app-trigger" aria-label={`Open ${info.name}`}>
           {tile}
         </button>
       </DropdownMenuTrigger>
@@ -68,20 +68,30 @@ export const GuestDashboard = () => {
   const savedLinks = links.isSuccess ? links.data.links : [];
 
   return (
-    <BaseDashboardLayout header={<GuestHeader />} pageTitle={<h1 className="page-title guest-dashboard-title">Applications</h1>}>
-      <GuestListFeedback label="applications" pending={apps.isFetching && !apps.isSuccess} failed={apps.isError} retry={() => void apps.refetch()} />
-      <GuestListFeedback label="links" pending={links.isFetching && !links.isSuccess} failed={links.isError} retry={() => void links.refetch()} />
-      {apps.isSuccess && links.isSuccess && installed.length === 0 && savedLinks.length === 0 && (
-        <EmptyPage title="GUEST_DASHBOARD_NO_APPS" subtitle="GUEST_DASHBOARD_NO_APPS_SUBTITLE" />
-      )}
-      <div className="row row-cards">
-        {installed.map((appData) => (
-          <Tile key={appData.app.id} data={appData} localDomain={localDomain} sslPort={sslPort} />
-        ))}
-        {savedLinks.map((link) => (
-          <GuestLinkTile key={link.id} link={link} />
-        ))}
-      </div>
+    <BaseDashboardLayout header={<GuestHeader />} showPageHeader={false}>
+      <section className="guest-applications-card" aria-labelledby="guest-applications-title">
+        <h1 id="guest-applications-title" className="guest-dashboard-title">
+          Applications
+        </h1>
+        <GuestListFeedback
+          label="applications"
+          pending={apps.isFetching && !apps.isSuccess}
+          failed={apps.isError}
+          retry={() => void apps.refetch()}
+        />
+        <GuestListFeedback label="links" pending={links.isFetching && !links.isSuccess} failed={links.isError} retry={() => void links.refetch()} />
+        {apps.isSuccess && links.isSuccess && installed.length === 0 && savedLinks.length === 0 && (
+          <EmptyPage title="GUEST_DASHBOARD_NO_APPS" subtitle="GUEST_DASHBOARD_NO_APPS_SUBTITLE" />
+        )}
+        <div className="guest-applications-list">
+          {installed.map((appData) => (
+            <Tile key={appData.app.id} data={appData} localDomain={localDomain} sslPort={sslPort} />
+          ))}
+          {savedLinks.map((link) => (
+            <GuestLinkTile key={link.id} link={link} />
+          ))}
+        </div>
+      </section>
     </BaseDashboardLayout>
   );
 };

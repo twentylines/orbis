@@ -1,4 +1,4 @@
-const timing = { duration: 380, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'both' } as const;
+const timing = { duration: 420, easing: 'cubic-bezier(.22, .8, .22, 1)', fill: 'both' } as const;
 const parts = '.orbis-whole-word, .app-logo, .docker-health, .app-tile-notice, .app-tab-indicator, .badge';
 type Box = { x: number; y: number; width: number; height: number };
 type Tile = { element: HTMLElement; box: Box; parts: { element: HTMLElement; box: Box }[] };
@@ -77,4 +77,10 @@ export function previewPaneMotion(element: HTMLElement, opening: boolean, from?:
       : [from ?? { opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(24px)' }],
     timing,
   );
+}
+
+export function revealCatalogueAfterPreview(element: HTMLElement, previousWidth: number): Animation | null {
+  const hidden = Math.max(0, element.getBoundingClientRect().width - previousWidth);
+  if (hidden < 1) return null;
+  return element.animate([{ clipPath: `inset(0 ${hidden}px 0 0)` }, { clipPath: 'inset(0 0px 0 0)' }], timing);
 }

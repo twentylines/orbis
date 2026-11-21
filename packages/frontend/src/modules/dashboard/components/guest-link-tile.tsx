@@ -20,7 +20,7 @@ export function GuestLinkTile({ link }: GuestLinkTileProps) {
       type="button"
       aria-labelledby={`${id}-title`}
       aria-describedby={link.description ? `${id}-description` : undefined}
-      className="col-sm-6 col-lg-4 app-link p-2 pt-0 pb-0 mb-0 guest-link-tile-button"
+      className="app-link guest-link-tile-button"
       data-testid={`guest-link-tile-${link.title}`}
     >
       <div className="card card-sm card-link">

@@ -85,7 +85,7 @@ body:has(.orbis-theme) .app-library-controls button:focus-visible {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px 16px;
   margin-bottom: 16px;
 }
@@ -95,7 +95,7 @@ body:has(.orbis-theme) .app-library-controls button:focus-visible {
   max-width: 100%;
   margin: 0;
 }
-body:has(.orbis-theme) .app-library-meta :is(.app-library-add-actions > button, .desktop-batch-controls > button) {
+body:has(.orbis-theme) :is(.app-library-add-actions > button, .app-library-meta .desktop-batch-controls > button) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -156,7 +156,7 @@ body:has(.orbis-theme) .app-library-meta :is(.app-library-add-actions > button, 
   margin: 0;
 }
 .app-library-meta > .app-library-results {
-  margin-inline-end: auto;
+  margin-inline-end: 0;
 }
 .app-library-links {
   margin-top: 28px;
@@ -213,5 +213,25 @@ body:has(.orbis-theme) .app-library-meta :is(.app-library-add-actions > button, 
   body:has(.orbis-theme) .app-library-controls button:focus-visible {
     outline: 2px solid Highlight;
     outline-offset: -3px;
+  }
+}
+
+.desktop-route-page[data-route-section="apps"] .desktop-page-toolbar {
+  margin-inline-start: auto;
+}
+.app-library-control-label {
+  display: inline-block;
+  translate: 0 var(--library-label-y, 0px);
+}
+.app-library-label-baseline {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  vertical-align: baseline;
+}
+@media (max-width: 760px) {
+  .desktop-route-page[data-route-section="apps"] .desktop-page-toolbar {
+    flex: 1 1 100%;
+    margin-inline-start: 0;
   }
 }

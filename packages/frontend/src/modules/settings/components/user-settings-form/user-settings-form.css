@@ -35,3 +35,13 @@
 .settings-guest-dashboard .orbis-switch {
   margin-block: 0;
 }
+
+.settings-general-toggles {
+  display: grid;
+  gap: 12px;
+  margin-block-end: 20px;
+}
+.settings-general-toggles .orbis-switch.form-check {
+  min-height: 44px;
+  margin: 0;
+}

@@ -10,14 +10,14 @@ import type { LocalBackupSnapshot } from './system-backups.service';
 export const timeMachineBuiltinPhotographs = {
   frost: 'frost-v2.webp',
   graphite: 'graphite-v2.webp',
-  forest: 'forest-v3.webp',
+  forest: 'forest-v4.webp',
   stone: 'stone-v2.webp',
   ocean: 'ocean-v4.webp',
   blush: 'blush-v4.webp',
-  burgundy: 'burgundy-v1.webp',
+  burgundy: 'burgundy-v2.webp',
   amber: 'amber-v1.webp',
   rose: 'rose-v1.webp',
-  orange: 'orange-v1.webp',
+  orange: 'orange-v2.webp',
 } as const satisfies Record<DesktopColourPreset, string>;
 const legacy = { sandstone: 'stone', tidal: 'ocean', canopy: 'forest' } as const;
 const mimes = { png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp' } as const;

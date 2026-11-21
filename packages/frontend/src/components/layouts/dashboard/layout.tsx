@@ -17,6 +17,7 @@ import { SetupCaptureNotice } from '@/components/welcome/setup-capture-notice';
 import { DesktopWallpaper } from '@/desktop/wallpaper';
 import { DesktopTaskLink } from '@/desktop/desktop-task-link';
 import { CommandSearch } from '@/desktop/command-search';
+import { requestCatalogueReturn } from '@/desktop/catalogue-return';
 import { desktopNavigation as navigation } from '@/desktop/navigation';
 import { useSectionMotion } from '@/desktop/section-motion';
 import { useEscapeBack } from '@/desktop/use-escape-back';
@@ -320,6 +321,19 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                     <Link
                       key={path}
                       to={path}
+                      onClick={(event) => {
+                        if (
+                          event.defaultPrevented ||
+                          event.button !== 0 ||
+                          event.metaKey ||
+                          event.ctrlKey ||
+                          event.shiftKey ||
+                          event.altKey ||
+                          current?.path !== path
+                        )
+                          return;
+                        if (requestCatalogueReturn(path)) event.preventDefault();
+                      }}
                       prefetch={preloadNavigation ? 'render' : 'intent'}
                       onPointerEnter={() => warmNavigation(path)}
                       onTouchStart={() => warmNavigation(path)}

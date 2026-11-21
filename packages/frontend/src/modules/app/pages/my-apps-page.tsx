@@ -1,4 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router';
+import { RouteHeaderToolbar } from '@/desktop/route-header-toolbar';
 import { useEffect, useId, useRef } from 'react';
 import { getInstalledAppsOptions, getLinksOptions } from '@/api-client/@tanstack/react-query.gen';
 import { EmptyPage } from '@/components/empty-page/empty-page';
@@ -158,12 +159,8 @@ function LocalApps() {
 
   const library = (
     <div key="library" className="orbis-managed-apps">
-      <AppLibraryControls filters={filters} change={change} categories={installed.flatMap(({ info }) => info.categories ?? [])} />
-      <div className="app-library-meta">
-        <output className="app-library-results">
-          {matching.length} of {installed.length} apps{matchingLinks.length ? ` · ${matchingLinks.length} links` : ''}
-        </output>
-        {installed.length || customLinks.length ? (
+      {installed.length || customLinks.length ? (
+        <RouteHeaderToolbar>
           <section className="app-library-add-actions" aria-label="Add to your library">
             <button type="button" className="btn" onClick={() => navigate('/apps/create')}>
               <IconLayoutGridAdd size={18} aria-hidden="true" />
@@ -174,7 +171,13 @@ function LocalApps() {
               Add external link
             </button>
           </section>
-        ) : null}
+        </RouteHeaderToolbar>
+      ) : null}
+      <AppLibraryControls filters={filters} change={change} categories={installed.flatMap(({ info }) => info.categories ?? [])} />
+      <div className="app-library-meta">
+        <output className="app-library-results">
+          {matching.length} of {installed.length} apps{matchingLinks.length ? ` · ${matchingLinks.length} links` : ''}
+        </output>
         <div ref={batchAnchor} className={clsx('desktop-batch-controls', { 'd-none': installed.length <= 1 })} data-open={batchActions.isOpen}>
           <button type="button" aria-expanded={batchActions.isOpen} aria-controls={batchActionsId} onClick={() => batchActions.toggle()}>
             <IconAdjustmentsHorizontal size={17} aria-hidden="true" />

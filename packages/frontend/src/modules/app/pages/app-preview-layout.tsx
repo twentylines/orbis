@@ -1,3 +1,4 @@
+import { catalogueReturnEvent } from '@/desktop/catalogue-return';
 import { PaneScrollProgress } from '@/components/pane-scroll-progress';
 import { DelayedRouteLoading } from '@/desktop/route-loading';
 import { prefersReducedMotion } from '@/desktop/motion-setting';
@@ -19,7 +20,7 @@ import {
   storeReturnPath,
   type AppPreviewHistory,
 } from './store-preview-navigation';
-import { animatePreviewTiles, capturePreviewTiles, previewPaneMotion, type PreviewSnapshot } from './preview-motion';
+import { animatePreviewTiles, capturePreviewTiles, previewPaneMotion, revealCatalogueAfterPreview, type PreviewSnapshot } from './preview-motion';
 import './store-preview.css';
 import { resolvePreviewCard } from './preview-card-anchor';
 
@@ -73,6 +74,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
     if (panelView) pane.current?.querySelector<HTMLElement>('.app-settings-preview > h2')?.focus({ preventScroll: true });
   }, [panelView]);
   const snapshot = useRef<PreviewSnapshot>([]);
+  const capturedCatalogueWidth = useRef<number | null>(null);
   const anchor = useRef<{ urn: string; top: number; element: HTMLElement } | null>(null);
   const opener = useRef<HTMLElement | null>(null);
   const suggestionKind = installed ? undefined : (suggestion?.kind ?? null);
@@ -101,6 +103,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
       const urn = link?.dataset.storeApp;
       anchor.current =
         link && urn ? { urn, top: link.getBoundingClientRect().top - catalogue.current.getBoundingClientRect().top, element: link } : null;
+      capturedCatalogueWidth.current = catalogue.current.getBoundingClientRect().width;
       snapshot.current = capturePreviewTiles(catalogue.current);
       paneBounds.current = {
         left: pane.current.offsetLeft,
@@ -123,16 +126,20 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
     if (depth > 0 && typeof index === 'number' && index >= depth) void navigate(-depth);
     else void navigate(closePath, { replace: true, preventScrollReset: true });
   }, [capture, closePath, installed, navigate, state]);
+  useEffect(() => {
+    const returnToList = (event: Event) => {
+      if (event.defaultPrevented || !visible || (event as CustomEvent<{ path: string }>).detail?.path !== (installed ? '/apps' : '/app-store'))
+        return;
+      event.preventDefault();
+      if (selected) close();
+    };
+    window.addEventListener(catalogueReturnEvent, returnToList);
+    return () => window.removeEventListener(catalogueReturnEvent, returnToList);
+  }, [close, installed, selected, visible]);
   const nextHistory = () =>
     installed
       ? nextAppsPreviewHistory(state, location.search, Boolean(selected))
       : nextStorePreviewHistory(state, location.search, Boolean(selected), suggestion);
-
-  useEffect(() => {
-    const captureHistory = () => capture();
-    window.addEventListener('popstate', captureHistory);
-    return () => window.removeEventListener('popstate', captureHistory);
-  }, [capture]);
 
   useLayoutEffect(() => {
     currentOutlet.current = outlet;
@@ -190,8 +197,12 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
       }
     }
     anchor.current = null;
-    if (split && snapshot.current.length && !prefersReducedMotion()) {
+    if (split && (snapshot.current.length || (!selected && last && capturedCatalogueWidth.current)) && !prefersReducedMotion()) {
       const animations = animatePreviewTiles(snapshot.current);
+      if (!selected && last && catalogue.current && capturedCatalogueWidth.current !== null) {
+        const reveal = revealCatalogueAfterPreview(catalogue.current, capturedCatalogueWidth.current);
+        if (reveal) animations.push(reveal);
+      }
       tileMotion.current = animations;
       void Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
         for (const animation of animations) animation.cancel();
@@ -199,6 +210,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
       });
     }
     snapshot.current = [];
+    capturedCatalogueWidth.current = null;
     if (!selected) {
       if (split && last && pane.current && !prefersReducedMotion()) {
         const animation = previewPaneMotion(pane.current, false, visual);
@@ -227,17 +239,23 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
       return;
     }
     const element = split && (!last || movingPane) ? pane.current : content.current;
-    if (!element || prefersReducedMotion() || (last === selected && openerChanged && !movingPane)) return;
+    if (!element || prefersReducedMotion() || (last === selected && openerChanged && !movingPane)) {
+      if (split) capture();
+      return;
+    }
     const animation = previewPaneMotion(element, true, movingPane ? visual : undefined);
     motion.current = animation;
     void animation.finished.then(
       () => {
         animation.cancel();
-        if (motion.current === animation) motion.current = null;
+        if (motion.current === animation) {
+          motion.current = null;
+          capture();
+        }
       },
       () => undefined,
     );
-  }, [selected, selection, split, suggestionKind]);
+  }, [capture, selected, selection, split, suggestionKind]);
 
   return (
     <StorePreviewContext.Provider
@@ -276,7 +294,10 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
           className="store-catalogue-pane"
           hidden={Boolean(selected && !split)}
           onScroll={() => {
-            if (split && catalogue.current) scroll.current = catalogue.current.scrollTop;
+            if (split && catalogue.current) {
+              scroll.current = catalogue.current.scrollTop;
+              if (selected) capture();
+            }
           }}
         >
           <PaneScrollProgress label="App catalogue scroll position" enabled={split && visible} />
