@@ -15,14 +15,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-PACKAGE_NAME = re.compile(r"^[a-z0-9][a-z0-9+.-]*(?::[a-z0-9][a-z0-9-]*)?$")
+PACKAGE_TOKEN = r"[a-z0-9][a-z0-9+.-]*(?::[a-z0-9][a-z0-9-]*)?"
+PACKAGE_NAME = re.compile(rf"^{PACKAGE_TOKEN}$")
 MAX_PACKAGES = 1000
 MAX_CHANGELOG_BYTES = 48 * 1024
 CHANGELOG_TIMEOUT_SECONDS = 20
 MAX_PLAN_SELECTION = 250
 MAX_SIMULATION_BYTES = 256 * 1024
-SIMULATION_TIMEOUT_SECONDS = 45
-SIMULATED_INSTALL = re.compile(r"^Inst ([^ ]+)(?: \[([^]]+)\])? \(([^ ]+)(?: .*)?\)$")
+SIMULATION_TIMEOUT_SECONDS = 35
+READINESS_TIMEOUT_SECONDS = 15
+# APT may print transient dependency annotations after the candidate description.
+# ShortBreaks adds a bracketed list of package names, each followed by a space.
+SIMULATED_INSTALL = re.compile(
+    rf"^Inst ({PACKAGE_TOKEN})(?: \[([^\s\[\]]+)\])? \(([^\s()]+)(?: .*)?\)"
+    rf"(?: \[{PACKAGE_TOKEN} on {PACKAGE_TOKEN}\])*(?: \[(?:{PACKAGE_TOKEN} )*\])?$"
+)
 
 
 def require_ubuntu() -> dict[str, str]:
@@ -80,11 +87,22 @@ def candidate_record(package) -> dict | None:
     }
 
 
-def inventory_from_cache(cache, release: dict[str, str], *, checked_at: str, indexes_at: str | None, reboot_required: bool) -> dict:
+def inventory_from_cache(
+    cache, release: dict[str, str], *, checked_at: str, indexes_at: str | None, reboot_required: bool,
+    ready_operations: list[dict] | None = None, native_architecture: str = "",
+) -> dict:
     records = [record for package in cache if (record := candidate_record(package)) is not None]
-    records.sort(key=lambda package: (not package["security"], package["name"]))
+    readiness = {"readiness": "unavailable"}
+    if ready_operations is not None:
+        ready = operation_versions(ready_operations, native_architecture)
+        for record in records:
+            record["ready"] = package_version(record, native_architecture) in ready
+        count = sum(record["ready"] for record in records)
+        readiness = {"readiness": "available", "readyPackageCount": count, "deferredPackageCount": len(records) - count}
+    records.sort(key=lambda package: (not package.get("ready", False), not package["security"], package["name"]))
     return {
         "available": True,
+        **readiness,
         "manager": "apt",
         "operatingSystem": release.get("PRETTY_NAME", "Ubuntu 24.04"),
         "checkedAt": checked_at,
@@ -99,12 +117,18 @@ def inventory_from_cache(cache, release: dict[str, str], *, checked_at: str, ind
 def inventory() -> dict:
     release = require_ubuntu()
     cache = apt_module().Cache()
+    try:
+        native = native_apt_architecture()
+        ready = normal_upgrade_operations()
+    except (OSError, ValueError):
+        native, ready = "", None
     return inventory_from_cache(
         cache,
         release,
         checked_at=datetime.now(timezone.utc).isoformat(),
         indexes_at=index_updated_at(),
         reboot_required=Path("/run/reboot-required").is_file(),
+        ready_operations=ready, native_architecture=native,
     )
 
 
@@ -216,7 +240,7 @@ def apt_refresh_command() -> list[str]:
     ]
 
 
-def parse_simulation(output: str, selected: list[dict]) -> list[dict]:
+def parse_simulation(output: str, selected: list[dict], *, allow_empty: bool = False) -> list[dict]:
     operations = []
     for line in output.splitlines():
         if line.startswith(("Remv ", "Purg ")):
@@ -228,7 +252,7 @@ def parse_simulation(output: str, selected: list[dict]) -> list[dict]:
             raise ValueError("APT returned an unrecognized install action")
         name, installed, candidate = match.groups()
         operations.append({"name": name, "installedVersion": installed, "candidateVersion": candidate, "action": "upgrade" if installed else "install"})
-    if not operations:
+    if not operations and not allow_empty:
         raise ValueError("APT did not plan any package changes")
     for item in selected:
         name = item["name"]
@@ -241,10 +265,50 @@ def parse_simulation(output: str, selected: list[dict]) -> list[dict]:
     return operations
 
 
+def native_apt_architecture() -> str:
+    architecture = importlib.import_module("apt_pkg").config.find("APT::Architecture")
+    if not architecture:
+        raise ValueError("APT native package architecture is unavailable")
+    return architecture
+
+
+def package_version(package: dict, native_architecture: str) -> tuple:
+    name, separator, architecture = package["name"].partition(":")
+    if separator and architecture != native_architecture:
+        name = package["name"]
+    return name, package["installedVersion"], package["candidateVersion"]
+
+
+def operation_versions(operations: list[dict], native_architecture: str) -> set[tuple]:
+    return {package_version(item, native_architecture) for item in operations if item["action"] == "upgrade"}
+
+
+def normal_upgrade_operations() -> list[dict]:
+    # Plain apt-get upgrade leaves phased, held, removal-requiring and
+    # new-dependency-requiring upgrades for later instead of pinning them.
+    command = ["/usr/bin/apt-get", "--simulate", "--no-remove", "upgrade"]
+    return parse_simulation(run_simulation(command, READINESS_TIMEOUT_SECONDS), [], allow_empty=True)
+
+
 def simulate_upgrades(names: list[str]) -> dict:
     require_ubuntu()
     selected = selected_candidates(names, apt_module().Cache())
-    return simulate_install(selected)
+    native = native_apt_architecture()
+    ready = operation_versions(normal_upgrade_operations(), native)
+    if any(package_version(item, native) not in ready for item in selected):
+        raise ValueError("APT is deferring one or more selected updates. Refresh the package list and try again.")
+    result = simulate_install(selected)
+    upgrades = operation_versions(result["operations"], native)
+    if not upgrades <= ready:
+        raise ValueError("APT planned an upgrade outside the current ready package set.")
+    selected_names = {package_version(item, native): item["name"] for item in selected}
+    if not selected_names.keys() <= upgrades:
+        raise ValueError("APT omitted or changed a selected package")
+    for operation in result["operations"]:
+        identity = package_version(operation, native)
+        if identity in selected_names:
+            operation["name"] = selected_names[identity]
+    return result
 
 
 def smart_tools_supported() -> bool:
@@ -290,16 +354,22 @@ def simulate_smart_tools() -> dict:
 
 
 def simulate_install(selected: list[dict], *, new_packages: bool = False) -> dict:
+    command = apt_install_command(selected, simulate=True, new_packages=new_packages)
+    summary = run_simulation(command, 20 if new_packages else SIMULATION_TIMEOUT_SECONDS)
+    return {"selected": selected, "operations": parse_simulation(summary, selected)}
+
+
+def run_simulation(command: list[str], timeout: int) -> str:
     environment = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "DEBIAN_FRONTEND": "noninteractive", "HOME": "/root"}
     try:
         with tempfile.TemporaryFile() as output:
             result = subprocess.run(
-                apt_install_command(selected, simulate=True, new_packages=new_packages),
+                command,
                 stdin=subprocess.DEVNULL,
                 stdout=output,
                 stderr=subprocess.STDOUT,
                 env=environment,
-                timeout=20 if new_packages else SIMULATION_TIMEOUT_SECONDS,
+                timeout=timeout,
                 check=False,
             )
             output.seek(0, os.SEEK_END)
@@ -311,4 +381,4 @@ def simulate_install(selected: list[dict], *, new_packages: bool = False) -> dic
         raise ValueError("APT simulation timed out") from error
     if result.returncode:
         raise ValueError("APT could not resolve the selected package updates")
-    return {"selected": selected, "operations": parse_simulation(summary, selected)}
+    return summary

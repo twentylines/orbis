@@ -131,6 +131,9 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.desktop-activity-summary strong[data-initialising] {
+  white-space: normal;
+}
 .desktop-activity-summary strong,
 .desktop-activity-list strong {
   font-size: 0.8125rem;

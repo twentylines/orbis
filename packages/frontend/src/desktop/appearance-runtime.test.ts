@@ -258,7 +258,7 @@ describe('saved appearance applied before hydration and to live materials', () =
       const [actionRed = 0, , actionBlue = 0] = rgb(custom.properties.get('--orbis-action') ?? '');
       expect(actionRed - actionBlue).toBeGreaterThan(100);
       expect(custom.properties.get('--orbis-accent')).toBe(custom.properties.get('--orbis-focus'));
-      expect(custom.properties.get('--orbis-chrome-rgb')).toBe('66, 29, 11');
+      expect(custom.properties.get('--orbis-chrome-rgb')).toBe(dark ? '8, 8, 8' : '66, 29, 11');
       expect(custom.properties.get('--orbis-theme-tint')).toBe('rgba(237, 105, 41, 1)');
     }
   });
@@ -315,8 +315,8 @@ describe('saved appearance applied before hydration and to live materials', () =
         const { properties } = apply({}, { dark, tokens });
         const menu = rgb(properties.get('--orbis-menu-surface') ?? '');
         const chrome = rgb(properties.get('--orbis-chrome') ?? tokens['--desktop-base-chrome'] ?? '');
-        expect(menu[3]).toBe(dark ? 0.52 : 0.78);
-        expect(chrome[3]).toBeLessThanOrEqual(dark ? 0.52 : 0.8);
+        expect(menu[3]).toBe(dark ? 0.28 : 0.78);
+        expect(chrome[3]).toBeLessThanOrEqual(dark ? 0.28 : 0.8);
         if (!dark) expect(properties.has('--orbis-chrome-backdrop-brightness')).toBe(false);
         for (const wallpaper of [0, 255]) {
           const behind = composite(menu, dark ? chromeBackdrop(properties, wallpaper) : wallpaper);
@@ -332,13 +332,14 @@ describe('saved appearance applied before hydration and to live materials', () =
     const options = { dark: true, tokens: actualPalette('stone', true) };
     const defaults = apply({}, options).properties;
     const reference = apply(
-      { materialMode: 'custom', transparency: 'glass', surfaceOpacity: 95, chromeOpacity: 52, chromeBlur: 14, glassTint: 0 },
+      { materialMode: 'custom', transparency: 'glass', surfaceOpacity: 95, chromeOpacity: 28, chromeBlur: 24, glassTint: 0 },
       options,
     ).properties;
     for (const token of ['pane-surface', 'chrome', 'chrome-backdrop-brightness', 'chrome-muted', 'chrome-focus']) {
       expect(defaults.get(`--orbis-${token}`)).toBe(reference.get(`--orbis-${token}`));
     }
-    expect(options.tokens['--desktop-default-chrome-filter']).toBe(reference.get('--orbis-chrome-filter'));
+    expect(defaults.get('--orbis-chrome-filter')).toBe(reference.get('--orbis-chrome-filter'));
+    expect(rgb(defaults.get('--orbis-chrome') ?? '').slice(0, 3)).toEqual([8, 8, 8]);
   });
   test('the entire opacity sweep retains the same chrome tint and readable controls in every palette', () => {
     for (const dark of [false, true]) {
@@ -376,30 +377,19 @@ describe('saved appearance applied before hydration and to live materials', () =
       }
     }
   });
-  test('uses independently authored dark photo chrome while retaining explicit tint and custom colours', () => {
-    for (const preset of ['burgundy', 'amber', 'orange', 'blush']) {
-      const tokens = actualPalette(preset, true);
-      const base = rgb(tokens['--desktop-base-chrome'] ?? '');
-      const options = { dark: true, tokens };
-      const defaultChrome = rgb(apply({}, options).properties.get('--orbis-chrome') ?? '');
-      const untinted = apply({ materialMode: 'custom' }, options);
-      expect(defaultChrome).toEqual(rgb(untinted.properties.get('--orbis-chrome') ?? ''));
-      expect(defaultChrome[3]).toBe(0.52);
-
-      const tinted = apply({ materialMode: 'custom', chromeOpacity: 72, glassTint: 20 }, options);
-      const customChrome = rgb(tinted.properties.get('--orbis-chrome') ?? '');
-      expect(customChrome[3]).toBe(0.72);
-      expect(customChrome.slice(0, 3)).not.toEqual(base.slice(0, 3));
-
-      const customColour = { themeColour: '#a8432c' };
-      const legacyTokens = { ...tokens, '--desktop-base-chrome-tint': '' };
-      expect(apply(customColour, options).properties.get('--orbis-chrome')).toBe(
-        apply(customColour, { dark: true, tokens: legacyTokens }).properties.get('--orbis-chrome'),
-      );
+  test('dark chrome stays neutral across presets and custom colours while actions retain their accent', () => {
+    for (const preset of themePresets) {
+      const options = { dark: true, tokens: actualPalette(preset, true) };
+      const normal = apply({}, options).properties;
+      expect(rgb(normal.get('--orbis-chrome') ?? '')).toEqual([8, 8, 8, 0.28]);
+      expect(normal.get('--orbis-chrome-filter')).toBe('blur(24px) saturate(1.2)');
+      for (const chromeOpacity of [10, 28, 76, 100]) {
+        const custom = apply({ materialMode: 'custom', chromeOpacity, glassTint: 30, themeColour: '#ed6929', accent: '#df4e09' }, options).properties;
+        expect(rgb(custom.get('--orbis-chrome') ?? '')).toEqual([8, 8, 8, chromeOpacity / 100]);
+        expect(custom.get('--orbis-theme-tint')).toBe('rgba(237, 105, 41, 1)');
+        expect(custom.get('--orbis-action-rgb')).not.toBe('8, 8, 8');
+      }
     }
-    const tokens = actualPalette('forest', true);
-    const legacyChrome = rgb(apply({}, { dark: true, tokens }).properties.get('--orbis-chrome') ?? '');
-    expect(legacyChrome.slice(0, 3)).not.toEqual(rgb(tokens['--desktop-base-chrome'] ?? '').slice(0, 3));
   });
   test('explicit solid and accessibility materials remain opaque, while explicit chrome opacity is preserved', () => {
     for (const options of [{ transparency: 'solid' }, { lowEffects: true }, { oledDark: true }]) {
@@ -425,7 +415,7 @@ describe('saved appearance applied before hydration and to live materials', () =
   test('OLED blackens cards and panels while preserving preset chrome and controls in dark mode', () => {
     const oled = apply({ oledDark: true, glassTint: 30, surfaceOpacity: 90 }, { dark: true });
     expect(rgb(oled.properties.get('--orbis-surface') ?? '')).toEqual([0, 0, 0, 1]);
-    expect(rgb(oled.properties.get('--orbis-chrome') ?? '')).toEqual([9, 23, 23, 1]);
+    expect(rgb(oled.properties.get('--orbis-chrome') ?? '')).toEqual([8, 8, 8, 1]);
     expect(rgb(oled.properties.get('--orbis-panel-dark') ?? '')).toEqual([0, 0, 0, 1]);
     expect(rgb(oled.properties.get('--orbis-oled-panel') ?? '')).toEqual([0, 0, 0, 1]);
     expect(oled.properties.has('--orbis-action')).toBe(false);

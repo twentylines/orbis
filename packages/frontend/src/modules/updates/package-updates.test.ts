@@ -2,9 +2,9 @@ import { expect, test } from 'bun:test';
 import { packageRestartRequired, selectedPackageNames, startPackageUpdate, type PackageUpdateRequest } from './package-updates';
 
 const selected = [
-  { name: 'libexample', installedVersion: '1.0', candidateVersion: '1.1' },
-  { name: 'example-tools', installedVersion: '2.0', candidateVersion: '2.2' },
-];
+  { name: 'libexample', installedVersion: '1.0', candidateVersion: '1.1', ready: true },
+  { name: 'example-tools', installedVersion: '2.0', candidateVersion: '2.2', ready: true },
+] as const;
 const planId = '00000000-0000-4000-8000-000000000001';
 const time = 1_800_000_000;
 const plan = () => ({
@@ -15,7 +15,7 @@ const plan = () => ({
   operations: selected.map((item) => ({ ...item, action: 'upgrade' })),
 });
 
-test('available packages are selected by default and user deselection survives refreshed inventory', () => {
+test('ready packages are selected by default and user deselection survives refreshed inventory', () => {
   expect(selectedPackageNames(selected, null)).toEqual(['libexample', 'example-tools']);
   expect(
     selectedPackageNames(
@@ -25,7 +25,18 @@ test('available packages are selected by default and user deselection survives r
   ).toEqual(['example-tools']);
   expect(selectedPackageNames(selected, [])).toEqual([]);
   expect(selectedPackageNames(selected.slice(1), ['libexample', 'example-tools'])).toEqual(['example-tools']);
-  const large = Array.from({ length: 300 }, (_, index) => ({ name: `example-${index}`, installedVersion: '1', candidateVersion: '2' }));
+  const filtered = [
+    { ...selected[0], ready: false },
+    { ...selected[1], ready: undefined },
+  ];
+  expect(selectedPackageNames(filtered, null)).toEqual([]);
+  expect(
+    selectedPackageNames(
+      filtered,
+      selected.map((item) => item.name),
+    ),
+  ).toEqual([]);
+  const large = Array.from({ length: 300 }, (_, index) => ({ name: `example-${index}`, installedVersion: '1', candidateVersion: '2', ready: true }));
   expect(selectedPackageNames(large, null)).toHaveLength(250);
 });
 

@@ -109,7 +109,6 @@ test('compatibility reviews appear in the tasks pill without creating an app ope
   expect(result?.detail).toBe('Beta 91');
   expect(result?.items[0]?.kind).toBe('core');
   expect(desktopActivity([], new Map(), null, null, [])).toBeNull();
-  expect(desktopActivity([], new Map(), null, null, [{ id: 'update-review', target: 'v0.1.0-beta.113', operation: 'update' }])).toBeNull();
 });
 
 test('the compact Orbis pill keeps the exact target release while the flyout retains progress', () => {
@@ -117,4 +116,20 @@ test('the compact Orbis pill keeps the exact target release while the flyout ret
   const activity = desktopActivity([], names, watch, null);
   expect(activity).toMatchObject({ title: 'Updating', detail: 'Orbis 1.1.3' });
   expect(activity?.items[0]?.detail).toBe('1.1.3 · Starting the Orbis update.');
+});
+
+test('one Orbis activity pill covers review, preflight, accepted progress and failed request cleanup', () => {
+  const review = { id: 'review', target: 'v1.1.3', operation: 'update' };
+  const apply = { ...review, id: 'apply', applying: true };
+  const active = advanceCoreUpdate(null, { type: 'accepted', id: 'd8b4a1ec-f912-4e14-8e20-58d2754a0130', targetTag: review.target });
+  expect(desktopActivityGroups([], names, null, null, [review])).toMatchObject([
+    { category: 'orbis', title: 'Initialising update', detail: 'Orbis 1.1.3', items: [{ id: review.id, detail: 'Checking release compatibility' }] },
+  ]);
+  expect(desktopActivityGroups([], names, null, null, [review, apply])).toMatchObject([
+    { category: 'orbis', title: 'Initialising update', items: [{ id: apply.id, detail: 'Checking the release and backup storage' }] },
+  ]);
+  expect(desktopActivityGroups([], names, active, null, [apply])).toMatchObject([
+    { category: 'orbis', title: 'Updating', items: [{ id: active?.id, detail: '1.1.3 · Starting the Orbis update.' }] },
+  ]);
+  expect(desktopActivityGroups([], names, null, null)).toEqual([]);
 });

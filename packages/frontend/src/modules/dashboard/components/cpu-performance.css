@@ -20,3 +20,19 @@
   font-size: 0.8125rem;
   line-height: 1.6;
 }
+.monitor-live-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 12px;
+}
+.monitor-live-scale {
+  margin-top: 6px;
+  color: var(--desktop-muted);
+  font-size: 0.75rem;
+}
+.monitor-performance .monitor-history-toolbar {
+  margin-top: 20px;
+}
+.monitor-processor-label > span {
+  overflow-wrap: anywhere;
+}

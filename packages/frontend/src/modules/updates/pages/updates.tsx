@@ -38,7 +38,7 @@ import {
   serverRestartQueryKey,
   type ServerRestartStatus,
 } from '@/desktop/host-update-watch';
-import { coreUpdatePhaseMessage, coreWatchIsActive } from '@/desktop/core-update-state';
+import { coreUpdatePhaseMessage, coreUpdateTitle, coreWatchIsActive, validCoreUpdate } from '@/desktop/core-update-state';
 import { installedOrbisBuildOptions, orbisReleaseErrorMessage, orbisReleasesOptions, newerOrbisRelease } from '@/desktop/orbis-release';
 import { useReviewExpired } from '@/desktop/use-review-expired';
 import { orbisReleaseChannelsOptions, releaseChannelErrorMessage } from '@/desktop/release-channels';
@@ -91,6 +91,7 @@ type HostPackage = {
   candidateVersion: string;
   downloadBytes: number | null;
   security: boolean;
+  ready?: boolean;
   sources: Array<{ origin: string | null; archive: string | null; site: string | null; trusted: boolean }>;
 };
 type HostPackageInventory = {
@@ -101,6 +102,9 @@ type HostPackageInventory = {
   indexesUpdatedAt?: string | null;
   rebootRequired?: boolean;
   packageCount?: number;
+  readiness?: 'available' | 'unavailable';
+  readyPackageCount?: number;
+  deferredPackageCount?: number;
   truncated?: boolean;
   packages?: HostPackage[];
 };
@@ -267,10 +271,13 @@ function LocalUpdates() {
     refetchOnWindowFocus: false,
     retry: false,
   });
+  const readinessKnown = systemPackages.data?.readiness === 'available';
+  const readyPackageCount = readinessKnown ? (systemPackages.data?.readyPackageCount ?? 0) : 0;
+  const deferredPackageCount = readinessKnown ? (systemPackages.data?.deferredPackageCount ?? 0) : 0;
   const [chosenPackages, setSelectedPackages] = useState<string[] | null>(null);
   const selectedPackages = useMemo(
-    () => selectedPackageNames(systemPackages.data?.packages ?? [], chosenPackages),
-    [systemPackages.data?.packages, chosenPackages],
+    () => selectedPackageNames(readinessKnown ? (systemPackages.data?.packages ?? []) : [], chosenPackages),
+    [readinessKnown, systemPackages.data?.packages, chosenPackages],
   );
   const [packageRequestStage, setPackageRequestStage] = useState<'checking' | 'starting'>('checking');
   const lastReviewScope = useRef({ section, entry });
@@ -372,7 +379,8 @@ function LocalUpdates() {
     mutationFn: (names: string[]) => {
       const inventory = systemPackages.data?.packages ?? [];
       const selected = names.map((name) => inventory.find((item) => item.name === name));
-      if (selected.some((item) => !item)) throw new Error('The package list changed. Check for updates before trying again.');
+      if (systemPackages.data?.readiness !== 'available' || selected.some((item) => item?.ready !== true))
+        throw new Error('The package list changed. Check for updates before trying again.');
       return startPackageUpdate(selected as HostPackage[], hostRequest, setPackageRequestStage);
     },
     retry: false,
@@ -416,11 +424,12 @@ function LocalUpdates() {
     gcTime: compatibilityReviewTime,
     mutationFn: async (tag: string) => {
       setCoreRequestStage('checking');
-      const checked = await hostRequest<HostPlan>('plan', { tag });
+      const [checked] = await Promise.all([hostRequest<HostPlan>('plan', { tag }), prepareDesktopForCoreUpdate()]);
       if (checked.targetTag !== tag) throw new Error('The checked release changed. Refresh before updating.');
-      await prepareDesktopForCoreUpdate();
       setCoreRequestStage('starting');
-      return hostRequest<{ jobId: string; state: string }>('apply', { planId: checked.planId });
+      const result = await hostRequest<{ jobId: string; state: string }>('apply', { planId: checked.planId });
+      if (!validCoreUpdate(result.jobId, tag)) throw new Error('The host returned an incomplete update response.');
+      return result;
     },
     onSuccess: (result, tag) => {
       setCoreReview(null);
@@ -447,6 +456,9 @@ function LocalUpdates() {
   const job = user.operator ? host.data?.job : undefined;
   const corePhase = coreUpdatePhaseMessage(job?.phase);
   const jobBusy = job?.state === 'running' || job?.state === 'recovering';
+  const activeWatch = watch && coreWatchIsActive(watch) ? watch : null;
+  const initialisingCore = !activeWatch && !jobBusy && (checkingCore || coreUpdatePending);
+  const showWatch = activeWatch && (!jobBusy || job?.id !== activeWatch.id) ? activeWatch : null;
   const canPlan = Boolean(
     build.data &&
       orbisUpdateAvailable &&
@@ -459,11 +471,13 @@ function LocalUpdates() {
       host.data.coreHealth === 'healthy' &&
       host.data.currentTag === build.data.version &&
       !jobBusy &&
+      !activeWatch &&
       job?.state !== 'interrupted',
   );
   const matchingPackages = (systemPackages.data?.packages ?? []).filter((item) =>
     `${item.name} ${packageSources(item.sources)}`.toLocaleLowerCase().includes(packageSearch.trim().toLocaleLowerCase()),
   );
+  const matchingReadyPackages = readinessKnown ? matchingPackages.filter((item) => item.ready === true) : [];
   const visiblePackages = showAllPackages ? matchingPackages : matchingPackages.slice(0, 12);
   const latestPackageJob = user.operator ? packageJob.data?.job : null;
   const packageJobState = latestPackageJob?.state;
@@ -494,15 +508,17 @@ function LocalUpdates() {
     !packageJob.data?.available ||
     !systemPackages.data?.available;
   const missingHostFeatures = host.data?.available
-    ? [refreshSupported ? null : 'checking for system updates', host.data.capabilities?.includes('restart.v1') ? null : 'server restarts'].filter(
-        (feature): feature is string => feature !== null,
-      )
+    ? [
+        refreshSupported ? null : 'checking for system updates',
+        host.data.capabilities?.includes('restart.v1') ? null : 'server restarts',
+        packageInventory && packageInventory.readiness === undefined ? 'package readiness checks' : null,
+      ].filter((feature): feature is string => feature !== null)
     : [];
   const matchingSelection =
-    matchingPackages.length > 0 &&
-    matchingPackages.length <= packageUpdateLimit &&
-    matchingPackages.every((item) => selectedPackages.includes(item.name));
-  const matchingSelectionExceedsLimit = new Set([...selectedPackages, ...matchingPackages.map((item) => item.name)]).size > packageUpdateLimit;
+    matchingReadyPackages.length > 0 &&
+    matchingReadyPackages.length <= packageUpdateLimit &&
+    matchingReadyPackages.every((item) => selectedPackages.includes(item.name));
+  const matchingSelectionExceedsLimit = new Set([...selectedPackages, ...matchingReadyPackages.map((item) => item.name)]).size > packageUpdateLimit;
   useEffect(() => {
     if (job?.state === 'complete' && job.id !== lastRefreshedCoreJob.current) {
       lastRefreshedCoreJob.current = job.id;
@@ -729,7 +745,7 @@ function LocalUpdates() {
                         reviewCore.mutate(latest.tag);
                       }}
                     >
-                      {checkingCore ? 'Preparing update…' : coreUpdatePending ? 'Starting update…' : 'Update Orbis'}
+                      Update Orbis
                     </button>
                   ) : null}
                   {build.isError ? (
@@ -815,7 +831,7 @@ function LocalUpdates() {
                 The installed Orbis image differs from the one registered with the host service. Resolve the mismatch before updating.
               </p>
             ) : null}
-            {job && job.state !== 'complete' ? (
+            {job && job.state !== 'complete' && !initialisingCore && !showWatch ? (
               <section className={`desktop-update-job ${jobBusy ? 'is-busy' : ''}`} aria-label="Orbis update status" aria-live="polite">
                 <strong>{job.state === 'running' ? 'Installing Orbis' : job.state === 'recovering' ? 'Recovering Orbis' : 'Last update'}</strong>
                 <span>{job.message || corePhase || (jobBusy ? 'The page will reload automatically when the server is ready.' : job.state)}</span>
@@ -827,16 +843,24 @@ function LocalUpdates() {
                 ) : null}
               </section>
             ) : null}
-            {coreUpdatePending ? (
-              <output className="desktop-update-note" aria-live="polite">
-                {coreRequestStage === 'checking'
-                  ? 'Checking the release and backup storage…'
-                  : coreRequestStage === 'starting'
-                    ? 'Starting the update. The page will reload automatically when Orbis is ready.'
-                    : 'Preparing the update…'}
-              </output>
+            {showWatch ? (
+              <section className="desktop-update-job is-busy" aria-label="Orbis update status" aria-live="polite">
+                <strong>{coreUpdateTitle(showWatch.phase, showWatch.operation)}</strong>
+                <span>{showWatch.message}</span>
+              </section>
+            ) : initialisingCore ? (
+              <section className="desktop-update-job is-busy" aria-label="Orbis update status" aria-live="polite">
+                <strong>Initialising update</strong>
+                <span>
+                  {checkingCore
+                    ? 'Checking release compatibility…'
+                    : coreRequestStage === 'starting'
+                      ? 'Waiting for the host service to accept the update…'
+                      : 'Checking the release and backup storage…'}
+                </span>
+              </section>
             ) : null}
-            {lastCoreUpdate?.status === 'error' ? (
+            {lastCoreUpdate?.status === 'error' && !initialisingCore && !activeWatch && !jobBusy ? (
               <p className="desktop-update-note" role="alert">
                 {lastCoreUpdate.error instanceof Error ? lastCoreUpdate.error.message : 'The update could not be started.'} Check the update status
                 before retrying.
@@ -887,6 +911,15 @@ function LocalUpdates() {
                 ) : null}
               </details>
             ) : null}
+            {latest ? (
+              <div className="desktop-updates-release">
+                <OrbisReleaseNotes latest={latest} installed={build.data?.version} channel={channels.data?.current} compact />
+                {latest.imageManifestUrl ? null : <p>No Orbis image manifest is attached to this release.</p>}
+                <a href={latest.url} target="_blank" rel="noreferrer" className="desktop-update-action secondary">
+                  View release on GitHub
+                </a>
+              </div>
+            ) : null}
           </section>
 
           <section className="desktop-updates-card desktop-updates-host" aria-labelledby={`${tabsId}-os-title`}>
@@ -900,11 +933,26 @@ function LocalUpdates() {
                     <div aria-live="polite">
                       <p>
                         <strong>
-                          {systemPackages.data.packageCount
-                            ? `${systemPackages.data.packageCount} update${systemPackages.data.packageCount === 1 ? '' : 's'} available`
-                            : 'No updates found'}
+                          {readinessKnown
+                            ? readyPackageCount > 0
+                              ? `${readyPackageCount} update${readyPackageCount === 1 ? '' : 's'} ready`
+                              : 'No updates ready'
+                            : 'Package readiness unavailable'}
                         </strong>
                       </p>
+                      {(systemPackages.data.packageCount ?? 0) > 0 ? (
+                        <p>
+                          {systemPackages.data.packageCount} available
+                          {readinessKnown && deferredPackageCount ? ` · ${deferredPackageCount} deferred by APT` : ''}
+                        </p>
+                      ) : null}
+                      {readinessKnown ? null : (
+                        <p>
+                          {systemPackages.data.readiness === undefined
+                            ? 'Update the system service to check which packages are ready.'
+                            : 'APT could not confirm which packages are ready. Check for updates to try again.'}
+                        </p>
+                      )}
                       {osName ? <p>{osName}</p> : null}
                       {packageInventory?.checkedAt ? (
                         <p className="desktop-host-package-times">
@@ -917,7 +965,7 @@ function LocalUpdates() {
                 ) : null}
                 {user.operator ? (
                   <div className="desktop-update-actions desktop-host-update-actions">
-                    {(systemPackages.data?.packageCount ?? 0) > 0 ? (
+                    {readyPackageCount > 0 ? (
                       <button
                         type="button"
                         className="desktop-update-action desktop-system-update-primary"
@@ -935,7 +983,7 @@ function LocalUpdates() {
                           ? packageRequestStage === 'checking'
                             ? 'Checking updates…'
                             : 'Starting update…'
-                          : (systemPackages.data?.packageCount ?? 0) > packageUpdateLimit
+                          : readyPackageCount > packageUpdateLimit
                             ? `Update ${selectedPackages.length} packages`
                             : 'Update system'}
                       </button>
@@ -1003,11 +1051,11 @@ function LocalUpdates() {
                     ) : null}
                   </div>
                 ) : null}
-                {user.operator && !packageStatusUnavailable && systemPackages.data?.packageCount ? (
+                {user.operator && !packageStatusUnavailable && readyPackageCount > 0 ? (
                   <p className="desktop-update-note" id={`${tabsId}-package-update-effects`}>
                     {selectedPackages.length} selected
-                    {systemPackages.data.packageCount > packageUpdateLimit ? ` · Up to ${packageUpdateLimit} per update` : ''}. Services may restart.
-                    The server will not reboot automatically. Package changes have no automatic rollback.
+                    {readyPackageCount > packageUpdateLimit ? ` · Up to ${packageUpdateLimit} per update` : ''}. Services may restart. The server will
+                    not reboot automatically. Package changes have no automatic rollback.
                   </p>
                 ) : null}
               </div>
@@ -1115,12 +1163,7 @@ function LocalUpdates() {
                 {systemPackages.data?.truncated ? <output>Showing the first 1,000 packages. Check the host for the complete list.</output> : null}
                 {!!systemPackages.data?.packageCount && systemPackages.data.available ? (
                   <>
-                    <p className="desktop-update-note">
-                      {systemPackages.data.packageCount > packageUpdateLimit
-                        ? `The first ${packageUpdateLimit} updates are selected for this transaction.`
-                        : 'All available updates are selected by default.'}{' '}
-                      Clear a package to exclude it from this update.
-                    </p>
+                    {readyPackageCount > 0 ? <p className="desktop-update-note">Clear a ready package to exclude it from this update.</p> : null}
                     <div className="desktop-host-package-toolbar">
                       <label className="desktop-host-package-search">
                         <span>Filter package details</span>
@@ -1134,37 +1177,39 @@ function LocalUpdates() {
                           }}
                         />
                       </label>
-                      <div className="desktop-host-package-selection">
-                        <strong>
-                          {selectedPackages.length} of {systemPackages.data.packageCount ?? 0} selected
-                        </strong>
-                        <div>
-                          <button
-                            type="button"
-                            disabled={
-                              matchingPackages.length === 0 || (!matchingSelection && matchingSelectionExceedsLimit) || packageControlsBlocked
-                            }
-                            onClick={() => {
-                              const names = matchingPackages.map((item) => item.name);
-                              setSelectedPackages(
-                                matchingSelection
-                                  ? selectedPackages.filter((name) => !names.includes(name))
-                                  : [...new Set([...selectedPackages, ...names])],
-                              );
-                            }}
-                          >
-                            {matchingSelection
-                              ? packageSearch
-                                ? 'Clear matching'
-                                : 'Clear selection'
-                              : packageSearch
-                                ? 'Select matching'
-                                : 'Select all'}
-                          </button>
+                      {readyPackageCount > 0 ? (
+                        <div className="desktop-host-package-selection">
+                          <strong>
+                            {selectedPackages.length} of {readyPackageCount} ready selected
+                          </strong>
+                          <div>
+                            <button
+                              type="button"
+                              disabled={
+                                matchingReadyPackages.length === 0 || (!matchingSelection && matchingSelectionExceedsLimit) || packageControlsBlocked
+                              }
+                              onClick={() => {
+                                const names = matchingReadyPackages.map((item) => item.name);
+                                setSelectedPackages(
+                                  matchingSelection
+                                    ? selectedPackages.filter((name) => !names.includes(name))
+                                    : [...new Set([...selectedPackages, ...names])],
+                                );
+                              }}
+                            >
+                              {matchingSelection
+                                ? packageSearch
+                                  ? 'Clear matching'
+                                  : 'Clear selection'
+                                : packageSearch
+                                  ? 'Select matching'
+                                  : 'Select all ready'}
+                            </button>
+                          </div>
                         </div>
-                      </div>
+                      ) : null}
                     </div>
-                    {(systemPackages.data.packages?.length ?? 0) > packageUpdateLimit ? (
+                    {readyPackageCount > packageUpdateLimit ? (
                       <p className="desktop-update-note">
                         Up to {packageUpdateLimit} packages can be updated at a time. Remaining updates will be listed after installation.
                       </p>
@@ -1178,11 +1223,9 @@ function LocalUpdates() {
                               aria-label={`Select ${item.name} for update`}
                               checked={selectedPackages.includes(item.name)}
                               disabled={
-                                installPackages.isPending ||
-                                packageJob.isPending ||
-                                packageJob.isError ||
-                                packageJobBusy ||
-                                packageJobNeedsInspection ||
+                                !readinessKnown ||
+                                item.ready !== true ||
+                                packageControlsBlocked ||
                                 (!selectedPackages.includes(item.name) && selectedPackages.length >= packageUpdateLimit)
                               }
                               onChange={(event) => {
@@ -1200,6 +1243,7 @@ function LocalUpdates() {
                               ))}
                             </strong>
                             {item.security ? <span>Security</span> : null}
+                            {readinessKnown && !item.ready ? <span>Deferred</span> : null}
                           </label>
                           <p className="desktop-host-package-versions">
                             <code title={item.installedVersion}>{item.installedVersion}</code>
@@ -1296,15 +1340,6 @@ function LocalUpdates() {
               </div>
             ) : null}
           </SentinelStatus>
-          {latest ? (
-            <div className="desktop-updates-card desktop-updates-release">
-              <OrbisReleaseNotes latest={latest} installed={build.data?.version} channel={channels.data?.current} compact />
-              {latest.imageManifestUrl ? null : <p>No Orbis image manifest is attached to this release.</p>}
-              <a href={latest.url} target="_blank" rel="noreferrer" className="desktop-update-action secondary">
-                View release on GitHub
-              </a>
-            </div>
-          ) : null}
         </div>
       </div>
     </div>

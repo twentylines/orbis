@@ -39,7 +39,7 @@ export function desktopActivity(
   names: ReadonlyMap<string, string>,
   watch: CoreUpdateWatch | null,
   packageJob: PackageActivityJob | null,
-  checks: readonly { id: string; target: string; operation: string }[] = [],
+  checks: readonly { id: string; target: string; operation: string; applying?: boolean }[] = [],
 ): DesktopActivity | null {
   const activeTasks = tasks
     .filter((task) => task.status === 'queued' || task.status === 'running')
@@ -103,6 +103,7 @@ export function desktopActivity(
       count: items.length,
     };
   }
+  const initialising = checks.find((check) => check.operation === 'update' && check.applying) ?? checks.find((check) => check.operation === 'update');
   if (watch && coreWatchIsActive(watch)) {
     const title = coreUpdateTitle(watch.phase, watch.operation);
     items.unshift({ id: watch.id, kind: 'core', title, detail: `${formatOrbisVersion(watch.targetTag)} · ${watch.message}`, state: watch.phase });
@@ -112,6 +113,11 @@ export function desktopActivity(
       kind: 'core',
       count: items.length,
     };
+  } else if (initialising) {
+    const title = 'Initialising update';
+    const detail = initialising.applying ? 'Checking the release and backup storage' : 'Checking release compatibility';
+    items.unshift({ id: initialising.id, kind: 'core', title, detail, state: 'initialising' });
+    summary = { title, detail: `Orbis ${formatOrbisVersion(initialising.target)}`, kind: 'core', count: items.length };
   }
   return summary ? { ...summary, count: items.length, items } : null;
 }
@@ -128,9 +134,27 @@ export function desktopActivityGroups(
   const add = (category: string, activity: DesktopActivity | null) => {
     if (activity) groups.push({ ...activity, category });
   };
-  add('orbis', desktopActivity([], names, watch, null));
+  add(
+    'orbis',
+    desktopActivity(
+      [],
+      names,
+      watch,
+      null,
+      checks.filter((check) => check.operation === 'update'),
+    ),
+  );
   add('system', desktopActivity([], names, null, packages));
-  add('compatibility', desktopActivity([], names, null, null, checks));
+  add(
+    'compatibility',
+    desktopActivity(
+      [],
+      names,
+      null,
+      null,
+      checks.filter((check) => check.operation === 'downgrade'),
+    ),
+  );
   if (capture)
     add('time-machine', {
       ...capture,

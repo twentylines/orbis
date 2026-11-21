@@ -5,7 +5,9 @@ import { IconCpu, IconDeviceDesktopAnalytics, IconNetwork, IconCircuitResistor }
 import type { Telemetry } from '@/desktop/telemetry';
 import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { MetricChart } from '@/components/metric-chart/metric-chart';
-import { CpuPerformance } from './cpu-performance';
+import { CpuPerformance, CpuRecordedChart } from './cpu-performance';
+import { LiveMetricChart, useLiveSamples } from './live-metric-chart';
+import { percentReading, rateReading } from './logical-processor-history';
 import { GpuReadings } from './gpu-readings';
 import { statusBytes, statusNetwork, usagePercent } from './system-readings';
 import { highUsage } from './system-health';
@@ -17,7 +19,12 @@ const resources = [
   { value: 'network', label: 'Network', Icon: IconNetwork },
   { value: 'gpu', label: 'GPU', Icon: IconDeviceDesktopAnalytics },
 ] as const;
-const rate = (value?: number | null) => (value == null ? 'Unavailable' : `${statusBytes(value)}/s`);
+const rate = (value?: number | null) => (rateReading(value ?? null) === null ? 'Unavailable' : `${statusBytes(value ?? null)}/s`);
+
+function GpuLiveChart({ sampledAt, utilisation }: { sampledAt: string; utilisation: number | null }) {
+  const samples = useLiveSamples(sampledAt, 'gpu', [percentReading(utilisation)]);
+  return samples.some((point) => point.values[0] != null) ? <LiveMetricChart label="Live GPU utilisation" samples={samples} gapMs={45_000} /> : null;
+}
 
 export function MonitorPerformance({
   sample,
@@ -57,6 +64,13 @@ export function MonitorPerformance({
   const swapFree = sample?.memory.swapFreeBytes ?? null;
   const swapUsed = swapTotal !== null && swapFree !== null && swapFree <= swapTotal ? swapTotal - swapFree : null;
   const network = statusNetwork(host, sample);
+  const memorySamples = useLiveSamples(sample?.sampledAt, sample?.memory.scope ?? '', [usedPercent]);
+  const networkTime = network?.scope === 'host' && host?.available ? host.sampledAt : sample?.sampledAt;
+  const networkIdentity = JSON.stringify([network?.scope, network?.interface, network && 'historyId' in network ? network.historyId : null]);
+  const networkSamples = useLiveSamples(networkTime, networkIdentity, [
+    rateReading(network?.rxBytesPerSecond ?? null),
+    rateReading(network?.txBytesPerSecond ?? null),
+  ]);
   const resourceDelayed = resource === 'network' && network?.scope === 'host' ? false : delayed;
   return (
     <div className="monitor-performance">
@@ -91,17 +105,17 @@ export function MonitorPerformance({
             sample={sample}
             history={history}
             loading={loading}
-            delayed={delayed}
+            historyControls={resource === 'cpu' ? historyControls : null}
             logicalProcessors={logicalProcessors}
             onLogicalProcessorsChange={onLogicalProcessorsChange}
             savingLogicalProcessors={savingLogicalProcessors}
           />
-        ) : telemetryPending ? (
-          <p className="monitor-resource-empty">Loading CPU readings…</p>
         ) : (
           <section aria-labelledby="telemetry-cpu-title">
             <h2 id="telemetry-cpu-title">CPU</h2>
-            <p className="monitor-resource-empty">CPU readings are unavailable.</p>
+            <p className="monitor-resource-empty">{telemetryPending ? 'Loading CPU readings…' : 'CPU readings are unavailable.'}</p>
+            {resource === 'cpu' ? historyControls : null}
+            <CpuRecordedChart history={history} loading={loading} />
           </section>
         )}
       </div>
@@ -118,7 +132,8 @@ export function MonitorPerformance({
             <strong>{usedPercent === null ? 'Unavailable' : `${usedPercent.toFixed(1)}%`}</strong>
             <span>In use · {statusBytes(used)}</span>
           </div>
-          <MetricChart history={history} field="memory" label="Host memory utilisation" color="var(--desktop-accent)" loading={loading} />
+          <p className="monitor-processor-caption">Last 60 seconds · 0–100%. Gaps mean missing readings.</p>
+          <LiveMetricChart label="Live memory utilisation" samples={memorySamples} />
           <dl className="monitor-resource-facts">
             <div>
               <dt>In use</dt>
@@ -141,6 +156,8 @@ export function MonitorPerformance({
               <dd>{statusBytes(swapTotal)}</dd>
             </div>
           </dl>
+          {historyControls}
+          <MetricChart history={history} field="memory" label="Host memory utilisation" color="var(--desktop-accent)" loading={loading} />
         </section>
       ) : null}
       {resource === 'network' ? (
@@ -178,9 +195,15 @@ export function MonitorPerformance({
               ? 'Live counters are for the named host interface.'
               : 'Host interface readings are unavailable. These readings cover Orbis traffic.'}
           </p>
+          <p className="monitor-processor-caption">Last 60 seconds · gaps mean missing readings.</p>
+          <div className="monitor-live-chart-grid">
+            <LiveMetricChart label="Live download" samples={networkSamples} unit="rate" />
+            <LiveMetricChart label="Live upload" samples={networkSamples} index={1} unit="rate" />
+          </div>
           <h3 id="monitor-network-history-title" className="monitor-chart-subtitle">
             Network history
           </h3>
+          {historyControls}
           <p className="monitor-resource-note">History records Orbis traffic, which may differ from the live host interface above.</p>
           <div className="desktop-network-charts">
             <MetricChart history={history} field="download" label="Network download" color="var(--desktop-accent)" loading={loading} />
@@ -188,8 +211,19 @@ export function MonitorPerformance({
           </div>
         </section>
       ) : null}
-      {resource === 'gpu' ? <GpuReadings data={sensors} stale={sensorsDelayed} /> : null}
-      {resource !== 'gpu' ? historyControls : null}
+      <div className="monitor-performance-live" hidden={resource !== 'gpu'}>
+        <GpuReadings
+          data={sensors}
+          stale={sensorsDelayed}
+          renderLiveChart={(gpu) => (sensors?.available ? <GpuLiveChart sampledAt={sensors.sampledAt} utilisation={gpu.utilizationPercent} /> : null)}
+        />
+        <section className="monitor-gpu-history" aria-labelledby="monitor-gpu-history-title">
+          <h3 id="monitor-gpu-history-title" className="monitor-chart-subtitle">
+            Recorded history
+          </h3>
+          <p className="monitor-resource-note">GPU utilisation history is unavailable.</p>
+        </section>
+      </div>
     </div>
   );
 }

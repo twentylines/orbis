@@ -235,7 +235,7 @@ export function HostUpdateProvider({ children, suspended = false }: PropsWithChi
   return (
     <HostUpdateContext.Provider
       value={{
-        watch,
+        watch: accepted && enabled ? advanceCoreUpdate(watch, { type: 'accepted', ...accepted }) : watch,
         departing: continuity.departing,
         core: core.data,
         packageJob: packages.data?.job ?? null,

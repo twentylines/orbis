@@ -176,7 +176,7 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   }
   if (opacity !== null) surface[3] = opacity / 100;
   if (chromeOpacity !== null) chrome[3] = chromeOpacity / 100;
-  const defaultChromeOpacity = dark ? 0.52 : 0.8;
+  const defaultChromeOpacity = dark ? 0.28 : 0.8;
   const defaultChromeChanged = !solid && chromeOpacity === null && chrome[3] > defaultChromeOpacity;
   if (defaultChromeChanged) chrome[3] = defaultChromeOpacity;
   if (solid) surface[3] = chrome[3] = panel[3] = 1;
@@ -199,9 +199,13 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
     paneSurface[3] = Math.min(1, Math.round((paneSurface[3] + 0.01) * 100) / 100);
   const paneChanged = homeSurface[3] !== tintedSurface[3] || css(paneSurface) !== css(tintedSurface);
   set('pane-surface', css(paneSurface));
-  // Photo presets already define their chrome tint separately from the panel.
-  const defaultChromeTint = themeColour ? 0.14 : Number(source.getPropertyValue('--desktop-base-chrome-tint').trim() || '0.14');
-  const chromeTint = dark && !solid && !customMaterial ? defaultChromeTint : tint;
+  const chromeTint = dark ? 0 : tint;
+  // Dark navigation is a neutral smoked glass. Keep the palette on its logo,
+  // selections and actions rather than washing the entire bar in that colour.
+  if (dark) {
+    chrome[0] = chrome[1] = chrome[2] = 8;
+    set('chrome-rgb', '8, 8, 8');
+  }
   const guardedGlass = !solid && (chromeOpacity !== null || dark);
   const chromePaint: Rgba = guardedGlass ? [chrome[0], chrome[1], chrome[2], 1] : chrome;
   const tintedPaint = mix(chromePaint, preset, chromeTint);
@@ -263,6 +267,7 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   const chromeBlur = customMaterial ? numeric('chromeBlur', 0, 64) : null;
   if (solid || chromeBlur === 0) set('chrome-filter', 'none');
   else if (chromeBlur !== null) set('chrome-filter', `blur(${chromeBlur}px) saturate(1.2)`);
+  else if (dark) set('chrome-filter', 'blur(24px) saturate(1.2)');
 
   if (brightness < 1 && (chromeBlur === 0 || (chromeBlur === null && blur === 0))) set('glass-chrome-blur', 'blur(0px)');
 

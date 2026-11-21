@@ -93,6 +93,7 @@
 .desktop-updates-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: clamp(0.85rem, 2cqi, 1.2rem);
   min-width: 0;
 }
@@ -110,14 +111,14 @@
   container-type: inline-size;
 }
 .desktop-updates-card-orbis {
-  align-self: start;
-}
-.desktop-updates-release,
-.desktop-updates-sentinel {
   grid-column: 1 / -1;
 }
+.desktop-updates-release {
+  margin-block-start: 1rem;
+  padding-block-start: 1rem;
+  border-block-start: 1px solid var(--desktop-line);
+}
 .desktop-updates-release .desktop-release-history {
-  max-width: 76ch;
   margin: 0 0 0.9rem;
 }
 .desktop-updates-release .desktop-update-markdown {
@@ -398,9 +399,6 @@
     align-self: center;
     inline-size: clamp(8.5rem, 31cqi, 12rem);
   }
-  .desktop-updates-card-orbis .desktop-updates-artwork {
-    inline-size: clamp(5rem, 18cqi, 7rem);
-  }
 }
 .desktop-updates-card-head h2 {
   flex: 1 1 min-content;
@@ -423,12 +421,12 @@
   min-width: 0;
   flex: 1 1 11rem;
 }
-.desktop-updates-card-orbis .desktop-update-summary {
-  display: grid;
-  justify-items: start;
+.desktop-updates-card-orbis .desktop-update-summary > div {
+  flex: 0 1 auto;
 }
 .desktop-updates-card-orbis .desktop-update-summary > button {
   max-inline-size: 100%;
+  margin: 0;
 }
 .desktop-update-summary :is(p, output) {
   display: block;

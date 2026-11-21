@@ -418,7 +418,7 @@ function ServerMonitor() {
         <Tabs.Content className="monitor-section-panel monitor-devices-panel" value="devices">
           <HostDevices />
           <MonitorDisclosure title="Recorded device history" openRequest={location.hash === '#device-history' ? location.key : undefined}>
-            <HostDeviceHistoryView section="devices" layoutReady={!host.isPending} />
+            <HostDeviceHistoryView section="devices" layoutReady={!host.isPending} host={currentHost ?? undefined} />
           </MonitorDisclosure>
           <MonitorDisclosure
             title="Additional storage and network readings"

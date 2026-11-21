@@ -106,7 +106,12 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
       }, scrollSettleDelay);
     };
     scrollToTop.current = () => {
-      if (settledSource !== activeSource || !settledSource?.isConnected || !scrollable(settledSource)) return;
+      if (!hidden || settledSource !== activeSource || !settledSource?.isConnected || !scrollable(settledSource)) return;
+      // An explicit Go up also leaves chart-entry mode, which ignores automatic chart alignment.
+      chartEntry = false;
+      manualChartScroll = false;
+      monitorDestination.current = null;
+      wheel = undefined;
       settledSource.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'instant' : 'smooth' });
     };
     // Update the button without rendering the dashboard on every scroll frame.

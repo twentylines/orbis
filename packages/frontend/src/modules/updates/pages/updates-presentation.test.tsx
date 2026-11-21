@@ -93,6 +93,12 @@ function renderLocalUpdates({
   operatingSystem = 'Ubuntu 24.04 LTS',
   releaseBody = 'Release notes',
   releaseChannel = 'stable',
+  coreRequest,
+  runningCore = false,
+  queryClient,
+  packagesReady = 'available',
+  readyCount = 1,
+  deferredCount = 0,
 }: {
   operator?: boolean;
   legacyHelper?: boolean;
@@ -100,8 +106,14 @@ function renderLocalUpdates({
   operatingSystem?: string;
   releaseBody?: string;
   releaseChannel?: 'stable' | 'nightly';
+  coreRequest?: 'review';
+  runningCore?: boolean;
+  queryClient?: QueryClient;
+  packagesReady?: 'available' | 'unavailable' | 'legacy';
+  readyCount?: number;
+  deferredCount?: number;
 } = {}) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
+  const client = queryClient ?? new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
   client.setQueryData(appContextQueryKey(), { user: { id: 7, operator }, version: { current: '4.10.1' } });
   client.setQueryData(getInstalledAppsOptions().queryKey, { installed: [] });
   client.setQueryData(installedOrbisBuildOptions().queryKey, {
@@ -127,14 +139,26 @@ function renderLocalUpdates({
     coreState: 'running',
     coreHealth: 'healthy',
     currentTag: 'v0.1.0',
+    job: runningCore ? { id: 'core', state: 'running', message: 'Downloading image' } : null,
     capabilities: legacyHelper ? ['restart.v1'] : ['restart.v1', 'packages.refresh.v1'],
   });
   client.setQueryData(['orbis-host-packages'], {
     available: true,
     operatingSystem,
     checkedAt: '2026-11-19T05:00:00Z',
-    packageCount: 1,
-    packages: [{ name: 'test-package', installedVersion: '1', candidateVersion: '2', downloadBytes: 1024, security: false, sources: [] }],
+    packageCount: readyCount + deferredCount,
+    readiness: packagesReady === 'legacy' ? undefined : packagesReady,
+    readyPackageCount: packagesReady === 'available' ? readyCount : undefined,
+    deferredPackageCount: packagesReady === 'available' ? deferredCount : undefined,
+    packages: Array.from({ length: readyCount + deferredCount }, (_, index) => ({
+      name: `test-package-${index}`,
+      installedVersion: '1',
+      candidateVersion: '2',
+      downloadBytes: 1024,
+      security: false,
+      sources: [],
+      ready: packagesReady === 'available' ? index < readyCount : undefined,
+    })),
   });
   client.setQueryData(['orbis-host-package-job'], {
     available: true,
@@ -146,6 +170,23 @@ function renderLocalUpdates({
     installedVersion: '0.1.0',
     availableVersion: null,
   });
+  if (coreRequest) {
+    client.getMutationCache().build(
+      client,
+      { mutationKey: ['orbis-compatibility', 'update', 7, 'v0.1.0'] },
+      {
+        status: 'pending',
+        error: null,
+        failureReason: null,
+        data: undefined,
+        variables: 'v0.2.0',
+        context: undefined,
+        failureCount: 0,
+        isPaused: false,
+        submittedAt: Date.now(),
+      },
+    );
+  }
   const markup = renderToStaticMarkup(
     <MemoryRouter>
       <QueryClientProvider client={client}>
@@ -168,7 +209,7 @@ function renderLocalUpdates({
       </QueryClientProvider>
     </MemoryRouter>,
   );
-  client.clear();
+  if (!queryClient) client.clear();
   return markup;
 }
 
@@ -183,7 +224,7 @@ test('default System view brings the Orbis, OS and service statuses together whi
   expect(markup).not.toMatch(/<h2[^>]*>Host service<\/h2>/);
   expect(markup).toContain('Update Orbis');
   expect(markup).toContain('Update system');
-  expect(markup).toContain('1 update available');
+  expect(markup).toContain('1 update ready');
   expect(markup).toMatch(/<details class="desktop-system-update-details(?: desktop-orbis-update-details)?"><summary>/);
   expect(markup).toContain('Package details and exclusions');
   expect(markup).toContain('Installed build details');
@@ -241,4 +282,64 @@ test('long release notes start folded and keep their own release entry', () => {
   expect(markup).toMatch(/<details class="desktop-release-note"><summary>/);
   expect(markup).toContain('View release on GitHub');
   expect(markup).not.toContain('Long release notes.');
+});
+
+test('Orbis status covers unresolved preflight, transfers to the host job, and clears on failure', async () => {
+  const reviewing = renderLocalUpdates({ coreRequest: 'review' });
+  expect(reviewing).toContain('Initialising update</strong><span>Checking release compatibility');
+
+  const queryClient = new QueryClient();
+  try {
+    const { promise, reject } = Promise.withResolvers<never>();
+    const applying = queryClient
+      .getMutationCache()
+      .build(queryClient, {
+        mutationKey: ['orbis-compatibility', 'update', 7, 'v0.1.0', 'apply'],
+        mutationFn: () => promise,
+      })
+      .execute('v0.2.0');
+    expect(renderLocalUpdates({ queryClient })).toContain('Initialising update</strong><span>Checking the release and backup storage');
+
+    const installing = renderLocalUpdates({ queryClient, runningCore: true });
+    expect(installing).toContain('Installing Orbis</strong><span>Downloading image');
+    expect(installing).not.toContain('Initialising update');
+
+    reject(new Error('Could not verify backup storage.'));
+    await expect(applying).rejects.toThrow('Could not verify backup storage.');
+    const failed = renderLocalUpdates({ queryClient });
+    expect(failed).toContain('Could not verify backup storage.');
+    expect(failed).not.toContain('Initialising update');
+  } finally {
+    queryClient.clear();
+  }
+});
+
+test('the Orbis card contains the release changelog after the version and action, ahead of other system cards', () => {
+  const markup = renderLocalUpdates();
+  expect(markup).toMatch(
+    /desktop-updates-card-orbis[\s\S]*Update available[\s\S]*>Update Orbis<\/button>[\s\S]*desktop-updates-release[\s\S]*<h3[^>]*>Changelog<\/h3>[\s\S]*<\/section><section class="desktop-updates-card desktop-updates-host"/,
+  );
+});
+
+test('package readiness shows a ready subset and keeps deferred packages visible but unselectable', () => {
+  const markup = renderLocalUpdates({ readyCount: 2, deferredCount: 1 });
+  expect(markup).toContain('2 updates ready');
+  expect(markup).toContain('3 available · 1 deferred by APT');
+  expect(markup).toContain('2 of 2 ready selected');
+  expect(markup).toMatch(/aria-label="Select test-package-0 for update"[^>]*checked/);
+  expect(markup).toMatch(/aria-label="Select test-package-2 for update"[^>]*disabled/);
+  expect(markup).toContain('>Deferred</span>');
+});
+
+test('zero ready is distinct from unreadable or legacy readiness, with no install action', () => {
+  const deferred = renderLocalUpdates({ readyCount: 0, deferredCount: 2 });
+  expect(deferred).toContain('No updates ready');
+  expect(deferred).toContain('2 available · 2 deferred by APT');
+  expect(deferred).not.toContain('>Update system</button>');
+  const unavailable = renderLocalUpdates({ packagesReady: 'unavailable' });
+  expect(unavailable).toContain('APT could not confirm which packages are ready.');
+  expect(unavailable).not.toContain('>Update system</button>');
+  const legacy = renderLocalUpdates({ packagesReady: 'legacy' });
+  expect(legacy).toContain('Update the system service to check which packages are ready.');
+  expect(legacy).not.toContain('>Update system</button>');
 });

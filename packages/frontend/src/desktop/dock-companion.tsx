@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { prefersReducedMotion } from './motion-setting';
 import { dockMotionDuration, sectionMotionEasing } from './section-motion-geometry';
-import { canJoinDockPills } from './dock-motion-geometry';
+import { canJoinDockPills, dockCircleSplitBridge } from './dock-motion-geometry';
 import { advanceDockFold, dockSideWidth, foldDockBox, foldDockClip } from './dock-scroll-state';
 
 export function replayStartupChrome(root: HTMLElement, reduced: boolean) {
@@ -238,6 +238,7 @@ export function DockGlass({ collapsed = false, reduced = false }: { collapsed?: 
     const element = glass.current;
     const dock = element?.parentElement;
     if (!element || !dock) return;
+    setDockStyle(dock, '--orbis-dock-compact-size', `${compactHeight}px`);
     let frame = 0;
     let disposed = false;
     const pillMotions = () =>
@@ -279,7 +280,11 @@ export function DockGlass({ collapsed = false, reduced = false }: { collapsed?: 
       const activity = dock.querySelector<HTMLElement>('.desktop-activity-rail');
       const traySize = tray?.parentElement?.offsetWidth ?? 0;
       const scrollTopSpacer = dock.querySelector<HTMLElement>('.desktop-dock-top-space');
-      const scrollTopSpace = scrollTopSpacer?.offsetWidth ?? 0;
+      const scrollTopButton = dock.querySelector<HTMLElement>('.desktop-dock-scroll-top');
+      const scrollTopSpace = scrollTopSpacer ? Number.parseFloat(getComputedStyle(scrollTopSpacer).width) || 0 : 0;
+      const splitTravel = scrollTopSpace / (compactHeight + pillGap);
+      setDockStyle(dock, '--orbis-dock-top-offset', `${scrollTopSpace}px`);
+      setDockStyle(dock, '--orbis-dock-top-travel', String(splitTravel));
       const sideBySide = scrollTopSpacer && getComputedStyle(scrollTopSpacer).position === 'static';
       const primaryWidth = primary.offsetWidth;
       const style = getComputedStyle(dock);
@@ -355,6 +360,11 @@ export function DockGlass({ collapsed = false, reduced = false }: { collapsed?: 
       primary.style.clipPath = progress > 0 ? foldDockClip(originalMain, main) : '';
       const moving = !progress && Boolean(dock.querySelector('[data-pill-motion]'));
       let path = rounded(main);
+      if (progress > 0 && splitTravel > 0 && scrollTopButton) {
+        const topButton = read(scrollTopButton);
+        path += rounded(topButton);
+        path += dockCircleSplitBridge(main.right, topButton.left, (topButton.top + topButton.bottom) / 2, compactHeight / 2);
+      }
       if (tray?.getClientRects().length) {
         const box = read(tray);
         const covered = Math.max(0, main.right - box.left);
@@ -419,6 +429,9 @@ export function DockGlass({ collapsed = false, reduced = false }: { collapsed?: 
       disposed = true;
       redrawFold.current = () => undefined;
       dock.style.removeProperty('--orbis-dock-fold');
+      dock.style.removeProperty('--orbis-dock-compact-size');
+      dock.style.removeProperty('--orbis-dock-top-offset');
+      dock.style.removeProperty('--orbis-dock-top-travel');
       dock.style.removeProperty('--orbis-dock-nav-center');
       dock.style.removeProperty('--orbis-dock-nav-margin');
       for (const node of dock.querySelectorAll<HTMLElement>('.desktop-dock-main, .orbis-app-tray, .desktop-activity-rail'))

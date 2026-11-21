@@ -1,10 +1,21 @@
-import type { HostSensors } from '@runtipi/common/schemas';
+import type { ReactNode } from 'react';
+import type { HostGpu, HostSensors } from '@runtipi/common/schemas';
 import { IconDeviceDesktopAnalytics } from '@tabler/icons-react';
 import { Link } from 'react-router';
 import './gpu-readings.css';
 import { statusBytes, usagePercent } from './system-readings';
 
-export function GpuReadings({ data, stale = false, compact = false }: { data?: HostSensors; stale?: boolean; compact?: boolean }) {
+export function GpuReadings({
+  data,
+  stale = false,
+  compact = false,
+  renderLiveChart,
+}: {
+  data?: HostSensors;
+  stale?: boolean;
+  compact?: boolean;
+  renderLiveChart?: (gpu: HostGpu) => ReactNode;
+}) {
   const gpus = data?.available ? data.gpus : [];
   if (compact && !gpus.length) return null;
   return (
@@ -30,6 +41,9 @@ export function GpuReadings({ data, stale = false, compact = false }: { data?: H
           </span>
         </header>
       )}
+      {renderLiveChart && gpus.some((gpu) => gpu.utilizationPercent !== null) ? (
+        <p className="monitor-processor-caption">Last 60 seconds · one GPU sample every 30 seconds. Gaps mean missing readings.</p>
+      ) : null}
       {stale ? <p className="monitor-resource-note">Readings delayed. Values below are from the last hardware sample.</p> : null}
       <div className="monitor-gpu-grid">
         {gpus.map((gpu, index) => {
@@ -57,7 +71,8 @@ export function GpuReadings({ data, stale = false, compact = false }: { data?: H
                   </div>
                 )}
               </dl>
-              {reported ? <meter min={0} max={100} value={utilisation} aria-label={`${gpu.label} utilisation`} /> : null}
+              {renderLiveChart?.(gpu)}
+              {reported && !renderLiveChart ? <meter min={0} max={100} value={utilisation} aria-label={`${gpu.label} utilisation`} /> : null}
               {!compact && memory !== null ? <meter min={0} max={100} value={memory} aria-label={`${gpu.label} memory usage`} /> : null}
             </article>
           );

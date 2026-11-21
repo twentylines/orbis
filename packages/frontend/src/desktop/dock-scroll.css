@@ -26,8 +26,9 @@
   translate: -50% 0;
   display: grid;
   place-items: center;
-  width: 56px;
-  height: 56px;
+  box-sizing: border-box;
+  inline-size: var(--orbis-dock-compact-size, 56px);
+  block-size: var(--orbis-dock-compact-size, 56px);
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -45,7 +46,7 @@
 .desktop .desktop-dock .desktop-dock-glass {
   visibility: var(--orbis-dock-shared-glass, visible);
 }
-.desktop .desktop-dock :is(.desktop-dock-main, .desktop-dock-reveal, .orbis-app-tray, .desktop-activity-trigger) {
+.desktop .desktop-dock :is(.desktop-dock-main, .desktop-dock-reveal, .desktop-dock-scroll-top, .orbis-app-tray, .desktop-activity-trigger) {
   background: var(--orbis-dock-local-glass, transparent);
   backdrop-filter: var(--orbis-dock-local-filter, none);
   -webkit-backdrop-filter: var(--orbis-dock-local-filter, none);
@@ -62,26 +63,16 @@
   width: 0;
   height: 0;
   pointer-events: none;
-  transition: width 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: width 360ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 .desktop-dock[data-scroll-top] .desktop-dock-top-space {
-  width: 68px;
+  width: calc(var(--orbis-dock-compact-size, 56px) + 12px);
 }
 .desktop .desktop-dock .desktop-dock-scroll-top {
-  background: var(--desktop-chrome);
-  backdrop-filter: var(--desktop-glass-chrome-filter);
-  -webkit-backdrop-filter: var(--desktop-glass-chrome-filter);
-  opacity: 0;
-  scale: 0.72;
-  transition:
-    translate 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    scale 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 145ms ease;
+  left: calc(var(--orbis-dock-nav-center, 50%) + var(--orbis-dock-top-offset, 0px));
+  opacity: calc(var(--orbis-dock-top-travel, 0) * clamp(0, (var(--orbis-dock-fold, 0) - 0.72) / 0.28, 1));
 }
 .desktop .desktop-dock[data-scroll-top] .desktop-dock-scroll-top {
-  opacity: clamp(0, calc((var(--orbis-dock-fold, 0) - 0.72) / 0.28), 1);
-  translate: 40px 0;
-  scale: 1;
   pointer-events: auto;
 }
 @media (min-width: 1100px) and (min-height: 640px) {

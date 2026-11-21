@@ -52,6 +52,7 @@ export function DockActivity() {
         id: `compatibility-${mutation.state.submittedAt}-${target}`,
         target,
         operation: String(mutation.options.mutationKey?.[1] ?? 'update'),
+        applying: mutation.options.mutationKey?.[4] === 'apply',
       };
     },
   });
@@ -208,7 +209,7 @@ function ActivityPill({ activity, desktop }: { activity: DesktopActivity; deskto
                   <ActivityIcon kind={displayed.kind} appUrn={displayed.appUrn} />
                 </span>
                 <span className="desktop-activity-summary">
-                  <strong>{displayed.title}</strong>
+                  <strong data-initialising={displayed.items[0]?.state === 'initialising' || undefined}>{displayed.title}</strong>
                   <small>{displayed.detail}</small>
                   {displayed.kind === 'time-machine' ? <RecoveryProgressBar label="Time Machine capture" percentage={displayed.percentage} /> : null}
                 </span>

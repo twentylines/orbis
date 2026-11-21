@@ -105,6 +105,76 @@ class HostPackagesTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "omitted"):
             PACKAGES.parse_simulation("Inst other [1.0] (1.1 Ubuntu:24.04/noble-updates [arm64])\n", selected)
 
+    def test_simulation_accepts_apt_transient_dependency_annotations(self):
+        selected = [{"name": "service:arm64", "candidateVersion": "1:1.1~noble+1"}]
+        operations = PACKAGES.parse_simulation(
+            "Inst dependency (2.0 Ubuntu:24.04/noble-updates [arm64]) [service:arm64 helper:arm64 ]\n"
+            "Inst service [1.0] (1:1.1~noble+1 Ubuntu:24.04/noble-updates [arm64]) "
+            "[service:arm64 on dependency:arm64] []\n"
+            "Conf dependency (2.0 Ubuntu:24.04/noble-updates [arm64])\n",
+            selected,
+        )
+        self.assertEqual(operations, [
+            {"name": "dependency", "installedVersion": None, "candidateVersion": "2.0", "action": "install"},
+            {"name": "service", "installedVersion": "1.0", "candidateVersion": "1:1.1~noble+1", "action": "upgrade"},
+        ])
+
+    def test_simulation_annotations_do_not_allow_unknown_actions_or_changed_candidates(self):
+        selected = [{"name": "service", "candidateVersion": "1.1"}]
+        install = "Inst service [1.0] (1.1 Ubuntu:24.04/noble-updates [arm64])"
+        for suffix in [" arbitrary", " [--option ]", " [service:arm64 does dependency:arm64]"]:
+            with self.subTest(suffix=suffix), self.assertRaisesRegex(ValueError, "unrecognized install"):
+                PACKAGES.parse_simulation(install + suffix, selected)
+        for action in ["Remv", "Purg"]:
+            with self.subTest(action=action), self.assertRaisesRegex(ValueError, "removal"):
+                PACKAGES.parse_simulation(install + " []\n" + action + " other [2.0]\n", selected)
+        with self.assertRaisesRegex(ValueError, "omitted or changed"):
+            PACKAGES.parse_simulation(install.replace("(1.1", "(1.2") + " []", selected)
+
+    def test_inventory_distinguishes_ready_deferred_and_unknown(self):
+        cache = [package("service:arm64"), package("service:amd64"), package("deferred:arm64")]
+        common = {"checked_at": "now", "indexes_at": None, "reboot_required": False}
+        operations = [{"name": "service", "installedVersion": "1.0", "candidateVersion": "1.1", "action": "upgrade"}]
+        result = PACKAGES.inventory_from_cache(cache, {}, **common, ready_operations=operations, native_architecture="arm64")
+        self.assertEqual((result["packageCount"], result["readyPackageCount"], result["deferredPackageCount"]), (3, 1, 2))
+        self.assertEqual([(item["name"], item["ready"]) for item in result["packages"]], [
+            ("service:arm64", True), ("deferred:arm64", False), ("service:amd64", False),
+        ])
+        unavailable = PACKAGES.inventory_from_cache(cache, {}, **common)
+        self.assertEqual(unavailable["readiness"], "unavailable")
+        self.assertNotIn("readyPackageCount", unavailable)
+        self.assertTrue(all("ready" not in item for item in unavailable["packages"]))
+
+    def test_normal_upgrade_accepts_no_work_with_timeout_below_inventory_transport(self):
+        with mock.patch.object(PACKAGES, "run_simulation", return_value="0 upgraded, 0 newly installed, 0 to remove.\n") as simulate:
+            self.assertEqual(PACKAGES.normal_upgrade_operations(), [])
+            simulate.assert_called_once_with(["/usr/bin/apt-get", "--simulate", "--no-remove", "upgrade"], 15)
+
+    def test_upgrade_rejects_deferred_selection_and_implicit_upgrade_but_keeps_reviewed_install(self):
+        cache = {name: package(name) for name in ("service:arm64", "deferred:arm64")}
+        ready = {"name": "service", "installedVersion": "1.0", "candidateVersion": "1.1", "action": "upgrade"}
+        new_dependency = {"name": "dependency", "installedVersion": None, "candidateVersion": "2.0", "action": "install"}
+        deferred = {**ready, "name": "deferred"}
+        with mock.patch.object(PACKAGES, "require_ubuntu"), mock.patch.object(
+            PACKAGES, "apt_module", return_value=SimpleNamespace(Cache=lambda: cache)
+        ), mock.patch.object(PACKAGES, "native_apt_architecture", return_value="arm64"), mock.patch.object(
+            PACKAGES, "normal_upgrade_operations", return_value=[ready]
+        ), mock.patch.object(PACKAGES, "simulate_install") as simulate:
+            with self.assertRaisesRegex(ValueError, "deferring"):
+                PACKAGES.simulate_upgrades(["deferred:arm64"])
+            simulate.assert_not_called()
+            simulate.side_effect = [
+                {"operations": [ready.copy(), deferred]},
+                {"operations": [ready.copy(), new_dependency]},
+                {"operations": [{**ready, "name": "service:amd64"}]},
+            ]
+            with self.assertRaisesRegex(ValueError, "outside"):
+                PACKAGES.simulate_upgrades(["service:arm64"])
+            result = PACKAGES.simulate_upgrades(["service:arm64"])
+            self.assertEqual(result["operations"], [{**ready, "name": "service:arm64"}, new_dependency])
+            with self.assertRaisesRegex(ValueError, "outside"):
+                PACKAGES.simulate_upgrades(["service:arm64"])
+
     def test_simulation_rejects_malformed_or_untrusted_selection(self):
         item = package()
         with self.assertRaisesRegex(ValueError, "distinct"):

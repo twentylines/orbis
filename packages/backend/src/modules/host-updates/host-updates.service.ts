@@ -122,6 +122,7 @@ export type HostPackage = {
   candidateVersion: string;
   downloadBytes: number | null;
   security: boolean;
+  ready?: boolean;
   sources: Array<{ origin: string | null; archive: string | null; site: string | null; trusted: boolean }>;
 };
 
@@ -134,6 +135,9 @@ export type HostPackageInventory = {
   indexesUpdatedAt?: string | null;
   rebootRequired?: boolean;
   packageCount?: number;
+  readiness?: 'available' | 'unavailable';
+  readyPackageCount?: number;
+  deferredPackageCount?: number;
   truncated?: boolean;
   packages?: HostPackage[];
 };

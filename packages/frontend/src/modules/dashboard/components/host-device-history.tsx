@@ -1,3 +1,4 @@
+import type { HostTelemetry } from '@runtipi/common/schemas';
 import { useServerPath } from '@/desktop/cluster-data';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef } from 'react';
@@ -9,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { revealPageFocus } from '@/desktop/window-viewport';
+import { LiveMetricChart, useLiveSamples } from './live-metric-chart';
+import { percentReading, rateReading } from './logical-processor-history';
 import './host-device-history.css';
 
 const keyOf = (device: HostHistorySelection) => `${device.kind}:${device.name}`;
@@ -22,7 +25,30 @@ const ranges = [
   ['7d', '7 days'],
 ] as const;
 
-export function HostDeviceHistoryView({ section, layoutReady = true }: { section?: string; layoutReady?: boolean } = {}) {
+function HostDeviceLiveCharts({ host, selected }: { host?: HostTelemetry; selected: HostHistorySelection }) {
+  const current = host?.available && !host.stale ? host : undefined;
+  const network = selected.kind === 'network' ? current?.network.find((item) => item.interface === selected.name) : undefined;
+  const disk = selected.kind === 'disk' ? current?.disks.find((item) => item.device === selected.name) : undefined;
+  const samples = useLiveSamples(current?.sampledAt, JSON.stringify([selected.kind, selected.name, network?.historyId ?? disk?.historyId]), [
+    rateReading(network?.rxBytesPerSecond ?? disk?.readBytesPerSecond ?? null),
+    rateReading(network?.txBytesPerSecond ?? disk?.writeBytesPerSecond ?? null),
+    percentReading(disk?.busyPercent ?? null),
+  ]);
+
+  return (
+    <section className="host-history-live" aria-label="Live device activity">
+      <h3 className="monitor-chart-subtitle">Live device activity</h3>
+      <p className="monitor-processor-caption">Last 60 seconds · gaps mean missing readings.</p>
+      <div className="monitor-live-chart-grid">
+        <LiveMetricChart label={selected.kind === 'disk' ? 'Live read' : 'Live download'} samples={samples} unit="rate" />
+        <LiveMetricChart label={selected.kind === 'disk' ? 'Live write' : 'Live upload'} samples={samples} index={1} unit="rate" />
+        {selected.kind === 'disk' ? <LiveMetricChart label="Live active time" samples={samples} index={2} /> : null}
+      </div>
+    </section>
+  );
+}
+
+export function HostDeviceHistoryView({ section, layoutReady = true, host }: { section?: string; layoutReady?: boolean; host?: HostTelemetry } = {}) {
   const visible = useWindowVisible();
   const serverPath = useServerPath();
   const queryClient = useQueryClient();
@@ -163,6 +189,10 @@ export function HostDeviceHistoryView({ section, layoutReady = true }: { section
             </SelectContent>
           </Select>
         </div>
+      </div>
+      {selected ? <HostDeviceLiveCharts key={`${basePath}:${selectedKey}`} host={host} selected={selected} /> : null}
+      <div className="host-history-controls">
+        <h3 className="monitor-chart-subtitle">Recorded history</h3>
         <SelectionGroup as="fieldset" className="monitor-history-ranges host-history-ranges">
           <legend className="visually-hidden">Device history time range</legend>
           {ranges.map(([value, label]) => (

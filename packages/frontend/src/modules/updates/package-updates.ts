@@ -1,4 +1,4 @@
-export type PackageCandidate = { name: string; installedVersion: string; candidateVersion: string };
+export type PackageCandidate = { name: string; installedVersion: string; candidateVersion: string; ready?: boolean };
 export const packageUpdateLimit = 250;
 const identifier = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -13,7 +13,7 @@ export type StartedPackageUpdate = { jobId: string; state: 'queued' | 'running' 
 export type PackageUpdateRequest = <T>(path: string, body: object) => Promise<T>;
 
 export function selectedPackageNames(available: readonly PackageCandidate[], chosen: readonly string[] | null) {
-  const names = new Set(available.map((item) => item.name));
+  const names = new Set(available.filter((item) => item.ready === true).map((item) => item.name));
   return chosen === null
     ? [...names].slice(0, packageUpdateLimit)
     : [...new Set(chosen)].filter((name) => names.has(name)).slice(0, packageUpdateLimit);

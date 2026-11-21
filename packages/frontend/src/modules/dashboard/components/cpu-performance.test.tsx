@@ -12,9 +12,7 @@ const sample: Telemetry = {
   network: [],
 };
 const render = (cpu = sample.cpu, history?: MetricHistory, logicalProcessors?: boolean) =>
-  renderToStaticMarkup(
-    <CpuPerformance sample={{ ...sample, cpu }} history={history} loading={false} delayed={false} logicalProcessors={logicalProcessors} />,
-  );
+  renderToStaticMarkup(<CpuPerformance sample={{ ...sample, cpu }} history={history} loading={false} logicalProcessors={logicalProcessors} />);
 
 test('CPU offers one labelled logical processor switch inside the CPU view and preserves actual model and idle utilisation', () => {
   const html = render({ ...sample.cpu, totalPercent: 0 });
@@ -25,6 +23,7 @@ test('CPU offers one labelled logical processor switch inside the CPU view and p
   expect(html).toContain('<strong>0.0%</strong>');
   expect(html).toContain('2 logical processors');
   expect(html).toContain('aria-label="Logical processor utilisation charts"');
+  expect(html).toContain('System CPU utilisation');
   expect(html).not.toContain('aria-pressed');
 });
 
@@ -66,7 +65,8 @@ test('system CPU history leaves runtime and mixed readings as gaps', () => {
   const html = render(sample.cpu, history, false);
   expect(html).toContain('aria-checked="false"');
   expect(html).not.toContain('aria-label="Logical processor utilisation charts"');
-  expect(html).toContain('Inspect System CPU utilisation history');
+  expect(html).toContain('Live total CPU utilisation: 18.0%');
+  expect(html.indexOf('Live total CPU utilisation')).toBeLessThan(html.indexOf('Inspect System CPU utilisation history'));
   expect(html).not.toContain('data-history-segment');
   expect(html).toContain('<circle');
   expect(html).not.toContain('94.0%');
