@@ -266,20 +266,24 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
             </div>
           )}
         </div>
-        {editing ? (
-          <ApplicationEditing
-            workspace={workspace}
-            capabilities={workspaceCapabilities}
-            apps={installed}
-            appsReady={apps.isSuccess}
-            appsFailed={apps.isError}
-            search={appSearch}
-            setSearch={setAppSearch}
-            chooserOpen={appChooserOpen}
-            setChooserOpen={setAppChooserOpen}
-            save={saveWorkspace}
-          />
-        ) : null}
+        <div className="workspace-edit-reveal workspace-app-editor-reveal" inert={!editing} aria-hidden={!editing}>
+          <div className="workspace-edit-clip">
+            {hasEdited.current ? (
+              <ApplicationEditing
+                workspace={workspace}
+                capabilities={workspaceCapabilities}
+                apps={installed}
+                appsReady={apps.isSuccess}
+                appsFailed={apps.isError}
+                search={appSearch}
+                setSearch={setAppSearch}
+                chooserOpen={appChooserOpen}
+                setChooserOpen={setAppChooserOpen}
+                save={saveWorkspace}
+              />
+            ) : null}
+          </div>
+        </div>
         {apps.isError ? (
           <div className="workspace-message" role="alert">
             Applications could not be loaded.{' '}
@@ -358,14 +362,23 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
                 );
                 return (
                   <div className="workspace-app-entry" key={info.urn} {...(pinned.has(urn) ? appSort.itemProps(urn) : {})}>
-                    {editing && pinned.has(urn) ? (
-                      <div className="workspace-app-editbar">
-                        <button className="workspace-drag-grip workspace-app-grip" type="button" {...appSort.gripProps(info.urn, info.name)}>
-                          <IconGripVertical size={18} aria-hidden="true" />
-                        </button>
-                        <button type="button" className="workspace-app-unpin" aria-label={`Unpin ${info.name}`} onClick={() => unpinApp(info.urn)}>
-                          <IconX size={18} aria-hidden="true" />
-                        </button>
+                    {pinned.has(urn) ? (
+                      <div className="workspace-edit-reveal workspace-app-edit-reveal" inert={!editing} aria-hidden={!editing}>
+                        <div className="workspace-edit-clip">
+                          <div className="workspace-app-editbar">
+                            <button className="workspace-drag-grip workspace-app-grip" type="button" {...appSort.gripProps(info.urn, info.name)}>
+                              <IconGripVertical size={18} aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              className="workspace-app-unpin"
+                              aria-label={`Unpin ${info.name}`}
+                              onClick={() => unpinApp(info.urn)}
+                            >
+                              <IconX size={18} aria-hidden="true" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     ) : null}
                     <Link
@@ -501,18 +514,16 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
       data-workspace-slot={workspace.order.indexOf(id)}
       {...(movableWidgets.includes(id) ? widgetSort.itemProps(id) : {})}
     >
-      {editing ? (
-        <div className="workspace-widget-editbar">
-          {movableWidgets.includes(id) ? (
-            <button className="workspace-drag-grip" type="button" {...widgetSort.gripProps(id, labels[id])}>
-              <IconGripVertical size={18} aria-hidden="true" />
-            </button>
-          ) : null}
-          <button className="workspace-widget-hide" type="button" aria-label={`Hide ${labels[id]}`} onClick={() => hideWidget(id)}>
-            <IconX size={17} aria-hidden="true" />
+      <div className="workspace-widget-editbar" inert={!editing} aria-hidden={!editing}>
+        {movableWidgets.includes(id) ? (
+          <button className="workspace-drag-grip" type="button" {...widgetSort.gripProps(id, labels[id])}>
+            <IconGripVertical size={18} aria-hidden="true" />
           </button>
-        </div>
-      ) : null}
+        ) : null}
+        <button className="workspace-widget-hide" type="button" aria-label={`Hide ${labels[id]}`} onClick={() => hideWidget(id)}>
+          <IconX size={17} aria-hidden="true" />
+        </button>
+      </div>
       <div className="workspace-widget-content">{widgets[id]}</div>
     </div>
   );

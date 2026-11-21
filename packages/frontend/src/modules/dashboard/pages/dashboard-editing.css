@@ -3,6 +3,41 @@
 }
 .workspace-widget-content > section {
   margin: 0;
+  transition: padding-block-start 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.workspace-widget {
+  position: relative;
+}
+.workspace[data-arranged] :is(.workspace-heading, .workspace-widget, .workspace-app) {
+  animation: none;
+}
+.workspace-edit-reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease-out,
+    visibility 0s 360ms;
+}
+.workspace-edit-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+.workspace[data-editing] .workspace-edit-reveal {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+.workspace-app-entry {
+  display: flex;
+  flex-direction: column;
+}
+.workspace-app-entry > .workspace-app {
+  flex: 1;
+  height: auto;
 }
 .workspace[data-editing] .workspace-grid .workspace-widget {
   position: relative;
@@ -27,11 +62,24 @@
   position: absolute;
   z-index: 2;
   inset: 14px 28px auto;
+  opacity: 0;
+  visibility: hidden;
+  translate: 0 -4px;
+  transition:
+    opacity 180ms ease-out,
+    translate 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s 360ms;
+}
+.workspace[data-editing] .workspace-widget-editbar {
+  opacity: 1;
+  visibility: visible;
+  translate: 0 0;
+  transition-delay: 0s;
 }
 .workspace-widget-activity .workspace-widget-editbar {
   inset-inline: 27px;
 }
-.workspace-widget-editbar + .workspace-widget-content > section {
+.workspace[data-editing] .workspace-widget-editbar + .workspace-widget-content > section {
   padding-block-start: 70px;
 }
 .workspace-widget-hide {
@@ -307,7 +355,7 @@
 }
 .workspace-heading:has(.workspace-widget-chooser[open]) {
   z-index: 4;
-  animation-fill-mode: none;
+  animation: none;
 }
 .workspace-edit-controls {
   display: flex;
@@ -348,4 +396,14 @@ body:has(.orbis-theme) .workspace-edit-controls .workspace-edit-toggle:focus-vis
 .workspace [data-sortable-over] {
   outline: 2px solid var(--desktop-focus);
   outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace :is(.workspace-edit-reveal, .workspace-widget-editbar),
+  .workspace .workspace-widget-content > section {
+    transition: none;
+  }
+}
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"]) .workspace :is(.workspace-edit-reveal, .workspace-widget-editbar),
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"]) .workspace .workspace-widget-content > section {
+  transition: none;
 }

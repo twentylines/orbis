@@ -60,7 +60,7 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
     const scrolling = document.scrollingElement ?? document.documentElement;
     let activeSource: Element | null = null;
     let focusedSource: Element | null = null;
-    // Pointer and keyboard selection outlasts passive scroll in a sibling.
+    // Intentional input selects a pane; passive layout clamps do not.
     let selectedPane: Element | null = null;
     let coveredRail: Element | null = null;
     let pointerInside = false;
@@ -213,6 +213,7 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
     const noteWheel = (event: WheelEvent) => {
       if (event.ctrlKey || event.shiftKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX) || !(event.target instanceof Element)) return;
       focusedSource = null;
+      selectPane(event.target);
       wheel = { target: event.target, direction: event.deltaY > 0 ? 1 : -1, time: event.timeStamp };
       if (chartEntry && wheel.direction === -1 && content.contains(wheel.target)) reveal();
     };

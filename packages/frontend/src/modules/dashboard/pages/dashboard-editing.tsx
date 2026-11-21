@@ -117,7 +117,7 @@ export function ApplicationEditing({
                   searchInput.current?.focus({ preventScroll: true });
                 }}
               >
-                <AppLogo urn={info.urn} size={28} alt="" />
+                <AppLogo urn={info.urn} size={28} alt="" loading="lazy" startupOptional />
                 <span>{info.name}</span>
                 <IconPin size={16} aria-hidden="true" />
               </button>

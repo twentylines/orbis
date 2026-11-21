@@ -20,14 +20,17 @@
   flex-wrap: wrap;
   gap: 0.15rem 0.5rem;
   margin: 0;
-  padding: 0.18rem 0.65rem;
+  padding: 0.4em 0.8em;
+  translate: 0 calc(1px * var(--orbis-text-scale, 1));
   border: 1px solid var(--desktop-line);
   border-radius: 999px;
+  line-height: 1;
   color: var(--desktop-muted);
   background: color-mix(in srgb, var(--desktop-preset-tint) 10%, transparent);
 }
 .workspace-app-counts span {
   white-space: nowrap;
+  line-height: 1;
 }
 .workspace-app-counts span + span::before {
   display: inline-block;
@@ -42,10 +45,16 @@
 }
 @media (min-width: 651px) {
   .workspace-apps .workspace-section-heading .workspace-app-counts {
-    translate: 0 2px;
+    translate: 0 calc(2.25px * var(--orbis-text-scale, 1));
+  }
+}
+@supports (text-box-trim: trim-both) {
+  .workspace-apps .workspace-section-heading .workspace-app-counts {
+    padding-block: 0.6em;
   }
   .workspace-app-counts span {
-    translate: 0 -0.083333em;
+    text-box-trim: trim-both;
+    text-box-edge: cap alphabetic;
   }
 }
 @media (max-width: 650px) {
