@@ -1,110 +1,84 @@
 import type { GuestAppsDto } from '@/api-client';
 import { getGuestAppsOptions, getGuestLinksOptions } from '@/api-client/@tanstack/react-query.gen';
+import { EmptyPage } from '@/components/empty-page/empty-page';
 import { GuestHeader } from '@/components/header/guest-header';
 import { BaseDashboardLayout } from '@/components/layouts/dashboard/base-dashboard-layout';
+import { Button } from '@/components/ui/Button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
-import { AppTile } from '@/modules/app/components/app-tile/app-tile';
-import { IconLock, IconLockOff, IconSettings } from '@tabler/icons-react';
-import { Link } from 'react-router';
-import { useSuspenseQueries } from '@tanstack/react-query';
-import '@/styles/app-grid.css';
-import { EmptyPage } from '@/components/empty-page/empty-page';
 import { useUserContext } from '@/context/user-context';
+import { appDestinations } from '@/desktop/app-destinations';
+import { AppTile } from '@/modules/app/components/app-tile/app-tile';
+import { useQuery } from '@tanstack/react-query';
+import '@/styles/app-grid.css';
 import { GuestLinkTile } from '../components/guest-link-tile';
 import './guest-dashboard.css';
 
-export const GuestDashboardPending = () => (
-  <BaseDashboardLayout header={<GuestHeader />} pageTitle={<h1 className="page-title guest-dashboard-title">Applications</h1>} startupReady={false}>
-    <output className="visually-hidden">Loading shared applications…</output>
-  </BaseDashboardLayout>
-);
-
 const Tile = ({ data, localDomain, sslPort }: { data: GuestAppsDto['installed'][number]; localDomain: string; sslPort: number }) => {
-  const { info, app, metadata } = data;
+  const { info, app } = data;
+  const destinations = appDestinations(data, { localDomain, sslPort }, window.location.hostname);
+  const tile = <AppTile info={info} status={app.status} updateAvailable={false} />;
 
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-
-  const handleOpen = (type: string) => {
-    let url = '';
-    const { https } = info;
-    const protocol = https ? 'https' : 'http';
-
-    if (typeof window !== 'undefined') {
-      // Current domain
-      const domain = window.location.hostname;
-      url = `${protocol}://${domain}:${app.port ?? info.port}${info.url_suffix || ''}`;
-    }
-
-    if (type === 'domain' && app.domain) {
-      url = `https://${app.domain}${sslPort !== 443 ? `:${sslPort}` : ''}${info.url_suffix || ''}`;
-    }
-
-    if (type === 'localDomain') {
-      url = `https://${metadata.localSubdomain}.${localDomain}${sslPort !== 443 ? `:${sslPort}` : ''}${info.url_suffix || ''}`;
-    }
-
-    window.open(url, '_blank', 'noreferrer');
-  };
+  if (destinations.length === 0) {
+    return (
+      <div className="col-sm-6 col-lg-4 app-link p-2 pt-0 pb-0 mb-0">
+        {tile}
+        <div className="guest-app-unavailable">No launch address available</div>
+      </div>
+    );
+  }
 
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button type="button" className="col-sm-6 col-lg-4 app-link guest-app-trigger p-2 pt-0 pb-0 mb-0" aria-label={`Open ${info.name}`}>
-          <AppTile key={info.urn} info={info} status={app.status} updateAvailable={false} />
+          {tile}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         <DropdownMenuGroup>
-          {app.exposed && app.domain && (
-            <DropdownMenuItem onClick={() => handleOpen('domain')}>
-              <IconLock className="text-green me-2" size={16} />
-              {app.domain}
-              {sslPort !== 443 ? `:${sslPort}` : ''}
+          {destinations.map(({ url }) => (
+            <DropdownMenuItem key={url} onSelect={() => window.open(url, '_blank', 'noopener,noreferrer')}>
+              {new URL(url).host}
             </DropdownMenuItem>
-          )}
-          {(app.exposedLocal || !info.dynamic_config) && (
-            <DropdownMenuItem onClick={() => handleOpen('localDomain')}>
-              <IconLock className="text-muted me-2" size={16} />
-              {metadata.localSubdomain}.{localDomain}
-              {sslPort !== 443 ? `:${sslPort}` : ''}
-            </DropdownMenuItem>
-          )}
-          {(app.openPort || !info.dynamic_config) && (
-            <DropdownMenuItem onClick={() => handleOpen('port')}>
-              <IconLockOff className="text-muted me-2" size={16} />
-              {hostname}:{app.port ?? info.port}
-            </DropdownMenuItem>
-          )}
+          ))}
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 };
 
+function GuestListFeedback({ label, pending, failed, retry }: { label: string; pending: boolean; failed: boolean; retry: () => void }) {
+  if (pending) return <output className="guest-list-feedback">Loading shared {label}…</output>;
+  if (!failed) return null;
+  return (
+    <div className="guest-list-feedback">
+      <p role="alert">Could not load shared {label}.</p>
+      <Button type="button" variant="outline" onClick={retry}>
+        Retry {label}
+      </Button>
+    </div>
+  );
+}
+
 export const GuestDashboard = () => {
   const { localDomain, sslPort } = useUserContext();
-
-  const [{ data: appsData }, { data: linksData }] = useSuspenseQueries({ queries: [getGuestAppsOptions(), getGuestLinksOptions()] });
-
-  const hasContent = appsData.installed.length > 0 || linksData.links.length > 0;
+  const apps = useQuery({ ...getGuestAppsOptions(), networkMode: 'always' });
+  const links = useQuery({ ...getGuestLinksOptions(), networkMode: 'always' });
+  const installed = apps.isSuccess ? apps.data.installed : [];
+  const savedLinks = links.isSuccess ? links.data.links : [];
 
   return (
-    <BaseDashboardLayout
-      header={<GuestHeader />}
-      pageTitle={<h1 className="page-title guest-dashboard-title">Applications</h1>}
-      layoutActions={
-        <Link className="guest-dashboard-manage" to="/login?return_to=%2Fapps" aria-label="Manage shared applications. Sign in to continue.">
-          <IconSettings size={20} aria-hidden="true" />
-          <span>Manage</span>
-        </Link>
-      }
-    >
-      {!hasContent && <EmptyPage title="GUEST_DASHBOARD_NO_APPS" subtitle="GUEST_DASHBOARD_NO_APPS_SUBTITLE" />}
+    <BaseDashboardLayout header={<GuestHeader />} pageTitle={<h1 className="page-title guest-dashboard-title">Applications</h1>}>
+      <GuestListFeedback label="applications" pending={apps.isFetching && !apps.isSuccess} failed={apps.isError} retry={() => void apps.refetch()} />
+      <GuestListFeedback label="links" pending={links.isFetching && !links.isSuccess} failed={links.isError} retry={() => void links.refetch()} />
+      {apps.isSuccess && links.isSuccess && installed.length === 0 && savedLinks.length === 0 && (
+        <EmptyPage title="GUEST_DASHBOARD_NO_APPS" subtitle="GUEST_DASHBOARD_NO_APPS_SUBTITLE" />
+      )}
       <div className="row row-cards">
-        {appsData.installed.map((appData) => {
-          return <Tile key={appData.app.id} data={appData} localDomain={localDomain} sslPort={sslPort} />;
-        })}
-        {linksData.links.map((link) => (
+        {installed.map((appData) => (
+          <Tile key={appData.app.id} data={appData} localDomain={localDomain} sslPort={sslPort} />
+        ))}
+        {savedLinks.map((link) => (
           <GuestLinkTile key={link.id} link={link} />
         ))}
       </div>

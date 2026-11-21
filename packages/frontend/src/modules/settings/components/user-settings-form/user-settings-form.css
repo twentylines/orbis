@@ -14,3 +14,24 @@
     opacity: 1;
   }
 }
+
+.settings-guest-dashboard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.settings-guest-dashboard > div {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.orbis-theme .settings-guest-dashboard > .btn {
+  min-height: 44px;
+  padding-inline: 0.75rem;
+}
+
+.settings-guest-dashboard .orbis-switch {
+  margin-block: 0;
+}

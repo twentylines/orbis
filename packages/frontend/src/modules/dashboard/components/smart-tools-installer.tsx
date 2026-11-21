@@ -92,16 +92,20 @@ export function SmartToolsInstaller({
         </>
       ) : null}
       {installing ? (
-        <output className="workspace-message">Installing smartmontools. Drive health will refresh when installation finishes.</output>
+        <output className="drive-health-tool-status">Installing smartmontools. Drive health will refresh when installation finishes.</output>
       ) : null}
       {job?.kind === 'smart-tools' && ['failed', 'interrupted'].includes(job.state) ? (
-        <p role="alert">{job.message || 'Installation stopped. Inspect the host package transaction before retrying.'}</p>
+        <p role="alert" className="drive-health-tool-status" data-tone="warning">
+          {job.message || 'Installation stopped. Inspect the host package transaction before retrying.'}
+        </p>
       ) : null}
       {blocked && !installing && job?.kind !== 'smart-tools' ? (
-        <p>Finish the current host package transaction before installing SMART tools.</p>
+        <p className="drive-health-tool-status" data-tone="warning">
+          Finish the current host package transaction before installing SMART tools.
+        </p>
       ) : null}
       {requested && !installing ? (
-        <div>
+        <div className="drive-health-tool-status drive-health-tool-request">
           <output>Checking the installation request.</output>
           {open ? null : (
             <button className="btn" type="button" disabled={waiting || status.isFetching} onClick={() => void refreshRequest()}>
@@ -118,9 +122,9 @@ export function SmartToolsInstaller({
       >
         <DialogContent size="sm" closeDisabled={waiting} className="drive-health-confirmation-dialog">
           <DialogHeader>
-            <DialogTitle>Install smartmontools?</DialogTitle>
+            <DialogTitle>Install SMART tools?</DialogTitle>
           </DialogHeader>
-          <DialogDescription>
+          <DialogDescription className="drive-health-tool-review">
             <p>
               Install smartmontools and its required dependencies from Ubuntu’s trusted package repositories. Ubuntu applies its package defaults.
             </p>
@@ -134,9 +138,21 @@ export function SmartToolsInstaller({
                 ))}
               </ul>
             ) : null}
-            {review.isError ? <p role="alert">{review.error.message}</p> : null}
-            {install.isError ? <p role="alert">{install.error.message}</p> : null}
-            {status.isError && requested ? <p role="alert">Task status is unavailable. The installation may still be running.</p> : null}
+            {review.isError ? (
+              <p role="alert" className="drive-health-tool-status" data-tone="warning">
+                {review.error.message}
+              </p>
+            ) : null}
+            {install.isError ? (
+              <p role="alert" className="drive-health-tool-status" data-tone="warning">
+                {install.error.message}
+              </p>
+            ) : null}
+            {status.isError && requested ? (
+              <p role="alert" className="drive-health-tool-status" data-tone="warning">
+                Task status is unavailable. The installation may still be running.
+              </p>
+            ) : null}
           </DialogDescription>
           <DialogFooter>
             <button className="btn" type="button" disabled={waiting} onClick={() => setOpen(false)}>

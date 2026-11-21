@@ -69,7 +69,7 @@
 }
 @media (max-width: 650px) {
   .workspace .workspace-widget-editbar {
-    padding-inline: calc(var(--orbis-compact-panel-space) + 1px);
+    padding-inline: var(--orbis-compact-panel-space);
   }
 }
 .workspace [data-sorting] {

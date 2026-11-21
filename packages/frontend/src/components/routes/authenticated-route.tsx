@@ -1,7 +1,7 @@
 import { ReceiverRequestProvider } from '@/modules/host-transfer/receiver-request-context';
 import { AppContextProvider } from '@/context/app-context';
 import { useUserContext } from '@/context/user-context';
-import { GuestDashboard, GuestDashboardPending } from '@/modules/dashboard/pages/guest-dashboard';
+import { GuestDashboard } from '@/modules/dashboard/pages/guest-dashboard';
 import { QueryErrorResetBoundary } from '@tanstack/react-query';
 import { Suspense } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
@@ -35,11 +35,7 @@ export default () => {
   }
 
   if (isGuestDashboardEnabled && !isLoggedIn) {
-    return (
-      <Suspense fallback={<GuestDashboardPending />}>
-        <GuestDashboard />
-      </Suspense>
-    );
+    return <GuestDashboard />;
   }
 
   return (

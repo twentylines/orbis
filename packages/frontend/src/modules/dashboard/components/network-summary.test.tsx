@@ -31,3 +31,31 @@ test('detailed network facts use the same initial and zero presentation', () => 
   expect(zero.match(/0 B\/s/g)).toHaveLength(2);
   expect(renderToStaticMarkup(<NetworkFacts item={{ ...network, receivedBytes: null }} visible />)).toContain('Unavailable');
 });
+
+test('primary device rates are outside the collapsed additional network readings', async () => {
+  const markup = renderToStaticMarkup(<NetworkFacts item={network} visible />);
+  const primary: string[] = [];
+  const additional: string[] = [];
+  let expanded = false;
+  await new HTMLRewriter()
+    .on('.host-device-network-readings > dl dt', {
+      text: ({ text }) => {
+        if (text) primary.push(text);
+      },
+    })
+    .on('details dl dt', {
+      text: ({ text }) => {
+        if (text) additional.push(text);
+      },
+    })
+    .on('details', {
+      element: (details) => {
+        expanded = details.hasAttribute('open');
+      },
+    })
+    .transform(new Response(markup))
+    .text();
+  expect(primary).toEqual(['Download', 'Upload']);
+  expect(additional).toEqual(['Received', 'Sent', 'Link speed']);
+  expect(expanded).toBeFalse();
+});

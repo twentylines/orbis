@@ -40,6 +40,14 @@
   vertical-align: 0.2em;
   content: "";
 }
+@media (min-width: 651px) {
+  .workspace-apps .workspace-section-heading .workspace-app-counts {
+    translate: 0 2px;
+  }
+  .workspace-app-counts span {
+    translate: 0 -0.083333em;
+  }
+}
 @media (max-width: 650px) {
   .workspace-heading .workspace-greeting h1 {
     font-size: min(var(--orbis-compact-title, 2.25rem), clamp(1.5rem, calc(7.75vw * var(--orbis-text-scale, 1)), 2.25rem));

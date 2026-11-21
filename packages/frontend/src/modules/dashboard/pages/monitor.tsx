@@ -13,7 +13,7 @@ import { formatUptime } from '@/desktop/uptime';
 import './monitor.css';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { HostDevices, useHostReadings } from '../components/host-devices';
-import { HostDeviceHistoryView } from '../components/host-device-history';
+import { DeviceHistoryWorkspace, HistoryHelp } from '../components/host-device-history';
 import { HostSensorsView } from '../components/host-sensors';
 import { ServerRack, useCluster } from '@/desktop/cluster';
 import { useServerPath } from '@/desktop/cluster-data';
@@ -353,7 +353,20 @@ function ServerMonitor() {
             historyControls={
               <>
                 <div className="monitor-history-toolbar">
-                  <h3>Recorded history</h3>
+                  <div className="monitor-history-label">
+                    <h3 className="monitor-chart-subtitle">Recorded history</h3>
+                    <HistoryHelp label="Recorded on this server">
+                      <p>
+                        Readings are collected every ten seconds while Orbis is in use. Minute summaries are saved for seven days; longer ranges show
+                        sample averages and peaks. Idle periods appear as gaps.
+                      </p>
+                      {history.data?.persistedThrough ? (
+                        <p>Saved through {new Date(history.data.persistedThrough).toLocaleString()}.</p>
+                      ) : (
+                        <p>The first minute has not been saved yet.</p>
+                      )}
+                    </HistoryHelp>
+                  </div>
                   <SelectionGroup as="fieldset" className="monitor-history-ranges">
                     <legend className="visually-hidden">History time range</legend>
                     {(
@@ -381,18 +394,6 @@ function ServerMonitor() {
                   <span className="monitor-history-resolution">
                     {range === '5m' ? 'Recent samples' : range === '1h' ? '1 min averages' : range === '24h' ? '5 min averages' : '30 min averages'}
                   </span>
-                  <details className="monitor-history-info">
-                    <summary>Recorded on this server</summary>
-                    <p>
-                      Readings are collected every ten seconds while Orbis is in use. Minute summaries are saved for seven days; longer ranges show
-                      sample averages and peaks. Idle periods appear as gaps.
-                    </p>
-                    {history.data?.persistedThrough ? (
-                      <p>Saved through {new Date(history.data.persistedThrough).toLocaleString()}.</p>
-                    ) : (
-                      <p>The first minute has not been saved yet.</p>
-                    )}
-                  </details>
                 </div>
                 <p className="monitor-history-caption">Gaps indicate missing readings or a change in source.</p>
                 {history.isError ? (
@@ -416,98 +417,108 @@ function ServerMonitor() {
           />
         </Tabs.Content>
         <Tabs.Content className="monitor-section-panel monitor-devices-panel" value="devices">
-          <HostDevices />
-          <MonitorDisclosure title="Recorded device history" openRequest={location.hash === '#device-history' ? location.key : undefined}>
-            <HostDeviceHistoryView section="devices" layoutReady={!host.isPending} host={currentHost ?? undefined} />
-          </MonitorDisclosure>
-          <MonitorDisclosure
-            title="Additional storage and network readings"
-            openRequest={['#telemetry-disks-title', '#telemetry-network-title'].includes(location.hash) ? location.key : undefined}
+          <DeviceHistoryWorkspace
+            key={location.hash === '#device-history' ? location.key : 'devices'}
+            initiallyOpen={location.hash === '#device-history'}
+            searchParams={searchParams}
+            host={currentHost ?? undefined}
           >
-            {sample ? (
-              <div className="desktop-telemetry-grid">
-                <section className="desktop-telemetry-disks" aria-labelledby="telemetry-disks-title">
-                  <h2 id="telemetry-disks-title">Orbis core storage</h2>
-                  {sample.filesystems.length ? (
-                    <div className="desktop-telemetry-list">
-                      {sample.filesystems.map((disk) => (
-                        <div className="desktop-disk" key={`${disk.mount}-${disk.filesystem}`}>
-                          <div>
-                            <strong>{disk.mount}</strong>
-                            <small>{disk.filesystem}</small>
+            {(openHistory) => (
+              <>
+                <HostDevices onHistory={openHistory} />
+                <MonitorDisclosure
+                  title="Additional storage and network readings"
+                  openRequest={['#telemetry-disks-title', '#telemetry-network-title'].includes(location.hash) ? location.key : undefined}
+                >
+                  {sample ? (
+                    <div className="desktop-telemetry-grid">
+                      <section className="desktop-telemetry-disks" aria-labelledby="telemetry-disks-title">
+                        <h2 id="telemetry-disks-title">Orbis core storage</h2>
+                        {sample.filesystems.length ? (
+                          <div className="desktop-telemetry-list">
+                            {sample.filesystems.map((disk) => (
+                              <div className="desktop-disk" key={`${disk.mount}-${disk.filesystem}`}>
+                                <div>
+                                  <strong>{disk.mount}</strong>
+                                  <small>{disk.filesystem}</small>
+                                </div>
+                                <span>
+                                  {bytes(disk.usedBytes)} / {bytes(disk.sizeBytes)}
+                                </span>
+                                <div className="workspace-meter">
+                                  <span
+                                    style={{
+                                      width: width(disk.usedBytes !== null && disk.sizeBytes ? (disk.usedBytes / disk.sizeBytes) * 100 : null),
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                          <span>
-                            {bytes(disk.usedBytes)} / {bytes(disk.sizeBytes)}
-                          </span>
-                          <div className="workspace-meter">
-                            <span
-                              style={{ width: width(disk.usedBytes !== null && disk.sizeBytes ? (disk.usedBytes / disk.sizeBytes) * 100 : null) }}
+                        ) : (
+                          <p>No filesystem readings available.</p>
+                        )}
+                      </section>
+                      <section className="desktop-telemetry-network" aria-labelledby="telemetry-network-title">
+                        <h2 id="telemetry-network-title">Network</h2>
+                        <div className="desktop-network-charts">
+                          <div>
+                            <h3>↓ Download</h3>
+                            <MetricChart
+                              history={history.data}
+                              field="download"
+                              label="Network download"
+                              color="color-mix(in srgb, var(--desktop-accent) 60%, var(--desktop-positive))"
+                              loading={history.isPending}
+                            />
+                          </div>
+                          <div>
+                            <h3>↑ Upload</h3>
+                            <MetricChart
+                              history={history.data}
+                              field="upload"
+                              label="Network upload"
+                              color="var(--desktop-accent)"
+                              loading={history.isPending}
                             />
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p>No filesystem readings available.</p>
-                  )}
-                </section>
-                <section className="desktop-telemetry-network" aria-labelledby="telemetry-network-title">
-                  <h2 id="telemetry-network-title">Network</h2>
-                  <div className="desktop-network-charts">
-                    <div>
-                      <h3>↓ Download</h3>
-                      <MetricChart
-                        history={history.data}
-                        field="download"
-                        label="Network download"
-                        color="color-mix(in srgb, var(--desktop-accent) 60%, var(--desktop-positive))"
-                        loading={history.isPending}
-                      />
-                    </div>
-                    <div>
-                      <h3>↑ Upload</h3>
-                      <MetricChart
-                        history={history.data}
-                        field="upload"
-                        label="Network upload"
-                        color="var(--desktop-accent)"
-                        loading={history.isPending}
-                      />
-                    </div>
-                  </div>
-                  {sample.network.length ? (
-                    <div className="desktop-telemetry-list">
-                      {sample.network.map((item) => (
-                        <div className="desktop-network" key={item.interface}>
-                          <strong>{item.interface}</strong>
-                          <div className="desktop-telemetry-pair">
-                            <span>Download</span>
-                            <strong>{item.rxBytesPerSecond === null ? 'Unavailable' : `${bytes(item.rxBytesPerSecond)}/s`}</strong>
+                        {sample.network.length ? (
+                          <div className="desktop-telemetry-list">
+                            {sample.network.map((item) => (
+                              <div className="desktop-network" key={item.interface}>
+                                <strong>{item.interface}</strong>
+                                <div className="desktop-telemetry-pair">
+                                  <span>Download</span>
+                                  <strong>{item.rxBytesPerSecond === null ? 'Unavailable' : `${bytes(item.rxBytesPerSecond)}/s`}</strong>
+                                </div>
+                                <div className="desktop-telemetry-pair">
+                                  <span>Upload</span>
+                                  <strong>{item.txBytesPerSecond === null ? 'Unavailable' : `${bytes(item.txBytesPerSecond)}/s`}</strong>
+                                </div>
+                                <small>
+                                  Received {bytes(item.receivedBytes)} · Sent {bytes(item.transmittedBytes)}
+                                </small>
+                              </div>
+                            ))}
                           </div>
-                          <div className="desktop-telemetry-pair">
-                            <span>Upload</span>
-                            <strong>{item.txBytesPerSecond === null ? 'Unavailable' : `${bytes(item.txBytesPerSecond)}/s`}</strong>
-                          </div>
-                          <small>
-                            Received {bytes(item.receivedBytes)} · Sent {bytes(item.transmittedBytes)}
-                          </small>
-                        </div>
-                      ))}
+                        ) : (
+                          <p>No network interface readings available.</p>
+                        )}
+                      </section>
                     </div>
+                  ) : telemetry.isPending ? (
+                    <p>Loading core storage and network readings…</p>
                   ) : (
-                    <p>No network interface readings available.</p>
+                    <section className="desktop-telemetry-disks" aria-labelledby="telemetry-disks-title">
+                      <h2 id="telemetry-disks-title">Orbis core storage</h2>
+                      <p>Core storage and network readings are unavailable.</p>
+                    </section>
                   )}
-                </section>
-              </div>
-            ) : telemetry.isPending ? (
-              <p>Loading core storage and network readings…</p>
-            ) : (
-              <section className="desktop-telemetry-disks" aria-labelledby="telemetry-disks-title">
-                <h2 id="telemetry-disks-title">Orbis core storage</h2>
-                <p>Core storage and network readings are unavailable.</p>
-              </section>
+                </MonitorDisclosure>
+              </>
             )}
-          </MonitorDisclosure>
+          </DeviceHistoryWorkspace>
         </Tabs.Content>
         <Tabs.Content className="monitor-section-panel" value="sensors">
           <HostSensorsView />

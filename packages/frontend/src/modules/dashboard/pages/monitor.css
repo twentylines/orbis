@@ -1130,7 +1130,6 @@
   align-items: center;
   gap: 10px 18px;
   padding-top: 20px;
-  border-top: 1px solid var(--desktop-line);
 }
 .monitor-history-toolbar > h3 {
   flex-basis: 100%;

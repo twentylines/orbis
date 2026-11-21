@@ -440,9 +440,57 @@
   color: var(--desktop-muted);
   font-size: 0.8125rem;
 }
+.drive-health-smart-tools .btn {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
 .drive-health-confirmation-dialog .modal-footer > .btn {
   flex: 1 1 8rem;
   min-width: 0;
+}
+.drive-health-smart-tools,
+.drive-health-tool-review {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+  line-height: 1.6;
+}
+.drive-health-smart-tools {
+  margin-block: 16px;
+}
+.drive-health-smart-tools > p,
+.drive-health-tool-review > :is(p, ul, output) {
+  margin: 0;
+}
+.drive-health-tool-review > ul {
+  padding-left: 1.25em;
+  overflow-wrap: break-word;
+}
+.drive-health-tool-review li + li {
+  margin-top: 8px;
+}
+.drive-health-tool-status {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--desktop-accent) 9%, transparent);
+  color: var(--desktop-ink);
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+.drive-health-tool-status[data-tone="warning"] {
+  background: color-mix(in srgb, var(--desktop-warning) 10%, transparent);
+}
+.drive-health-tool-request {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
 }
 @media (max-width: 1000px) {
   .drive-health-layout {

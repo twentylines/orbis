@@ -6,6 +6,7 @@ import type React from 'react';
 import { Suspense, lazy, useRef, useState } from 'react';
 import { Controller, useForm, type RegisterOptions } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 import { Tooltip } from 'react-tooltip';
 import validator from 'validator';
 import { type } from 'arktype';
@@ -106,7 +107,7 @@ export const UserSettingsForm = (props: IProps) => {
   };
 
   const {
-    guestDashboard: _guest,
+    guestDashboard: guestDashboardEnabled,
     allowErrorMonitoring: _reporting,
     advancedSettings: _advanced,
     persistTraefikConfig: _proxy,
@@ -121,6 +122,7 @@ export const UserSettingsForm = (props: IProps) => {
     resetField,
     formState: { errors, dirtyFields },
   } = useForm<SettingsFormValues>({ values: draftValues, resetOptions: { keepDirtyValues: true } });
+  const guestDashboard = toggles['guest-dashboard'];
   const advancedSettings = toggles['advanced-settings'].checked;
   type Field = keyof SettingsFormValues;
   const inFlight = useRef(new Set<Field>());
@@ -177,11 +179,10 @@ export const UserSettingsForm = (props: IProps) => {
   return (
     <form className="flex flex-col mt-2" onSubmit={(event) => event.preventDefault()}>
       <fieldset className="settings-save-fields">
-        <div className="mb-3">
+        <div className="settings-guest-dashboard mb-3">
           <AutosavedSettingSwitch
             id="setting-guestDashboard"
-            className="mb-3"
-            toggle={toggles['guest-dashboard']}
+            toggle={guestDashboard}
             label={
               <>
                 {t('SETTINGS_GENERAL_GUEST_DASHBOARD')}
@@ -192,6 +193,13 @@ export const UserSettingsForm = (props: IProps) => {
               </>
             }
           />
+          {guestDashboardEnabled && guestDashboard.checked && (
+            <Button asChild variant="outline">
+              <Link to="/apps" aria-label="Manage shared applications">
+                Manage
+              </Link>
+            </Button>
+          )}
         </div>
         <div className="mb-3">
           <AutosavedSettingSwitch

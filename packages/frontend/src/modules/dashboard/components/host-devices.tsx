@@ -3,9 +3,9 @@ import { useServerPath } from '@/desktop/cluster-data';
 import { useQuery } from '@tanstack/react-query';
 import { Fragment, memo, useEffect, useRef, useState } from 'react';
 import type { HostTelemetry } from '@runtipi/common/schemas';
-import { Link, useSearchParams } from 'react-router';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import type { OpenDeviceHistory } from './host-device-history';
 import { useNetworkWarmup } from './network-rate-warmup';
 import './host-devices.css';
 
@@ -18,20 +18,16 @@ function bytes(value: number | null) {
 }
 const rate = (value: number | null) => (value === null ? 'Unavailable' : `${bytes(value)}/s`);
 
-function HistoryLink({ kind, name }: { kind: 'network' | 'disk'; name: string }) {
-  const [params] = useSearchParams();
-  const next = new URLSearchParams(params);
-  next.set('hostDevice', `${kind}:${name}`);
+function HistoryButton({ kind, name, onHistory }: { kind: 'network' | 'disk'; name: string; onHistory: OpenDeviceHistory }) {
   return (
-    <Link
+    <button
+      type="button"
       className="btn btn-secondary host-device-history-action"
-      to={{ search: next.toString(), hash: '#device-history' }}
-      preventScrollReset
-      state={{ focusHostHistory: true }}
+      onClick={(event) => onHistory({ kind, name }, event.currentTarget)}
       aria-label={`View history for ${name}`}
     >
       View history
-    </Link>
+    </button>
   );
 }
 
@@ -57,14 +53,24 @@ function Facts({ values }: { values: [string, string][] }) {
 export function NetworkFacts({ item, visible }: { item: Extract<HostTelemetry, { available: true }>['network'][number]; visible: boolean }) {
   const measuring = useNetworkWarmup(item, visible);
   return (
-    <Facts
-      values={[
-        ['Download', measuring ? 'Measuring…' : rate(item.rxBytesPerSecond)],
-        ['Upload', measuring ? 'Measuring…' : rate(item.txBytesPerSecond)],
-        ['Received', bytes(item.receivedBytes)],
-        ['Sent', bytes(item.transmittedBytes)],
-      ]}
-    />
+    <div className="host-device-network-readings">
+      <Facts
+        values={[
+          ['Download', measuring ? 'Measuring…' : rate(item.rxBytesPerSecond)],
+          ['Upload', measuring ? 'Measuring…' : rate(item.txBytesPerSecond)],
+        ]}
+      />
+      <details className="host-device-network-more">
+        <summary>Additional network readings</summary>
+        <Facts
+          values={[
+            ['Received', bytes(item.receivedBytes)],
+            ['Sent', bytes(item.transmittedBytes)],
+            ...(item.speedMbps === null ? [] : [['Link speed', `${item.speedMbps.toLocaleString()} Mb/s`] as [string, string]]),
+          ]}
+        />
+      </details>
+    </div>
   );
 }
 
@@ -112,7 +118,7 @@ export function useHostReadings() {
   });
 }
 
-export const HostDevices = memo(function HostDevices() {
+export const HostDevices = memo(function HostDevices({ onHistory }: { onHistory: OpenDeviceHistory }) {
   const query = useHostReadings();
   const visible = useWindowVisible();
   const data = query.data;
@@ -262,10 +268,9 @@ export const HostDevices = memo(function HostDevices() {
                             {item.state === 'up' ? 'Link up' : item.state === 'down' ? 'Link down' : 'Link unknown'}
                           </span>
                         </div>
-                        {item.speedMbps !== null ? <p className="host-device-kind">Link speed {item.speedMbps.toLocaleString()} Mb/s</p> : null}
                       </div>
                       <NetworkFacts item={item} visible={visible} />
-                      <HistoryLink kind="network" name={item.interface} />
+                      <HistoryButton kind="network" name={item.interface} onHistory={onHistory} />
                     </article>
                   ))}
                 </div>
@@ -294,7 +299,7 @@ export const HostDevices = memo(function HostDevices() {
                           ['In progress', disk.inFlight === null ? 'Unavailable' : disk.inFlight.toLocaleString()],
                         ]}
                       />
-                      <HistoryLink kind="disk" name={disk.device} />
+                      <HistoryButton kind="disk" name={disk.device} onHistory={onHistory} />
                     </article>
                   ))}
                 </div>

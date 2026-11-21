@@ -1,69 +1,78 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { installApp, loginUser } from './fixtures/fixtures';
 import { clearDatabase, db } from './helpers/db';
-import { setSettings } from './helpers/settings';
+
+const guestSetting = (page: Page) => page.getByRole('switch', { name: /Enable guest dashboard/ });
+const manage = (page: Page) => page.getByRole('link', { name: 'Manage shared applications' });
+const logOut = (page: Page) => page.getByRole('button', { name: 'Log out' }).click();
+
+async function setGuestDashboard(page: Page, enabled: boolean) {
+  const setting = guestSetting(page);
+  await expect(setting).toBeVisible();
+  if ((await setting.getAttribute('aria-checked')) !== String(enabled)) {
+    const saved = page.waitForResponse((response) => response.url().endsWith('/api/user-settings') && response.request().method() === 'PATCH');
+    await setting.click();
+    expect((await saved).ok()).toBe(true);
+    await expect(setting).not.toHaveAttribute('aria-busy', 'true');
+  }
+  if (enabled) {
+    await expect(manage(page)).toHaveAttribute('href', '/apps');
+  } else {
+    await expect(manage(page)).toHaveCount(0);
+  }
+}
+
+async function enableGuestDashboard(page: Page) {
+  await page.goto('/settings?tab=general');
+  await setGuestDashboard(page, false);
+  await setGuestDashboard(page, true);
+}
 
 test.beforeEach(async () => {
   await clearDatabase();
-  await setSettings({});
 });
 
-test('user can activate the guest dashboard and see it when logged out', async ({ page, context }) => {
+test('an operator can enable the guest dashboard and see its empty public view', async ({ page, context }) => {
   await loginUser(page, context);
-  await page.goto('/settings');
+  await enableGuestDashboard(page);
+  await logOut(page);
 
-  await page.getByRole('tab', { name: 'Settings' }).click();
-  await page.getByRole('switch', { name: 'Enable guest dashboard' }).setChecked(true);
-  await page.getByRole('button', { name: 'Update settings' }).click();
-  await page.getByTestId('logout-button').click();
-
-  await expect(page.getByText('No apps to display')).toBeVisible();
+  await expect(page.getByText('No shared apps')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Login' })).toBeVisible();
+  await expect(manage(page)).toHaveCount(0);
 });
 
-test('logged out users can see the apps on the guest dashboard', async ({ page, context }) => {
+test('the public guest dashboard shows only shared apps and offers their launch addresses', async ({ page, context }) => {
   test.slow();
-
   await loginUser(page, context);
+  await enableGuestDashboard(page);
 
   const store = await db.query.appStore.findFirst();
+  if (!store) throw new Error('No store found');
+  const domain = 'shared-app.example.test';
+  await context.route(`https://${domain}/**`, (route) => route.fulfill({ body: 'Shared app launch' }));
 
-  if (!store) {
-    throw new Error('No store found');
-  }
-
-  await installApp(page, store.slug, 'nginx', { visibleOnGuestDashboard: true, domain: 'duckduckgo.com' });
+  await installApp(page, store.slug, 'nginx', { visibleOnGuestDashboard: true, domain });
   await installApp(page, store.slug, 'whoami', { visibleOnGuestDashboard: false });
+  await logOut(page);
 
-  await page.goto('/settings');
-  await page.getByRole('tab', { name: 'Settings' }).click();
-  await page.getByRole('switch', { name: 'Enable guest dashboard' }).setChecked(true);
-  await page.getByRole('button', { name: 'Update settings' }).click();
-  await page.getByTestId('logout-button').click();
+  const sharedApp = page.getByRole('button', { name: 'Open Nginx' });
+  await expect(sharedApp).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open Whoami' })).toHaveCount(0);
+  await expect(manage(page)).toHaveCount(0);
+  await sharedApp.press('Enter');
 
-  await expect(page.getByText(/Open-source simple and fast web server/)).toBeVisible();
-  const locator = page.locator('text=Whoami');
-  await expect(locator).not.toBeVisible();
-
-  await page.getByText('Nginx', { exact: true }).click();
-
-  const [newPage] = await Promise.all([context.waitForEvent('page'), page.getByRole('menuitem', { name: 'duckduckgo.com' }).click()]);
-
-  await newPage.waitForLoadState();
-  expect(newPage.url()).toBe('https://duckduckgo.com/');
-  await newPage.close();
-
-  await context.close();
+  const [popup] = await Promise.all([context.waitForEvent('page'), page.getByRole('menuitem', { name: domain }).click()]);
+  await expect(popup).toHaveURL(`https://${domain}/`);
+  await popup.close();
 });
 
-test('user can deactivate the guest dashboard and not see it when logged out', async ({ page, context }) => {
+test('disabling the guest dashboard removes Manage and sends logged-out users to Login', async ({ page, context }) => {
   await loginUser(page, context);
-  await page.goto('/settings');
+  await enableGuestDashboard(page);
 
-  await page.getByRole('tab', { name: 'Settings' }).click();
-  await page.getByRole('switch', { name: 'Enable guest dashboard' }).setChecked(false);
-  await page.getByRole('button', { name: 'Update settings' }).click();
-  await page.getByTestId('logout-button').click();
+  await setGuestDashboard(page, false);
+  await logOut(page);
 
-  // We should be redirected to the login page
   await expect(page.getByRole('heading', { name: 'Login' })).toBeVisible();
 });

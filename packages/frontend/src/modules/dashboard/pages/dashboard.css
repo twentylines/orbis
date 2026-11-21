@@ -296,7 +296,6 @@
 .workspace-pin-editor {
   padding-top: 18px;
   margin-top: 18px;
-  border-top: 1px solid var(--desktop-line);
 }
 .workspace-pin-editor h3 {
   margin: 0 0 3px;
@@ -396,7 +395,7 @@
 .workspace-operations,
 .workspace-attention {
   background: var(--desktop-home-surface);
-  border: 1px solid var(--desktop-edge);
+  border: 0;
   color: var(--desktop-ink);
   border-radius: 24px;
   box-shadow: 0 24px 58px rgba(12, 38, 34, 0.17);
@@ -413,12 +412,12 @@
   text-transform: uppercase;
 }
 .workspace-apps {
-  padding: 28px 27px 31px;
+  padding: 28px 28px 31px;
   min-height: 0;
   position: relative;
   overflow: visible;
   background: var(--desktop-home-surface);
-  border: 1px solid var(--desktop-line);
+  border: 0;
   border-radius: 24px;
   box-shadow: none;
   backdrop-filter: var(--desktop-pane-filter);
@@ -655,7 +654,6 @@
 }
 .desktop[data-desktop-mode="dark"] .workspace-storage,
 .desktop[data-desktop-mode="dark"] .workspace-attention {
-  border-color: rgba(255, 255, 255, 0.13);
   box-shadow: 0 24px 58px rgba(3, 15, 14, 0.28);
 }
 
@@ -766,7 +764,6 @@
   gap: 14px 18px;
   padding-top: 23px;
   margin-top: 26px;
-  border-top: 1px solid var(--desktop-line);
 }
 .workspace-links h3 {
   flex-basis: 100%;
@@ -795,7 +792,6 @@
   overflow: hidden;
   background: var(--desktop-pane-status-background);
   background-color: transparent;
-  border-color: var(--desktop-edge);
   color: var(--desktop-ink);
   box-shadow: 0 26px 58px rgba(7, 34, 31, 0.22);
 }
@@ -975,7 +971,7 @@
   gap: 8px 14px;
   align-items: center;
   padding: 14px;
-  border: 1px solid var(--desktop-line);
+  border: 0;
   border-radius: 15px;
   background: color-mix(in srgb, var(--desktop-preset-tint) 6%, var(--desktop-surface));
   color: var(--desktop-ink);
@@ -1174,7 +1170,6 @@
   isolation: isolate;
   overflow: hidden;
   background: color-mix(in srgb, var(--desktop-preset-tint) 7%, var(--desktop-home-surface));
-  border-color: color-mix(in srgb, var(--desktop-warning) 25%, var(--desktop-line));
 }
 
 .workspace-attention::before {
@@ -1255,7 +1250,6 @@
   gap: 5px 14px;
   margin: 20px 0;
   padding-top: 18px;
-  border-top: 1px solid var(--desktop-line);
   text-decoration: none;
   color: var(--desktop-ink);
 }
@@ -1307,7 +1301,7 @@
   background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  border: 1px solid var(--desktop-line);
+  border: 0;
   border-radius: 22px;
   color: var(--desktop-ink);
   box-shadow: 0 24px 58px rgba(12, 38, 34, 0.17);
@@ -1369,9 +1363,6 @@
 .workspace-recent-tasks a:focus-visible,
 .workspace-attention-apps a:focus-visible {
   outline-offset: -3px;
-}
-.workspace-recent-tasks li + li {
-  border-top: 1px solid var(--desktop-line);
 }
 .workspace-recent-tasks a {
   box-sizing: border-box;
@@ -1775,7 +1766,6 @@
 }
 .workspace-operations .workspace-section-heading {
   padding-bottom: 16px;
-  border-bottom: 1px solid var(--desktop-line);
 }
 .workspace-recent-tasks b {
   display: inline-flex;

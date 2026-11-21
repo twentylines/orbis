@@ -459,12 +459,10 @@ html[data-orbis-startup-landing="true"] .workspace-widget-attention {
   position: relative;
   isolation: isolate;
   background: var(--desktop-surface);
-  border: 1px solid var(--desktop-edge);
+  border: 0;
   border-radius: 26px;
   padding: 30px;
-  box-shadow:
-    0 30px 70px rgba(12, 35, 32, 0.19),
-    inset 0 1px var(--desktop-highlight);
+  box-shadow: 0 30px 70px rgba(12, 35, 32, 0.19);
   backdrop-filter: var(--orbis-glass-filter, blur(24px) saturate(1.2));
   -webkit-backdrop-filter: var(--orbis-glass-filter, blur(24px) saturate(1.2));
   animation: orbis-window-enter 0.44s cubic-bezier(0.16, 1, 0.3, 1) backwards;

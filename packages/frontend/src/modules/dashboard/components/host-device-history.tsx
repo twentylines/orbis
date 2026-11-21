@@ -1,15 +1,15 @@
 import type { HostTelemetry } from '@runtipi/common/schemas';
 import { useServerPath } from '@/desktop/cluster-data';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef } from 'react';
-import { useLocation, useSearchParams } from 'react-router';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { IconArrowLeft } from '@tabler/icons-react';
+import { Tooltip } from 'react-tooltip';
 import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/schemas/metric-history';
 import type { HostDeviceHistory, HostHistorySelection } from '@runtipi/common/schemas/host-device-history';
 import { MetricPlot, formatPlotValue, type MetricPlotHistory } from '@/components/metric-chart/metric-plot';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select/Select';
 import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { useWindowVisible } from '@/desktop/window-visibility';
-import { revealPageFocus } from '@/desktop/window-viewport';
 import { LiveMetricChart, useLiveSamples } from './live-metric-chart';
 import { percentReading, rateReading } from './logical-processor-history';
 import './host-device-history.css';
@@ -48,22 +48,124 @@ function HostDeviceLiveCharts({ host, selected }: { host?: HostTelemetry; select
   );
 }
 
-export function HostDeviceHistoryView({ section, layoutReady = true, host }: { section?: string; layoutReady?: boolean; host?: HostTelemetry } = {}) {
+export type OpenDeviceHistory = (device: HostHistorySelection, opener: HTMLButtonElement) => void;
+
+export function HistoryHelp({ label, children }: { label: string; children: ReactNode }) {
+  const id = useId();
+  return (
+    <>
+      <button className="monitor-history-help" type="button" aria-label={label} data-tooltip-id={id}>
+        <span className="form-help" aria-hidden="true">
+          ?
+        </span>
+      </button>
+      <Tooltip
+        id={id}
+        className="tooltip monitor-history-tooltip"
+        positionStrategy="fixed"
+        openEvents={{ mouseenter: true, focus: true, click: true }}
+        closeEvents={{ mouseleave: true, blur: true }}
+        globalCloseEvents={{ escape: true, clickOutsideAnchor: true, scroll: true, resize: true }}
+        clickable
+      >
+        {children}
+      </Tooltip>
+    </>
+  );
+}
+
+export function DeviceHistoryWorkspace({
+  initiallyOpen,
+  searchParams,
+  host,
+  children,
+}: {
+  initiallyOpen: boolean;
+  searchParams: URLSearchParams;
+  host?: HostTelemetry;
+  children: (open: OpenDeviceHistory) => ReactNode;
+}) {
+  const [page, setPage] = useState<'devices' | 'history' | 'return'>(initiallyOpen ? 'history' : 'devices');
+  const open = page === 'history';
+  const [range, setRange] = useState<MetricHistoryRange>(() => {
+    const requested = searchParams.get('range');
+    return requested && Object.hasOwn(metricHistoryRanges, requested) ? (requested as MetricHistoryRange) : '1h';
+  });
+  const [device, setDevice] = useState<string | null>(() => {
+    const requested = searchParams.get('hostDevice');
+    return requested && /^(network|disk):[a-zA-Z0-9_.:@+!-]{1,128}$/.test(requested) && !/^(network|disk):\.{1,2}$/.test(requested)
+      ? requested
+      : null;
+  });
+  const list = useRef<HTMLDivElement>(null);
+  const back = useRef<HTMLButtonElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const origin = useRef<{ opener: HTMLButtonElement; positions: [Element, number][] } | null>(null);
+
+  const show = useCallback<OpenDeviceHistory>((selection, opener) => {
+    const positions: [Element, number][] = [];
+    for (let parent = list.current?.parentElement; parent; parent = parent.parentElement) {
+      if (parent === document.scrollingElement || /^(auto|scroll)$/.test(getComputedStyle(parent).overflowY)) {
+        positions.push([parent, parent.scrollTop]);
+      }
+    }
+    origin.current = { opener, positions };
+    setDevice(keyOf(selection));
+    setPage('history');
+  }, []);
+
+  useLayoutEffect(() => {
+    if (open) {
+      back.current?.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'instant' });
+      (origin.current ? back.current : heading.current)?.focus({ preventScroll: true });
+    } else if (page === 'return') {
+      const saved = origin.current;
+      const fallback =
+        list.current?.querySelector<HTMLElement>('input[type="search"]') ?? list.current?.querySelector<HTMLElement>('#host-devices-title');
+      const target = saved?.opener.isConnected ? saved.opener : fallback;
+      target?.focus({ preventScroll: true });
+      for (const [element, top] of saved?.positions ?? []) element.scrollTo({ top, behavior: 'instant' });
+      if (target === fallback) fallback?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+      origin.current = null;
+    }
+  }, [open, page]);
+
+  return (
+    <div className="monitor-device-pages">
+      <div ref={list} hidden={open} data-device-page={page === 'return' ? 'back' : undefined}>
+        {children(show)}
+      </div>
+      {open ? (
+        <div data-device-page="forward">
+          <button type="button" className="btn btn-secondary monitor-device-back" ref={back} onClick={() => setPage('return')}>
+            <IconArrowLeft size={18} aria-hidden="true" />
+            Back to devices
+          </button>
+          <HostDeviceHistoryView device={device} range={range} onDevice={setDevice} onRange={setRange} heading={heading} host={host} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function HostDeviceHistoryView({
+  device,
+  range,
+  onDevice,
+  onRange,
+  heading,
+  host,
+}: {
+  device: string | null;
+  range: MetricHistoryRange;
+  onDevice: (device: string) => void;
+  onRange: (range: MetricHistoryRange) => void;
+  heading: RefObject<HTMLHeadingElement | null>;
+  host?: HostTelemetry;
+}) {
   const visible = useWindowVisible();
   const serverPath = useServerPath();
   const queryClient = useQueryClient();
-  const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const selectedRange = searchParams.get('range');
-  const range: MetricHistoryRange = selectedRange && Object.hasOwn(metricHistoryRanges, selectedRange) ? (selectedRange as MetricHistoryRange) : '1h';
-  const requested = searchParams.get('hostDevice');
-  const device =
-    requested &&
-    requested.length <= 136 &&
-    /^(network|disk):[a-zA-Z0-9_.:@+!-]{1,128}$/.test(requested) &&
-    !/^(network|disk):\.{1,2}$/.test(requested)
-      ? requested
-      : null;
   const basePath = serverPath('/api/system/host-history');
   const path = `${basePath}?range=${range}${device ? `&device=${encodeURIComponent(device)}` : ''}`;
   const query = useQuery<HostDeviceHistory>({
@@ -95,12 +197,8 @@ export function HostDeviceHistoryView({ section, layoutReady = true, host }: { s
     if (device || !data?.selected) return;
     const resolved = keyOf(data.selected);
     queryClient.setQueryData(historyQueryKey(basePath, range, resolved), data, { updatedAt: query.dataUpdatedAt });
-    const next = new URLSearchParams(searchParams);
-    next.set('hostDevice', resolved);
-    next.set('range', range);
-    if (section) next.set('section', section);
-    setSearchParams(next, { replace: true, preventScrollReset: true, state: null });
-  }, [basePath, device, data, range, query.dataUpdatedAt, queryClient, searchParams, section, setSearchParams]);
+    onDevice(resolved);
+  }, [basePath, device, data, range, query.dataUpdatedAt, queryClient, onDevice]);
   const plots = useMemo(() => {
     if (!data) return null;
     const plot = (field: 'inbound' | 'outbound' | 'busy'): MetricPlotHistory => ({
@@ -117,35 +215,15 @@ export function HostDeviceHistoryView({ section, layoutReady = true, host }: { s
     });
     return { inbound: plot('inbound'), outbound: plot('outbound'), busy: plot('busy') };
   }, [data]);
-  const heading = useRef<HTMLHeadingElement>(null);
   const retry = useRef<HTMLButtonElement>(null);
   const restoreFocus = useRef(false);
-  const previousHash = useRef<string | null>(null);
-  const focusedRequest = useRef<string | null>(null);
-  useEffect(() => {
-    if (!visible || !layoutReady) return;
-    const explicit = location.state?.focusHostHistory === true && focusedRequest.current !== location.key;
-    if (location.hash === '#device-history' && (previousHash.current !== location.hash || explicit)) {
-      heading.current?.focus({ preventScroll: true });
-      if (heading.current) revealPageFocus(heading.current);
-      focusedRequest.current = location.key;
-    }
-    previousHash.current = location.hash;
-  }, [visible, layoutReady, location.hash, location.key, location.state]);
   useEffect(() => {
     if (query.isFetching || !restoreFocus.current) return;
     restoreFocus.current = false;
     if (document.activeElement !== document.body && document.activeElement !== retry.current) return;
     (data && !query.isError ? heading.current : retry.current)?.focus({ preventScroll: true });
-  }, [query.isFetching, query.isError, data]);
+  }, [query.isFetching, query.isError, data, heading]);
 
-  const setParam = (name: string, value: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (selected && name === 'range') next.set('hostDevice', keyOf(selected));
-    next.set(name, value);
-    if (section) next.set('section', section);
-    setSearchParams(next, { replace: true, preventScrollReset: true, state: null });
-  };
   const fields =
     selected?.kind === 'disk'
       ? ([
@@ -161,14 +239,28 @@ export function HostDeviceHistoryView({ section, layoutReady = true, host }: { s
   return (
     <section className="host-device-history" id="device-history" aria-labelledby="host-device-history-title" aria-busy={loading}>
       <header className="host-history-heading">
-        <h2 id="host-device-history-title" tabIndex={-1} ref={heading} data-page-focus-align="start">
+        <h2 id="host-device-history-title" tabIndex={-1} ref={heading} data-page-focus-align="managed">
           Device history
         </h2>
-        <span className="host-history-state">Recorded every 10 seconds</span>
+        <HistoryHelp label="About device history">
+          <p>Orbis records readings every ten seconds while in use and keeps history for seven days. Longer ranges show averages and peaks.</p>
+          <p>
+            Gaps indicate missing readings or a device change. A reboot starts a new series. Disk active time is approximate and devices may share
+            traffic.
+          </p>
+          {data ? (
+            <p>
+              {data.persistedThrough
+                ? `Saved through ${new Date(data.persistedThrough).toLocaleString()}.`
+                : 'The first minute has not been saved yet.'}{' '}
+              Recent samples stay in memory. Saved summaries survive a restart.
+            </p>
+          ) : null}
+        </HistoryHelp>
       </header>
       <div className="host-history-controls">
         <div className="host-history-device">
-          <Select value={selectedKey} onValueChange={(value) => setParam('hostDevice', value)} disabled={!choices.length}>
+          <Select value={selectedKey} onValueChange={onDevice} disabled={!choices.length}>
             <SelectTrigger label="Host device" value={selectedKey} title={selected ? `${kindLabel(selected.kind)}: ${selected.name}` : undefined}>
               <SelectValue placeholder={loading ? 'Loading devices…' : 'No recorded devices'} />
             </SelectTrigger>
@@ -196,7 +288,7 @@ export function HostDeviceHistoryView({ section, layoutReady = true, host }: { s
         <SelectionGroup as="fieldset" className="monitor-history-ranges host-history-ranges">
           <legend className="visually-hidden">Device history time range</legend>
           {ranges.map(([value, label]) => (
-            <button type="button" key={value} aria-pressed={range === value} onClick={() => setParam('range', value)}>
+            <button type="button" key={value} aria-pressed={range === value} onClick={() => onRange(value)}>
               {label}
             </button>
           ))}
@@ -287,29 +379,6 @@ export function HostDeviceHistoryView({ section, layoutReady = true, host }: { s
           ) : (
             <p>No device samples have been recorded yet.</p>
           )}
-          {data ? (
-            <details className="host-history-about">
-              <summary>About device history</summary>
-              <p>
-                Readings are recorded while Orbis is in use. Idle periods appear as gaps. History is retained for seven days. Longer ranges show
-                sample averages and peaks; use the pointer or arrow keys to inspect each chart.
-              </p>
-              <p>
-                Gaps indicate missing readings or a device change. A reboot starts a new series. Disk active time is approximate; layered disks and
-                virtual interfaces can share the same traffic.
-              </p>
-              <p>
-                {data.persistedThrough ? (
-                  <>
-                    Saved through <time dateTime={data.persistedThrough}>{new Date(data.persistedThrough).toLocaleString()}</time>.
-                  </>
-                ) : (
-                  'The first minute has not been saved yet.'
-                )}{' '}
-                Recent samples stay in memory. Saved summaries survive a restart.
-              </p>
-            </details>
-          ) : null}
         </>
       ) : null}
     </section>
