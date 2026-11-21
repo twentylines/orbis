@@ -403,6 +403,23 @@ class InstallationStorageTests(unittest.TestCase):
             STORAGE.capture(self.root, self.docker, self.review(), host_writers_stopped=False)
         self.assertFalse(self.bundle.exists())
 
+    def test_batched_review_preserves_foreign_writer_checks_and_reads_afresh(self):
+        foreign = self.foreign()
+        baseline = self.review()
+        batches = []
+        def inspect_many(ids):
+            batches.append(list(ids))
+            return {value: copy.deepcopy(self.docker.app(value)) for value in ids}
+        with mock.patch.object(self.docker, "inspect_apps", side_effect=inspect_many, create=True):
+            batched = self.review()
+            self.assertEqual(batched, baseline)
+            self.assertEqual(len(batches), 1)
+            self.assertIn(foreign["id"], batches[0])
+            foreign["mounts"][0]["RW"] = False
+            self.assertEqual(self.review()["conflictingWriters"], [])
+            self.assertEqual(len(batches), 2)
+        self.assertEqual(len(baseline["conflictingWriters"]), 1)
+
     def test_foreign_writable_mount_blocks_but_readonly_or_quiet_container_does_not(self):
         app = self.foreign()
         self.assertEqual(len(self.review()["conflictingWriters"]), 1)

@@ -257,10 +257,13 @@ def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, exi
     if len(resources) > 4096:
         raise StorageError("Installation storage exceeds the resource limit")
     conflicts = []
+    outside = [row["id"] for row in rows if row["id"] not in owned]
+    inspect_many = getattr(reader, "inspect_apps", None)
+    inspected = inspect_many(outside) if callable(inspect_many) else None
     for row in rows:
         if row["id"] in owned:
             continue
-        raw = reader.app(row["id"])
+        raw = inspected[row["id"]] if inspected is not None else reader.app(row["id"])
         if raw.get("id") != row["id"]:
             raise StorageError("Docker changed during storage review")
         mounts = DETECT.validate_mounts(raw.get("mounts"))

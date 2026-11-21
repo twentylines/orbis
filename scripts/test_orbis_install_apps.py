@@ -519,5 +519,44 @@ class InstallationAppTests(unittest.TestCase):
         self.assertLess(counts[1], counts[0] * 2.25)
 
 
+
+class BatchedInspectionTests(unittest.TestCase):
+    def test_many_containers_use_bounded_calls_and_fresh_data_on_each_review(self):
+        reader = APPS.Docker("test-install-apps")
+        ids = [identifier(str(index)) for index in range(95)]
+        calls = []
+        version = [1]
+        def read(arguments):
+            selected = arguments[4:]
+            calls.append(selected)
+            return "\n".join(json.dumps({"id": value, "version": version[0]}) for value in reversed(selected))
+        with mock.patch.object(reader, "_read", side_effect=read):
+            first = reader.inspect_apps(ids)
+            self.assertEqual(len(calls), 3)
+            self.assertTrue(all(len(batch) <= 32 for batch in calls))
+            self.assertEqual(set(first), set(ids))
+            version[0] = 2
+            second = reader.inspect_apps(ids)
+            self.assertEqual(len(calls), 6)
+            self.assertTrue(all(row["version"] == 2 for row in second.values()))
+            self.assertTrue(all(row["version"] == 1 for row in first.values()))
+            self.assertEqual(reader.inspect_apps([]), {})
+            self.assertEqual(len(calls), 6)
+
+    def test_partial_duplicate_unrequested_or_invalid_replies_fail_closed(self):
+        reader = APPS.Docker("test-install-apps")
+        ids = [identifier("one"), identifier("two")]
+        replies = [[], [{"id": ids[0]}], [{"id": ids[0]}, {"id": ids[0]}],
+                   [{"id": ids[0]}, {"id": identifier("outside")}], [[], {}]]
+        for reply in replies:
+            with self.subTest(reply=reply), mock.patch.object(reader, "_read", return_value="\n".join(map(json.dumps, reply))):
+                with self.assertRaises(APPS.AppError):
+                    reader.inspect_apps(ids)
+        with mock.patch.object(reader, "_read") as read:
+            for invalid in ([ids[0], ids[0]], ["short"], [identifier(str(i)) for i in range(4097)]):
+                with self.assertRaises(APPS.AppError):
+                    reader.inspect_apps(invalid)
+            read.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()

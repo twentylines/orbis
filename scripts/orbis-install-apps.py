@@ -70,6 +70,29 @@ class Docker(DETECT.DockerReader):
             raise AppError("An app container identity is invalid")
         return self._object(["container", "inspect", "--format", APP_FORMAT, identifier])
 
+    def inspect_apps(self, identifiers: list[str]) -> dict[str, dict]:
+        """Read one bounded inventory, without retaining it across reviews."""
+        if (len(identifiers) > 4096 or any(not isinstance(value, str) or not DETECT.IDENTIFIER.fullmatch(value) for value in identifiers)
+                or len(set(identifiers)) != len(identifiers)):
+            raise AppError("The inspection inventory contains invalid container identities")
+        records = {}
+        received = 0
+        for offset in range(0, len(identifiers), 32):
+            selected = identifiers[offset:offset + 32]
+            try:
+                body = self._read(["container", "inspect", "--format", APP_FORMAT, *selected])
+                received += len(body.encode("utf-8"))
+                if received > 32 * 1024 * 1024:
+                    raise AppError("The inspection inventory exceeds its total size limit")
+                rows = [json.loads(line) for line in body.splitlines()]
+            except (json.JSONDecodeError, UnicodeError) as error:
+                raise AppError("Docker returned invalid inspection data") from error
+            if (len(rows) != len(selected) or any(not isinstance(row, dict) or row.get("id") not in selected for row in rows)
+                    or len({row["id"] for row in rows}) != len(selected)):
+                raise AppError("Docker changed the requested inspection inventory")
+            records.update((row["id"], row) for row in rows)
+        return records
+
     def change(self, arguments: list[str], timeout: int = 90) -> None:
         try:
             result = subprocess.run(
