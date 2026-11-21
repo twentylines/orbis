@@ -377,10 +377,13 @@ def update_existing(root, reader, target, display, *, without_host_service=False
         raise ValueError(f"Installed {UI.display_release(current['tag'])} is newer than this installer. Use the latest installer; no downgrade was made")
     if current["tag"] == target["tag"] and current["digest"] != target["digest"]:
         raise ValueError("The same release tag has a different digest; inspect its published identity before updating")
-    display.set_remaining_steps((4 if without_host_service else 6) + (0 if shutil.which("rsync") else 1))
+    requires_backup_tools = target.get("installationProtocol") != HOST.PLAN.INSTALLATION_PROTOCOL
+    missing_backup_tools = requires_backup_tools and not shutil.which("rsync")
+    display.set_remaining_steps((4 if without_host_service else 6) + int(missing_backup_tools))
     with display.step("Verifying the Orbis release"):
         REPLACE.UPDATE.verify_release(target)
-    prepare_backup_tools(display)
+    if requires_backup_tools:
+        prepare_backup_tools(display)
     prepared_sentinel = prepare_sentinel(display, state_dir)
     activate_sentinel(display, prepared_sentinel)
     if not without_host_service:
@@ -405,7 +408,7 @@ def update_existing(root, reader, target, display, *, without_host_service=False
         snapshot = snapshots / ("orbis-" + target["tag"] + "-" + str(uuid.uuid4()))
         with display.step("Updating Orbis and verifying server health"):
             return REPLACE.UPDATE.apply_update(root, current, target, reader.context, snapshot)
-    with display.step("Checking the release and backup storage"):
+    with display.step("Checking the release and update readiness"):
         request = {"tag": target["tag"]}
         if channel["channel"] == "nightly" and not target_nightly:
             request["returnToStable"] = True

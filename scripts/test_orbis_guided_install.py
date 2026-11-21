@@ -950,6 +950,45 @@ class ExplicitChannelTests(GuidedFixture):
         self.assertGreaterEqual(sum(required.issubset(values) for values in declared), 2)
         GUIDE.require_helper_capabilities({"capabilities": sorted(required)})
 
+    def test_modern_update_does_not_install_unused_backup_tools(self):
+        for legacy in (False, True):
+            with self.subTest(legacy=legacy):
+                target = dict(MANIFEST)
+                if legacy:
+                    target.pop('installationProtocol')
+                current = {**target, 'tag': 'v1.0.0', 'digest': 'sha256:' + 'd' * 64}
+                channel = {'channel': 'stable', 'revision': 'initial'}
+                upgrade = SimpleNamespace(SERVICE=SimpleNamespace(installed_manifest=lambda *_: current,
+                    read_channel=lambda *_: channel), SETUP=SimpleNamespace(SOCKET_FILE=Path('/unused/socket')),
+                    upgrade=mock.Mock())
+                enable = SimpleNamespace(enable=mock.Mock())
+                calls, steps = [], []
+                def request(_socket, route, data=None):
+                    calls.append(route)
+                    if route == '/v1/plan':
+                        return {'planId': 'fixture', 'targetTag': target['tag'], 'targetDigest': target['digest']}
+                    if route == '/v1/apply':
+                        return {'jobId': 'fixture'}
+                    return {'capabilities': ['restart.v1', 'packages.refresh.v1', 'release-channels.v1'],
+                            'job': None if len(calls) == 1 else {'id': 'fixture', 'state': 'complete'},
+                            'currentDigest': target['digest'], 'imageMatches': True, 'coreHealth': 'healthy'}
+                def step(label):
+                    steps.append(label)
+                    return contextlib.nullcontext()
+                display = SimpleNamespace(set_remaining_steps=mock.Mock(), step=step)
+                with mock.patch.object(GUIDE, 'load', side_effect=lambda name, _: upgrade if name == 'orbis-host-service-upgrade.py' else enable), \
+                        mock.patch.object(GUIDE.REPLACE.UPDATE, 'verify_release'), \
+                        mock.patch.object(GUIDE, 'prepare_backup_tools') as packages, \
+                        mock.patch.object(GUIDE.shutil, 'which', return_value=None), \
+                        mock.patch.object(GUIDE, 'host_request', side_effect=request):
+                    result = GUIDE.update_existing(Path('/unused'), SimpleNamespace(context='test'), target, display)
+                self.assertEqual(result['result'], 'orbis-updated')
+                self.assertEqual(packages.call_count, int(legacy))
+                display.set_remaining_steps.assert_called_once_with(7 if legacy else 6)
+                upgrade.upgrade.assert_called_once()
+                self.assertEqual(calls, ['/v1/status', '/v1/plan', '/v1/apply', '/v1/status'])
+                self.assertIn('Checking the release and update readiness', steps)
+
     def test_nightly_policy_keeps_following_nightly_when_latest_artifact_is_stable(self):
         current = {**MANIFEST, "tag": "v1.0.0", "digest": "sha256:" + "d" * 64}
         channel = {"channel": "nightly", "revision": "initial"}
