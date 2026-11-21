@@ -110,9 +110,6 @@
   background: color-mix(in srgb, var(--desktop-preset-tint) 5%, var(--desktop-content-fill));
   container-type: inline-size;
 }
-.desktop-updates-card-orbis {
-  grid-column: 1 / -1;
-}
 .desktop-updates-release {
   margin-block-start: 1rem;
   padding-block-start: 1rem;
@@ -145,6 +142,7 @@
   }
 }
 .desktop-updates-sentinel {
+  grid-column: 1 / -1;
   padding-block: 0.9rem;
 }
 .desktop-sentinel-readings {

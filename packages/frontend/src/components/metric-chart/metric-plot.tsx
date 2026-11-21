@@ -51,7 +51,8 @@ export function MetricPlot({
   const { from, to, max, times, x, y, segments, axisTimes } = useMemo(() => {
     const from = history ? Date.parse(history.from) : 0;
     const to = history ? Date.parse(history.to) : 1;
-    const max = unit === 'percent' ? 100 : Math.max(1024, ...points.map((point) => point.value.peak ?? 0)) * 1.1;
+    const peak = Math.max(1024, ...points.map((point) => point.value.peak ?? 0));
+    const max = unit === 'percent' ? 100 : 2 ** Math.ceil(Math.log2(peak));
     const times = points.map((point) => Date.parse(point.at));
     const x = (at: number) => Math.max(0, Math.min(chartWidth, ((at - from) / Math.max(1, to - from)) * chartWidth));
     const y = (value: number) => chartHeight - 8 - (Math.min(max, Math.max(0, value)) / max) * (chartHeight - 16);
@@ -91,6 +92,7 @@ export function MetricPlot({
   const selectedIndex = selectedTime === null ? Math.max(0, points.length - 1) : nearestPoint(times, selectedTime);
   const selected = points[selectedIndex];
   const summary = selected?.value;
+  const hasPlot = points.length > 0 && segments.length > 0;
   const sampleText = selected
     ? `${new Date(selected.at).toLocaleString()}, ${selected.source ?? label} ${formatPlotValue(selected.value.average, unit)}, ${selected.value.samples > 1 ? `peak ${formatPlotValue(selected.value.peak, unit)}, ` : ''}${selected.value.samples} sample${selected.value.samples === 1 ? '' : 's'}`
     : 'No recorded samples';
@@ -99,6 +101,7 @@ export function MetricPlot({
     <div className="metric-chart" data-metric={metricKey ?? unit}>
       <div
         className="metric-chart-plot"
+        data-empty={!hasPlot || undefined}
         role="slider"
         tabIndex={points.length ? 0 : -1}
         aria-label={`Inspect ${label} history`}
@@ -132,7 +135,7 @@ export function MetricPlot({
           setInspecting(true);
         }}
       >
-        <div className="metric-chart-scale" aria-hidden="true">
+        <div className="metric-chart-scale" aria-hidden="true" hidden={!hasPlot}>
           <span>{formatPlotValue(max, unit)}</span>
           <span>{formatPlotValue(max / 2, unit)}</span>
           <span>0</span>
@@ -168,14 +171,14 @@ export function MetricPlot({
             </g>
           ) : null}
         </svg>
-        {!points.length || !segments.length ? (
+        {hasPlot ? null : (
           <span className="metric-chart-empty">
             {loading
               ? 'Loading history…'
               : (emptyMessage ?? (points.length ? 'Readings unavailable in this range' : 'No samples recorded in this range'))}
           </span>
-        ) : null}
-        <div className="metric-chart-times" aria-hidden="true">
+        )}
+        <div className="metric-chart-times" aria-hidden="true" hidden={!hasPlot}>
           <span>{axisTimes[0]}</span>
           <span>{axisTimes[1]}</span>
           <span>{axisTimes[2]}</span>

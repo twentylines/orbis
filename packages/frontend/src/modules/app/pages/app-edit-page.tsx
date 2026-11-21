@@ -95,25 +95,22 @@ export default function AppEditPage({ loaderData }: Route.ComponentProps) {
       <h2 ref={heading} tabIndex={-1} className="app-configuration-heading">
         {t('APP_EDIT_CONFIG')}
       </h2>
-      <div className="card">
-        <div className="card-body">
-          <div className="row">
-            <div className="col-12">
-              <Input
-                label={
-                  <>
-                    {t('APP_NAME_LABEL')} <span className="text-danger">*</span>
-                  </>
-                }
-                value={appName}
-                disabled={true}
-                placeholder={t('APP_NAME_PLACEHOLDER')}
-              />
-              <div className="form-text">{t('APP_EDIT_NAME_HELP')}</div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <section className="custom-app-name-panel" aria-label={t('APP_NAME_LABEL')}>
+        <Input
+          aria-describedby={id}
+          label={
+            <>
+              {t('APP_NAME_LABEL')} <span className="text-danger">*</span>
+            </>
+          }
+          value={appName}
+          disabled
+          placeholder={t('APP_NAME_PLACEHOLDER')}
+        />
+        <p className="custom-app-name-help form-text" id={id}>
+          {t('APP_EDIT_NAME_HELP')}
+        </p>
+      </section>
       <MultiServiceForm onSubmit={onSubmit} />
     </>
   );

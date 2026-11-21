@@ -1,9 +1,10 @@
 import type { HostTelemetry } from '@runtipi/common/schemas';
 import { useServerPath } from '@/desktop/cluster-data';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode, type RefObject } from 'react';
 import { IconArrowLeft } from '@tabler/icons-react';
 import { Tooltip } from 'react-tooltip';
+import { createPortal } from 'react-dom';
 import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/schemas/metric-history';
 import type { HostDeviceHistory, HostHistorySelection } from '@runtipi/common/schemas/host-device-history';
 import { MetricPlot, formatPlotValue, type MetricPlotHistory } from '@/components/metric-chart/metric-plot';
@@ -52,24 +53,42 @@ export type OpenDeviceHistory = (device: HostHistorySelection, opener: HTMLButto
 
 export function HistoryHelp({ label, children }: { label: string; children: ReactNode }) {
   const id = useId();
+  const [pointer, setPointer] = useState<{ x: number; y: number }>();
+  const trackPointer = (event: PointerEvent<HTMLButtonElement>) => {
+    setPointer(event.pointerType === 'mouse' ? { x: event.clientX, y: event.clientY } : undefined);
+  };
   return (
     <>
-      <button className="monitor-history-help" type="button" aria-label={label} data-tooltip-id={id}>
+      <button
+        className="monitor-history-help"
+        type="button"
+        aria-label={label}
+        data-tooltip-id={id}
+        onPointerEnter={trackPointer}
+        onPointerMove={trackPointer}
+        onFocus={() => setPointer(undefined)}
+      >
         <span className="form-help" aria-hidden="true">
           ?
         </span>
       </button>
-      <Tooltip
-        id={id}
-        className="tooltip monitor-history-tooltip"
-        positionStrategy="fixed"
-        openEvents={{ mouseenter: true, focus: true, click: true }}
-        closeEvents={{ mouseleave: true, blur: true }}
-        globalCloseEvents={{ escape: true, clickOutsideAnchor: true, scroll: true, resize: true }}
-        clickable
-      >
-        {children}
-      </Tooltip>
+      {typeof document === 'undefined'
+        ? null
+        : createPortal(
+            <Tooltip
+              id={id}
+              className="tooltip monitor-history-tooltip"
+              positionStrategy="fixed"
+              position={pointer}
+              openEvents={{ mouseenter: true, focus: true, click: true }}
+              closeEvents={{ mouseleave: true, blur: true }}
+              globalCloseEvents={{ escape: true, clickOutsideAnchor: true, scroll: true, resize: true }}
+              clickable
+            >
+              {children}
+            </Tooltip>,
+            document.body,
+          )}
     </>
   );
 }
@@ -283,7 +302,7 @@ function HostDeviceHistoryView({
         </div>
       </div>
       {selected ? <HostDeviceLiveCharts key={`${basePath}:${selectedKey}`} host={host} selected={selected} /> : null}
-      <div className="host-history-controls">
+      <div className="host-history-controls host-history-recorded">
         <h3 className="monitor-chart-subtitle">Recorded history</h3>
         <SelectionGroup as="fieldset" className="monitor-history-ranges host-history-ranges">
           <legend className="visually-hidden">Device history time range</legend>

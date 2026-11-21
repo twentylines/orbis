@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { convertLegacyToYaml } from '@runtipi/common/schemas/utils/convert-legacy-schema';
@@ -79,37 +79,52 @@ export default () => {
 
   return (
     <div className="custom-app-create-page">
-      <section className="custom-app-name-panel card" aria-label={t('CUSTOM_APP_NAME_LABEL')}>
-        <div className="card-body">
-          <div className="custom-app-name-field">
-            <Input
-              id="custom-app-name"
-              className="custom-app-name-input"
-              aria-describedby="custom-app-name-help"
-              label={
-                <>
-                  {t('CUSTOM_APP_NAME_LABEL')} <span className="text-danger">*</span>
-                </>
-              }
-              onChange={(e) => setAppName(e.target.value)}
-              error={appNameError}
-              placeholder={t('CUSTOM_APP_NAME_PLACEHOLDER')}
-              title={t('CUSTOM_APP_NAME_VALIDATION_HELP')}
-              disabled={createCustomApp.isPending}
-            />
-            <p className="custom-app-name-help form-text" id="custom-app-name-help">
-              {t('CUSTOM_APP_NAME_HELP')}
-            </p>
-          </div>
+      <header className="custom-app-create-header">
+        <nav aria-label="breadcrumbs">
+          <ol className="custom-app-create-breadcrumbs">
+            <li>
+              <Link className="custom-app-create-crumb" to="/apps">
+                Apps
+              </Link>
+            </li>
+            <li aria-current="page">Create</li>
+          </ol>
+        </nav>
+        <div className="custom-app-create-heading">
+          <h2 className="page-title">Create an application</h2>
           <Button
             type="button"
             className="custom-app-create-close"
             aria-label="Back to apps"
             disabled={createCustomApp.isPending}
-            onClick={() => void close()}
+            onClick={(event) => {
+              event.currentTarget.focus({ preventScroll: true });
+              void close();
+            }}
           >
             <IconX size={20} aria-hidden="true" />
           </Button>
+        </div>
+      </header>
+      <section className="custom-app-name-panel" aria-label={t('CUSTOM_APP_NAME_LABEL')}>
+        <div className="custom-app-name-field">
+          <Input
+            id="custom-app-name"
+            aria-describedby="custom-app-name-help"
+            label={
+              <>
+                {t('CUSTOM_APP_NAME_LABEL')} <span className="text-danger">*</span>
+              </>
+            }
+            onChange={(e) => setAppName(e.target.value)}
+            error={appNameError}
+            placeholder={t('CUSTOM_APP_NAME_PLACEHOLDER')}
+            title={t('CUSTOM_APP_NAME_VALIDATION_HELP')}
+            disabled={createCustomApp.isPending}
+          />
+          <p className="custom-app-name-help form-text" id="custom-app-name-help">
+            {t('CUSTOM_APP_NAME_HELP')}
+          </p>
         </div>
       </section>
       <MultiServiceForm

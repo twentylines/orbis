@@ -1,11 +1,28 @@
-.service-compose-panel {
-  container-type: inline-size;
-  margin-top: 16px;
-  overflow: clip;
+.service-compose-panel,
+.custom-app-name-panel {
+  min-width: 0;
   border: 1px solid var(--desktop-line);
   border-radius: 18px;
   background: var(--desktop-surface);
 }
+.custom-app-name-panel {
+  padding: 20px;
+  color: var(--desktop-ink);
+}
+
+.custom-app-name-help {
+  margin: 8px 0 0;
+  color: var(--desktop-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.service-compose-panel {
+  container-type: inline-size;
+  margin-top: 16px;
+  overflow: clip;
+}
+
 .service-form-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -251,4 +268,7 @@ body:has(.orbis-theme) .service-form-footer > .btn {
   flex-basis: 100%;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.store-preview-content:has(.app-configuration-heading) > .store-preview-close {
+  position: static;
 }

@@ -39,7 +39,7 @@
   margin-block: 24px;
 }
 .host-history-device {
-  flex: 1 1 22em;
+  flex: 0 1 32em;
   min-width: 0;
   max-width: 100%;
 }
@@ -78,9 +78,16 @@
   padding-block: 12px;
 }
 .host-history-ranges {
-  flex: 1 1 24em;
+  flex: 0 1 auto;
+  width: fit-content;
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
-  align-self: end;
+  align-self: center;
+}
+.host-history-recorded {
+  align-items: center;
+  gap: 12px 18px;
 }
 .host-history-notice {
   display: flex;
@@ -213,14 +220,16 @@
 .monitor-history-label {
   display: flex;
   align-items: center;
-  flex-basis: 100%;
-  gap: 4px 8px;
+  flex: 0 1 auto;
+  width: fit-content;
+  gap: 4px;
 }
 
 .monitor-history-help {
   flex: 0 0 44px;
   display: inline-grid;
-  place-items: center;
+  align-items: center;
+  justify-items: start;
   width: 44px;
   height: 44px;
   padding: 0;
@@ -233,6 +242,7 @@
 
 .monitor-history-help .form-help {
   font-weight: 650;
+  margin: 0;
 }
 
 .monitor-history-help:focus-visible,

@@ -5,27 +5,60 @@
   color: var(--desktop-ink);
 }
 
-.custom-app-name-panel {
-  min-width: 0;
-  margin: 0;
-  border: 1px solid var(--desktop-line);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--desktop-preset-tint) 5%, var(--desktop-surface));
-  color: var(--desktop-ink);
-  box-shadow: none;
+/* The Create route supplies its own heading so Close sits with the task title. */
+.desktop-route-title:has(+ .desktop-route-content .custom-app-create-page) {
+  display: none;
 }
 
-.custom-app-name-panel > .card-body {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 20px;
+.custom-app-create-header {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 25px;
+  padding-bottom: 20px;
 }
+
+.custom-app-create-breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--desktop-muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.custom-app-create-crumb {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  color: inherit;
+}
+
+.custom-app-create-breadcrumbs [aria-current]::before {
+  margin-inline-end: 10px;
+  content: "/" / "";
+}
+
+.custom-app-create-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.custom-app-create-heading .page-title {
+  margin: 0;
+  font-size: var(--orbis-compact-page-title, clamp(1.5625rem, calc(3vw * var(--orbis-text-scale, 1)), 2.1875rem));
+  letter-spacing: -0.035em;
+}
+
 .custom-app-create-close.btn {
   display: inline-grid;
   place-items: center;
-  flex: 0 0 44px;
   width: 44px;
   height: 44px;
   padding: 0;
@@ -34,17 +67,13 @@
   background: var(--desktop-surface);
   color: var(--desktop-ink);
 }
-.custom-app-create-close:hover {
+
+.custom-app-create-close.btn:hover {
   background: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
 }
 
 .custom-app-name-field {
-  width: min(100%, 40rem);
-  min-width: 0;
-}
-
-.custom-app-name-input {
-  min-width: 0;
+  max-width: 40rem;
 }
 
 .custom-app-create-page .form-label {
@@ -70,25 +99,13 @@ body:has(.orbis-theme) .custom-app-create-page .form-control:focus-visible {
   box-shadow: none;
 }
 
+.custom-app-name-field .form-control:placeholder-shown {
+  text-overflow: ellipsis;
+}
+
 .custom-app-create-page .form-control::placeholder {
   color: var(--desktop-muted);
   opacity: 1;
-}
-
-.custom-app-name-help {
-  margin: 8px 0 0;
-  color: var(--desktop-muted);
-  font-size: 0.875rem;
-  line-height: 1.5;
-}
-
-.custom-app-create-page .service-compose-panel {
-  min-width: 0;
-  border: 1px solid var(--desktop-line);
-  border-radius: 18px;
-  background: var(--desktop-surface);
-  color: var(--desktop-ink);
-  box-shadow: none;
 }
 
 .custom-app-create-page .service-form-layout,
@@ -280,10 +297,6 @@ body:has(.orbis-theme) .custom-app-create-page .btn {
 }
 
 @media (max-width: 450px) {
-  .custom-app-name-panel > .card-body {
-    padding: 16px 20px;
-  }
-
   .custom-app-create-page .service-form-sidebar-header {
     padding: 16px 20px;
   }
@@ -300,6 +313,11 @@ body:has(.orbis-theme) .custom-app-create-page .btn {
     transition: none;
   }
 }
+body:has(.orbis-theme) .custom-app-create-page .custom-app-create-close.btn:focus-visible {
+  outline: 2px solid var(--desktop-focus);
+  outline-offset: 2px;
+}
+
 @media (forced-colors: active) {
   body:has(.orbis-theme) .custom-app-create-page :is(button, input, .nav-link):focus-visible {
     outline: 2px solid Highlight;

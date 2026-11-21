@@ -1,4 +1,5 @@
 import type { ChangeEvent } from 'react';
+import { MemoryRouter } from 'react-router';
 import { fireEvent, render, screen, waitFor } from '@/tests/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useMultiServiceStore } from '@/stores/multiServiceStore';
@@ -70,7 +71,11 @@ describe('CustomAppCreatePage', () => {
   });
 
   it('does not submit stale compose extras carried over from another page', async () => {
-    render(<CustomAppCreatePage />);
+    render(
+      <MemoryRouter initialEntries={['/apps/create']}>
+        <CustomAppCreatePage />
+      </MemoryRouter>,
+    );
 
     await waitFor(() => {
       expect(useMultiServiceStore.getState().composeExtras).toEqual({});
