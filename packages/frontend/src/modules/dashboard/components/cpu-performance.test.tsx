@@ -65,8 +65,8 @@ test('system CPU history leaves runtime and mixed readings as gaps', () => {
   const html = render(sample.cpu, history, false);
   expect(html).toContain('aria-checked="false"');
   expect(html).not.toContain('aria-label="Logical processor utilisation charts"');
-  expect(html).toContain('Live total CPU utilisation: 18.0%');
-  expect(html.indexOf('Live total CPU utilisation')).toBeLessThan(html.indexOf('Inspect System CPU utilisation history'));
+  expect(html).toContain('Total CPU utilisation: 18.0%');
+  expect(html.indexOf('Total CPU utilisation')).toBeLessThan(html.indexOf('Inspect System CPU utilisation history'));
   expect(html).not.toContain('data-history-segment');
   expect(html).toContain('<circle');
   expect(html).not.toContain('94.0%');

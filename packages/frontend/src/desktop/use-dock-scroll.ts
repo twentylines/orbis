@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import {
   dockCollapseForMonitorChart,
   dockScrollMinExtent,
+  dockScrollNearEnd,
   dockScrollProgress,
   dockScrollRoute,
   sampleDockScroll,
@@ -98,6 +99,11 @@ export function useDockScroll(dock: RefObject<HTMLElement | null>, route: string
         return;
       }
       if (settledSource === source) return;
+      if (dockScrollNearEnd(source.scrollTop, source.scrollHeight - source.clientHeight, source.clientHeight)) {
+        settledSource = source;
+        setCanScrollToTop(true);
+        return;
+      }
       settledSource = null;
       setCanScrollToTop(false);
       settleTimer = window.setTimeout(() => {

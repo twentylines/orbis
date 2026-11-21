@@ -363,18 +363,17 @@ html[data-desktop-preset="ocean"][data-desktop-mode="dark"] {
 }
 
 html[data-desktop-preset="blush"][data-desktop-mode="dark"] {
-  --desktop-base-preset-tint: #e360a3;
-  --desktop-base-ink: #fff0f8;
-  --desktop-base-muted: #e3bed4;
-  --desktop-base-surface: rgba(42, 14, 32, 0.98);
-  --desktop-base-chrome: rgba(73, 34, 55, 0.94);
-  --desktop-base-chrome-tint: 0;
-  --desktop-base-chrome-rgb: 73, 34, 55;
-  --desktop-base-panel-dark: rgba(50, 13, 38, 0.98);
+  --desktop-base-preset-tint: #b18b9f;
+  --desktop-base-ink: #f8eef4;
+  --desktop-base-muted: #d6bfcc;
+  --desktop-base-surface: rgba(25, 18, 23, 0.98);
+  --desktop-base-chrome: rgba(31, 22, 29, 0.94);
+  --desktop-base-chrome-rgb: 31, 22, 29;
+  --desktop-base-panel-dark: rgba(31, 22, 29, 0.98);
   --desktop-line: rgba(243, 220, 233, 0.16);
-  --desktop-base-accent: #f5a5d3;
-  --desktop-base-action: #87315f;
-  --desktop-base-action-rgb: 135, 49, 95;
+  --desktop-base-accent: #ddbad0;
+  --desktop-base-action: #86516e;
+  --desktop-base-action-rgb: 134, 81, 110;
   --workspace-heading-ink: var(--desktop-ink);
 }
 

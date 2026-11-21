@@ -71,28 +71,9 @@ const frame = (box: SessionBox, radius: number, opacity = 1): Keyframe => ({
 type ShapeStep = ReturnType<typeof sessionExpansionSteps>[number];
 
 function animateShell(shell: HTMLElement, steps: ShapeStep[], opacity: (offset: number) => number, timing: KeyframeAnimationOptions) {
-  // Keep the mark at its intrinsic size while the glass outline changes.
-  const first = steps[0]?.box;
-  const last = steps.at(-1)?.box;
-  if (!first || !last) throw new Error('Session motion requires both endpoints');
-  const width = Math.max(first.width, last.width);
-  const height = Math.max(first.height, last.height);
-  const left = first.left + (first.width - width) / 2;
-  const top = first.top + (first.height - height) / 2;
-  Object.assign(shell.style, frame({ left, top, width, height }, 0));
+  // Round the glass box itself so its backdrop and fill share the same outline.
   return shell.animate(
-    steps.map(({ box, radius, offset }) => {
-      const insetX = (width - box.width) / 2;
-      const insetY = (height - box.height) / 2;
-      const x = box.left - left - insetX;
-      const y = box.top - top - insetY;
-      return {
-        clipPath: `inset(${insetY}px ${insetX}px round ${radius}px)`,
-        transform: `translate(${x}px, ${y}px)`,
-        opacity: opacity(offset),
-        offset,
-      };
-    }),
+    steps.map(({ box, radius, offset }) => ({ ...frame(box, radius, opacity(offset)), offset })),
     timing,
   );
 }
@@ -362,6 +343,7 @@ export function contractSessionMorph(model: SessionMorph, shell: HTMLElement, re
     const steps = sessionExpansionSteps(model.orb, model.from, model.radius)
       .reverse()
       .map((step) => ({ ...step, offset: 1 - step.offset }));
+    Object.assign(shell.style, to, { opacity: 0 });
     shellMotion = animateShell(shell, steps, (offset) => Math.min(1, Math.max(0, (offset - 0.12) / 0.43)), timing);
     model.animations.push(shellMotion);
     const origin = {
@@ -459,17 +441,9 @@ export async function expandSessionMorph(shell: HTMLElement, target: HTMLElement
   target.style.zIndex = '101';
   target.inert = true;
   const animations: Animation[] = [];
-  const shellBox = {
-    left: shell.style.left,
-    top: shell.style.top,
-    width: shell.style.width,
-    height: shell.style.height,
-    borderRadius: shell.style.borderRadius,
-  };
   let aborted = false;
   const abort = () => {
     aborted = true;
-    Object.assign(shell.style, shellBox);
     for (const animation of animations) animation.cancel();
     window.removeEventListener('resize', resized);
     window.visualViewport?.removeEventListener('resize', resized);

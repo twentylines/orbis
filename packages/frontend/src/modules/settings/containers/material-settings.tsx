@@ -218,7 +218,7 @@ export function MaterialSettings() {
                   <AppearanceRange
                     label="Panel opacity"
                     max={100}
-                    value={value.surfaceOpacity ?? defaultOpacity.panel ?? 95}
+                    value={value.surfaceOpacity ?? defaultOpacity.panel ?? 90}
                     disabled={opaque}
                     onPreview={preview('surfaceOpacity')}
                     onChange={(surfaceOpacity) => updateMaterial({ surfaceOpacity })}

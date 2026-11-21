@@ -23,7 +23,7 @@ const rate = (value?: number | null) => (rateReading(value ?? null) === null ? '
 
 function GpuLiveChart({ sampledAt, utilisation }: { sampledAt: string; utilisation: number | null }) {
   const samples = useLiveSamples(sampledAt, 'gpu', [percentReading(utilisation)]);
-  return samples.some((point) => point.values[0] != null) ? <LiveMetricChart label="Live GPU utilisation" samples={samples} gapMs={45_000} /> : null;
+  return samples.some((point) => point.values[0] != null) ? <LiveMetricChart label="GPU utilisation" samples={samples} gapMs={45_000} /> : null;
 }
 
 export function MonitorPerformance({
@@ -97,7 +97,7 @@ export function MonitorPerformance({
         ))}
       </SelectionGroup>
       {resource !== 'gpu' && resourceDelayed ? (
-        <output className="monitor-resource-note">Live readings are delayed. Values are from the last received sample.</output>
+        <output className="monitor-resource-note">Readings are delayed. Values are from the last received sample.</output>
       ) : null}
       <div className="monitor-performance-live" hidden={resource !== 'cpu'}>
         {sample ? (
@@ -126,14 +126,14 @@ export function MonitorPerformance({
               <h2 id="telemetry-memory-title">Memory</h2>
               <p>{total === null ? 'Host memory capacity not reported' : `${statusBytes(total)} total system memory`}</p>
             </div>
-            <span className="monitor-sample-label">{resourceDelayed ? 'Last reported' : 'Live · every second'}</span>
+            <span className="monitor-sample-label">{resourceDelayed ? 'Last reported' : 'Every second'}</span>
           </header>
           <div className="desktop-telemetry-lead" data-high={highUsage(usedPercent)}>
             <strong>{usedPercent === null ? 'Unavailable' : `${usedPercent.toFixed(1)}%`}</strong>
             <span>In use · {statusBytes(used)}</span>
           </div>
           <p className="monitor-processor-caption">Last 60 seconds · 0–100%. Gaps mean missing readings.</p>
-          <LiveMetricChart label="Live memory utilisation" samples={memorySamples} />
+          <LiveMetricChart label="Memory utilisation" samples={memorySamples} />
           <dl className="monitor-resource-facts">
             <div>
               <dt>In use</dt>
@@ -170,7 +170,7 @@ export function MonitorPerformance({
                 {network?.speedMbps != null ? ` · ${network.speedMbps.toLocaleString()} Mbps link` : ''}
               </p>
             </div>
-            <span className="monitor-sample-label">{resourceDelayed ? 'Last reported' : 'Live · every second'}</span>
+            <span className="monitor-sample-label">{resourceDelayed ? 'Last reported' : 'Every second'}</span>
           </header>
           <dl className="monitor-resource-facts monitor-network-live">
             <div>
@@ -192,19 +192,19 @@ export function MonitorPerformance({
           </dl>
           <p className="monitor-resource-note">
             {network?.scope === 'host'
-              ? 'Live counters are for the named host interface.'
+              ? 'Counters are for the named host interface.'
               : 'Host interface readings are unavailable. These readings cover Orbis traffic.'}
           </p>
           <p className="monitor-processor-caption">Last 60 seconds · gaps mean missing readings.</p>
           <div className="monitor-live-chart-grid">
-            <LiveMetricChart label="Live download" samples={networkSamples} unit="rate" />
-            <LiveMetricChart label="Live upload" samples={networkSamples} index={1} unit="rate" />
+            <LiveMetricChart label="Download" samples={networkSamples} unit="rate" />
+            <LiveMetricChart label="Upload" samples={networkSamples} index={1} unit="rate" />
           </div>
           <h3 id="monitor-network-history-title" className="monitor-chart-subtitle">
             Network history
           </h3>
           {historyControls}
-          <p className="monitor-resource-note">History records Orbis traffic, which may differ from the live host interface above.</p>
+          <p className="monitor-resource-note">History records Orbis traffic, which may differ from the host interface above.</p>
           <div className="desktop-network-charts">
             <MetricChart history={history} field="download" label="Network download" color="var(--desktop-accent)" loading={loading} />
             <MetricChart history={history} field="upload" label="Network upload" color="var(--desktop-positive)" loading={loading} />

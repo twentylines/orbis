@@ -201,11 +201,12 @@ test('real source waits for the prepared shell, contracts on one clock, and canc
     expect(h.card.calls[0]?.timing).toEqual({ duration: 640, easing: 'cubic-bezier(.22,.72,.18,1)', fill: 'both' });
     expect(h.card.calls[0]?.frames[0]).toMatchObject({ transform: 'none', borderRadius: '18px', width: '400px', height: '360px' });
     expect(h.card.calls[0]?.frames.at(-1)).toMatchObject({ transform: 'none', width: '176px', height: '176px', borderRadius: '88px' });
-    expect(h.shell.calls[0]?.frames[0]).toMatchObject({ opacity: 0, clipPath: 'inset(0px 0px round 18px)' });
-    expect(h.shell.calls[0]?.frames.at(-1)).toMatchObject({ opacity: 1, clipPath: 'inset(92px 112px round 88px)' });
+    expect(h.shell.calls[0]?.frames[0]).toMatchObject({ opacity: 0, width: '400px', height: '360px', borderRadius: '18px' });
+    expect(h.shell.calls[0]?.frames.at(-1)).toMatchObject({ opacity: 1, width: '176px', height: '176px', borderRadius: '88px' });
     for (const frame of h.shell.calls[0]?.frames ?? []) {
-      expect(frame).not.toHaveProperty('width');
-      expect(frame).not.toHaveProperty('height');
+      expect(Number.parseFloat(String(frame.borderRadius))).toBeGreaterThan(0);
+      expect(frame.transform).toBe('none');
+      expect(frame).not.toHaveProperty('clipPath');
       expect(frame).not.toHaveProperty('backdropFilter');
     }
     expect(h.shell.style).toHaveProperty('backdropFilter', 'blur(28px)');
@@ -225,6 +226,28 @@ test('real source waits for the prepared shell, contracts on one clock, and canc
     expect(h.card.style.overflow).toBe('');
     expect(hasActiveSessionMorph()).toBe(false);
     expect(h.root.dataset.orbisSessionMorph).toBeUndefined();
+  } finally {
+    h.restore();
+  }
+});
+
+test('sign-in glass has a round base before the animation applies and after its effect is removed', async () => {
+  const h = harness();
+  h.holdAnimations();
+  try {
+    const model = beginSessionMorph('signing-in');
+    if (!model) throw new Error('missing model');
+    contractSessionMorph(model, h.shell as unknown as HTMLElement, false);
+    expect(h.shell.style).toMatchObject({
+      width: '176px',
+      height: '176px',
+      borderRadius: '88px',
+      opacity: 0,
+      backdropFilter: 'blur(28px)',
+    });
+    for (const animation of model.animations) animation.finish();
+    await model.finished;
+    expect(h.shell.style).toMatchObject({ width: '176px', height: '176px', borderRadius: '88px', opacity: 1 });
   } finally {
     h.restore();
   }
@@ -330,6 +353,7 @@ test('reduced motion and missing animation capability keep the same pending cont
       expect(h.root.dataset.orbisSessionMorph).toBe('waiting');
       expect(h.source.calls).toHaveLength(0);
       expect(h.shell.calls).toHaveLength(0);
+      expect(h.shell.style).toMatchObject({ width: '176px', height: '176px', borderRadius: '88px', opacity: 1 });
       expect(h.source.style.opacity).toBe('0');
       expect(h.source.draft).toBe('retained draft');
     } finally {
@@ -406,8 +430,10 @@ test('expansion reveals the actual login card and keeps its lift until the persi
     expect(h.target.calls[0]?.frames.at(-1)?.clipPath).toBe('inset(120px 200px 120px 200px round 18px)');
     expect(h.targetCard.calls).toHaveLength(0);
     expect(h.shell.calls[0]?.frames.at(-1)).toMatchObject({
-      clipPath: 'inset(0px 0px round 18px)',
-      transform: 'translate(0px, 0px)',
+      width: '400px',
+      height: '360px',
+      borderRadius: '18px',
+      transform: 'none',
       opacity: 0,
     });
     expect(h.target.style.zIndex).toBe('101');
@@ -503,8 +529,12 @@ test('superseding expansion aborts immediately and cannot overwrite the next own
   h.holdAnimations();
   try {
     const controller = new AbortController();
+    const roundShell = { left: '312px', top: '212px', width: '176px', height: '176px', borderRadius: '88px', opacity: 1 };
+    Object.assign(h.shell.style, roundShell);
     const expanding = expandSessionMorph(h.shell as unknown as HTMLElement, h.target as unknown as HTMLElement, false, controller.signal);
+    expect(h.shell.calls[0]?.frames[0]).toMatchObject(roundShell);
     controller.abort();
+    expect(h.shell.style).toMatchObject(roundShell);
     expect(h.target.inert).toBe(false);
     expect(h.target.style.zIndex).toBe('');
     h.target.style.opacity = '0.7';

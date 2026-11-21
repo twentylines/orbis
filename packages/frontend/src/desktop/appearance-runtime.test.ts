@@ -271,7 +271,7 @@ describe('saved appearance applied before hydration and to live materials', () =
       else expect(Math.min(...surface)).toBeGreaterThanOrEqual(250);
     }
   });
-  test('main panes use 95% while Home keeps its previous glass and text retains contrast', () => {
+  test('main panes use 90% while Home stays more translucent and text retains contrast', () => {
     for (const preset of themePresets) {
       for (const dark of [false, true]) {
         const tokens = actualPalette(preset, dark);
@@ -279,8 +279,8 @@ describe('saved appearance applied before hydration and to live materials', () =
           const { properties, dataset } = apply({}, { dark, tokens, firstPaint });
           const pane = rgb(properties.get('--orbis-pane-surface') ?? '');
           const home = rgb(properties.get('--orbis-home-surface') ?? '');
-          expect(pane[3]).toBe(0.95);
-          expect(home[3]).toBeGreaterThanOrEqual(dark ? 0.9 : 0.76);
+          expect(pane[3]).toBe(0.9);
+          expect(home[3]).toBeGreaterThanOrEqual(dark ? 0.82 : 0.76);
           expect(home[3]).toBeLessThanOrEqual(dark ? 0.9 : 0.88);
           if (!dark) expect(pane.slice(0, 3).every((channel, index) => channel >= (home[index] ?? 0))).toBe(true);
           expect(properties.has('--orbis-surface')).toBe(false);
@@ -300,13 +300,24 @@ describe('saved appearance applied before hydration and to live materials', () =
   });
   test('pane opacity respects custom fill, solid, OLED and device accessibility choices', () => {
     expect(rgb(apply({ surfaceOpacity: 95 }).properties.get('--orbis-pane-surface') ?? '')[3]).toBe(0.95);
+    for (const preset of themePresets) {
+      for (const dark of [false, true]) {
+        const { properties } = apply({ surfaceOpacity: 95 }, { dark, tokens: actualPalette(preset, dark) });
+        const home = rgb(properties.get('--orbis-home-surface') ?? '');
+        expect(home[3]).toBeLessThan(0.95);
+        for (const wallpaper of [0, 255])
+          expect(contrast(rgb(properties.get('--orbis-muted') ?? ''), composite(home, wallpaper))).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    expect(rgb(apply({ surfaceOpacity: 40 }).properties.get('--orbis-home-surface') ?? '')[3]).toBe(0.4);
     for (const options of [{ transparency: 'solid' }, { lowEffects: true }, { oledDark: true }]) {
       const result = apply(options, { dark: true });
       expect(rgb(result.properties.get('--orbis-pane-surface') ?? '')[3]).toBe(1);
+      expect(rgb(result.properties.get('--orbis-home-surface') ?? '')[3]).toBe(1);
       expect(result.properties.get('--orbis-glass-filter')).toBe('none');
     }
     expect(rgb(apply({}, { solidSystem: true }).properties.get('--orbis-pane-surface') ?? '')[3]).toBe(1);
-    expect(rgb(apply({ transparency: 'glass' }, { solidSystem: true }).properties.get('--orbis-pane-surface') ?? '')[3]).toBe(0.95);
+    expect(rgb(apply({ transparency: 'glass' }, { solidSystem: true }).properties.get('--orbis-pane-surface') ?? '')[3]).toBe(0.9);
   });
   test('floating glass remains translucent and readable across every preset and wallpaper extreme', () => {
     for (const preset of themePresets) {
@@ -328,11 +339,11 @@ describe('saved appearance applied before hydration and to live materials', () =
       }
     }
   });
-  test('dark Stone defaults use translucent chrome and keep the 95% pane', () => {
+  test('dark Stone defaults use translucent chrome and the requested 90% pane', () => {
     const options = { dark: true, tokens: actualPalette('stone', true) };
     const defaults = apply({}, options).properties;
     const reference = apply(
-      { materialMode: 'custom', transparency: 'glass', surfaceOpacity: 95, chromeOpacity: 28, chromeBlur: 24, glassTint: 0 },
+      { materialMode: 'custom', transparency: 'glass', surfaceOpacity: 90, chromeOpacity: 28, chromeBlur: 24, glassTint: 0 },
       options,
     ).properties;
     for (const token of ['pane-surface', 'chrome', 'chrome-backdrop-brightness', 'chrome-muted', 'chrome-focus']) {
@@ -539,7 +550,7 @@ test('legacy chrome stays in Dark on first paint and explicit mode profiles reta
   const firstPaint = (appearance: unknown, dark: boolean) => apply(appearance, { firstPaint: true, legacy: true, dark }).properties;
   const light = firstPaint(legacy, false);
   const dark = firstPaint(legacy, true);
-  expect(rgb(light.get('--orbis-pane-surface') ?? '')[3]).toBe(0.95);
+  expect(rgb(light.get('--orbis-pane-surface') ?? '')[3]).toBe(0.9);
   expect(rgb(light.get('--orbis-chrome') ?? '')[3]).not.toBe(0.1);
   expect(light.has('--orbis-chrome-filter')).toBe(false);
   expect(rgb(dark.get('--orbis-chrome') ?? '')[3]).toBe(0.1);

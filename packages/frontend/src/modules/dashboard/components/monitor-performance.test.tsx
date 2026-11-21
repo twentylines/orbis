@@ -19,9 +19,9 @@ test('GPU identity and metrics remain accessible when CPU telemetry is unavailab
     </MemoryRouter>,
   );
   expect(html).toContain('Independent GPU');
-  expect(html).toContain('Live GPU utilisation: 27.0%');
+  expect(html).toContain('GPU utilisation: 27.0%');
   expect(html).toContain('GPU utilisation history is unavailable.');
-  expect(html).not.toContain('Live readings are delayed.');
+  expect(html).not.toContain('Readings are delayed.');
   expect(html).not.toContain('Recorded range');
 });
 
@@ -55,7 +55,7 @@ test('existing Home Memory anchor renders the Memory chart even when an older CP
     expect(html).toContain('id="telemetry-memory-title">Memory</h2>');
     expect(html).toContain('Host memory utilisation');
     expect(html).toContain('Recorded range');
-    expect(html.indexOf('Live memory utilisation')).toBeLessThan(html.indexOf('Recorded range'));
+    expect(html.indexOf('Memory utilisation')).toBeLessThan(html.indexOf('Recorded range'));
     expect(html.indexOf('Recorded range')).toBeLessThan(html.indexOf('Host memory utilisation'));
   }
 });

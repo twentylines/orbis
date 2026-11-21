@@ -5,6 +5,11 @@ export function dockScrollProgress(top: number, extent: number): number | null {
   return Math.max(0, Math.min(1, (Number.isFinite(top) ? top : 0) / extent));
 }
 
+export function dockScrollNearEnd(top: number, extent: number, viewport: number): boolean {
+  if (![top, extent, viewport].every(Number.isFinite) || extent < dockScrollMinExtent || viewport <= 0) return false;
+  return top >= 64 && extent - top <= Math.min(160, Math.max(48, viewport * 0.18));
+}
+
 export type DockScrollDirection = -1 | 1;
 export const dockCollapseForMonitorChart = 'orbis-dock-collapse-for-monitor-chart';
 

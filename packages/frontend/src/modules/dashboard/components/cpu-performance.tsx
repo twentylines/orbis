@@ -79,7 +79,7 @@ export function CpuPerformance({
           ))}
         </section>
       ) : (
-        <LiveMetricChart label="Live total CPU utilisation" samples={totals} />
+        <LiveMetricChart label="Total CPU utilisation" samples={totals} />
       )}
       {historyControls}
       <CpuRecordedChart history={history} loading={loading} />

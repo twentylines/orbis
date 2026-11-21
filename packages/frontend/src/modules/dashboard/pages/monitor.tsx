@@ -174,7 +174,7 @@ function ServerMonitor() {
               title="CPU and memory update every second. Other hardware readings keep their own sampling rate."
             >
               <span className={telemetry.isError ? 'desktop-live-dot desktop-live-dot-stale' : 'desktop-live-dot'} aria-hidden="true" />
-              <span>{telemetry.isError ? 'Readings delayed' : telemetry.isPending ? 'Connecting' : 'Live · every second'}</span>
+              <span>{telemetry.isError ? 'Readings delayed' : telemetry.isPending ? 'Connecting' : 'Every second'}</span>
             </div>
           </header>
           {telemetry.isError ? (

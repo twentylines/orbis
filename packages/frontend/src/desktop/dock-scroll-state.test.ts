@@ -3,6 +3,7 @@ import {
   advanceDockFold,
   advanceDockScroll,
   dockScrollProgress,
+  dockScrollNearEnd,
   dockScrollRoute,
   dockSideWidth,
   foldDockBox,
@@ -12,6 +13,17 @@ import {
 } from './dock-scroll-state';
 
 describe('scrolling navigation', () => {
+  it('anticipates the bottom before momentum settles without activating on short pages', () => {
+    expect(dockScrollNearEnd(909, 1000, 500)).toBe(false);
+    expect(dockScrollNearEnd(910, 1000, 500)).toBe(true);
+    expect(dockScrollNearEnd(1000, 1000, 500)).toBe(true);
+    expect(dockScrollNearEnd(839, 1000, 2000)).toBe(false);
+    expect(dockScrollNearEnd(840, 1000, 2000)).toBe(true);
+    expect(dockScrollNearEnd(63, 100, 500)).toBe(false);
+    expect(dockScrollNearEnd(64, 100, 500)).toBe(true);
+    expect(dockScrollNearEnd(40, 47, 500)).toBe(false);
+    expect(dockScrollNearEnd(1000, 1000, Number.NaN)).toBe(false);
+  });
   it('reports bounded progress for meaningful overflow only', () => {
     expect(dockScrollProgress(10, 47)).toBeNull();
     expect(dockScrollProgress(10, Number.POSITIVE_INFINITY)).toBeNull();

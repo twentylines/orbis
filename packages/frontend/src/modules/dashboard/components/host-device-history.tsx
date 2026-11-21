@@ -36,13 +36,13 @@ function HostDeviceLiveCharts({ host, selected }: { host?: HostTelemetry; select
   ]);
 
   return (
-    <section className="host-history-live" aria-label="Live device activity">
-      <h3 className="monitor-chart-subtitle">Live device activity</h3>
+    <section className="host-history-live" aria-label="Device activity">
+      <h3 className="monitor-chart-subtitle">Device activity</h3>
       <p className="monitor-processor-caption">Last 60 seconds · gaps mean missing readings.</p>
       <div className="monitor-live-chart-grid">
-        <LiveMetricChart label={selected.kind === 'disk' ? 'Live read' : 'Live download'} samples={samples} unit="rate" />
-        <LiveMetricChart label={selected.kind === 'disk' ? 'Live write' : 'Live upload'} samples={samples} index={1} unit="rate" />
-        {selected.kind === 'disk' ? <LiveMetricChart label="Live active time" samples={samples} index={2} /> : null}
+        <LiveMetricChart label={selected.kind === 'disk' ? 'Read' : 'Download'} samples={samples} unit="rate" />
+        <LiveMetricChart label={selected.kind === 'disk' ? 'Write' : 'Upload'} samples={samples} index={1} unit="rate" />
+        {selected.kind === 'disk' ? <LiveMetricChart label="Active time" samples={samples} index={2} /> : null}
       </div>
     </section>
   );

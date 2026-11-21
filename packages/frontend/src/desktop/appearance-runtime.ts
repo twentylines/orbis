@@ -182,18 +182,18 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   if (solid) surface[3] = chrome[3] = panel[3] = 1;
   const tintedSurface = [...mix(surface, preset, tint).slice(0, 3), surface[3]] as Rgba;
   const homeSurface = [...tintedSurface] as Rgba;
-  if (!solid && opacity === null) homeSurface[3] = Math.min(homeSurface[3], dark ? 0.9 : 0.76);
+  if (!solid) homeSurface[3] = Math.min(homeSurface[3], dark ? 0.82 : 0.76);
   const paneBackgrounds = (value: Rgba) =>
     [value, mix(value, preset, 0.08), mix(value, preset, 0.2)].flatMap((background) => backgrounds(background));
   const inkValue = (source.getPropertyValue('--desktop-base-ink') || source.getPropertyValue('--desktop-ink')).trim();
   const paneInk = themeColour ? colour(next.get('theme-ink') ?? '') : inkValue ? colour(inkValue) : mode === 'dark' ? white : black;
-  while (opacity === null && homeSurface[3] < 1 && !paneBackgrounds(homeSurface).every((background) => contrast(paneInk, background) >= 4.65))
-    homeSurface[3] = Math.min(1, Math.round((homeSurface[3] + 0.01) * 100) / 100);
+  while (!solid && homeSurface[3] < tintedSurface[3] && !paneBackgrounds(homeSurface).every((background) => contrast(paneInk, background) >= 4.65))
+    homeSurface[3] = Math.min(tintedSurface[3], Math.round((homeSurface[3] + 0.01) * 100) / 100);
   set('home-surface', css(homeSurface));
-  // The main window has a denser fill. Home retains its existing material.
+  // Home apps and widgets share a lighter glass; full pages retain their denser fill.
   const paneSurface =
     opacity === null && !solid
-      ? ([...mix([...tintedSurface.slice(0, 3), 1] as Rgba, white, dark ? 0 : 0.45).slice(0, 3), 0.95] as Rgba)
+      ? ([...mix([...tintedSurface.slice(0, 3), 1] as Rgba, white, dark ? 0 : 0.45).slice(0, 3), 0.9] as Rgba)
       : ([...tintedSurface] as Rgba);
   while (opacity === null && paneSurface[3] < 1 && !paneBackgrounds(paneSurface).every((background) => contrast(paneInk, background) >= 4.65))
     paneSurface[3] = Math.min(1, Math.round((paneSurface[3] + 0.01) * 100) / 100);
