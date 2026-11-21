@@ -101,7 +101,7 @@ export function AppLibraryControls({
         className="btn app-library-find"
         onClick={(event) => {
           event.currentTarget.focus({ preventScroll: true });
-          openCommandSearch();
+          openCommandSearch('apps');
         }}
         aria-haspopup="dialog"
       >

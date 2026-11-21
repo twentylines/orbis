@@ -74,6 +74,9 @@
 .settings-store-groups > .appearance-section .appearance-material-controls {
   align-content: center;
 }
+.appearance-name {
+  align-self: center;
+}
 .appearance-name label {
   display: block;
   font-size: 0.8125rem;

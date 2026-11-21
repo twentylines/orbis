@@ -30,7 +30,8 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router';
 import { desktopSearchSections } from './navigation';
-import { commandSearchEvent } from './command-search-event';
+import { commandSearchEvent, commandSearchScope } from './command-search-event';
+import { SearchSettingChoices } from './command-search-setting-choices';
 import { useAppLauncher } from './app-launcher';
 import { appDestinations } from './app-destinations';
 import { primaryAppAddress } from './app-opening';
@@ -410,8 +411,12 @@ export function CommandSearch() {
   }, [open, panelElement, readBar, cancelMotions, finishClose]);
 
   useEffect(() => {
-    window.addEventListener(commandSearchEvent, openSearch);
-    return () => window.removeEventListener(commandSearchEvent, openSearch);
+    const requested = (event: Event) => {
+      setScope(commandSearchScope(event));
+      openSearch();
+    };
+    window.addEventListener(commandSearchEvent, requested);
+    return () => window.removeEventListener(commandSearchEvent, requested);
   }, [openSearch]);
 
   useEffect(() => {
@@ -747,6 +752,7 @@ export function CommandSearch() {
                                       </button>
                                     </div>
                                   ) : null}
+                                  {result.settingId ? <SearchSettingChoices settingId={result.settingId} onKeyDown={handleResultKeyDown} /> : null}
                                   {feedback ? (
                                     <output className="desktop-search-result-feedback">
                                       <span>{feedback}</span>

@@ -72,6 +72,29 @@ def spaceflight(width, tick, height=12, unicode=False):
     return ["".join(row).rstrip() for row in cells]
 
 
+def branching_stars(width, progress, height=12, unicode=False):
+    """Grow fixed, forked star trails outwards; no elapsed-time replay."""
+    width, height = max(1, min(96, width)), max(6, min(13, height))
+    progress = min(1, max(0, progress))
+    cells = [[" " for _ in range(width)] for _ in range(height)]
+    centre_x, centre_y = (width - 1) / 2, (height - 1) / 2
+    for arm in range(10):
+        angle = arm * math.tau / 10 + 0.16
+        for fork in (-1, 1):
+            for step in range(1, 33):
+                distance = step / 32
+                if progress == 0 or distance > 0.34 + 0.66 * progress:
+                    break
+                bend = fork * max(0, distance - 0.3) * 0.55
+                direction = angle + bend
+                x = round(centre_x + math.cos(direction) * distance * centre_x)
+                y = round(centre_y + math.sin(direction) * distance * centre_y)
+                if 0 <= x < width and 0 <= y < height:
+                    # Nodes and fine trails stay in place as the front advances.
+                    cells[y][x] = ("•" if unicode else "*") if step % 8 == 0 else ("·" if unicode else ".")
+    return ["".join(row).rstrip() for row in cells]
+
+
 class PullProgress:
     """Read bounded Docker layer updates from the existing private pull log."""
 
@@ -142,8 +165,8 @@ _LOGO_POINTS = _logo_points()
 _BRAILLE = ((1, 8), (2, 16), (4, 32), (64, 128))
 
 
-def logo_frame(width, height, tick=12, unicode=False, *, progress=None):
-    """Rasterize the mark at the supplied installation progress, or its introductory formation position."""
+def logo_frame(width, height, tick=12, unicode=False):
+    """Form the complete mark once, independently of installation progress."""
     width, height = max(1, min(48, width)), max(1, min(16, height))
     columns, rows = (width * 2, height * 4) if unicode else (width, height)
     scale_x, scale_y = (columns - 1) / 64, (rows - 1) / 64
@@ -152,7 +175,7 @@ def logo_frame(width, height, tick=12, unicode=False, *, progress=None):
         scale_y = scale_x / 2
     else:
         scale_x = scale_y = min(scale_x, scale_y)
-    amount = min(1, max(0, progress)) if progress is not None else 1 - (1 - min(1, max(0, tick) / 12)) ** 3
+    amount = 1 - (1 - min(1, max(0, tick) / 12)) ** 3
     twist = (1 - amount) * 1.4
     dots = [[0] * columns for _ in range(rows)]
     for x, y, radius in _LOGO_POINTS:
@@ -194,6 +217,7 @@ class Presentation:
         self._frame_width = None
         self._scene_started = None
         self._scene_logo = None
+        self._branch = (0.0, 0.0, 0.0)
         self.unicode = "utf" in (getattr(self.stream, "encoding", None) or env.get("LC_ALL") or env.get("LANG", "")).lower()
 
     def paint(self, value, code):
@@ -272,16 +296,25 @@ class Presentation:
         if width < 40 or height < 18:
             return []
         field_width = min(96, width - 1)
+        now = time.monotonic()
         if self._scene_started is None:
-            self._scene_started = time.monotonic()
-        tick = max(tick, int((time.monotonic() - self._scene_started) * 10))
+            self._scene_started = now
+        tick = max(tick, int((now - self._scene_started) * 10))
         field_height = min(13, height - 12)
-        lines = [line.ljust(field_width) for line in spaceflight(field_width, tick, field_height, self.unicode)]
+        start, target, changed = self._branch
+        blend = min(1, max(0, (now - changed) / 0.7))
+        position = start + (target - start) * (1 - (1 - blend) ** 3)
+        requested = self.installation_progress(fraction)
+        if requested != target:
+            self._branch = (position, requested, now)
+        if requested == 1:
+            position = 1
+        lines = [line.ljust(field_width) for line in branching_stars(field_width, position, field_height, self.unicode)]
         mark_width = min(field_width, field_height * 2 + field_width % 2)
-        position = self.installation_progress(fraction)
-        key = (mark_width, field_height, self.unicode, position)
+        formation = min(12, tick)
+        key = (mark_width, field_height, self.unicode, formation)
         if self._scene_logo is None or self._scene_logo[0] != key:
-            self._scene_logo = (key, logo_frame(mark_width, field_height, unicode=self.unicode, progress=position))
+            self._scene_logo = (key, logo_frame(mark_width, field_height, formation, self.unicode))
         mark = self._scene_logo[1]
         inset = (field_width - mark_width) // 2
         def color_run(match):

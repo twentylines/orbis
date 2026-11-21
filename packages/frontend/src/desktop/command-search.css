@@ -568,3 +568,38 @@ body:has(.orbis-theme) .desktop-search-surface .desktop-search-input #orbis-comm
     color-mix(in srgb, var(--search-palette-colour) 45%, #111) 50%
   );
 }
+
+.desktop-search-setting-choices {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+.desktop-search-setting-choices button {
+  flex: 1 1 auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  color: var(--desktop-ink);
+  background: transparent;
+  line-height: 1.4;
+}
+.desktop-search-setting-choices button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--desktop-ink) 16%, var(--desktop-surface));
+  border-color: var(--desktop-muted);
+  font-weight: 650;
+}
+.desktop-search-setting-choices button:focus-visible {
+  outline: 2px solid var(--desktop-focus);
+  outline-offset: 2px;
+}
+.desktop-search-setting-choices p {
+  flex-basis: 100%;
+  margin: 0;
+}

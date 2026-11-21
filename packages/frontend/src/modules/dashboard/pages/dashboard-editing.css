@@ -149,7 +149,7 @@
   width: min(19rem, calc(100vw - 80px));
   padding: 12px;
 }
-.workspace-layout-options :is(.orbis-switch, button) {
+.workspace-layout-options :is(.orbis-switch, button:not([role="switch"])) {
   min-height: 44px;
   margin: 0;
 }

@@ -350,7 +350,7 @@ class SpaceflightTests(unittest.TestCase):
                 rows = plain.scene(20)
                 clean = [re.sub(r"\x1b\[[0-9;]+m", "", row) for row in colored.scene(20)]
                 self.assertEqual(rows, clean)
-                field = [line.ljust(min(96, width - 1)) for line in UI.spaceflight(min(96, width - 1), 20, 12)]
+                field = [line.ljust(min(96, width - 1)) for line in UI.branching_stars(min(96, width - 1), 1, 12)]
                 mark_width = 24 + min(96, width - 1) % 2
                 inset = (min(96, width - 1) - mark_width) // 2
                 self.assertEqual(inset * 2 + mark_width, min(96, width - 1))
@@ -422,32 +422,58 @@ class OrbisLogoTests(unittest.TestCase):
                     if not unicode:
                         self.assertTrue(set("".join(rows)) <= {" ", "*"})
 
-    def test_scene_growth_tracks_completed_work_instead_of_elapsed_time(self):
+    def test_logo_completes_while_stars_wait_for_work_then_branch_without_replay(self):
         ui = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"}, color=False)
         ui.unicode = True
         clock = [10.0]
         def mark(rows):
-            return [line[26:53] for line in rows]
+            return [line.ljust(79)[26:53] for line in rows]
+        def field(rows):
+            return [line.ljust(79)[:26] + line.ljust(79)[53:] for line in rows]
         with mock.patch.object(UI.time, "monotonic", side_effect=lambda: clock[0]), mock.patch.object(ui, "width", return_value=80), mock.patch.object(ui, "height", return_value=25):
-            initial = mark(ui.scene(0))
-            clock[0] += 60
-            self.assertEqual(initial, mark(ui.scene(600)))
+            initial = ui.scene(0)
             ui.set_remaining_steps(4)
-            self.assertEqual(initial, mark(ui.scene(0)))
+            clock[0] += 2
+            formed = ui.scene(0)
+            self.assertNotEqual(mark(initial), mark(formed))
+            self.assertEqual(mark(formed), UI.logo_frame(27, 13, unicode=True))
+            self.assertEqual(field(initial), field(formed))
             ui.completed = 1
-            first = mark(ui.scene(0))
-            self.assertNotEqual(initial, first)
-            midway = mark(ui.scene(0, fraction=0.5))
-            self.assertNotEqual(first, midway)
+            ui.scene(0)
+            clock[0] += 0.35
+            moving = ui.scene(0)
+            clock[0] += 0.35
+            first = ui.scene(0)
+            self.assertNotEqual(field(formed), field(first))
+            self.assertEqual(mark(moving), mark(formed))
             clock[0] += 60
-            self.assertEqual(midway, mark(ui.scene(1200, fraction=0.5)))
+            self.assertEqual(first, ui.scene(0))
             ui.completed = 2
-            second = mark(ui.scene(0))
-            self.assertNotEqual(midway, second)
+            ui.scene(0)
+            clock[0] += 1
+            second = ui.scene(0)
+            self.assertNotEqual(field(first), field(second))
+            self.assertEqual(mark(first), mark(second))
             ui.completed = ui.total
-            self.assertEqual(mark(ui.scene(0)), UI.logo_frame(27, 13, unicode=True, progress=1))
+            final = ui.scene(0)
+            self.assertNotEqual(field(second), field(final))
+            clock[0] += 60
+            self.assertEqual(final, ui.scene(0))
 
-    def test_unknown_or_invalid_stage_progress_cannot_advance_the_logo(self):
+    def test_branch_field_is_bounded_and_progress_reveals_fixed_paths(self):
+        for unicode in (False, True):
+            for width in (1, 40, 80, 200):
+                previous = set()
+                for progress in (0, 0.25, 0.5, 0.75, 1):
+                    rows = UI.branching_stars(width, progress, unicode=unicode)
+                    points = {(x, y) for y, row in enumerate(rows) for x, value in enumerate(row) if value != " "}
+                    self.assertTrue(previous <= points)
+                    self.assertTrue(all(len(row) <= min(96, width) for row in rows))
+                    self.assertEqual(len(rows), 12)
+                    self.assertNotIn("\x1b", "".join(rows))
+                    previous = points
+
+    def test_unknown_or_invalid_stage_progress_cannot_advance_star_branches(self):
         ui = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"}, color=False)
         self.assertEqual(ui.installation_progress(1), 0)
         ui.set_remaining_steps(4)

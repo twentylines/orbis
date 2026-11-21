@@ -183,7 +183,13 @@ export const settingsCatalogue: readonly SettingEntry[] = [
     aliases: 'performance energy low effects cpu gpu battery',
   },
   { id: 'density', label: 'Spacing', section: 'customise', anchor: 'appearance-density', aliases: 'density compact comfortable spacing rows' },
-  { id: 'opening-apps', label: 'Opening apps', section: 'customise', anchor: 'app-opening-heading', aliases: 'browser tab windows launcher open' },
+  {
+    id: 'opening-apps',
+    label: 'Opening apps',
+    section: 'customise',
+    anchor: 'app-opening-heading',
+    aliases: 'browser tab new tabs window windows layout launcher open app opening mode',
+  },
   {
     id: 'customisation-file',
     label: 'Import and export customisation',
@@ -456,7 +462,8 @@ export const settingsCatalogue: readonly SettingEntry[] = [
 export function searchSettings(query: string, access: SettingsAccess, limit = 12): SettingEntry[] {
   const needle = normaliseSearch(query.slice(0, 160)).slice(0, 80);
   if (!needle) return [];
-  const match = createSearchMatcher(query);
+  const intent = query.replace(/^(?:please\s+)?(?:change|set|switch|choose|use|adjust)\s+(?:my\s+)?/i, '').replace(/\s+(?:to|for)\s+.*$/i, '');
+  const match = createSearchMatcher(intent);
   return settingsCatalogue
     .filter((entry) => settingAvailable(entry, access))
     .map((entry, index) => ({

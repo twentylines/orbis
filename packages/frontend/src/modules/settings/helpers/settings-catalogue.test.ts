@@ -118,3 +118,8 @@ test('Search keeps active app-source and account links after the retired Setting
     expect(searchSettings(query, operator).map(settingsPath)[0]).toBe(destination);
   }
 });
+
+test('opening modes remain discoverable by their visible choice labels and direct-setting intent', () => {
+  for (const query of ['window layout', 'window layou', 'new tabs', 'change my window layout', 'switch opening apps to tabs'])
+    expect(searchSettings(query, operator).some((entry) => entry.id === 'opening-apps')).toBe(true);
+});
