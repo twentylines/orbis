@@ -126,7 +126,7 @@ test('one Orbis activity pill covers review, preflight, accepted progress and fa
     { category: 'orbis', title: 'Initialising update', detail: 'Orbis 1.1.3', items: [{ id: review.id, detail: 'Checking release compatibility' }] },
   ]);
   expect(desktopActivityGroups([], names, null, null, [review, apply])).toMatchObject([
-    { category: 'orbis', title: 'Initialising update', items: [{ id: apply.id, detail: 'Checking the release and backup storage' }] },
+    { category: 'orbis', title: 'Initialising update', items: [{ id: apply.id, detail: 'Checking the release and update readiness' }] },
   ]);
   expect(desktopActivityGroups([], names, active, null, [apply])).toMatchObject([
     { category: 'orbis', title: 'Updating', items: [{ id: active?.id, detail: '1.1.3 · Starting the Orbis update.' }] },

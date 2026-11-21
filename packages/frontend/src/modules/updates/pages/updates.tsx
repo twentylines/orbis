@@ -57,6 +57,7 @@ type HostJob = {
   message?: string;
   phase?: string | null;
   download?: DownloadProgress;
+  backupPolicy?: 'none' | 'automatic';
 };
 type HostStatus = {
   available: boolean;
@@ -77,6 +78,7 @@ type HostPlan = {
   targetDigest: string;
   snapshotBytes: number;
   appsMustBeStopped: boolean;
+  backupPolicy?: 'none' | 'automatic';
 };
 type ReleaseCompatibility = {
   tag: string;
@@ -840,7 +842,13 @@ function LocalUpdates() {
                 {jobBusy && job.download ? <UpdateDownloadProgress value={job.download} /> : null}
                 {job.state === 'interrupted' ? (
                   <button type="button" disabled={recover.isPending} onClick={() => recover.mutate(job.id)}>
-                    {recover.isPending ? 'Starting recovery…' : 'Restore previous release'}
+                    {job.backupPolicy === 'none'
+                      ? recover.isPending
+                        ? 'Checking update…'
+                        : 'Check update state'
+                      : recover.isPending
+                        ? 'Starting recovery…'
+                        : 'Restore previous release'}
                   </button>
                 ) : null}
               </section>
@@ -858,7 +866,7 @@ function LocalUpdates() {
                     ? 'Checking release compatibility…'
                     : coreRequestStage === 'starting'
                       ? 'Waiting for the host service to accept the update…'
-                      : 'Checking the release and backup storage…'}
+                      : 'Checking the release and update readiness…'}
                 </span>
               </section>
             ) : null}

@@ -42,6 +42,7 @@ type Review = {
   targetTag: string;
   snapshotBytes: number;
   appsMustBeStopped: boolean;
+  backupPolicy?: 'none' | 'automatic';
   compatibility: string;
   expiresAt: number;
   forced: boolean;
@@ -258,7 +259,10 @@ export function OrbisDowngrade({
                     ))}
                   </ul>
                   <p>
-                    A passing health check cannot prove that your data, sign-in, or settings still work. You may need to restore the backup manually.
+                    A passing health check cannot prove that your data, sign-in, or settings still work.{' '}
+                    {review.backupPolicy === 'none'
+                      ? 'No automatic backup is created. A failed switch may require local recovery.'
+                      : 'You may need to restore the backup manually.'}
                   </p>
                 </div>
               ) : (
@@ -266,12 +270,21 @@ export function OrbisDowngrade({
               )}
               <ol className="desktop-update-process">
                 <li>
-                  <strong>Back up</strong>
-                  <span>Create and verify a recovery snapshot before switching releases.</span>
+                  <strong>{review?.backupPolicy === 'none' ? 'Prepare' : 'Back up'}</strong>
+                  <span>
+                    {review?.backupPolicy === 'none'
+                      ? 'Pause Orbis control services. Applications keep running. No automatic data backup is created.'
+                      : 'Create and verify a recovery snapshot before switching releases.'}
+                  </span>
                 </li>
                 <li>
                   <strong>Switch release</strong>
-                  <span>Install {review?.targetTag} and check server health. Restore the current release if startup fails.</span>
+                  <span>
+                    Install {review?.targetTag} and check server health.{' '}
+                    {review?.backupPolicy === 'none'
+                      ? 'An interrupted switch requires local recovery review.'
+                      : 'Restore the current release if startup fails.'}
+                  </span>
                 </li>
                 <li>
                   <strong>Reconnect</strong>

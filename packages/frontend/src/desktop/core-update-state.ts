@@ -11,6 +11,7 @@ export type CoreUpdateJob = {
   message?: string;
   phase?: string | null;
   download?: DownloadProgress;
+  backupPolicy?: 'none' | 'automatic';
 };
 export type CoreUpdateStatus = {
   available: boolean;
@@ -55,14 +56,17 @@ export const coreUpdateTitle = (phase: CoreUpdateWatch['phase'], operation: Core
           : 'Updating Orbis';
 
 const restartingMessage = 'The page will reload automatically when Orbis is ready.';
+const recoveryRequiredMessage = 'The update was interrupted. Local recovery review is required.';
 
 export function coreUpdatePhaseMessage(phase?: string | null): string | undefined {
   const messages: Record<string, string> = {
-    preparing: 'Checking the release and backup storage…',
+    preparing: 'Checking the release and update readiness…',
     downloading: 'Downloading the verified Orbis image…',
-    pulled: 'Image downloaded. Preparing the backup…',
+    pulled: 'Image downloaded. Preparing the controller update…',
     stopping: 'Pausing Orbis control services. Applications keep running.',
-    stopped: 'Control services paused for backup…',
+    stopped: 'Control services paused. Preparing the controller…',
+    'handoff-ready': 'Control services paused. Applying the verified update…',
+    'recovery-required': recoveryRequiredMessage,
     snapshotting: 'Saving and verifying the safety backup. Applications keep running.',
     'snapshot-ready': 'Backup verified. Applying the update…',
     staged: 'Starting Orbis and checking server health…',
@@ -110,6 +114,7 @@ export function advanceCoreUpdate(watch: CoreUpdateWatch | null, event: CoreUpda
       : next;
   if (job.targetTag !== next.targetTag) return { ...next, phase: 'checking', message: 'Checking the requested Orbis release.' };
   next = { ...next, returnedTag: undefined, outcome: undefined, download: readDownloadProgress(job.download) };
+  if (job.phase === 'recovery-required') return { ...next, phase: 'failed', message: recoveryRequiredMessage };
   if (['failed', 'interrupted', 'rolled-back'].includes(job.state)) {
     const outcome = job.state === 'rolled-back' ? 'rolled-back' : job.state === 'failed' && job.phase === 'aborted' ? 'aborted' : undefined;
     const currentTag = typeof status.currentTag === 'string' ? status.currentTag : '';
@@ -139,8 +144,11 @@ export function advanceCoreUpdate(watch: CoreUpdateWatch | null, event: CoreUpda
   if (job.state !== 'complete' && job.phase === 'restarting') return { ...next, phase: 'offline', message: restartingMessage };
   if (job.state !== 'complete' && job.phase === 'verifying')
     return { ...next, phase: 'checking', message: 'Starting Orbis and checking server health.' };
-  if (job.state === 'running' && ['preparing', 'pulled', 'stopping', 'stopped', 'snapshotting', 'snapshot-ready'].includes(job.phase ?? '')) {
-    // Control services are deliberately offline during the safety checkpoint.
+  if (
+    job.state === 'running' &&
+    ['preparing', 'pulled', 'stopping', 'stopped', 'snapshotting', 'snapshot-ready', 'handoff-ready'].includes(job.phase ?? '')
+  ) {
+    // Control services are deliberately offline during the protected cutover.
     // Their health cannot describe which step this matching active job is doing.
     return { ...next, phase: 'updating', message: coreUpdatePhaseMessage(job.phase) ?? next.message };
   }

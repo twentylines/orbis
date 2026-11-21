@@ -115,6 +115,68 @@ class TransactionTests(unittest.TestCase):
     def recover(self):
         return TX.recover(self.root, self.docker, self.journal, host_writers_stopped=True)
 
+    def no_backup_review(self):
+        config = self.root / "traefik"
+        config.mkdir(exist_ok=True)
+        self.docker.services[identifier("runtipi-reverse-proxy")]["mounts"] = [
+            {"Type": "bind", "Source": str(config), "Destination": "/etc/traefik", "RW": True}]
+        return TX.review(self.root, self.docker, self.bundle, self.journal, scope=TX.STORAGE.LIVE_PROXY_SCOPE, backup=False)
+
+    def test_no_backup_handoff_never_copies_storage_and_cannot_be_legacy_recovery(self):
+        with mock.patch.object(TX.STORAGE.SNAPSHOT, "preflight", side_effect=AssertionError("No backup sizing")):
+            value = self.no_backup_review()
+            original_apps = copy.deepcopy(self.docker.apps)
+            self.assertEqual(value["storage"]["estimatedBytes"], 0)
+            self.assertFalse(self.journal.exists())
+            with mock.patch.object(TX.STORAGE, "capture", side_effect=AssertionError("No data copy")), mock.patch.object(TX.RESTORE, "runtime", side_effect=AssertionError("No restore runtime")):
+                record = TX.quiesce_without_backup(self.root, self.docker, value, host_writers_stopped=True)
+        self.assertFalse(self.bundle.exists())
+        self.assertFalse(record["backupCreated"])
+        self.assertEqual(TX.read_no_backup_handoff(self.journal, self.root, self.docker), record)
+        with self.assertRaises(TX.TransactionError):
+            TX.read_record(self.journal, self.root, self.docker)
+        self.assertEqual(self.docker.services[identifier("runtipi-reverse-proxy")]["state"], "running")
+        self.assertEqual(self.docker.apps, original_apps)
+        self.assertEqual(self.docker.controller_state, "exited")
+
+    def test_no_backup_policy_requires_explicit_confirmation_and_rejects_checkpoint_use(self):
+        value = self.no_backup_review()
+        with self.assertRaises(TX.TransactionError):
+            TX.quiesce_without_backup(self.root, self.docker, value, host_writers_stopped=False)
+        with self.assertRaises(TX.TransactionError):
+            TX.checkpoint(self.root, self.docker, value, host_writers_stopped=True)
+        self.assertFalse(self.journal.exists())
+        self.assertEqual(self.docker.calls, [])
+        with self.assertRaises(TX.TransactionError):
+            TX.review(self.root, self.docker, self.bundle, self.journal, backup=False)
+
+    def test_incomplete_no_backup_handoff_is_not_ready_or_recoverable_as_a_backup(self):
+        value = self.no_backup_review()
+        def interrupt(arguments):
+            if arguments[0] == "stop":
+                raise Interrupted()
+        self.docker.fail = interrupt
+        with self.assertRaises(Interrupted):
+            TX.quiesce_without_backup(self.root, self.docker, value, host_writers_stopped=True)
+        self.assertEqual(TX.RESTORE.private_json(self.journal)["stage"], "quiescing")
+        with self.assertRaises(TX.TransactionError):
+            TX.read_no_backup_handoff(self.journal, self.root, self.docker)
+        with self.assertRaises(TX.TransactionError):
+            TX.read_record(self.journal, self.root, self.docker)
+        self.assertFalse(self.bundle.exists())
+
+    def test_no_backup_handoff_rejects_resumed_writer_or_claimed_backup(self):
+        value = self.no_backup_review()
+        record = TX.quiesce_without_backup(self.root, self.docker, value, host_writers_stopped=True)
+        self.docker.controller_state = "running"
+        with self.assertRaises(TX.STORAGE.StorageError):
+            TX.read_no_backup_handoff(self.journal, self.root, self.docker)
+        self.docker.controller_state = "exited"
+        record["backupFingerprint"] = "0" * 64
+        TX.save(record)
+        with self.assertRaises(TX.TransactionError):
+            TX.read_no_backup_handoff(self.journal, self.root, self.docker)
+
     def test_review_is_read_only_and_covers_core_and_apps_without_secret_values(self):
         value = self.review()
         self.assertEqual(len(value["roles"]), 7)

@@ -147,6 +147,112 @@ class OrbisHostUpdateTests(unittest.TestCase):
         self.assertEqual(saved['stage'], 'complete')
         self.assertEqual(saved['progressPhase'], 'verifying')
 
+    def test_no_backup_update_never_captures_or_automatically_restores_storage(self):
+        for failed in (False, True):
+            with self.subTest(failed=failed):
+                snapshot = self.snapshot.with_name(self.snapshot.name + str(failed))
+                fake = FakeDocker(self.root)
+                checkpoint = {'backupPolicy': 'none', 'storage': {'backupScope': UPDATE.CONTROLLER.SCOPE}}
+                runtime = mock.Mock()
+                tools, reader = mock.Mock(), mock.Mock()
+                runtime.commit.return_value = False
+                if failed:
+                    runtime.start_target.side_effect = RuntimeError('health failed after start')
+                else:
+                    runtime.start_target.side_effect = lambda **options: setattr(fake, 'image', TARGET_IMAGE)
+                with mock.patch.object(UPDATE, 'update_plan', return_value={'checkpoint': checkpoint}), \
+                        mock.patch.object(UPDATE.CONTROLLER, 'ControllerUpdate', return_value=runtime), \
+                        mock.patch.object(UPDATE, 'controller_tools', return_value=(tools, reader)), \
+                        mock.patch.object(UPDATE.HOST, 'docker', side_effect=fake), \
+                        mock.patch.object(UPDATE, 'rollback') as rollback, \
+                        mock.patch.object(UPDATE.SNAPSHOT, 'capture') as capture:
+                    if failed:
+                        with self.assertRaises(UPDATE.CONTROLLER.NoBackupRecoveryRequired):
+                            UPDATE.apply_update(self.root, CURRENT, TARGET, 'test-daemon', snapshot)
+                    else:
+                        self.assertEqual(UPDATE.apply_update(self.root, CURRENT, TARGET, 'test-daemon', snapshot)['result'], 'healthy')
+                    tools.quiesce_without_backup.assert_called_once_with(self.root, reader, checkpoint, host_writers_stopped=True)
+                    tools.checkpoint.assert_not_called()
+                    rollback.assert_not_called()
+                    capture.assert_not_called()
+                saved = json.loads(UPDATE.journal_path(snapshot).read_text())
+                self.assertEqual(saved['schema'], UPDATE.NO_BACKUP_JOURNAL_SCHEMA)
+                self.assertEqual(saved['stage'], 'recovery-required' if failed else 'complete')
+                self.assertFalse(snapshot.exists())
+                if not failed:
+                    (self.root / 'orbis-compose.yml').write_text(UPDATE.HOST.STAGE.staged_content(CURRENT))
+                    UPDATE.HOST.write_state(self.root, UPDATE.HOST.installation_fingerprint(self.root, CURRENT, 'test-daemon'))
+
+    def test_modern_plan_reviews_no_backup_without_copy_capacity_or_rsync(self):
+        fake = FakeDocker(self.root)
+        target = {**TARGET, 'installationProtocol': UPDATE.HOST.PLAN.INSTALLATION_PROTOCOL}
+        tools, reader = mock.Mock(), mock.Mock()
+        checkpoint = {'backupPolicy': 'none', 'storage': {'estimatedBytes': 0}}
+        tools.review.return_value = checkpoint
+        with mock.patch.object(UPDATE.HOST, 'docker', side_effect=fake), \
+                mock.patch.object(UPDATE, 'verify_release'), \
+                mock.patch.object(UPDATE, 'controller_tools', return_value=(tools, reader)), \
+                mock.patch.object(UPDATE.shutil, 'which', return_value=None), \
+                mock.patch.object(UPDATE.SNAPSHOT, 'preflight') as copy_review:
+            plan = UPDATE.update_plan(self.root, CURRENT, target, 'test-daemon', self.snapshot)
+        self.assertEqual(plan['backupPolicy'], 'none')
+        self.assertEqual(plan['snapshotBytes'], 0)
+        self.assertFalse(plan['runningAppsMustBeStopped'])
+        tools.review.assert_called_once_with(self.root, reader, self.snapshot, UPDATE.checkpoint_path(self.snapshot), scope=UPDATE.CONTROLLER.SCOPE, backup=False)
+        copy_review.assert_not_called()
+        self.assertFalse(self.snapshot.exists())
+
+    def test_changed_reviewed_backup_policy_fails_before_journal_or_download(self):
+        checkpoint = {'backupPolicy': 'none', 'storage': {'backupScope': UPDATE.CONTROLLER.SCOPE}}
+        with mock.patch.object(UPDATE, 'update_plan', return_value={'checkpoint': checkpoint}), \
+                mock.patch.object(UPDATE, 'pull_verified_image') as pull:
+            with self.assertRaisesRegex(ValueError, 'backup policy changed'):
+                UPDATE.apply_update(self.root, CURRENT, TARGET, 'test-daemon', self.snapshot, expected_backup_policy='automatic')
+            pull.assert_not_called()
+        self.assertFalse(UPDATE.journal_path(self.snapshot).exists())
+
+    def test_no_backup_recovery_never_uses_legacy_rollback_after_handoff(self):
+        checkpoint = {'backupPolicy': 'none', 'storage': {'backupScope': UPDATE.CONTROLLER.SCOPE}}
+        record = {'schema': UPDATE.NO_BACKUP_JOURNAL_SCHEMA, 'backupPolicy': 'none',
+                  'backupScope': UPDATE.CONTROLLER.SCOPE, 'checkpoint': checkpoint, 'root': str(self.root),
+                  'snapshot': str(self.snapshot), 'dockerContext': 'test-daemon',
+                  'previousDigest': CURRENT['digest'], 'targetDigest': TARGET['digest'], 'stage': 'staged'}
+        UPDATE.write_journal(self.snapshot, record)
+        runtime = mock.Mock()
+        runtime.read.return_value = {'schema': UPDATE.CONTROLLER.NO_BACKUP_POLICY, 'checkpoint': checkpoint, 'phase': 'active'}
+        with mock.patch.object(UPDATE.CONTROLLER, 'ControllerUpdate', return_value=runtime), mock.patch.object(UPDATE, 'rollback') as rollback:
+            with self.assertRaises(UPDATE.CONTROLLER.NoBackupRecoveryRequired):
+                UPDATE.recover(self.root, CURRENT, TARGET, 'test-daemon', self.snapshot)
+            rollback.assert_not_called()
+            runtime.stop_for_rollback.assert_not_called()
+            runtime.start_original.assert_not_called()
+        saved = json.loads(UPDATE.journal_path(self.snapshot).read_text())
+        self.assertEqual(saved['stage'], 'recovery-required')
+        self.assertIn('no automatic data backup', UPDATE.failure_message(saved))
+        with self.assertRaises(UPDATE.CONTROLLER.NoBackupRecoveryRequired):
+            UPDATE.require_local_recovery(self.snapshot, saved)
+        self.assertEqual(json.loads(UPDATE.journal_path(self.snapshot).read_text()), saved)
+        self.assertEqual(saved['failureStage'], 'staged')
+        with self.assertRaises(UPDATE.CONTROLLER.NoBackupRecoveryRequired):
+            UPDATE.rollback(self.root, CURRENT, 'test-daemon', self.snapshot, record)
+
+    def test_no_backup_committed_target_settles_after_lost_completion_reply(self):
+        checkpoint = {'backupPolicy': 'none', 'storage': {'backupScope': UPDATE.CONTROLLER.SCOPE}}
+        record = {'schema': UPDATE.NO_BACKUP_JOURNAL_SCHEMA, 'backupPolicy': 'none',
+                  'backupScope': UPDATE.CONTROLLER.SCOPE, 'checkpoint': checkpoint, 'root': str(self.root),
+                  'snapshot': str(self.snapshot), 'dockerContext': 'test-daemon',
+                  'previousDigest': CURRENT['digest'], 'targetDigest': TARGET['digest'], 'stage': 'staged'}
+        UPDATE.write_journal(self.snapshot, record)
+        runtime = mock.Mock()
+        runtime.read.return_value = {'schema': UPDATE.CONTROLLER.NO_BACKUP_POLICY, 'checkpoint': checkpoint, 'phase': 'committed'}
+        runtime.commit.return_value = False
+        with mock.patch.object(UPDATE.CONTROLLER, 'ControllerUpdate', return_value=runtime), mock.patch.object(UPDATE, 'rollback') as rollback:
+            result = UPDATE.recover(self.root, CURRENT, TARGET, 'test-daemon', self.snapshot)
+            self.assertEqual(result['result'], 'healthy')
+            self.assertFalse(result['backupCreated'])
+            rollback.assert_not_called()
+        self.assertEqual(json.loads(UPDATE.journal_path(self.snapshot).read_text())['stage'], 'complete')
+
     def test_incapable_target_has_explicit_failure_before_checkpoint_or_downtime(self):
         fake = FakeDocker(self.root)
         runtime = mock.Mock()

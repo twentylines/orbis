@@ -99,6 +99,7 @@ export type HostUpdateStatus = {
     id: string;
     state: string;
     targetTag: string;
+    backupPolicy?: 'none' | 'automatic';
     startedAt: number;
     finishedAt?: number;
     message?: string;
@@ -114,6 +115,7 @@ export type HostUpdatePlan = {
   targetDigest: string;
   snapshotBytes: number;
   appsMustBeStopped: boolean;
+  backupPolicy?: 'none' | 'automatic';
 };
 
 export type HostPackage = {
@@ -1165,7 +1167,12 @@ export class HostUpdatesService {
       }
     }
     return this.call<HostUpdatePlan>('/v1/plan', { tag, ...(returnToStable ? { returnToStable: true } : {}) }).then((plan) => {
-      if (typeof plan.planId !== 'string' || !PLAN_ID.test(plan.planId)) {
+      if (
+        typeof plan.planId !== 'string' ||
+        !PLAN_ID.test(plan.planId) ||
+        (plan.backupPolicy !== undefined && plan.backupPolicy !== 'none' && plan.backupPolicy !== 'automatic') ||
+        (plan.backupPolicy === 'none' && (plan.snapshotBytes !== 0 || plan.appsMustBeStopped !== false))
+      ) {
         throw new ServiceUnavailableException('The Orbis host service returned an invalid update plan.');
       }
       for (const [id, previous] of this.plans) if (previous.expiresAt < Date.now()) this.plans.delete(id);

@@ -27,6 +27,7 @@ def load(name, key):
 D = load('orbis-host-retained-restore-runtime.py', 'orbis_controller_update_runtime')
 BOOTSTRAP = load('orbis-controller-bootstrap-profile.py', 'orbis_controller_bootstrap_profile')
 POLICY = 'orbis.controller-update-preserve-live-proxy.v1'
+NO_BACKUP_POLICY = 'orbis.controller-update-no-backup.v1'
 SCOPE = 'controller-live-proxy.v1'
 RESET = D.RESET
 RESET_POLICY = 'orbis.controller-update-reset-mount.v1'
@@ -38,10 +39,26 @@ PROBE_RETIREMENT = 'orbis.controller-probe-retirement.v2'
 TOOLS = load('orbis-install-transaction.py', 'orbis_controller_reconstruction_transaction')
 CAPABILITY = {'schema': 'orbis.controller-overlay-startup.v1', 'version': 1, 'preserveNetworkAccess': True,
               'preserveRunningApps': True, 'environment': 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1'}
+NO_BACKUP_CAPABILITY = {**CAPABILITY, 'schema': 'orbis.controller-overlay-startup.v2', 'version': 2,
+                        'updateBackupPolicy': 'none'}
 
 
 class CapabilityError(ValueError):
     code = 'controller-preservation-unsupported'
+
+
+class NoBackupRecoveryRequired(RuntimeError):
+    code = 'recovery-required'
+
+
+def unbacked(record):
+    selected = record.get('schema') == NO_BACKUP_POLICY
+    review = record.get('checkpoint') or {}
+    if selected != (review.get('backupPolicy') == 'none'):
+        raise ValueError('The controller update backup policy changed')
+    if 'unbackedWritesPossible' in record and (not selected or type(record['unbackedWritesPossible']) is not bool):
+        raise ValueError('The unbacked write boundary is invalid')
+    return selected
 
 
 class ControllerUpdate:
@@ -71,9 +88,10 @@ class ControllerUpdate:
         with self.a.protected_directory(self.path) as directory:
             with self.a.protected_file(directory, 'runtime.json', 16 * 1024 * 1024) as body:
                 record = self.P.metadata(body, byte_limit=16 * 1024 * 1024, string_limit=2 * 1024 * 1024)
-        if (record.get('schema') != POLICY or record.get('root') != str(self.root) or record.get('context') != self.context
+        if (record.get('schema') not in {POLICY, NO_BACKUP_POLICY} or record.get('root') != str(self.root) or record.get('context') != self.context
                 or record.get('current') != self.current or record.get('target') != self.target or record.get('snapshot') != str(self.snapshot)):
             raise ValueError('Controller recovery authority does not match this operation')
+        unbacked(record)
         return record
 
     def lookup(self, name):
@@ -442,9 +460,44 @@ class ControllerUpdate:
         retirement['anchorDefinition'] = definition
         self.save(record)
 
+    def no_backup_handoff(self, record):
+        if not unbacked(record):
+            raise ValueError('This controller operation requires a no-backup policy')
+        checkpoint = record['checkpoint']
+        saved = TOOLS.read_no_backup_handoff(Path(checkpoint['journal']), self.root, self.runtime.reader, verify_runtime=False)
+        if saved['review'] != checkpoint:
+            raise ValueError('The controller handoff review changed')
+        digest = hashlib.sha256(self.P.canonical(saved)).hexdigest()
+        if record.get('noBackupHandoffSha256') not in {None, digest}:
+            raise ValueError('The protected controller handoff changed')
+        if not record.get('unbackedWritesPossible', False):
+            retirement = record.get('sourceRetirement') or {}
+            if retirement.get('phase') not in {'retiring', 'retired'}:
+                source = self.verify_source(record)
+                if source['State'].get('Running') or source['HostConfig'].get('RestartPolicy') != {'Name': 'no', 'MaximumRetryCount': 0}:
+                    raise ValueError('The no-backup source must be stopped and restart-disabled')
+            for original in record['peers'].values():
+                peer = self.runtime.inspect(original['Id'])
+                if peer['State'].get('Running') or peer['HostConfig'].get('RestartPolicy') != {'Name': 'no', 'MaximumRetryCount': 0}:
+                    raise ValueError('The no-backup controller peers must be stopped and restart-disabled')
+        record['noBackupHandoffSha256'] = digest
+        self.save(record)
+        return saved
+
     def checkpoint_manifest(self, record):
         retirement = self.validate_retirement(record)
         checkpoint = record['checkpoint']
+        if unbacked(record):
+            saved = self.no_backup_handoff(record)
+            if saved['review'] != checkpoint or retirement.get('checkpointManifestSha256'):
+                raise ValueError('Source retirement requires its exact no-backup handoff')
+            self.require_reset_excluded(record, checkpoint['storage'])
+            digest = hashlib.sha256(self.P.canonical(saved)).hexdigest()
+            if retirement.get('handoffSha256') not in {None, digest}:
+                raise ValueError('The protected no-backup handoff changed')
+            retirement['handoffSha256'] = digest
+            self.save(record)
+            return saved
         saved = TOOLS.read_record(Path(checkpoint['journal']), self.root, self.runtime.reader)
         manifest = TOOLS.STORAGE.verified_manifest(self.snapshot)
         if (saved.get('stage') != 'ready' or saved.get('review') != checkpoint
@@ -492,6 +545,8 @@ class ControllerUpdate:
         self.require_reset_mount(record)
 
     def ensure_rollback_source(self, record):
+        if unbacked(record):
+            raise NoBackupRecoveryRequired('This update has no data backup; preserve its state for recovery review')
         retirement = self.validate_retirement(record)
         original = self.optional_container(record['source']['Id'])
         if original is not None:
@@ -537,6 +592,8 @@ class ControllerUpdate:
 
     def restore_reconstructed_checkpoint(self):
         record = self.read()
+        if unbacked(record):
+            raise NoBackupRecoveryRequired('This update has no data backup; preserve its state for recovery review')
         if not record.get('sourceRetirement') or self.validate_retirement(record)['phase'] == 'held':
             return False
         source = self.ensure_rollback_source(record)
@@ -689,6 +746,9 @@ class ControllerUpdate:
         return True
 
     def prepare(self, checkpoint):
+        without_backup = checkpoint.get('backupPolicy') == 'none'
+        if without_backup:
+            TOOLS.validate_review(checkpoint)
         if checkpoint['storage'].get('backupScope') != SCOPE:
             raise ValueError('This controller replacement requires a live-proxy checkpoint')
         try:
@@ -708,7 +768,7 @@ class ControllerUpdate:
             proxy = self.runtime.inspect('runtipi-reverse-proxy')
             overlay = self.runtime.overlay_preflight(source, policy='controller-overlay.v1')
             peers = {name: self.runtime.inspect(name) for name in ('runtipi-db', 'runtipi-queue')}
-            record = {'schema': POLICY, 'root': str(self.root), 'context': self.context, 'snapshot': str(self.snapshot),
+            record = {'schema': NO_BACKUP_POLICY if without_backup else POLICY, 'root': str(self.root), 'context': self.context, 'snapshot': str(self.snapshot),
                       'current': self.current, 'target': self.target, 'phase': 'preparing', 'nonce': secrets.token_hex(32),
                       'checkpoint': checkpoint, 'source': source, 'sourceDefinition': self.runtime.definition(source),
                       'proxy': proxy, 'proxyDefinition': self.runtime.definition(proxy), 'proxyPolicy': overlay['controllerProxyPolicy'],
@@ -741,7 +801,7 @@ class ControllerUpdate:
             body = self.proxy_candidate_body(body, transform=True)
             record.update(body=body, targetImageId=target_image['Id'], appIdentities=app_identities)
             self.save(record)
-        if record['checkpoint'] != checkpoint:
+        if unbacked(record) != without_backup or record['checkpoint'] != checkpoint:
             raise ValueError('The protected controller checkpoint changed')
         self.preserved(record)
         if not record.get('probeId'):
@@ -773,7 +833,8 @@ class ControllerUpdate:
                     or not entries[0].isfile() or not 0 < entries[0].size <= 4096):
                 raise CapabilityError('The target does not support preserving live network access during controller updates')
             body = archive.extractfile(entries[0]).read(4097)
-        if self.P.metadata(body, byte_limit=4096) != CAPABILITY:
+        capability = self.P.metadata(body, byte_limit=4096)
+        if capability != CAPABILITY and not (without_backup and capability == NO_BACKUP_CAPABILITY):
             raise CapabilityError('The target does not support preserving live network access during controller updates')
         self.runtime.change(['rm', probe['Id']])
         record.pop('probeId', None)
@@ -826,6 +887,8 @@ class ControllerUpdate:
     def start_target(self, progress=None):
         record = self.read()
         self.preserved(record)
+        if unbacked(record):
+            self.no_backup_handoff(record)
         if record.get('sourceRetirement'):
             self.retire_dedicated_source(record)
             original = None
@@ -863,6 +926,9 @@ class ControllerUpdate:
             if candidate['Name'] != '/' + record['candidateName']:
                 raise ValueError('Candidate controller name changed')
             self.runtime.change(['rename', candidate['Id'], 'runtipi'])
+        if unbacked(record):
+            record['unbackedWritesPossible'] = True
+            self.save(record)
         self.start_peers(record)
         if progress is not None:
             progress('restarting')
@@ -896,6 +962,8 @@ class ControllerUpdate:
 
     def stop_for_rollback(self):
         record = self.read()
+        if unbacked(record):
+            raise NoBackupRecoveryRequired('This update has no data backup; preserve its state for recovery review')
         self.preserved(record)
         retirement = record.get('sourceRetirement')
         if retirement:
@@ -983,6 +1051,8 @@ class ControllerUpdate:
 
     def start_original(self):
         record = self.read()
+        if unbacked(record):
+            raise NoBackupRecoveryRequired('This update has no data backup; preserve its state for recovery review')
         if record.get('sourceBootstrapEnablement') is not None:
             self.bootstrap_source(record, 'rollback')
         original = self.verify_source(record)

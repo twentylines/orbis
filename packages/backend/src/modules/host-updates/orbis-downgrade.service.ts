@@ -31,7 +31,7 @@ type Review = HostUpdatePlan & {
 };
 type StoredReview = Review & { riskFingerprint: string; hostBinding: string };
 const FORCE_WARNING =
-  'Forcing a downgrade can make current data unreadable, prevent sign-in, or reset settings. A recovery snapshot is still required.';
+  'Forcing a downgrade can make current data unreadable, prevent sign-in, or reset settings. Review recovery options before continuing.';
 
 function stateFingerprint(value: unknown) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');

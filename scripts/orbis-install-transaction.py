@@ -25,6 +25,7 @@ STORAGE = RESTORE.STORAGE
 APPS = STORAGE.APPS
 SCHEMA = "orbis.installation-transaction.v1"
 STAGES = {"prepared", "quiescing", "snapshotting", "ready", "recovering", "restoring", "starting", "recovered"}
+NO_BACKUP_SCHEMA = "orbis.controller-update-handoff.v1"
 NO_RESTART = {"Name": "no", "MaximumRetryCount": 0}
 
 
@@ -35,7 +36,11 @@ class TransactionError(ValueError):
 def validate_review(value: dict) -> None:
     if value.get("schema") != SCHEMA or value.get("reviewId") != APPS.digest({key: item for key, item in value.items() if key != "reviewId"}):
         raise TransactionError("The installation review is invalid or was edited")
+    if value.get("backupPolicy") not in {None, "none"}:
+        raise TransactionError("The installation backup policy is unsupported")
     storage = STORAGE.validate_review(value["storage"])
+    if value.get("backupPolicy") == "none" and (storage.get("backupScope") != STORAGE.LIVE_PROXY_SCOPE or storage["estimatedBytes"] != 0):
+        raise TransactionError("A no-backup handoff requires the live-proxy controller scope")
     if value["root"] != storage["root"] or value["dockerContext"] != storage["dockerContext"]:
         raise TransactionError("The installation and storage reviews do not match")
     roles = value.get("roles")
@@ -61,8 +66,10 @@ def semantic_review(value: dict) -> dict:
     return {key: STORAGE.semantic_review(item) if key == "storage" else item for key, item in value.items() if key != "reviewId"}
 
 
-def review(root: Path, reader, bundle: Path, journal: Path, *, scope: str = "full") -> dict:
-    storage = STORAGE.review(root, reader, bundle, scope=scope)
+def review(root: Path, reader, bundle: Path, journal: Path, *, scope: str = "full", backup: bool = True) -> dict:
+    if type(backup) is not bool or not backup and scope != STORAGE.LIVE_PROXY_SCOPE:
+        raise TransactionError("Only controller updates support a no-backup review")
+    storage = STORAGE.review(root, reader, bundle, scope=scope, check_capacity=backup)
     if storage["conflictingWriters"]:
         raise TransactionError(STORAGE.writer_conflict_message(storage["conflictingWriters"]))
     journal = private_paths(root, storage, journal)
@@ -86,10 +93,12 @@ def review(root: Path, reader, bundle: Path, journal: Path, *, scope: str = "ful
         if role in {"controller", "database", "queue"} and item["state"] != "running":
             raise TransactionError("Start the original controller, database and queue before reviewing a checkpoint")
     value = {"schema": SCHEMA, "root": str(root), "dockerContext": reader.context, "journal": str(journal), "storage": storage, "roles": roles}
+    if not backup:
+        value["backupPolicy"] = "none"
     value["reviewId"] = APPS.digest(value)
     validate_review(value)
     require_healthy(reader, controller)
-    if STORAGE.semantic_review(STORAGE.review(root, reader, bundle, scope=scope)) != STORAGE.semantic_review(storage):
+    if STORAGE.semantic_review(STORAGE.review(root, reader, bundle, scope=scope, check_capacity=backup)) != STORAGE.semantic_review(storage):
         raise TransactionError("The installation changed during review")
     return value
 
@@ -144,8 +153,45 @@ def quiesce(root: Path, reader, record: dict) -> None:
     STORAGE.require_quiet_existing(root, reader, value["storage"])
 
 
+def quiesce_without_backup(root: Path, reader, value: dict, *, host_writers_stopped: bool) -> dict:
+    """Create a distinct stopped-controller handoff, never a recovery backup."""
+    validate_review(value)
+    if value.get("backupPolicy") != "none" or not host_writers_stopped:
+        raise TransactionError("Confirm the no-backup policy and native host writers before handoff")
+    current = review(root, reader, Path(value["storage"]["bundle"]), Path(value["journal"]),
+                     scope=STORAGE.LIVE_PROXY_SCOPE, backup=False)
+    if semantic_review(current) != semantic_review(value):
+        raise TransactionError("The installation changed before controller handoff")
+    record = {"schema": NO_BACKUP_SCHEMA, "id": str(uuid.uuid4()), "stage": "quiescing", "review": value, "backupCreated": False}
+    save(record)
+    quiesce(root, reader, record)
+    record["stage"] = "ready"
+    save(record)
+    return record
+
+
+def read_no_backup_handoff(path: Path, root: Path, reader, *, verify_runtime: bool = True) -> dict:
+    record = RESTORE.private_json(path)
+    value = record.get("review")
+    if (record.get("schema") != NO_BACKUP_SCHEMA or record.get("stage") != "ready" or record.get("backupCreated") is not False
+            or "backupFingerprint" in record or not isinstance(value, dict) or value.get("backupPolicy") != "none"):
+        raise TransactionError("A complete no-backup controller handoff is required")
+    validate_review(value)
+    if (value["root"] != str(root) or value["dockerContext"] != reader.context
+            or private_paths(root, value["storage"], path) != Path(value["journal"])):
+        raise TransactionError("The controller handoff belongs to another root or Docker context")
+    if type(verify_runtime) is not bool:
+        raise TransactionError("Choose an explicit handoff runtime verification policy")
+    if verify_runtime:
+        identities(root, reader, value)
+        STORAGE.require_quiet_existing(root, reader, value["storage"])
+    return record
+
+
 def checkpoint(root: Path, reader, value: dict, *, host_writers_stopped: bool, progress=None) -> dict:
     validate_review(value)
+    if value.get("backupPolicy") == "none":
+        raise TransactionError("A no-backup review cannot create a legacy checkpoint")
     if not host_writers_stopped:
         raise TransactionError("Confirm native host and remote storage writers are stopped before checkpointing")
     if semantic_review(review(root, reader, Path(value["storage"]["bundle"]), Path(value["journal"]), scope=value["storage"].get("backupScope", "full"))) != semantic_review(value):

@@ -455,19 +455,37 @@ class ControllerUpdateTests(unittest.TestCase):
                 info.size = len(body)
                 tar.addfile(info, io.BytesIO(body))
             return output.getvalue()
-        self.runtime.bounded_output = mock.Mock(return_value=archive({**C.CAPABILITY, 'version': 2}))
-        with self.assertRaises(C.CapabilityError): self.updater.prepare(checkpoint)
-        self.assertFalse(self.calls)
-        self.assertFalse(self.objects['1' * 64]['State']['Running'])
-        intent = self.runtime.engine.call_args.args[2]
-        self.assertNotIn('Binds', intent['HostConfig'])
-        self.assertNotIn('Mounts', intent['HostConfig'])
-        self.assertEqual(intent['HostConfig']['NetworkMode'], 'none')
-        self.runtime.bounded_output.return_value = archive(C.CAPABILITY)
-        with mock.patch.object(C.BOOTSTRAP, 'probe', return_value={'profile': C.BOOTSTRAP.CAPABLE}):
-            self.updater.prepare(checkpoint)
-        self.assertEqual(self.calls, [['rm', probe['Id']]])
-        self.assertEqual(self.record['phase'], 'prepared')
+        original_record = copy.deepcopy(self.record)
+        cases = [(False, {**C.CAPABILITY, 'version': 2}, False),
+                 (False, C.NO_BACKUP_CAPABILITY, False),
+                 (True, C.NO_BACKUP_CAPABILITY, True),
+                 (False, C.CAPABILITY, True), (True, C.CAPABILITY, True)]
+        for without_backup, capability, accepted in cases:
+            with self.subTest(without_backup=without_backup, capability=capability):
+                self.record = copy.deepcopy(original_record)
+                self.objects[probe['Id']] = copy.deepcopy(probe)
+                self.calls.clear()
+                review = copy.deepcopy(checkpoint)
+                if without_backup:
+                    review['backupPolicy'] = 'none'
+                    self.record['schema'] = C.NO_BACKUP_POLICY
+                self.record['checkpoint'] = review
+                self.runtime.bounded_output = mock.Mock(return_value=archive(capability))
+                with mock.patch.object(C.TOOLS, 'validate_review'), \
+                        mock.patch.object(C.BOOTSTRAP, 'probe', return_value={'profile': C.BOOTSTRAP.CAPABLE}):
+                    if accepted:
+                        self.updater.prepare(review)
+                    else:
+                        with self.assertRaises(C.CapabilityError):
+                            self.updater.prepare(review)
+                intent = self.runtime.engine.call_args.args[2]
+                self.assertNotIn('Binds', intent['HostConfig'])
+                self.assertNotIn('Mounts', intent['HostConfig'])
+                self.assertEqual(intent['HostConfig']['NetworkMode'], 'none')
+                self.assertFalse(self.objects['1' * 64]['State']['Running'])
+                self.assertEqual(self.calls, [['rm', probe['Id']]] if accepted else [])
+                if accepted:
+                    self.assertEqual(self.record['phase'], 'prepared')
 
     def test_protected_commit_retires_only_stopped_original_and_reconciles_lost_reply(self):
         self.updater.start_target()
@@ -489,6 +507,87 @@ class ControllerUpdateTests(unittest.TestCase):
         self.assertFalse(self.record['cleanupRequired'])
         self.assertTrue(self.objects['2' * 64]['State']['Running'])
         self.assertFalse(any('3' * 64 in call for call in self.calls))
+
+    def select_no_backup(self):
+        self.record['schema'] = C.NO_BACKUP_POLICY
+        self.record['checkpoint'] = {'backupPolicy': 'none', 'journal': '/fixture/handoff', 'storage': {'backupScope': C.SCOPE}}
+        proof = {'schema': C.TOOLS.NO_BACKUP_SCHEMA, 'stage': 'ready', 'backupCreated': False, 'review': copy.deepcopy(self.record['checkpoint'])}
+        patch = mock.patch.object(C.TOOLS, 'read_no_backup_handoff', return_value=proof)
+        self.handoff_reader = patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_no_backup_missing_handoff_or_running_peer_blocks_before_effects(self):
+        self.select_no_backup()
+        self.handoff_reader.side_effect = ValueError('handoff unavailable')
+        with self.assertRaisesRegex(ValueError, 'handoff unavailable'):
+            self.updater.start_target()
+        self.assertFalse(self.calls)
+        self.handoff_reader.side_effect = None
+        self.objects['4' * 64]['State']['Running'] = True
+        with self.assertRaisesRegex(ValueError, 'peers must be stopped'):
+            self.updater.start_target()
+        self.assertFalse(self.calls)
+
+    def test_unbacked_start_persists_write_intent_before_any_peer_or_controller_start(self):
+        self.select_no_backup()
+        change = self.runtime.change
+        def observe(arguments):
+            if arguments[0] == 'start':
+                self.assertIs(self.record.get('unbackedWritesPossible'), True)
+            change(arguments)
+        self.runtime.change = observe
+        self.updater.start_target()
+        self.assertEqual(self.record['phase'], 'active')
+        self.assertTrue(self.record['unbackedWritesPossible'])
+
+    def test_unbacked_lost_start_reply_cannot_trigger_legacy_rollback_or_data_restore(self):
+        self.select_no_backup()
+        change = self.runtime.change
+        def lost_reply(arguments):
+            change(arguments)
+            if arguments[0] == 'start':
+                raise RuntimeError('start reply lost')
+        self.runtime.change = lost_reply
+        with self.assertRaisesRegex(RuntimeError, 'start reply lost'):
+            self.updater.start_target()
+        self.assertTrue(self.record['unbackedWritesPossible'])
+        self.calls.clear()
+        for operation in [self.updater.stop_for_rollback, self.updater.start_original, self.updater.restore_reconstructed_checkpoint,
+                          lambda: self.updater.ensure_rollback_source(self.record)]:
+            with self.assertRaises(C.NoBackupRecoveryRequired):
+                operation()
+        self.assertFalse(self.calls)
+
+    def test_no_backup_handoff_is_pinned_and_retirement_never_reads_a_backup(self):
+        self.select_no_backup()
+        retirement = {}
+        self.record['sourceRetirement'] = retirement
+        with mock.patch.object(self.updater, 'validate_retirement', return_value=retirement), \
+                mock.patch.object(self.updater, 'require_reset_excluded') as excluded, \
+                mock.patch.object(C.TOOLS, 'read_record') as legacy, \
+                mock.patch.object(C.TOOLS.STORAGE, 'verified_manifest') as archive:
+            self.updater.checkpoint_manifest(self.record)
+            self.assertEqual(retirement['handoffSha256'], self.record['noBackupHandoffSha256'])
+            self.assertNotIn('checkpointManifestSha256', retirement)
+            self.handoff_reader.assert_called_with(Path('/fixture/handoff'), self.root, self.runtime.reader, verify_runtime=False)
+            excluded.assert_called_once()
+            legacy.assert_not_called()
+            archive.assert_not_called()
+            self.handoff_reader.return_value['id'] = 'changed-proof'
+            with self.assertRaisesRegex(ValueError, 'handoff changed'):
+                self.updater.checkpoint_manifest(self.record)
+        self.assertFalse(self.calls)
+
+    def test_no_backup_schema_and_review_marker_must_agree(self):
+        self.select_no_backup()
+        self.assertTrue(C.unbacked(self.record))
+        self.record['schema'] = C.POLICY
+        with self.assertRaises(ValueError):
+            C.unbacked(self.record)
+        self.record['schema'] = C.NO_BACKUP_POLICY
+        self.record['checkpoint'] = {}
+        with self.assertRaises(ValueError):
+            C.unbacked(self.record)
 
     def test_target_start_preserves_proxy_and_reuses_database_and_queue_ids(self):
         proxy_before = copy.deepcopy(self.objects['3' * 64])

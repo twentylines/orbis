@@ -8,6 +8,7 @@ export type StableChannelPlan = {
   targetDigest: string;
   snapshotBytes: number;
   appsMustBeStopped: boolean;
+  backupPolicy?: 'none' | 'automatic';
   compatibility: string;
   expiresAt: number;
   forced: boolean;

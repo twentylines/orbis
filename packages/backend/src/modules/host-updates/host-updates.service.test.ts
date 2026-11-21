@@ -187,6 +187,21 @@ describe('host update Unix socket transport', () => {
     await expect(service.apply(id, true)).rejects.toThrow('new update or downgrade review');
   });
 
+  it('retains a no-backup plan only when its live-app and zero-snapshot claims agree', async () => {
+    const candidate = new HostUpdatesService(channels as never, drives);
+    vi.spyOn(candidate, 'status').mockResolvedValue({ available: true, capabilities: ['release-channels.v1'] });
+    const plan = { planId: '00000000-0000-4000-8000-000000000001', backupPolicy: 'none', snapshotBytes: 0, appsMustBeStopped: false };
+    const call = vi.spyOn(candidate as unknown as { call: (endpoint: string, body?: object) => Promise<unknown> }, 'call');
+    for (const changed of [{ backupPolicy: 'other' }, { backupPolicy: null }, { snapshotBytes: 1 }, { appsMustBeStopped: true }]) {
+      call.mockResolvedValueOnce({ ...plan, ...changed });
+      await expect(candidate.plan('v0.1.0-beta.8')).rejects.toThrow('invalid update plan');
+      await expect(candidate.apply(plan.planId)).rejects.toThrow('new update or downgrade review');
+    }
+    call.mockResolvedValueOnce(plan);
+    expect(await candidate.plan('v0.1.0-beta.8')).toEqual(plan);
+    call.mockRestore();
+  });
+
   it('rejects ordinary downgrade plans and unverifiable installed versions before contacting the host', async () => {
     const planCount = requests.filter((request) => request.path === '/v1/plan').length;
     try {

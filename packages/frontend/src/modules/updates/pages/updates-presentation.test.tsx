@@ -96,6 +96,7 @@ function renderLocalUpdates({
   releaseChannel = 'stable',
   coreRequest,
   runningCore = false,
+  unbackedInterrupted = false,
   queryClient,
   packagesReady = 'available',
   readyCount = 1,
@@ -109,6 +110,7 @@ function renderLocalUpdates({
   releaseChannel?: 'stable' | 'nightly';
   coreRequest?: 'review';
   runningCore?: boolean;
+  unbackedInterrupted?: boolean;
   queryClient?: QueryClient;
   packagesReady?: 'available' | 'unavailable' | 'legacy';
   readyCount?: number;
@@ -140,7 +142,17 @@ function renderLocalUpdates({
     coreState: 'running',
     coreHealth: 'healthy',
     currentTag: 'v0.1.0',
-    job: runningCore ? { id: 'core', state: 'running', message: 'Downloading image' } : null,
+    job: unbackedInterrupted
+      ? {
+          id: 'core',
+          state: 'interrupted',
+          phase: 'recovery-required',
+          backupPolicy: 'none',
+          message: 'This update has no automatic data backup. Preserve its state for local recovery review.',
+        }
+      : runningCore
+        ? { id: 'core', state: 'running', message: 'Downloading image' }
+        : null,
     capabilities: legacyHelper ? ['restart.v1'] : ['restart.v1', 'packages.refresh.v1'],
   });
   client.setQueryData(['orbis-host-packages'], {
@@ -302,7 +314,7 @@ test('Orbis status covers unresolved preflight, transfers to the host job, and c
         mutationFn: () => promise,
       })
       .execute('v0.2.0');
-    expect(renderLocalUpdates({ queryClient })).toContain('Initialising update</strong><span>Checking the release and backup storage');
+    expect(renderLocalUpdates({ queryClient })).toContain('Initialising update</strong><span>Checking the release and update readiness');
 
     const installing = renderLocalUpdates({ queryClient, runningCore: true });
     expect(installing).toContain('Installing Orbis</strong><span>Downloading image');
@@ -346,4 +358,11 @@ test('zero ready is distinct from unreadable or legacy readiness, with no instal
   const legacy = renderLocalUpdates({ packagesReady: 'legacy' });
   expect(legacy).toContain('Update the system service to check which packages are ready.');
   expect(legacy).not.toContain('>Update system</button>');
+});
+
+test('an interrupted no-backup update offers a state check without promising automatic restore', () => {
+  const markup = renderLocalUpdates({ unbackedInterrupted: true });
+  expect(markup).toContain('>Check update state</button>');
+  expect(markup).not.toContain('>Restore previous release</button>');
+  expect(markup).toContain('Preserve its state for local recovery review.');
 });

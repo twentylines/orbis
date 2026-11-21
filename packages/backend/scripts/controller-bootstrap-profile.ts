@@ -32,11 +32,12 @@ const read = (file: string, limit = 1048576) => {
   }
 };
 const capability = {
-  schema: 'orbis.controller-overlay-startup.v1',
-  version: 1,
+  schema: 'orbis.controller-overlay-startup.v2',
+  version: 2,
   preserveNetworkAccess: true,
   preserveRunningApps: true,
   environment: 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1',
+  updateBackupPolicy: 'none',
 };
 const codeSha256 = sha(read('/app/main.mjs', 32 * 1024 * 1024));
 if (process.env.ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS === '1' && fs.existsSync('/app/controller-overlay-capability.json')) {

@@ -50,6 +50,9 @@ function isStablePlan(value: StableChannelPlan): boolean {
     Number.isSafeInteger(value.snapshotBytes) &&
     value.snapshotBytes >= 0 &&
     typeof value.appsMustBeStopped === 'boolean' &&
+    (value.backupPolicy === undefined ||
+      value.backupPolicy === 'automatic' ||
+      (value.backupPolicy === 'none' && value.snapshotBytes === 0 && value.appsMustBeStopped === false)) &&
     typeof value.compatibility === 'string' &&
     Number.isFinite(value.expiresAt) &&
     typeof value.forced === 'boolean' &&
@@ -343,8 +346,14 @@ export function ReleaseChannelSettings() {
                   <dd>{plan.compatibility}</dd>
                 </div>
                 <div>
-                  <dt>Snapshot size</dt>
-                  <dd>{Number.isFinite(plan.snapshotBytes) ? `${(plan.snapshotBytes / 1024 / 1024).toFixed(1)} MB` : 'Unavailable'}</dd>
+                  <dt>{plan.backupPolicy === 'none' ? 'Data backup' : 'Snapshot size'}</dt>
+                  <dd>
+                    {plan.backupPolicy === 'none'
+                      ? 'No automatic backup'
+                      : Number.isFinite(plan.snapshotBytes)
+                        ? `${(plan.snapshotBytes / 1024 / 1024).toFixed(1)} MB`
+                        : 'Unavailable'}
+                  </dd>
                 </div>
                 <div>
                   <dt>Applications</dt>

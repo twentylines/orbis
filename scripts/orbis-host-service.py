@@ -1910,9 +1910,13 @@ class HostService:
             target = PLAN.validate_manifest(job["target"])
             snapshot = self.snapshots / f"orbis-{target['tag']}-{identifier}"
             if (job.get("snapshot") != str(snapshot) or job.get("targetTag") != target["tag"]
-                    or journal.get("schema") != UPDATE.JOURNAL_SCHEMA or journal.get("snapshot") != str(snapshot)
+                    or journal.get("schema") not in {UPDATE.JOURNAL_SCHEMA, UPDATE.NO_BACKUP_JOURNAL_SCHEMA}
+                    or journal.get("snapshot") != str(snapshot)
                     or journal.get("root") != str(self.root) or journal.get("dockerContext") != self.context
                     or journal.get("previousDigest") != current["digest"] or journal.get("targetDigest") != target["digest"]):
+                return False
+            without_backup = UPDATE.unbacked_job(journal)
+            if without_backup != (job.get("backupPolicy") == "none"):
                 return False
         except (KeyError, TypeError, ValueError):
             return False
@@ -1978,20 +1982,21 @@ class HostService:
         journal = self.read_core_operation_record(UPDATE.journal_path(snapshot), optional=True)
         phase = None
         if journal is not None:
-            if (journal.get("schema") != UPDATE.JOURNAL_SCHEMA or journal.get("root") != str(self.root)
-                    or journal.get("snapshot") != str(snapshot) or journal.get("dockerContext") != self.context
-                    or journal.get("previousDigest") != current["digest"] or journal.get("targetDigest") != target["digest"]):
+            if not self.update_journal_matches(job, journal):
                 raise ValueError("Core progress is unavailable")
             phase = journal.get("stage")
-            if not isinstance(phase, str) or phase not in UPDATE.FAILURE_STAGES | UPDATE.TERMINAL_STAGES | {"rolling-back", "rollback-failed"}:
+            if not isinstance(phase, str) or phase not in UPDATE.FAILURE_STAGES | UPDATE.TERMINAL_STAGES | {"rolling-back", "rollback-failed", "recovery-required"}:
+                raise ValueError("Core progress is unavailable")
+            if phase == "recovery-required" and not UPDATE.unbacked_job(journal):
                 raise ValueError("Core progress is unavailable")
             phase = self.update_progress_phase(job, journal) or phase
             phase = (phase if phase in {"restarting", "verifying"} else "downloading" if phase == "downloading"
                      else "recovering" if phase in {"rolling-back", "rollback-failed"}
-                     else None if phase in UPDATE.TERMINAL_STAGES else "installing")
+                     else None if phase in UPDATE.TERMINAL_STAGES | {"recovery-required"} else "installing")
         if job["state"] == "recovering":
             phase = "recovering"
-        public = {"id": identifier, "state": "failed" if job["state"] == "rolled-back" else job["state"],
+        recovery_required = journal is not None and journal.get("stage") == "recovery-required"
+        public = {"id": identifier, "state": "interrupted" if recovery_required else "failed" if job["state"] == "rolled-back" else job["state"],
                   "targetTag": target["tag"], "phase": phase}
         if journal is not None:
             public.update(UPDATE.safe_download(journal))
@@ -2041,7 +2046,7 @@ class HostService:
         download = UPDATE.safe_download(journal)
         if job and job.get("state") == "running":
             phase = journal.get("stage") if journal else "preparing"
-            if phase not in UPDATE.FAILURE_STAGES | UPDATE.TERMINAL_STAGES:
+            if phase not in UPDATE.FAILURE_STAGES | UPDATE.TERMINAL_STAGES | {"recovery-required"}:
                 phase = "preparing"
             phase = self.update_progress_phase(job, journal) or phase
         if job and job.get("state") == "interrupted":
@@ -2064,7 +2069,7 @@ class HostService:
                         job["message"] = "Stable is installed, but its channel change needs recovery. Refresh status to retry."
                         write_private(self.job_file, job)
                         return {
-                            "available": True, "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1", "controller-config.v1", *smart_capabilities],
+                            "available": True, "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1", "controller-config.v1", "controller-update-no-backup.v1", *smart_capabilities],
                             "enrolled": enrolled, "currentTag": saved.get("tag"), "currentDigest": saved.get("digest"),
                             "coreState": core.get("state"), "coreHealth": core.get("health"), "imageMatches": True,
                             "job": {key: job.get(key) for key in ("id", "state", "targetTag", "startedAt", "finishedAt", "message")},
@@ -2082,16 +2087,21 @@ class HostService:
                 write_private(self.job_file, job)
         if job and job.get("state") == "failed":
             phase = self.aborted_update_phase(job)
+        if (job and job.get("state") == "interrupted" and self.update_journal_matches(job, journal)
+                and journal.get("stage") == "recovery-required"):
+            phase = "recovery-required"
         return {
             "available": True,
-            "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1", "controller-config.v1", *smart_capabilities],
+            "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1", "controller-config.v1", "controller-update-no-backup.v1", *smart_capabilities],
             "enrolled": enrolled,
             "currentTag": publication.get("tag"),
             "currentDigest": publication.get("digest"),
             "coreState": core.get("state"),
             "coreHealth": core.get("health"),
             "imageMatches": bool(enrolled and saved and core.get("image") == expected_reference),
-            "job": {key: job.get(key) for key in ("id", "state", "targetTag", "startedAt", "finishedAt", "message")} | {"phase": phase} | download | UPDATE.safe_failure(job)
+            "job": {key: job.get(key) for key in ("id", "state", "targetTag", "startedAt", "finishedAt", "message")}
+            | ({"backupPolicy": job["backupPolicy"]} if job.get("backupPolicy") in ("none", "automatic") else {})
+            | {"phase": phase} | download | UPDATE.safe_failure(job)
             if job
             else None,
         }
@@ -2124,6 +2134,7 @@ class HostService:
             "snapshot": str(snapshot),
             "channelState": channel,
             "returnToStable": return_to_stable,
+            "backupPolicy": result["backupPolicy"],
         }
         if HOST.retained_state(self.root):
             record["retainedSource"] = HOST.retained_descriptor(self.root, self.context, current)
@@ -2134,6 +2145,7 @@ class HostService:
             "targetTag": target["tag"],
             "targetDigest": target["digest"],
             "snapshotBytes": result["snapshotBytes"],
+            "backupPolicy": result["backupPolicy"],
             "appsMustBeStopped": result.get("runningAppsMustBeStopped", True),
         }
 
@@ -2148,6 +2160,7 @@ class HostService:
             or record.get("schema") != "orbis.host-service-plan.v1"
             or record.get("id") != plan_id
             or not plan_is_current(record.get("createdAt"), PLAN_TTL_SECONDS)
+            or record.get("backupPolicy") not in ("none", "automatic")
         ):
             raise ValueError("update plan is missing or expired; create a new plan")
         return record
@@ -2165,7 +2178,6 @@ class HostService:
             previous = read_private(self.job_file)
             if previous and previous.get("state") in {"running", "recovering", "interrupted"}:
                 raise ValueError("resolve the previous host update before applying another")
-            self.core_overlays().reconcile_unaccepted()
             self.require_core_overlay_clear(previous)
             plan = self._read_plan(plan_id)
             current = PLAN.validate_manifest(plan["current"])
@@ -2181,6 +2193,11 @@ class HostService:
             snapshot = Path(plan["snapshot"])
             if snapshot.parent != self.snapshots or snapshot.name != f"orbis-{target['tag']}-{plan_id}":
                 raise ValueError("update plan has an invalid snapshot destination")
+            fresh = UPDATE.update_plan(self.root, current, target, self.context, snapshot)
+            if fresh.get("backupPolicy") != plan["backupPolicy"]:
+                raise ValueError("update backup policy changed; create a new plan")
+            self.core_overlays().reconcile_unaccepted()
+            self.require_core_overlay_clear(previous)
             overlays = self.core_overlays()
             try:
                 overlay_id = overlays.begin(plan_id, current, target)
@@ -2203,6 +2220,7 @@ class HostService:
                 "target": target,
                 "channelState": plan["channelState"],
                 "returnToStable": plan.get("returnToStable", False),
+                "backupPolicy": plan["backupPolicy"],
             }
             if plan.get("retainedSource") is not None:
                 job["retainedSource"] = plan["retainedSource"]
@@ -2225,7 +2243,9 @@ class HostService:
         def run() -> None:
             try:
                 self.core_overlays().resume(job)
-                options = {"expected_source": job["retainedSource"]} if job.get("retainedSource") is not None else {}
+                options = {"expected_backup_policy": job["backupPolicy"]}
+                if job.get("retainedSource") is not None:
+                    options["expected_source"] = job["retainedSource"]
                 UPDATE.apply_update(self.root, current, target, self.context, snapshot, controller_state_dir=self.state_dir, **options)
                 self.complete_channel_change(job)
                 job["state"] = "complete"
@@ -2244,6 +2264,7 @@ class HostService:
                     else (f"{UPDATE.failure_message(journal)} The update stopped before restarting Orbis.".strip()
                           if stage == "aborted" else "The update failed. Check Updates before trying again.")
                     if job["state"] == "failed"
+                    else UPDATE.FAILURE_MESSAGES["recovery-required"] if stage == "recovery-required"
                     else "Update needs local inspection or recovery."
                 )
             finally:
@@ -2275,6 +2296,8 @@ class HostService:
             if snapshot.parent != self.snapshots or snapshot.name != f"orbis-{target['tag']}-{job_id}":
                 raise ValueError("interrupted job has an invalid snapshot destination")
             journal = UPDATE.read_journal(snapshot, self.root, self.context, current, target)
+            if UPDATE.unbacked_job(journal) != (job.get("backupPolicy") == "none"):
+                raise ValueError("interrupted update backup policy changed; preserve it for local inspection")
             if journal.get("stage") in UPDATE.TERMINAL_STAGES:
                 raise ValueError("transaction already finished; refresh status")
             self.core_overlays().resume(job)
@@ -2286,23 +2309,34 @@ class HostService:
             try:
                 outcome = UPDATE.recover(self.root, current, target, self.context, snapshot, controller_state_dir=self.state_dir)
                 committed = isinstance(outcome, dict) and outcome.get("result") == "healthy"
+                aborted = isinstance(outcome, dict) and outcome.get("result") == "aborted-before-downtime"
+                if job.get("backupPolicy") == "none" and not (committed or aborted):
+                    raise ValueError("an unbacked update cannot report a data restore")
                 if committed:
                     self.complete_channel_change(job)
-                job["state"] = "complete" if committed else "rolled-back"
+                job["state"] = "complete" if committed else "failed" if aborted else "rolled-back"
                 journal = read_private(UPDATE.journal_path(snapshot))
                 job.update(UPDATE.safe_failure(journal))
                 job["message"] = (
                     "Orbis reached the reviewed image and healthy state."
-                    if committed else f"{UPDATE.failure_message(journal)} Previous Orbis release is healthy.".strip()
+                    if committed else f"{UPDATE.failure_message(journal)} The update stopped before restarting Orbis.".strip()
+                    if aborted else f"{UPDATE.failure_message(journal)} Previous Orbis release is healthy.".strip()
                 )
             except Exception:
                 job["state"] = "interrupted"
-                job["message"] = "Recovery needs local inspection."
+                try:
+                    journal = read_private(UPDATE.journal_path(snapshot))
+                except (OSError, ValueError, json.JSONDecodeError):
+                    journal = None
+                job.update(UPDATE.safe_failure(journal))
+                job["message"] = (UPDATE.FAILURE_MESSAGES["recovery-required"]
+                                  if journal and journal.get("stage") == "recovery-required"
+                                  else "Recovery needs local inspection.")
             finally:
                 job["finishedAt"] = time.time()
                 try:
                     write_private(self.job_file, job)
-                    if job["state"] in {"complete", "rolled-back"}:
+                    if job["state"] in {"complete", "rolled-back", "failed"}:
                         self.core_operation_maintenance()
                 finally:
                     with self.lock:

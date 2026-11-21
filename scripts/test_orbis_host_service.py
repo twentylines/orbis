@@ -287,7 +287,7 @@ class HostServiceTests(unittest.TestCase):
         self.target = mock.patch.object(SERVICE, "manifest_for_tag", return_value=TARGET)
         self.target.start()
         self.addCleanup(self.target.stop)
-        self.plan = mock.patch.object(SERVICE.UPDATE, "update_plan", return_value={"snapshotBytes": 12345})
+        self.plan = mock.patch.object(SERVICE.UPDATE, "update_plan", return_value={"snapshotBytes": 12345, "backupPolicy": "automatic"})
         self.plan.start()
         self.addCleanup(self.plan.stop)
         self.healthy = mock.patch.object(self.service, "require_healthy_core")
@@ -577,6 +577,107 @@ class HostServiceTests(unittest.TestCase):
         self.assertEqual(args[0:4], (self.root, CURRENT, TARGET, "test-daemon"))
         self.assertEqual(args[4], Path(job["snapshot"]))
         self.assertEqual(args[4].parent, self.snapshots)
+
+    def test_no_backup_plan_is_bound_before_overlay_effects_and_worker_dispatch(self):
+        with mock.patch.object(SERVICE.UPDATE, 'update_plan', return_value={'snapshotBytes': 0, 'backupPolicy': 'none'}):
+            planned = self.service.plan(TARGET['tag'])
+            self.assertEqual(planned['backupPolicy'], 'none')
+            self.assertEqual(planned['snapshotBytes'], 0)
+            with mock.patch.object(SERVICE.UPDATE, 'apply_update') as update:
+                _, launch = self.service.apply(planned['planId'])
+                launch()
+                job = self.wait_for_job()
+            self.assertEqual(job['backupPolicy'], 'none')
+            self.assertEqual(update.call_args.kwargs['expected_backup_policy'], 'none')
+
+    def test_old_or_changed_backup_plan_cannot_acquire_overlay_or_launch_worker(self):
+        for missing in (True, False):
+            with self.subTest(missing=missing):
+                planned = self.service.plan(TARGET['tag'])
+                path = self.state / f"plan-{planned['planId']}.json"
+                record = SERVICE.read_private(path)
+                if missing:
+                    record.pop('backupPolicy')
+                    SERVICE.write_private(path, record)
+                self.service.core_overlay_manager.reset_mock()
+                with mock.patch.object(SERVICE.UPDATE, 'update_plan', return_value={'snapshotBytes': 0, 'backupPolicy': 'none'}), \
+                        mock.patch.object(SERVICE.UPDATE, 'apply_update') as worker:
+                    with self.assertRaisesRegex(ValueError, 'new plan'):
+                        self.service.apply(planned['planId'])
+                self.service.core_overlay_manager.begin.assert_not_called()
+                self.service.core_overlay_manager.reconcile_unaccepted.assert_not_called()
+                worker.assert_not_called()
+                self.assertFalse(self.service.job_file.exists())
+
+    def test_interrupted_no_backup_update_reports_review_without_restore_claim(self):
+        with mock.patch.object(SERVICE.UPDATE, 'update_plan', return_value={'snapshotBytes': 0, 'backupPolicy': 'none'}):
+            planned = self.service.plan(TARGET['tag'])
+            def interrupted(root, current, target, context, snapshot, **options):
+                SERVICE.UPDATE.write_journal(snapshot, {
+                    'schema': SERVICE.UPDATE.NO_BACKUP_JOURNAL_SCHEMA, 'backupPolicy': 'none',
+                    'checkpoint': {'backupPolicy': 'none'}, 'backupScope': SERVICE.UPDATE.CONTROLLER.SCOPE,
+                    'root': str(root), 'dockerContext': context, 'snapshot': str(snapshot),
+                    'previousDigest': current['digest'], 'targetDigest': target['digest'],
+                    'stage': 'recovery-required', 'failureStage': 'staged', 'failureType': 'RuntimeError',
+                    'failureCode': 'recovery-required',
+                })
+                raise RuntimeError('PRIVATE_FIXTURE')
+            with mock.patch.object(SERVICE.UPDATE, 'apply_update', side_effect=interrupted):
+                _, launch = self.service.apply(planned['planId'])
+                launch()
+                job = self.wait_for_job()
+        self.assertEqual(job['state'], 'interrupted')
+        self.assertEqual(job['message'], SERVICE.UPDATE.FAILURE_MESSAGES['recovery-required'])
+        self.assertNotIn('restored', job['message'])
+        self.assertNotIn('PRIVATE_FIXTURE', json.dumps(job))
+        journal = SERVICE.read_private(SERVICE.UPDATE.journal_path(Path(job['snapshot'])))
+        with mock.patch.object(self.service, 'read_core_operation_record', side_effect=[job, journal]), \
+                mock.patch.object(SERVICE.HOST, 'docker', side_effect=AssertionError('Observer cannot run Docker')):
+            public = self.service.core_operation_progress()
+        self.assertEqual(public['job']['state'], 'interrupted')
+        self.assertIsNone(public['job']['phase'])
+        for change in ({'backupPolicy': 'automatic'}, {'checkpoint': {'backupPolicy': 'automatic'}},
+                       {'schema': SERVICE.UPDATE.JOURNAL_SCHEMA}, {'checkpoint': []},
+                       {'backupScope': 'other'}):
+            self.assertFalse(self.service.update_journal_matches(job, {**journal, **change}))
+
+    def test_pre_downtime_recovery_reports_abort_instead_of_a_restore(self):
+        planned = self.service.plan(TARGET['tag'])
+        snapshot = self.snapshots / f"orbis-{TARGET['tag']}-{planned['planId']}"
+        job = {'schema': 'orbis.host-service-job.v1', 'id': planned['planId'], 'state': 'interrupted',
+               'snapshot': str(snapshot), 'targetTag': TARGET['tag'], 'current': CURRENT, 'target': TARGET}
+        SERVICE.write_private(self.service.job_file, job)
+        def abort(*args, **options):
+            SERVICE.UPDATE.write_journal(snapshot, {'stage': 'aborted'})
+            return {'result': 'aborted-before-downtime', 'releaseTag': CURRENT['tag']}
+        with mock.patch.object(SERVICE.UPDATE, 'read_journal', return_value={'stage': 'pulled'}), \
+                mock.patch.object(SERVICE.UPDATE, 'recover', side_effect=abort):
+            _, launch = self.service.recover(planned['planId'])
+            launch()
+            result = self.wait_for_job()
+        self.assertEqual(result['state'], 'failed')
+        self.assertIn('stopped before restarting', result['message'])
+        self.assertNotIn('restored', result['message'])
+
+    def test_recovery_cannot_cross_between_approved_backup_modes(self):
+        planned = self.service.plan(TARGET['tag'])
+        snapshot = self.snapshots / f"orbis-{TARGET['tag']}-{planned['planId']}"
+        job = {'schema': 'orbis.host-service-job.v1', 'id': planned['planId'], 'state': 'interrupted',
+               'snapshot': str(snapshot), 'targetTag': TARGET['tag'], 'current': CURRENT, 'target': TARGET}
+        no_backup = {'schema': SERVICE.UPDATE.NO_BACKUP_JOURNAL_SCHEMA, 'backupPolicy': 'none',
+                     'checkpoint': {'backupPolicy': 'none'}, 'backupScope': SERVICE.UPDATE.CONTROLLER.SCOPE,
+                     'stage': 'recovery-required'}
+        for job_policy, journal in [('none', {'stage': 'staged'}), ('automatic', no_backup)]:
+            with self.subTest(job_policy=job_policy):
+                SERVICE.write_private(self.service.job_file, {**job, 'backupPolicy': job_policy})
+                self.service.core_overlay_manager.reset_mock()
+                with mock.patch.object(SERVICE.UPDATE, 'read_journal', return_value=journal), \
+                        mock.patch.object(SERVICE.UPDATE, 'recover') as worker:
+                    with self.assertRaisesRegex(ValueError, 'backup policy changed'):
+                        self.service.recover(planned['planId'])
+                self.service.core_overlay_manager.resume.assert_not_called()
+                worker.assert_not_called()
+                self.assertFalse(self.service.busy)
 
     def test_overlay_preflight_failure_aborts_before_accepting_job_and_preserves_error(self):
         planned = self.service.plan(TARGET['tag'])

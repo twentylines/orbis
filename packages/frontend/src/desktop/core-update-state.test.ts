@@ -25,7 +25,7 @@ const status = (state: string, overrides: Partial<CoreUpdateStatus> = {}): CoreU
 const accepted = () => advanceCoreUpdate(null, { type: 'accepted', id, targetTag });
 
 describe('safety checkpoint progress', () => {
-  test.each(['preparing', 'pulled', 'stopping', 'stopped', 'snapshotting', 'snapshot-ready'])(
+  test.each(['preparing', 'pulled', 'stopping', 'stopped', 'snapshotting', 'snapshot-ready', 'handoff-ready'])(
     'keeps %s distinct from a restart while control services are paused',
     (phase) => {
       const watch = advanceCoreUpdate(accepted(), {
@@ -54,6 +54,17 @@ describe('safety checkpoint progress', () => {
       expect(coreUpdatePhaseMessage(phase)).toBeUndefined();
     }
   });
+});
+
+test('an interrupted unbacked cutover stops observation without promising restore or refreshing', () => {
+  const watch = advanceCoreUpdate(accepted(), {
+    type: 'status',
+    status: status('running', { coreState: 'exited', job: { id, targetTag, state: 'running', phase: 'recovery-required', backupPolicy: 'none' } }),
+    buildTag: targetTag,
+  });
+  expect(watch).toMatchObject({ phase: 'failed', message: coreUpdatePhaseMessage('recovery-required') });
+  expect(coreWatchIsActive(watch)).toBe(false);
+  expect(claimCoreRefresh(watch, new Set()).refresh).toBe(false);
 });
 
 describe('reviewed downgrade lifecycle', () => {

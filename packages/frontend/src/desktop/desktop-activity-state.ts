@@ -117,7 +117,7 @@ export function desktopActivity(
     };
   } else if (initialising) {
     const title = 'Initialising update';
-    const detail = initialising.applying ? 'Checking the release and backup storage' : 'Checking release compatibility';
+    const detail = initialising.applying ? 'Checking the release and update readiness' : 'Checking release compatibility';
     items.unshift({ id: initialising.id, kind: 'core', title, detail, state: 'initialising' });
     summary = { title, detail: `Orbis ${formatOrbisVersion(initialising.target)}`, kind: 'core', count: items.length };
   }

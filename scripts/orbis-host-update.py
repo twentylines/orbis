@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Plan, apply, or recover a digest-pinned Orbis core update on a CLI v4 host.
 
-The update pauses control services, captures verified control storage, and
-restores it if the new core fails. App containers and their data remain live.
-Legacy releases retain their original whole-installation backup protocol.
+Modern controller updates pause control services without an automatic data
+backup. App containers, their data and the reverse proxy remain live. An
+interrupted unbacked cutover requires local review; historical backup journals
+retain their original verified restoration protocol.
 Only the explicit Docker context is used for runtime operations.
 """
 
@@ -42,9 +43,10 @@ SNAPSHOT = load_script("orbis-snapshot.py", "orbis_snapshot_for_update")
 CONTROLLER = load_script("orbis-host-controller-update.py", "orbis_controller_update")
 CORE_SERVICES = ("runtipi-reverse-proxy", "runtipi", "runtipi-queue", "runtipi-db")
 JOURNAL_SCHEMA = "orbis.update.v1"
+NO_BACKUP_JOURNAL_SCHEMA = "orbis.update-no-backup.v1"
 TERMINAL_STAGES = {"complete", "rolled-back", "aborted"}
-FAILURE_MESSAGES = {**SNAPSHOT.FAILURE_MESSAGES, "source-bootstrap-preservation-unsupported": "The source controller cannot safely restart with its current network, cache and TLS state. Review the source bootstrap before updating.", "controller-preservation-unsupported": "This Orbis version cannot be installed with the current updater. Choose a newer version."}
-FAILURE_STAGES = {"preparing", "downloading", "pulled", "stopping", "stopped", "snapshotting", "snapshot-ready", "staged"}
+FAILURE_MESSAGES = {**SNAPSHOT.FAILURE_MESSAGES, "recovery-required": "This update has no automatic data backup. Preserve its state for local recovery review.", "source-bootstrap-preservation-unsupported": "The source controller cannot safely restart with its current network, cache and TLS state. Review the source bootstrap before updating.", "controller-preservation-unsupported": "This Orbis version cannot be installed with the current updater. Choose a newer version."}
+FAILURE_STAGES = {"preparing", "downloading", "pulled", "stopping", "stopped", "snapshotting", "snapshot-ready", "handoff-ready", "staged"}
 PROGRESS_PHASES = {"restarting", "verifying"}
 DOWNLOAD_SCHEMA = "orbis.download-progress.v1"
 DOWNLOAD_LIMIT = 2**53 - 1
@@ -315,6 +317,29 @@ def pull_verified_image(context, target, root, publish, *, cancelled=None):
         raise RuntimeError("Docker could not finish downloading the verified Orbis image") from error
 
 
+def unbacked_job(record):
+    selected = record.get('schema') == NO_BACKUP_JOURNAL_SCHEMA
+    checkpoint = record.get('checkpoint') or {}
+    if not isinstance(checkpoint, dict):
+        raise ValueError('The update checkpoint is invalid')
+    if selected != (record.get('backupPolicy') == 'none') or selected != (checkpoint.get('backupPolicy') == 'none'):
+        raise ValueError('The update backup policy changed')
+    if selected and record.get('backupScope') != CONTROLLER.SCOPE:
+        raise ValueError('A no-backup update requires protected controller replacement')
+    return selected
+
+
+def require_local_recovery(snapshot, record):
+    error = CONTROLLER.NoBackupRecoveryRequired(FAILURE_MESSAGES['recovery-required'])
+    if safe_failure(record):
+        record['failureCode'] = 'recovery-required'
+    else:
+        record.update(failure_details(record.get('stage'), error))
+    record['stage'] = 'recovery-required'
+    write_journal(snapshot, record)
+    raise error
+
+
 def failure_details(stage: object, error: Exception) -> dict[str, str]:
     code = getattr(error, "code", None)
     name = next((kind.__name__ for kind in (SNAPSHOT.SnapshotError, PermissionError, FileNotFoundError, OSError, ValueError, RuntimeError) if isinstance(error, kind)), "Exception")
@@ -429,7 +454,7 @@ def read_journal(snapshot: Path, root: Path, context: str, current: dict[str, st
         record = json.loads(body, object_pairs_hook=HOST.IDENTITY.PUBLICATION.pairs)
     finally:
         os.close(descriptor)
-    if not isinstance(record, dict) or record.get("schema") != JOURNAL_SCHEMA:
+    if not isinstance(record, dict) or record.get("schema") not in {JOURNAL_SCHEMA, NO_BACKUP_JOURNAL_SCHEMA}:
         raise ValueError("update journal has an unsupported schema")
     if (
         record.get("root") != str(root)
@@ -439,6 +464,7 @@ def read_journal(snapshot: Path, root: Path, context: str, current: dict[str, st
         or record.get("targetDigest") != target["digest"]
     ):
         raise ValueError("update journal does not match this installation and release pair")
+    unbacked_job(record)
     retained_source(root, context, record, current, target)
     if HOST.retained_state(root) and record.get("retainedSource") is None:
         raise ValueError("retained recovery requires its full protected source identity")
@@ -550,7 +576,8 @@ def update_plan(root: Path, current: dict[str, str], target: dict[str, str], con
         raise ValueError("Docker context name is invalid")
     if current["digest"] == target["digest"]:
         raise ValueError("current and target image digests are identical")
-    if shutil.which("rsync") is None:
+    scoped = target.get("installationProtocol") == HOST.PLAN.INSTALLATION_PROTOCOL
+    if not scoped and shutil.which("rsync") is None:
         raise ValueError("rsync is required to restore a stopped installation snapshot")
     if journal_path(snapshot).exists() or journal_path(snapshot).is_symlink():
         raise ValueError("an update journal already exists for this snapshot destination")
@@ -568,10 +595,9 @@ def update_plan(root: Path, current: dict[str, str], target: dict[str, str], con
     if core.get("image") != current_image or core.get("state") != "running" or core.get("health") != "healthy":
         raise ValueError("the enrolled Orbis core must be running and healthy")
     verify_release(target)
-    scoped = target.get("installationProtocol") == HOST.PLAN.INSTALLATION_PROTOCOL
     if scoped:
         tools, reader = controller_tools(context)
-        checkpoint = tools.review(root, reader, snapshot, checkpoint_path(snapshot), scope=CONTROLLER.SCOPE)
+        checkpoint = tools.review(root, reader, snapshot, checkpoint_path(snapshot), scope=CONTROLLER.SCOPE, backup=False)
         snapshot_bytes = checkpoint["storage"]["estimatedBytes"]
     else:
         require_quiet_apps(root, context)
@@ -585,6 +611,7 @@ def update_plan(root: Path, current: dict[str, str], target: dict[str, str], con
         "targetImage": f"{target['image']}@{target['digest']}",
         "snapshot": str(snapshot),
         "snapshotBytes": snapshot_bytes,
+        "backupPolicy": "none" if scoped else "automatic",
         "runningAppsMustBeStopped": not scoped,
     }
     if scoped:
@@ -617,6 +644,8 @@ def start_core(root: Path, context: str, force_recreate: bool = False) -> None:
 
 
 def rollback(root: Path, current: dict[str, str], context: str, snapshot: Path, record: dict[str, object], *, controller_state_dir=Path("/var/lib/orbis/state")) -> None:
+    if unbacked_job(record):
+        require_local_recovery(snapshot, record)
     retained_source(root, context, record, current)
     origin = record.setdefault("rollbackStartedFrom", record["stage"])
     record["stage"] = "rolling-back"
@@ -732,9 +761,12 @@ def rollback(root: Path, current: dict[str, str], context: str, snapshot: Path, 
     write_journal(snapshot, record)
 
 
-def apply_update(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path, *, expected_source=None, controller_state_dir=Path("/var/lib/orbis/state")) -> dict[str, object]:
+def apply_update(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path, *, expected_source=None, expected_backup_policy=None, controller_state_dir=Path("/var/lib/orbis/state")) -> dict[str, object]:
     with HOST.host_lock(root) as lock_fd:
         planned = update_plan(root, current, target, context, snapshot)
+        policy = 'none' if planned.get('checkpoint', {}).get('backupPolicy') == 'none' else 'automatic'
+        if expected_backup_policy is not None and expected_backup_policy != policy:
+            raise ValueError('The update backup policy changed; review this update again')
         if expected_source is not None and HOST.retained_descriptor(root, context, current) != expected_source:
             raise ValueError("retained source changed after update approval")
         record = {
@@ -754,6 +786,8 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
             retained_source(root, context, record, current, target)
         if "checkpoint" in planned:
             record.update(backupScope=CONTROLLER.SCOPE, checkpoint=planned["checkpoint"], targetPublication=target)
+            if planned["checkpoint"].get('backupPolicy') == 'none':
+                record.update(schema=NO_BACKUP_JOURNAL_SCHEMA, backupPolicy='none')
         write_journal(snapshot, record)
         try:
             record["stage"] = "downloading"
@@ -769,7 +803,12 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
                 scoped_runtime.prepare(planned['checkpoint'])
             record["stage"] = "stopping"
             write_journal(snapshot, record)
-            if record.get("backupScope") in {"controller", CONTROLLER.SCOPE}:
+            if unbacked_job(record):
+                tools, reader = controller_tools(context, lock_fd)
+                tools.quiesce_without_backup(root, reader, planned["checkpoint"], host_writers_stopped=True)
+                record["stage"] = "handoff-ready"
+                write_journal(snapshot, record)
+            elif record.get("backupScope") in {"controller", CONTROLLER.SCOPE}:
                 tools, reader = controller_tools(context, lock_fd)
                 def publish_checkpoint(phase):
                     if phase not in {"stopping", "snapshotting", "snapshot-ready"}:
@@ -785,8 +824,9 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
                 record["stage"] = "snapshotting"
                 write_journal(snapshot, record)
                 SNAPSHOT.capture(root, snapshot, current["tag"], context)
-            record["stage"] = "snapshot-ready"
-            write_journal(snapshot, record)
+            if not unbacked_job(record):
+                record["stage"] = "snapshot-ready"
+                write_journal(snapshot, record)
             source = retained_source(root, context, record, current, target)
             if source:
                 if (root / "orbis-compose.yml").read_text() != HOST.AUTHORITY.override_content(current, source["creationReference"]):
@@ -842,6 +882,8 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
                         # probe or interrupted cleanup needs its protected review.
                         pass
                 raise RuntimeError("update stopped before service downtime") from error
+            if unbacked_job(record):
+                require_local_recovery(snapshot, record)
             try:
                 rollback(root, current, context, snapshot, record, controller_state_dir=controller_state_dir)
             except Exception as rollback_error:
@@ -856,7 +898,26 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
 def recover(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path, *, controller_state_dir=Path("/var/lib/orbis/state")) -> dict[str, object]:
     with HOST.host_lock(root):
         record = read_journal(snapshot, root, context, current, target)
-        if record.get('backupScope') == CONTROLLER.SCOPE:
+        if unbacked_job(record):
+            if record.get('stage') in TERMINAL_STAGES:
+                raise ValueError("update transaction is already complete or recovered")
+            runtime = CONTROLLER.ControllerUpdate(HOST, root, context, snapshot, current, target, controller_state_dir)
+            try:
+                protected = runtime.read()
+            except FileNotFoundError:
+                protected = None
+            if protected is not None:
+                if not CONTROLLER.unbacked(protected) or protected.get('checkpoint') != record['checkpoint']:
+                    raise ValueError('The protected controller update policy changed')
+                if protected.get('phase') == 'committed':
+                    record['controllerCleanupRequired'] = runtime.commit()
+                    record['stage'] = 'complete'
+                    write_journal(snapshot, record)
+                    return {'result': 'healthy', 'releaseTag': target['tag'], 'snapshot': str(snapshot),
+                            'controllerCleanupRequired': record['controllerCleanupRequired'], 'backupCreated': False}
+            if record.get('stage') not in {'preparing', 'downloading', 'pulled'}:
+                require_local_recovery(snapshot, record)
+        if record.get('backupScope') == CONTROLLER.SCOPE and not unbacked_job(record):
             runtime = CONTROLLER.ControllerUpdate(HOST, root, context, snapshot, current, target, controller_state_dir)
             protected = runtime.read()
             if protected.get('phase') == 'committed':
