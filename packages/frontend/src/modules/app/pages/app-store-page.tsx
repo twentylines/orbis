@@ -171,10 +171,10 @@ function LocalStore() {
   const updating = isPlaceholderData || search !== querySearch || (isFetching && !isFetchingNextPage);
   const moreAllowed = useRef(false);
   const requestMore = useRef(fetchNextPage);
-  moreAllowed.current = browsing && !isError && !updating;
+  moreAllowed.current = browsing && !isError && !updating && !isFetching;
   requestMore.current = fetchNextPage;
   const loadMore = useCallback(() => {
-    if (moreAllowed.current) void requestMore.current();
+    if (moreAllowed.current) void requestMore.current({ cancelRefetch: false });
   }, []);
   const { lastElementRef } = useInfiniteScroll({
     fetchNextPage: loadMore,
@@ -363,7 +363,7 @@ function LocalStore() {
                   {hasNextPage ? (
                     <div className="orbis-store-pagination">
                       <span>
-                        {apps.length.toLocaleString()} of {total.toLocaleString()} apps loaded
+                        {apps.length.toLocaleString()} of {total.toLocaleString()} apps loaded. More load as you scroll.
                       </span>
                       <button type="button" disabled={isFetching || updating} onClick={() => void fetchNextPage()}>
                         {isFetchingNextPage ? 'Loading more apps…' : 'Load more apps'}
