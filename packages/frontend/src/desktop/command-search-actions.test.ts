@@ -102,6 +102,7 @@ test('queried running apps group lifecycle controls once with readable names and
   expect(html).toContain('>Beszel actions</legend>');
   expect(html).toContain('aria-label="Restart Beszel"');
   expect(html).toContain('aria-label="Stop Beszel"');
+  expect(html).toContain('data-app-command="stop"');
   expect(html.match(/<button/g)).toHaveLength(2);
   expect(html).not.toContain('aria-label="Start Beszel"');
   expect(onCommand).not.toHaveBeenCalled();
@@ -117,6 +118,7 @@ test('a queried stopped app offers Start without unavailable Stop or Restart con
   );
   expect(html.match(/<button/g)).toHaveLength(1);
   expect(html).toContain('aria-label="Start Beszel"');
+  expect(html).toContain('data-app-command="start"');
   expect(html).not.toContain('aria-label="Stop Beszel"');
   expect(html).not.toContain('aria-label="Restart Beszel"');
 });

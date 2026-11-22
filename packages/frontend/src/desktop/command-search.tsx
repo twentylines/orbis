@@ -699,7 +699,7 @@ export function CommandSearch() {
                               const toggle = result.settingId ? toggles[result.settingId] : undefined;
                               const feedback = toggle?.error ?? null;
                               return (
-                                <div className="desktop-search-result" key={result.id}>
+                                <div className="desktop-search-result" data-app-commands={result.commands ? true : undefined} key={result.id}>
                                   <button
                                     data-search-result
                                     className="desktop-search-result-main"
@@ -728,7 +728,14 @@ export function CommandSearch() {
                                     </div>
                                   ) : null}
                                   {result.managePath ? (
-                                    <div className="desktop-search-result-control">
+                                    <div className={result.commands ? 'desktop-search-app-tools' : 'desktop-search-result-control'}>
+                                      {result.commands ? (
+                                        <SearchAppCommandControls
+                                          commands={result.commands}
+                                          onCommand={requestAppCommand}
+                                          onKeyDown={handleResultKeyDown}
+                                        />
+                                      ) : null}
                                       <button
                                         type="button"
                                         className="desktop-search-result-manage"
@@ -750,13 +757,6 @@ export function CommandSearch() {
                                         {result.actionLabel}
                                       </button>
                                     </div>
-                                  ) : null}
-                                  {result.commands ? (
-                                    <SearchAppCommandControls
-                                      commands={result.commands}
-                                      onCommand={requestAppCommand}
-                                      onKeyDown={handleResultKeyDown}
-                                    />
                                   ) : null}
                                   {result.settingId ? <SearchSettingChoices settingId={result.settingId} onKeyDown={handleResultKeyDown} /> : null}
                                   {feedback ? (

@@ -27,6 +27,7 @@ export function SearchAppCommandControls({
             type="button"
             key={command.action}
             data-search-result
+            data-app-command={command.action}
             className="desktop-search-result-manage"
             aria-label={`${label} ${command.name}`}
             title={label}

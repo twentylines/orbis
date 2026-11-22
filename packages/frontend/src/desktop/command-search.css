@@ -346,17 +346,57 @@ body:has(.orbis-theme) .desktop-search-surface .desktop-search-input #orbis-comm
   align-items: center;
   padding-inline-end: 16px;
 }
-/* Lifecycle controls have their own row; the settings gear stays beside the app title. */
+.desktop-search-result[data-app-commands="true"] {
+  container-type: inline-size;
+}
+.desktop-search-app-tools {
+  display: contents;
+}
+.desktop-search-app-tools > .desktop-search-result-manage {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  margin-inline-end: 16px;
+}
 .desktop-search-app-commands {
   min-width: 0;
   margin: 0;
   border: 0;
   grid-column: 1 / -1;
+  grid-row: 2;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   padding: 0 16px 12px;
+}
+.desktop-search-app-commands [data-app-command="start"] {
+  --search-command-ink: var(--desktop-positive);
+}
+.desktop-search-app-commands [data-app-command="stop"] {
+  --search-command-ink: var(--desktop-negative);
+}
+.desktop-search-app-commands .desktop-search-result-manage {
+  color: var(--search-command-ink, var(--desktop-muted));
+}
+.desktop-search-app-commands .desktop-search-result-manage:is(:hover, :focus-visible) {
+  color: var(--search-command-ink, var(--desktop-ink));
+  background: color-mix(in srgb, var(--search-command-ink, var(--desktop-ink)) 12%, transparent);
+}
+@container (min-width: 28em) {
+  .desktop-search-app-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-inline-end: 16px;
+  }
+  .desktop-search-app-tools > .desktop-search-result-manage {
+    margin: 0;
+  }
+  .desktop-search-app-commands {
+    flex-wrap: nowrap;
+    padding: 0;
+  }
 }
 .desktop-search-result-control .orbis-switch {
   margin: 0;
