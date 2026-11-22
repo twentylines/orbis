@@ -1,12 +1,16 @@
 import { createAppUrn } from '@/common/helpers/app-helpers';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
+import { LoggerService } from '@/core/logger/logger.service';
+import { StartAppCommand } from '@/modules/app-lifecycle/commands/start-app-command';
+import { DockerService } from '@/modules/docker/docker.service';
 import { EnvUtils } from '@/modules/env/env.utils';
+import type { ModuleRef } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import type { AppInfo } from '@runtipi/common/schemas';
 import type { AppUrn } from '@runtipi/common/types';
 import { fromPartial } from '@total-typescript/shoehorn';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import { AppFilesManager } from '../app-files-manager';
 import { AppHelpers } from '../app.helpers';
@@ -15,13 +19,17 @@ describe('AppHelpers', () => {
   let appHelpers: AppHelpers;
   let appFilesManager = mock<AppFilesManager>();
   let config = mock<ConfigurationService>();
-  let filesystem = mock<FilesystemService>();
-  let envUtils = mock<EnvUtils>();
+  const envUtils = new EnvUtils();
   const testAppUrn: AppUrn = createAppUrn('test-app', 'test-store');
+  const testAppEnv = '/app-data/test-store/test-app/app.env';
+  const writtenEnv = () => envUtils.envStringToMap(appFilesManager.writeAppEnv.mock.lastCall?.[1] ?? '');
+
+  afterEach(() => vi.restoreAllMocks());
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     const moduleRef = await Test.createTestingModule({
-      providers: [AppHelpers],
+      providers: [AppHelpers, { provide: EnvUtils, useValue: envUtils }],
     })
       .useMocker(mock)
       .compile();
@@ -29,8 +37,6 @@ describe('AppHelpers', () => {
     appHelpers = moduleRef.get(AppHelpers);
     appFilesManager = moduleRef.get(AppFilesManager);
     config = moduleRef.get(ConfigurationService);
-    filesystem = moduleRef.get(FilesystemService);
-    envUtils = moduleRef.get(EnvUtils);
   });
 
   describe('generateEnvFile', () => {
@@ -66,19 +72,18 @@ describe('AppHelpers', () => {
       config.getConfig.mockReturnValue(
         fromPartial({
           internalIp: '127.0.0.1',
-          envFilePath: '/data/.env',
           rootFolderHost: '/opt/runtipi',
           userSettings: {
             appDataPath: '/opt/runtipi',
+            localDomain: 'local.test',
+            timeZone: 'Etc/UTC',
           },
         }),
       );
 
-      envUtils.envStringToMap.mockReturnValue(new Map());
-      envUtils.envMapToString.mockReturnValue('');
       appFilesManager.getInstalledAppInfo.mockResolvedValue(mockAppInfo);
-      appFilesManager.getAppEnv.mockResolvedValue({ path: '/data/.env', content: '' });
-      filesystem.readTextFile.mockResolvedValue('');
+      appFilesManager.getAppEnv.mockResolvedValue({ path: testAppEnv, content: '' });
+      appFilesManager.writeAppEnv.mockResolvedValue(true);
     });
 
     it('should throw an error if app is not found', async () => {
@@ -90,37 +95,107 @@ describe('AppHelpers', () => {
     });
 
     it('should set default env variables correctly', async () => {
-      // Arrange
-      const envMap = new Map<string, string>();
-      envUtils.envStringToMap.mockReturnValue(envMap);
-
       // Act
       await appHelpers.generateEnvFile(testAppUrn, {});
 
       // Assert
-      expect(envMap.get('APP_PORT')).toBe('8080');
-      expect(envMap.get('APP_ID')).toBe('test-app-test-store');
-      expect(envMap.get('ROOT_FOLDER_HOST')).toBe('/opt/runtipi');
-      expect(envMap.get('APP_DATA_DIR')).toBe('/opt/runtipi/app-data/test-store/test-app');
+      expect(writtenEnv().get('APP_PORT')).toBe('8080');
+      expect(writtenEnv().get('APP_ID')).toBe('test-app-test-store');
+      expect(writtenEnv().get('ROOT_FOLDER_HOST')).toBe('/opt/runtipi');
+      expect(writtenEnv().get('APP_DATA_DIR')).toBe('/opt/runtipi/app-data/test-store/test-app');
+    });
+
+    it('keeps public interpolation values and app-owned fields while discarding legacy Core variables', async () => {
+      const forbidden = () => {
+        throw new Error('Core environment data accessed while generating an app file');
+      };
+      Object.defineProperties(
+        config.getConfig(),
+        Object.fromEntries(['envFilePath', 'jwtSecret', 'database', 'queue'].map((key) => [key, { get: forbidden }])),
+      );
+      const legacyValue = 'synthetic-legacy-core-value';
+      appFilesManager.getAppEnv.mockResolvedValue({
+        path: testAppEnv,
+        content: [
+          `JWT_SECRET=${legacyValue}`,
+          `POSTGRES_PASSWORD=${legacyValue}`,
+          `RABBITMQ_PASSWORD=${legacyValue}`,
+          `UNRELATED_SETTING=${legacyValue}`,
+          'APP_RANDOM=kept-app-random',
+        ].join('\n'),
+      });
+      appFilesManager.getInstalledAppInfo.mockResolvedValue({
+        ...mockAppInfo,
+        form_fields: [
+          { env_variable: 'POSTGRES_PASSWORD', label: 'App database password', type: 'text', required: true },
+          { env_variable: 'APP_RANDOM', label: 'App token', type: 'random', required: false },
+        ],
+      });
+
+      await appHelpers.generateEnvFile(testAppUrn, { POSTGRES_PASSWORD: 'app-owned-fixture-value', exposedLocal: true });
+
+      const env = writtenEnv();
+      expect(env.get('LOCAL_DOMAIN')).toBe('local.test');
+      expect(env.get('TZ')).toBe('Etc/UTC');
+      expect(env.get('INTERNAL_IP')).toBe('127.0.0.1');
+      expect(env.get('APP_LOCAL_DOMAIN')).toBe('test-app-test-store.local.test');
+      expect(env.get('POSTGRES_PASSWORD')).toBe('app-owned-fixture-value');
+      expect(env.get('APP_RANDOM')).toBe('kept-app-random');
+      expect(['JWT_SECRET', 'RABBITMQ_PASSWORD', 'UNRELATED_SETTING'].some((key) => env.has(key))).toBe(false);
+      expect([...env.values()].includes(legacyValue)).toBe(false);
+      expect(appFilesManager.getUserEnv).not.toHaveBeenCalled();
+    });
+
+    it('does not launch an app when writing the isolated environment fails', async () => {
+      const filesystem = mock<FilesystemService>();
+      const logger = mock<LoggerService>();
+      const dockerService = mock<DockerService>();
+      config.getConfig.mockReturnValue({
+        ...config.getConfig(),
+        directories: { appDataDir: '/app-data', appDir: '/app', dataDir: '/data' },
+      });
+      const files = new AppFilesManager(config, filesystem, logger);
+      vi.spyOn(files, 'getInstalledAppInfo').mockResolvedValue(mockAppInfo);
+      vi.spyOn(files, 'getAppEnv').mockResolvedValue({ path: testAppEnv, content: 'LEGACY_ENV=synthetic-already-present' });
+      filesystem.writePrivateTextFile.mockResolvedValue(false);
+      const helpers = new AppHelpers(files, config, envUtils);
+      const providers = new Map<unknown, unknown>([
+        [AppFilesManager, files],
+        [AppHelpers, helpers],
+        [DockerService, dockerService],
+        [LoggerService, logger],
+      ]);
+      const moduleRef = mock<ModuleRef>();
+      moduleRef.get.mockImplementation((token) => providers.get(token) as never);
+      class StartWithPreparedCompose extends StartAppCommand {
+        protected override async ensureAppDir() {
+          return undefined;
+        }
+      }
+
+      const start = new StartWithPreparedCompose(moduleRef, fromPartial({}));
+      await expect(start.execute(testAppUrn, {})).resolves.toEqual({
+        success: false,
+        message: `Failed to write app environment for ${testAppUrn}`,
+      });
+      expect(filesystem.writePrivateTextFile).toHaveBeenCalledOnce();
+      expect(filesystem.writePrivateTextFile.mock.lastCall?.[0]).toBe(testAppEnv);
+      expect(dockerService.composeApp).not.toHaveBeenCalled();
     });
 
     it('should handle form port override', async () => {
       // Arrange
-      const envMap = new Map<string, string>();
-      envUtils.envStringToMap.mockReturnValue(envMap);
       const customPort = 9090;
 
       // Act
       await appHelpers.generateEnvFile(testAppUrn, { port: customPort });
 
       // Assert
-      expect(envMap.get('APP_PORT')).toBe(String(customPort));
+      expect(writtenEnv().get('APP_PORT')).toBe(String(customPort));
     });
 
     it('should generate VAPID keys if configured', async () => {
       // Arrange
-      const envMap = new Map<string, string>();
-      envUtils.envStringToMap.mockReturnValue(envMap);
       const appInfoWithVapid = { ...mockAppInfo, generate_vapid_keys: true };
       appFilesManager.getInstalledAppInfo.mockResolvedValue(appInfoWithVapid);
 
@@ -128,26 +203,22 @@ describe('AppHelpers', () => {
         publicKey: 'test-public-key',
         privateKey: 'test-private-key',
       };
-      envUtils.generateVapidKeys.mockReturnValue(mockVapidKeys);
+      vi.spyOn(envUtils, 'generateVapidKeys').mockReturnValue(mockVapidKeys);
 
       // Act
       await appHelpers.generateEnvFile(testAppUrn, {});
 
       // Assert
-      expect(envMap.get('VAPID_PUBLIC_KEY')).toBe(mockVapidKeys.publicKey);
-      expect(envMap.get('VAPID_PRIVATE_KEY')).toBe(mockVapidKeys.privateKey);
+      expect(writtenEnv().get('VAPID_PUBLIC_KEY')).toBe(mockVapidKeys.publicKey);
+      expect(writtenEnv().get('VAPID_PRIVATE_KEY')).toBe(mockVapidKeys.privateKey);
     });
 
     it('should reuse existing VAPID keys if available', async () => {
       // Arrange
-      const existingEnvMap = new Map<string, string>([
-        ['VAPID_PUBLIC_KEY', 'existing-public-key'],
-        ['VAPID_PRIVATE_KEY', 'existing-private-key'],
-      ]);
-      const newEnvMap = new Map<string, string>();
-      envUtils.envStringToMap
-        .mockReturnValueOnce(newEnvMap) // For base env file
-        .mockReturnValueOnce(existingEnvMap); // For app env file
+      appFilesManager.getAppEnv.mockResolvedValue({
+        path: testAppEnv,
+        content: 'VAPID_PUBLIC_KEY=existing-public-key\nVAPID_PRIVATE_KEY=existing-private-key',
+      });
 
       const appInfoWithVapid = { ...mockAppInfo, generate_vapid_keys: true };
       appFilesManager.getInstalledAppInfo.mockResolvedValue(appInfoWithVapid);
@@ -156,14 +227,12 @@ describe('AppHelpers', () => {
       await appHelpers.generateEnvFile(testAppUrn, {});
 
       // Assert
-      expect(newEnvMap.get('VAPID_PUBLIC_KEY')).toBe('existing-public-key');
-      expect(newEnvMap.get('VAPID_PRIVATE_KEY')).toBe('existing-private-key');
+      expect(writtenEnv().get('VAPID_PUBLIC_KEY')).toBe('existing-public-key');
+      expect(writtenEnv().get('VAPID_PRIVATE_KEY')).toBe('existing-private-key');
     });
 
     it('should set correct domain settings when app is exposed', async () => {
       // Arrange
-      const envMap = new Map<string, string>();
-      envUtils.envStringToMap.mockReturnValue(envMap);
       const domain = 'test.example.com';
 
       // Act
@@ -173,17 +242,13 @@ describe('AppHelpers', () => {
       });
 
       // Assert
-      expect(envMap.get('APP_EXPOSED')).toBe('true');
-      expect(envMap.get('APP_DOMAIN')).toBe(domain);
-      expect(envMap.get('APP_HOST')).toBe(domain);
-      expect(envMap.get('APP_PROTOCOL')).toBe('https');
+      expect(writtenEnv().get('APP_EXPOSED')).toBe('true');
+      expect(writtenEnv().get('APP_DOMAIN')).toBe(domain);
+      expect(writtenEnv().get('APP_HOST')).toBe(domain);
+      expect(writtenEnv().get('APP_PROTOCOL')).toBe('https');
     });
 
     it('should set correct domain settings for local exposure', async () => {
-      // Arrange
-      const envMap = new Map<string, string>([['LOCAL_DOMAIN', 'local.test']]);
-      envUtils.envStringToMap.mockReturnValue(envMap);
-
       // Act
       await appHelpers.generateEnvFile(testAppUrn, {
         exposedLocal: true,
@@ -191,24 +256,22 @@ describe('AppHelpers', () => {
       });
 
       // Assert
-      expect(envMap.get('APP_DOMAIN')).toBe('test-app-test-store.local.test');
-      expect(envMap.get('APP_HOST')).toBe('test-app-test-store.local.test');
-      expect(envMap.get('APP_PROTOCOL')).toBe('https');
+      expect(writtenEnv().get('APP_DOMAIN')).toBe('test-app-test-store.local.test');
+      expect(writtenEnv().get('APP_HOST')).toBe('test-app-test-store.local.test');
+      expect(writtenEnv().get('APP_PROTOCOL')).toBe('https');
     });
 
     it('should set correct domain settings for internal access', async () => {
       // Arrange
-      const envMap = new Map<string, string>();
-      envUtils.envStringToMap.mockReturnValue(envMap);
       const port = 8080;
 
       // Act
       await appHelpers.generateEnvFile(testAppUrn, { port });
 
       // Assert
-      expect(envMap.get('APP_DOMAIN')).toBe('127.0.0.1:8080');
-      expect(envMap.get('APP_HOST')).toBe('127.0.0.1');
-      expect(envMap.get('APP_PROTOCOL')).toBe('http');
+      expect(writtenEnv().get('APP_DOMAIN')).toBe('127.0.0.1:8080');
+      expect(writtenEnv().get('APP_HOST')).toBe('127.0.0.1');
+      expect(writtenEnv().get('APP_PROTOCOL')).toBe('http');
     });
 
     it('should throw error for required form fields', async () => {
@@ -232,9 +295,6 @@ describe('AppHelpers', () => {
 
     it('should handle random type form fields', async () => {
       // Arrange
-      const envMap = new Map<string, string>();
-      envUtils.envStringToMap.mockReturnValue(envMap);
-
       const appInfoWithRandom = {
         ...mockAppInfo,
         form_fields: [
@@ -257,35 +317,33 @@ describe('AppHelpers', () => {
       appFilesManager.getInstalledAppInfo.mockResolvedValue(appInfoWithRandom);
 
       const randomString = 'random-string';
-      envUtils.createRandomString.mockReturnValue(randomString);
+      const generate = vi.spyOn(envUtils, 'createRandomString').mockReturnValue(randomString);
 
       // Act
       await appHelpers.generateEnvFile(testAppUrn, {});
 
       // Assert
-      expect(envMap.get('RANDOM_VAR')).toBe(randomString);
-      expect(envUtils.createRandomString).toHaveBeenCalledWith('RANDOM_VAR', 16, undefined);
+      expect(writtenEnv().get('RANDOM_VAR')).toBe(randomString);
+      expect(generate).toHaveBeenCalledWith('RANDOM_VAR', 16, undefined);
     });
 
     it('should write the transformed env map to file', async () => {
       // Arrange
-      const envMap = new Map<string, string>([['TEST_VAR', 'test-value']]);
-      envUtils.envStringToMap.mockReturnValue(envMap);
-      const transformedEnv = 'TEST_VAR=test-value';
-      envUtils.envMapToString.mockReturnValue(transformedEnv);
+      appFilesManager.getInstalledAppInfo.mockResolvedValue({
+        ...mockAppInfo,
+        form_fields: [{ env_variable: 'TEST_VAR', label: 'Test field', type: 'text', required: false }],
+      });
 
       // Act
-      await appHelpers.generateEnvFile(testAppUrn, {});
+      await appHelpers.generateEnvFile(testAppUrn, { TEST_VAR: 'test=value' });
 
       // Assert
-      expect(appFilesManager.writeAppEnv).toHaveBeenCalledWith(testAppUrn, transformedEnv);
+      expect(appFilesManager.writeAppEnv).toHaveBeenCalledOnce();
+      expect(writtenEnv().get('TEST_VAR')).toBe('test=value');
     });
 
     it('should use default value when form field is not provided', async () => {
       // Arrange
-      const envMap = new Map<string, string>();
-      envUtils.envStringToMap.mockReturnValue(envMap);
-
       const appInfoWithDefaults = {
         ...mockAppInfo,
         form_fields: [
@@ -318,16 +376,13 @@ describe('AppHelpers', () => {
       await appHelpers.generateEnvFile(testAppUrn, {});
 
       // Assert
-      expect(envMap.get('TEXT_WITH_DEFAULT')).toBe('default-text-value');
-      expect(envMap.get('NUMBER_WITH_DEFAULT')).toBe('42');
-      expect(envMap.get('BOOLEAN_WITH_DEFAULT')).toBe('true');
+      expect(writtenEnv().get('TEXT_WITH_DEFAULT')).toBe('default-text-value');
+      expect(writtenEnv().get('NUMBER_WITH_DEFAULT')).toBe('42');
+      expect(writtenEnv().get('BOOLEAN_WITH_DEFAULT')).toBe('true');
     });
 
     it('should use default value when form field is empty string', async () => {
       // Arrange
-      const envMap = new Map<string, string>();
-      envUtils.envStringToMap.mockReturnValue(envMap);
-
       const appInfoWithDefaults = {
         ...mockAppInfo,
         form_fields: [
@@ -346,14 +401,11 @@ describe('AppHelpers', () => {
       await appHelpers.generateEnvFile(testAppUrn, { TEXT_WITH_DEFAULT: '' });
 
       // Assert - should use default value, not empty string
-      expect(envMap.get('TEXT_WITH_DEFAULT')).toBe('default-value');
+      expect(writtenEnv().get('TEXT_WITH_DEFAULT')).toBe('default-value');
     });
 
     it('should override default value when form provides a value', async () => {
       // Arrange
-      const envMap = new Map<string, string>();
-      envUtils.envStringToMap.mockReturnValue(envMap);
-
       const appInfoWithDefaults = {
         ...mockAppInfo,
         form_fields: [
@@ -382,15 +434,12 @@ describe('AppHelpers', () => {
       });
 
       // Assert - should use form values, not defaults
-      expect(envMap.get('TEXT_WITH_DEFAULT')).toBe('custom-value');
-      expect(envMap.get('BOOLEAN_WITH_DEFAULT')).toBe('false');
+      expect(writtenEnv().get('TEXT_WITH_DEFAULT')).toBe('custom-value');
+      expect(writtenEnv().get('BOOLEAN_WITH_DEFAULT')).toBe('false');
     });
 
     it('should handle number zero as valid form value and not use default', async () => {
       // Arrange
-      const envMap = new Map<string, string>();
-      envUtils.envStringToMap.mockReturnValue(envMap);
-
       const appInfoWithDefaults = {
         ...mockAppInfo,
         form_fields: [
@@ -409,14 +458,11 @@ describe('AppHelpers', () => {
       await appHelpers.generateEnvFile(testAppUrn, { NUMBER_WITH_DEFAULT: 0 });
 
       // Assert - should use 0, not the default
-      expect(envMap.get('NUMBER_WITH_DEFAULT')).toBe('0');
+      expect(writtenEnv().get('NUMBER_WITH_DEFAULT')).toBe('0');
     });
 
     it('should handle false as valid form value and not use default', async () => {
       // Arrange
-      const envMap = new Map<string, string>();
-      envUtils.envStringToMap.mockReturnValue(envMap);
-
       const appInfoWithDefaults = {
         ...mockAppInfo,
         form_fields: [
@@ -435,7 +481,7 @@ describe('AppHelpers', () => {
       await appHelpers.generateEnvFile(testAppUrn, { BOOLEAN_WITH_DEFAULT: false });
 
       // Assert - should use false, not the default
-      expect(envMap.get('BOOLEAN_WITH_DEFAULT')).toBe('false');
+      expect(writtenEnv().get('BOOLEAN_WITH_DEFAULT')).toBe('false');
     });
   });
 });

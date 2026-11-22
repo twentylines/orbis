@@ -109,6 +109,7 @@ export function HomeSystemStatus() {
             clockGHz={system.data?.cpu.reportedClockGHz}
             memoryUsed={memoryUsed}
             memoryTotal={memoryAvailable ? memoryTotal : null}
+            memoryScope={system.data?.memory.scope}
             diskUsed={disk?.usedBytes ?? null}
             diskTotal={disk?.sizeBytes ?? null}
             diskLabel={diskLabel}

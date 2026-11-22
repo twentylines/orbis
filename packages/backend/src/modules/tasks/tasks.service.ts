@@ -10,11 +10,13 @@ import type { AppUrn } from '@runtipi/common/types';
 import { type } from 'arktype';
 import { taskAttentionKey, taskAttentionLedgerSchema } from '@runtipi/common/schemas/task-history';
 import { installationHeld } from '@/common/installation-mode';
+import { Subject } from 'rxjs';
+import { taskPhaseSchema, type TaskPhase } from '@runtipi/common/schemas/task-history';
 
 type TaskEvent = { requestId: string; appUrn: AppUrn; command: TaskAction; displayName?: string };
 const limit = 300;
 const retentionDays = 30;
-const active = new Set<TaskRecord['status']>(['queued', 'running', 'unconfirmed']);
+const active = new Set<TaskRecord['status']>(['queued', 'running', 'cancelling', 'unconfirmed']);
 const storedHistory = taskRecordSchema.array().narrow((tasks) => tasks.length <= limit);
 
 @Injectable()
@@ -25,6 +27,15 @@ export class TasksService implements OnModuleInit {
   private storage: TaskHistory['storage'] = 'persistent';
   private unreadable = false;
   private readonly attentionWrites = new Map<number, Promise<unknown>>();
+  private readonly changes = new Subject<void>();
+
+  changesForClient() {
+    return this.changes.asObservable();
+  }
+
+  onModuleDestroy() {
+    this.changes.complete();
+  }
 
   constructor(
     private readonly config: ConfigurationService,
@@ -62,6 +73,7 @@ export class TasksService implements OnModuleInit {
       if (parsed instanceof type.errors) throw new Error('Task history is invalid');
       const now = new Date().toISOString();
       this.tasks = parsed.map((task) => {
+        if (task.cancellable !== undefined) task.cancellable = false;
         if (active.has(task.status)) {
           this.transition(task, 'interrupted');
           task.updatedAt = now;
@@ -103,12 +115,21 @@ export class TasksService implements OnModuleInit {
     }
   }
 
-  private async change(event: TaskEvent, update: (task: TaskRecord) => void) {
+  private async change(event: TaskEvent, update: (task: TaskRecord) => void, requireStarted = false) {
     await this.load();
     this.writes = this.writes
       .catch(() => undefined)
       .then(async () => {
         let task = this.tasks.find((item) => item.id === event.requestId);
+        if (
+          requireStarted &&
+          (!task ||
+            !task.startedAt ||
+            !['running', 'cancelling', 'unconfirmed'].includes(task.status) ||
+            task.appUrn !== event.appUrn ||
+            task.action !== event.command)
+        )
+          return;
         if (!task) {
           const now = new Date().toISOString();
           task = {
@@ -124,9 +145,11 @@ export class TasksService implements OnModuleInit {
           };
           this.tasks.unshift(task);
         }
+        if (task.appUrn !== event.appUrn || task.action !== event.command) return;
         update(task);
         this.prune();
         await this.persist();
+        this.changes.next();
       })
       .catch(() => {
         this.storage = 'unavailable';
@@ -142,15 +165,65 @@ export class TasksService implements OnModuleInit {
   start(event: TaskEvent) {
     return this.change(event, (task) => {
       this.transition(task, 'running');
+      delete task.phase;
       task.startedAt = new Date().toISOString();
       task.updatedAt = task.startedAt;
       task.finishedAt = null;
     });
   }
 
+  progress(event: TaskEvent, phase: TaskPhase) {
+    if (taskPhaseSchema(phase) instanceof type.errors) return Promise.resolve();
+    return this.change(
+      event,
+      (task) => {
+        // The requesting client can time out while this request's worker continues.
+        // A real worker stage confirms liveness; persisted interrupted or terminal work stays closed.
+        if (task.status !== 'cancelling') this.transition(task, 'running');
+        task.phase = phase;
+        task.updatedAt = new Date().toISOString();
+      },
+      true,
+    );
+  }
+
   finish(event: TaskEvent, success: boolean) {
     return this.change(event, (task) => {
       this.transition(task, success ? 'succeeded' : 'failed');
+      task.finishedAt = new Date().toISOString();
+      task.updatedAt = task.finishedAt;
+      if (task.cancellable !== undefined) task.cancellable = false;
+    });
+  }
+
+  setCancellable(event: TaskEvent, value: boolean) {
+    return this.change(event, (task) => {
+      task.cancellable = value && ['queued', 'running', 'unconfirmed'].includes(task.status);
+    });
+  }
+
+  requeue(task: TaskRecord) {
+    return this.change({ requestId: task.id, appUrn: task.appUrn, command: task.action }, (current) => {
+      if (current.status !== 'interrupted' || current.startedAt !== null) return;
+      current.status = 'queued';
+      current.cancellable = true;
+      current.updatedAt = new Date().toISOString();
+    });
+  }
+
+  cancelling(event: TaskEvent) {
+    return this.change(event, (task) => {
+      if (!active.has(task.status)) return;
+      this.transition(task, 'cancelling');
+      task.cancellable = false;
+      task.updatedAt = new Date().toISOString();
+    });
+  }
+
+  cancelled(event: TaskEvent) {
+    return this.change(event, (task) => {
+      this.transition(task, 'cancelled');
+      task.cancellable = false;
       task.finishedAt = new Date().toISOString();
       task.updatedAt = task.finishedAt;
     });

@@ -7,7 +7,7 @@ import { EncryptionService } from '@/core/encryption/encryption.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { PasswordService } from '@/core/password/password.service';
 import { UserRepository } from '@/modules/user/user.repository';
-import { HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import type { Request } from 'express';
 import { SESSION_COOKIE_NAME } from '@/common/constants';
 import psl from 'psl';
@@ -18,6 +18,10 @@ import { TotpAuthenticator } from './utils/totp-authenticator';
 import { normalizeNewUsername } from './username';
 import { PasskeyStore } from './passkey.store';
 import { sensitiveAccountBinding } from './sensitive-action-context';
+import { credentialWriters } from '../sentinel-recovery/writer-gate';
+import { CredentialSynchronization } from '../sentinel-recovery/credential-synchronization.service';
+import { RecoveryChangeError } from '../sentinel-recovery/change-coordinator';
+import { OwnershipWriteError } from '../sentinel-recovery/ownership-authority';
 
 const TOTP_SESSION_EXPIRATION = 60 * 5;
 const MAX_TOTP_ATTEMPTS = 5;
@@ -39,7 +43,20 @@ export class AuthService {
     private filesystem: FilesystemService,
     private passwordService: PasswordService,
     private passkeys: PasskeyStore,
+    @Optional() private readonly credentialSync?: CredentialSynchronization,
   ) {}
+
+  private credentialChanges() {
+    if (!this.credentialSync)
+      throw new ServiceUnavailableException('The credential change could not be verified. Check recovery before trying again.');
+    return this.credentialSync;
+  }
+
+  private async requireCredentialAccount(accountId: number) {
+    // Address lookup preserves the existing missing-account policy; all proof
+    // and authority checks are repeated against the coordinator's locked row.
+    if (!(await this.userRepository.getUserById(accountId))) throw new TranslatableError('AUTH_ERROR_USER_NOT_FOUND');
+  }
 
   public getCookieDomain(domain?: string) {
     if (!domain || !validator.isFQDN(domain)) {
@@ -61,7 +78,7 @@ export class AuthService {
    * @param password - The password of the user to login.
    * @returns The session ID.
    */
-  public login = async (input: LoginBody) => {
+  public login = credentialWriters.wrap(async (input: LoginBody) => {
     const { username, password } = input;
 
     const user = await this.userRepository.getUserByUsername(username);
@@ -78,9 +95,9 @@ export class AuthService {
     }
 
     return this.beginVerifiedLogin(user);
-  };
+  });
 
-  public beginVerifiedLogin = async (user: NonNullable<Awaited<ReturnType<UserRepository['getUserById']>>>) => {
+  public beginVerifiedLogin = credentialWriters.wrap(async (user: NonNullable<Awaited<ReturnType<UserRepository['getUserById']>>>) => {
     if (user.totpEnabled) {
       const totpSessionId = crypto.randomUUID();
       this.cache.set(totpSessionId, user.id.toString(), TOTP_SESSION_EXPIRATION);
@@ -93,7 +110,7 @@ export class AuthService {
     return {
       sessionId,
     };
-  };
+  });
 
   /**
    * Verify TOTP code and return a JWT token
@@ -102,7 +119,7 @@ export class AuthService {
    * @param {string} params.totpSessionId - The TOTP session ID
    * @param {string} params.totpCode - The TOTP code
    */
-  public verifyTotp = async (params: { totpSessionId: string; totpCode: string }) => {
+  public verifyTotp = credentialWriters.wrap(async (params: { totpSessionId: string; totpCode: string }) => {
     const { totpSessionId, totpCode } = params;
     const userId = this.cache.get(totpSessionId);
     const attemptKey = `totp-attempts:${totpSessionId}`;
@@ -147,14 +164,14 @@ export class AuthService {
     return {
       sessionId,
     };
-  };
+  });
 
   /**
    * Creates a new user with the provided email and password and returns a session token
    *
    * @param {LoginBody} input - An object containing the email and password fields
    */
-  public register = async (input: RegisterBody) => {
+  public register = credentialWriters.wrap(async (input: RegisterBody) => {
     if (await this.userRepository.getFirstOperator()) {
       throw new TranslatableError('AUTH_ERROR_ADMIN_ALREADY_EXISTS', {}, HttpStatus.FORBIDDEN);
     }
@@ -176,10 +193,22 @@ export class AuthService {
     }
 
     const hash = await this.passwordService.hash(password);
-    const newUser = await this.userRepository.createFirstOperator({ username: identifier, password: hash });
-
-    if (!newUser) {
-      throw new TranslatableError('AUTH_ERROR_ADMIN_ALREADY_EXISTS', {}, HttpStatus.FORBIDDEN);
+    const ownership = await this.credentialChanges().beginOwnership('first-registration');
+    let newUser: Awaited<ReturnType<UserRepository['createFirstOperator']>>;
+    try {
+      // register already holds credentialWriters; Root's durable lifecycle hold
+      // must still be current immediately before the SQL writer is invoked.
+      await ownership.beforeWrite();
+      newUser = await this.userRepository.createFirstOperator({ username: identifier, password: hash });
+      if (!newUser) throw new Error('First operator creation did not confirm ownership.');
+      await ownership.finishCommitted();
+    } catch (error) {
+      if (ownership.outcome.writes === 'not-started') {
+        await ownership.cancelUnwritten().catch(() => false);
+      }
+      // A rejected SQL call or lost Root reply cannot prove that no account
+      // was created. Keep the Root hold and never delete the resulting row.
+      throw error instanceof OwnershipWriteError ? error : new OwnershipWriteError(ownership.outcome);
     }
 
     const sessionId = await this.sessionManager.createSession(newUser.id);
@@ -187,7 +216,7 @@ export class AuthService {
     return {
       sessionId,
     };
-  };
+  });
 
   /**
    * Logs out the currently logged in user.
@@ -199,72 +228,47 @@ export class AuthService {
   /**
    * Change the username of the currently logged in user.
    */
-  public changeUsername = async (params: { password: string; userId: number; newUsername: string }) => {
-    if (this.config.get('demoMode')) {
-      throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
-    }
-
+  public changeUsername = credentialWriters.wrap(async (params: { password: string; userId: number; newUsername: string }) => {
+    if (this.config.get('demoMode')) throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
     const { newUsername, password, userId } = params;
+    await this.requireCredentialAccount(userId);
+    let identifier: string | null = null;
+    return this.credentialChanges().change({
+      accountId: userId,
+      authorize: async (user) => {
+        if (!(await this.passwordService.verify(password, user.password))) throw new TranslatableError('AUTH_ERROR_INVALID_PASSWORD');
+        identifier = normalizeNewUsername(newUsername);
+        if (!identifier) throw new TranslatableError('AUTH_ERROR_INVALID_USERNAME');
+        if (await this.userRepository.getUserByUsername(identifier)) throw new TranslatableError('AUTH_ERROR_USER_ALREADY_EXISTS');
+      },
+      plan: () => {
+        if (!identifier) throw new TranslatableError('AUTH_ERROR_INVALID_USERNAME');
+        return { patch: { username: identifier }, value: true };
+      },
+      afterSuccess: async (value: boolean) => {
+        await this.sessionManager.destroyAllSessionsByUserId(userId);
+        return value;
+      },
+    });
+  });
 
-    const user = await this.userRepository.getUserById(userId);
-
-    if (!user) {
-      throw new TranslatableError('AUTH_ERROR_USER_NOT_FOUND');
-    }
-
-    const valid = await this.passwordService.verify(password, user.password);
-
-    if (!valid) {
-      throw new TranslatableError('AUTH_ERROR_INVALID_PASSWORD');
-    }
-
-    const identifier = normalizeNewUsername(newUsername);
-
-    if (!identifier) {
-      throw new TranslatableError('AUTH_ERROR_INVALID_USERNAME');
-    }
-
-    const existingUser = await this.userRepository.getUserByUsername(identifier);
-
-    if (existingUser) {
-      throw new TranslatableError('AUTH_ERROR_USER_ALREADY_EXISTS');
-    }
-
-    await this.userRepository.updateUser(user.id, { username: identifier });
-    await this.sessionManager.destroyAllSessionsByUserId(user.id);
-
-    return true;
-  };
-
-  public changePassword = async (params: { currentPassword: string; newPassword: string; userId: number }) => {
-    if (this.config.get('demoMode')) {
-      throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
-    }
-
+  public changePassword = credentialWriters.wrap(async (params: { currentPassword: string; newPassword: string; userId: number }) => {
+    if (this.config.get('demoMode')) throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
     const { currentPassword, newPassword, userId } = params;
-
-    const user = await this.userRepository.getUserById(userId);
-
-    if (!user) {
-      throw new TranslatableError('AUTH_ERROR_USER_NOT_FOUND');
-    }
-
-    const valid = await this.passwordService.verify(currentPassword, user.password);
-
-    if (!valid) {
-      throw new TranslatableError('AUTH_ERROR_INVALID_PASSWORD');
-    }
-
-    if (newPassword.length < 8) {
-      throw new TranslatableError('AUTH_ERROR_INVALID_PASSWORD_LENGTH');
-    }
-
-    const hash = await this.passwordService.hash(newPassword);
-    await this.userRepository.updateUser(user.id, { password: hash });
-    await this.sessionManager.destroyAllSessionsByUserId(user.id);
-
-    return true;
-  };
+    await this.requireCredentialAccount(userId);
+    return this.credentialChanges().change({
+      accountId: userId,
+      authorize: async (user) => {
+        if (!(await this.passwordService.verify(currentPassword, user.password))) throw new TranslatableError('AUTH_ERROR_INVALID_PASSWORD');
+        if (newPassword.length < 8) throw new TranslatableError('AUTH_ERROR_INVALID_PASSWORD_LENGTH');
+      },
+      plan: async () => ({ patch: { password: await this.passwordService.hash(newPassword) }, value: true }),
+      afterSuccess: async (value: boolean) => {
+        await this.sessionManager.destroyAllSessionsByUserId(userId);
+        return value;
+      },
+    });
+  });
 
   /**
    * Given a userId returns the TOTP URI and the secret key
@@ -273,96 +277,59 @@ export class AuthService {
    * @param {number} params.userId - The user's ID
    * @param {string} params.password - The user's password
    */
-  public getTotpUri = async (params: { userId: number; password: string }) => {
-    if (this.config.get('demoMode')) {
-      throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
-    }
-
-    const { userId, password } = params;
-
-    const user = await this.userRepository.getUserById(userId);
-
-    if (!user) {
-      throw new TranslatableError('AUTH_ERROR_USER_NOT_FOUND');
-    }
-
-    const isPasswordValid = await this.passwordService.verify(password, user.password);
-    if (!isPasswordValid) {
-      throw new TranslatableError('AUTH_ERROR_INVALID_PASSWORD');
-    }
-
-    if (user.totpEnabled) {
-      throw new TranslatableError('AUTH_ERROR_TOTP_ALREADY_ENABLED');
-    }
-
-    let { salt } = user;
-    const newTotpSecret = TotpAuthenticator.generateSecret();
-
-    if (!salt) {
-      salt = this.sessionManager.generateSalt();
-    }
-
-    const encryptedTotpSecret = this.encryption.encrypt(newTotpSecret, salt);
-
-    await this.userRepository.updateUser(userId, { totpSecret: encryptedTotpSecret, salt });
-
-    const uri = TotpAuthenticator.keyuri(user.username, 'Orbis', newTotpSecret);
-
-    return { uri, key: newTotpSecret };
-  };
-
-  public setupTotp = async (params: { userId: number; totpCode: string }) => {
-    if (this.config.get('demoMode')) {
-      throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
-    }
-
-    const { userId, totpCode } = params;
-    const user = await this.userRepository.getUserById(userId);
-
-    if (!user) {
-      throw new TranslatableError('AUTH_ERROR_USER_NOT_FOUND');
-    }
-
-    if (user.totpEnabled || !user.totpSecret || !user.salt) {
-      throw new TranslatableError('AUTH_ERROR_TOTP_ALREADY_ENABLED');
-    }
-
-    const totpSecret = this.encryption.decrypt(user.totpSecret, user.salt);
-    const isValid = TotpAuthenticator.check(totpCode, totpSecret);
-
-    if (!isValid) {
-      throw new TranslatableError('AUTH_ERROR_TOTP_INVALID_CODE', {}, HttpStatus.BAD_REQUEST);
-    }
-
-    await this.userRepository.updateUser(userId, { totpEnabled: true });
-
-    return true;
-  };
-
-  public disableTotp = async (params: { userId: number; password: string }) => {
+  public getTotpUri = credentialWriters.wrap(async (params: { userId: number; password: string }) => {
     if (this.config.get('demoMode')) throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
     const { userId, password } = params;
+    await this.requireCredentialAccount(userId);
+    return this.credentialChanges().change({
+      accountId: userId,
+      authorize: async (user) => {
+        if (!(await this.passwordService.verify(password, user.password))) throw new TranslatableError('AUTH_ERROR_INVALID_PASSWORD');
+        if (user.totpEnabled) throw new TranslatableError('AUTH_ERROR_TOTP_ALREADY_ENABLED');
+      },
+      plan: (user) => {
+        const salt = user.salt || this.sessionManager.generateSalt();
+        const secret = TotpAuthenticator.generateSecret();
+        return {
+          patch: { totpSecret: this.encryption.encrypt(secret, salt), salt },
+          value: { uri: TotpAuthenticator.keyuri(user.username, 'Orbis', secret), key: secret },
+        };
+      },
+    });
+  });
 
-    const user = await this.userRepository.getUserById(userId);
+  public setupTotp = credentialWriters.wrap(async (params: { userId: number; totpCode: string }) => {
+    if (this.config.get('demoMode')) throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
+    const { userId, totpCode } = params;
+    await this.requireCredentialAccount(userId);
+    return this.credentialChanges().change({
+      accountId: userId,
+      authorize: (user) => {
+        if (user.totpEnabled || !user.totpSecret || !user.salt) throw new TranslatableError('AUTH_ERROR_TOTP_ALREADY_ENABLED');
+        if (!TotpAuthenticator.check(totpCode, this.encryption.decrypt(user.totpSecret, user.salt)))
+          throw new TranslatableError('AUTH_ERROR_TOTP_INVALID_CODE', {}, HttpStatus.BAD_REQUEST);
+      },
+      plan: () => ({ patch: { totpEnabled: true }, value: true }),
+    });
+  });
 
-    if (!user) {
-      throw new TranslatableError('AUTH_ERROR_USER_NOT_FOUND');
-    }
-
-    if (!user.totpEnabled) {
-      throw new TranslatableError('AUTH_ERROR_TOTP_NOT_ENABLED');
-    }
-
-    const isPasswordValid = await this.passwordService.verify(password, user.password);
-    if (!isPasswordValid) {
-      throw new TranslatableError('AUTH_ERROR_INVALID_PASSWORD');
-    }
-
-    await this.passkeys.clearTotpAfterPasskey(userId);
-    await this.userRepository.updateUser(userId, { totpEnabled: false, totpSecret: null });
-
-    return true;
-  };
+  public disableTotp = credentialWriters.wrap(async (params: { userId: number; password: string }) => {
+    if (this.config.get('demoMode')) throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
+    const { userId, password } = params;
+    await this.requireCredentialAccount(userId);
+    return this.credentialChanges().change({
+      accountId: userId,
+      authorize: async (user) => {
+        if (!user.totpEnabled) throw new TranslatableError('AUTH_ERROR_TOTP_NOT_ENABLED');
+        if (!(await this.passwordService.verify(password, user.password))) throw new TranslatableError('AUTH_ERROR_INVALID_PASSWORD');
+      },
+      plan: (_user, draft) => {
+        const keys = draft.users[String(userId)];
+        if (keys) delete keys.totpAfterPasskey;
+        return { patch: { totpEnabled: false, totpSecret: null }, value: true };
+      },
+    });
+  });
 
   /**
    * Change the password of the operator user
@@ -377,39 +344,71 @@ export class AuthService {
 
     this.operatorResetInProgress = true;
     try {
-      const isRequested = await this.checkPasswordChangeRequest();
+      return await credentialWriters.run(async () => {
+        const isRequested = await this.checkPasswordChangeRequest();
 
-      if (!isRequested) {
-        throw new TranslatableError('AUTH_ERROR_NO_CHANGE_PASSWORD_REQUEST', {}, HttpStatus.BAD_REQUEST);
-      }
+        if (!isRequested) {
+          throw new TranslatableError('AUTH_ERROR_NO_CHANGE_PASSWORD_REQUEST', {}, HttpStatus.BAD_REQUEST);
+        }
 
-      const { newPassword } = params;
-      if (newPassword.length < 8) {
-        throw new TranslatableError('AUTH_ERROR_INVALID_PASSWORD_LENGTH', {}, HttpStatus.BAD_REQUEST);
-      }
+        const { newPassword } = params;
+        if (newPassword.length < 8) {
+          throw new TranslatableError('AUTH_ERROR_INVALID_PASSWORD_LENGTH', {}, HttpStatus.BAD_REQUEST);
+        }
 
-      const user = await this.userRepository.getFirstOperator();
+        const user = await this.userRepository.getFirstOperator();
 
-      if (!user) {
-        throw new TranslatableError('AUTH_ERROR_OPERATOR_NOT_FOUND');
-      }
+        if (!user) {
+          throw new TranslatableError('AUTH_ERROR_OPERATOR_NOT_FOUND');
+        }
 
-      const hash = await this.passwordService.hash(newPassword);
-      await this.passkeys.removeAll(user.id);
-      await this.userRepository.updateUser(user.id, { password: hash, totpEnabled: false, totpSecret: null });
-      try {
-        await this.sessionManager.destroyAllSessionsByUserId(user.id);
-      } catch {
-        throw new TranslatableError('AUTH_ERROR_RESET_SESSION_CLEANUP');
-      }
-
-      const { dataDir } = this.config.get('directories');
-      const cleared = await this.filesystem.removeFile(path.join(dataDir, 'state', 'password-change-request'));
-      if (!cleared) {
-        throw new TranslatableError('AUTH_ERROR_RESET_REQUEST_CLEANUP');
-      }
-
-      return { email: user.username };
+        let cleanupError: TranslatableError | undefined;
+        try {
+          return await this.credentialChanges().change({
+            accountId: user.id,
+            authorize: async () => {
+              if (!(await this.checkPasswordChangeRequest()))
+                throw new TranslatableError('AUTH_ERROR_NO_CHANGE_PASSWORD_REQUEST', {}, HttpStatus.BAD_REQUEST);
+            },
+            plan: async (account, draft) => {
+              delete draft.users[String(account.id)];
+              return {
+                patch: { password: await this.passwordService.hash(newPassword), totpEnabled: false, totpSecret: null },
+                value: { email: account.username },
+              };
+            },
+            afterSuccess: async (value: { email: string }) => {
+              try {
+                await this.sessionManager.destroyAllSessionsByUserId(user.id);
+              } catch {
+                cleanupError = new TranslatableError('AUTH_ERROR_RESET_SESSION_CLEANUP');
+                throw cleanupError;
+              }
+              const { dataDir } = this.config.get('directories');
+              const cleared = await this.filesystem.removeFile(path.join(dataDir, 'state', 'password-change-request'));
+              if (!cleared) {
+                cleanupError = new TranslatableError('AUTH_ERROR_RESET_REQUEST_CLEANUP');
+                throw cleanupError;
+              }
+              return value;
+            },
+          });
+        } catch (error) {
+          if (
+            cleanupError &&
+            error instanceof RecoveryChangeError &&
+            error.outcome.phase === 'after-success' &&
+            error.outcome.sql === 'committed' &&
+            error.outcome.recovery === 'completed'
+          ) {
+            // Preserve existing cleanup guidance without losing the internal fact
+            // that credentials/Root committed. Nothing here claims a rollback.
+            Object.defineProperty(cleanupError, 'recoveryOutcome', { value: error.outcome });
+            throw cleanupError;
+          }
+          throw error;
+        }
+      });
     } finally {
       this.operatorResetInProgress = false;
     }
@@ -502,12 +501,12 @@ export class AuthService {
    * @returns {boolean} - A boolean indicating if the file is removed successfully or not
    * @throws {Error} - If the file cannot be removed
    */
-  public cancelPasswordChangeRequest = async () => {
+  public cancelPasswordChangeRequest = credentialWriters.wrap(async () => {
     const { dataDir } = this.config.get('directories');
     const changeRequestPath = path.join(dataDir, 'state', 'password-change-request');
 
     await this.filesystem.removeFile(changeRequestPath);
 
     return true;
-  };
+  });
 }

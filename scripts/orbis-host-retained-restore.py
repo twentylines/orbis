@@ -378,9 +378,16 @@ class RestoreManager:
             self.save(record)
             return {'version': 1, 'transactionId': identifier, 'phase': grant['phase'], 'sequence': grant['sequence'], 'status': 'complete'}
 
-    def prepare(self, identifier, token):
+    def require_forward_effects(self, record):
+        if record['stage'].get('metadata', {}).get('schema') != 'orbis.time-machine-runtime.v6':
+            raise ValueError('Retained restore lacks the supported historical app effect contract')
+        self.runtime.validate_forward_activation(record)
+
+    def prepare(self, identifier, token, *, for_activation=False):
         with self.operation(identifier):
             record = self.authenticate(identifier, token)
+            if for_activation:
+                self.require_forward_effects(record)
             if record['phase'] == 'prepared' and record['decision'] is None:
                 self.runtime.validate_prepared(record)
                 return self.public(record)
@@ -404,6 +411,7 @@ class RestoreManager:
     def _finish(self, record, *, app_recovery=False):
         if record['decision'] != 'commit':
             raise fail()
+        self.require_forward_effects(record)
         # Commit authorization never discards old data. Public candidate startup
         # follows the durable root and Node commit decisions; recovery is forward-only.
         record['phase'] = 'committing'
@@ -447,6 +455,7 @@ class RestoreManager:
                 return self._finish(record)
             if record['phase'] != 'prepared' or record['decision'] is not None:
                 raise fail()
+            self.require_forward_effects(record)
             try:
                 self.runtime.validate_prepared(record)
                 record['phase'] = 'promoting'
@@ -551,6 +560,8 @@ class RestoreManager:
                 self.runtime.retire_auxiliary(record)
                 self.seal_terminal(record)
                 return self.public(record)
+            if record['decision'] == 'commit':
+                self.require_forward_effects(record)
             # Kill a surviving exec before revoking its phase grant. The inert
             # coordinator can then safely execute a new bounded recovery grant.
             self.runtime.quiesce_owned(record)

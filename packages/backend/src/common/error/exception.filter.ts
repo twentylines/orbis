@@ -5,6 +5,7 @@ import { type } from 'arktype';
 import { timeMachineIssueSchema } from '@runtipi/common/schemas/time-machine';
 import { timeMachineRestoreIssueSchema } from '@runtipi/common/schemas/time-machine-restore';
 import type { Request, Response } from 'express';
+import { isRecoveryKeyHandoffPath } from '../helpers/error-helpers';
 import { TranslatableError } from './translatable-error';
 
 @Catch()
@@ -15,6 +16,7 @@ export class MainExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
+    const keyHandoff = isRecoveryKeyHandoffPath(request.originalUrl ?? request.url);
     const status = exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
     let message = 'Internal server error';
@@ -26,13 +28,13 @@ export class MainExceptionFilter implements ExceptionFilter {
       if (timeMachineIssueSchema.allows(issue) || timeMachineRestoreIssueSchema.allows(issue)) code = issue.code;
     }
 
-    if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
+    if (status === HttpStatus.INTERNAL_SERVER_ERROR && !keyHandoff) {
       this.logger.error(`An error occured while calling: ${request.url}`, exception);
     }
 
     // @ts-expect-error
     const error = exception?.error;
-    if (error instanceof type.errors) {
+    if (error instanceof type.errors && !keyHandoff) {
       this.logger.error('Schema validation failed: ', request.path, JSON.stringify(error, null, 2));
     }
 
@@ -55,7 +57,7 @@ export class MainExceptionFilter implements ExceptionFilter {
       }
     }
 
-    if (status >= 500 && !(exception instanceof TranslatableError)) {
+    if (status >= 500 && !(exception instanceof TranslatableError) && !keyHandoff) {
       Sentry.captureException(exception, {
         tags: {
           cause: String(cause),

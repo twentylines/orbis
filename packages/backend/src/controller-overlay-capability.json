@@ -1,8 +1,18 @@
 {
-  "schema": "orbis.controller-overlay-startup.v2",
-  "version": 2,
+  "schema": "orbis.controller-overlay-startup.v4",
+  "version": 4,
   "preserveNetworkAccess": true,
   "preserveRunningApps": true,
   "environment": "ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1",
-  "updateBackupPolicy": "none"
+  "updateBackupPolicy": "none",
+  "cliIdentity": {
+    "path": "/data/.secrets/cli-secret",
+    "encoding": "hex32",
+    "creator": "backend"
+  },
+  "coreNetwork": {
+    "name": "runtipi_tipi_core_network",
+    "internal": true,
+    "peers": ["runtipi-db", "runtipi-queue"]
+  }
 }

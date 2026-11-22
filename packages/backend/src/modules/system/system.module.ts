@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ExchangeRatesController } from './exchange-rates.controller';
 import { ExchangeRatesService } from './exchange-rates.service';
 import { SystemController } from './system.controller';
+import { HostMemoryService } from './host-memory.service';
 import { SystemService } from './system.service';
 import { OrbisReleaseService } from './orbis-release.service';
 import { DockerModule } from '../docker/docker.module';
@@ -25,9 +26,10 @@ import { InstalledSoftwareService } from './installed-software.service';
   providers: [
     ExchangeRatesService,
     SystemService,
+    HostMemoryService,
+    InstalledSoftwareService,
     SentinelService,
     SentinelReleasesService,
-    InstalledSoftwareService,
     OrbisReleaseService,
     OrbisReleaseChannelsService,
     ContainerTelemetryService,

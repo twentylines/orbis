@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -16,6 +16,18 @@ const legacy = {
   environment: 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1',
 };
 const current = { ...legacy, schema: 'orbis.controller-overlay-startup.v2', version: 2, updateBackupPolicy: 'none' };
+const cli = {
+  ...current,
+  schema: 'orbis.controller-overlay-startup.v3',
+  version: 3,
+  cliIdentity: { path: '/data/.secrets/cli-secret', encoding: 'hex32', creator: 'backend' },
+};
+const network = {
+  ...cli,
+  schema: 'orbis.controller-overlay-startup.v4',
+  version: 4,
+  coreNetwork: { name: 'runtipi_tipi_core_network', internal: true, peers: ['runtipi-db', 'runtipi-queue'] },
+};
 
 // The distributed, bundled probe runs in a child with only its two read-only
 // inputs substituted. No /app or /data fixture is created on the test host.
@@ -68,7 +80,17 @@ function runProbe(capability: unknown) {
   }
 }
 
-test.each([legacy, current])('the shipped probe reads the exact supported source capability $schema', (capability) => {
+test('the actual target capability is supported by the shipped read-only bootstrap probe', () => {
+  const actual = JSON.parse(readFileSync(path.resolve(import.meta.dir, '../src/controller-overlay-capability.json'), 'utf8'));
+  expect(actual).toEqual(network);
+  const result = runProbe(actual);
+  expect(result.error).toBeUndefined();
+  expect(result.status).toBe(0);
+  expect(result.stderr).toBe('');
+  expect(JSON.parse(result.stdout).profile).toBe('controller-preservation.v1');
+});
+
+test.each([legacy, current, cli, network])('the shipped probe reads the exact supported source capability $schema', (capability) => {
   const before = Date.now();
   const result = runProbe(capability);
   expect(result.error).toBeUndefined();
@@ -96,6 +118,13 @@ test.each(
     { ...current, preserveRunningApps: false },
     { ...current, preserveNetworkAccess: 1 },
     { ...current, unexpected: true },
+    { ...cli, cliIdentity: { ...cli.cliIdentity, path: '/data/elsewhere' } },
+    { ...cli, cliIdentity: { ...cli.cliIdentity, creator: 'cli' } },
+    { ...cli, cliIdentity: { ...cli.cliIdentity, encoding: 'hex64' } },
+    { ...cli, cliIdentity: { ...cli.cliIdentity, extra: true } },
+    { ...network, coreNetwork: { ...network.coreNetwork, internal: false } },
+    { ...network, coreNetwork: { ...network.coreNetwork, peers: [...network.coreNetwork.peers].reverse() } },
+    { ...network, coreNetwork: { ...network.coreNetwork, extra: true } },
   ].map((capability) => ({ capability })),
 )('the shipped probe refuses an ambiguous or unsupported capability %#', ({ capability }) => {
   const result = runProbe(capability);

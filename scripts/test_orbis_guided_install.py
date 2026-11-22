@@ -185,7 +185,7 @@ class GuidedTests(GuidedFixture):
     
                 install.side_effect = finish_install
                 new = SimpleNamespace(IMAGES={}, choose_ports=lambda *args: (80, 443), install=install)
-                enable = SimpleNamespace(require_scoped_cleanup=mock.Mock())
+                enable = SimpleNamespace(require_scoped_cleanup=mock.Mock(), available=mock.Mock(), enable=mock.Mock())
                 private = SimpleNamespace(private_directory=lambda _path: state)
                 modules = {
                     "orbis-install-new.py": new,
@@ -211,6 +211,11 @@ class GuidedTests(GuidedFixture):
                     else:
                         self.assertEqual(GUIDE.main(), 0)
                 self.assertEqual(install.call_count, 1)
+                enable.available.assert_called_once()
+                if failed:
+                    enable.enable.assert_not_called()
+                else:
+                    self.assertTrue(enable.enable.call_args.kwargs['credentials_only'])
                 self.assertEqual(GUIDE.CHANNELS.read_channel(root)["channel"], "stable" if failed else "nightly")
                 completion = f"Orbis {GUIDE.UI.display_release(selected_manifest['tag'])} is installed at {root}."
                 self.assertEqual(completion in output.getvalue(), not failed)
@@ -279,12 +284,14 @@ class GuidedTests(GuidedFixture):
                     return {"result": "orbis-installed"}
 
                 new = SimpleNamespace(IMAGES={}, choose_ports=lambda *args: (80, 443), install=mock.Mock(side_effect=install))
-                modules = {"orbis-install-new.py": new, "orbis-host-service-enable.py": SimpleNamespace(require_scoped_cleanup=mock.Mock()), "install-orbis.py": SimpleNamespace(private_directory=lambda path: path)}
+                security = SimpleNamespace(require_scoped_cleanup=mock.Mock(), available=mock.Mock(), enable=mock.Mock())
+                modules = {"orbis-install-new.py": new, "orbis-host-service-enable.py": security, "install-orbis.py": SimpleNamespace(private_directory=lambda path: path)}
                 output = io.StringIO()
                 with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE, "require_docker_prerequisites"), mock.patch.object(GUIDE.APPS, "Docker"), mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value={"installations": [selected] if existing else [], "unassignedManagedContainers": []}), mock.patch.object(GUIDE.APPS, "require_assigned"), mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release"), mock.patch.object(GUIDE.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)), mock.patch.object(GUIDE.shutil, "which", return_value=None), mock.patch.object(GUIDE, "load", side_effect=lambda name, _: modules[name]), mock.patch.object(GUIDE, "prepare_backup_tools", side_effect=lambda _: ready.append("rsync")), mock.patch.object(GUIDE, "replacement", side_effect=install), contextlib.redirect_stdout(output):
                     self.assertEqual(GUIDE.main(), 0)
                 self.assertIn("Open Orbis in your browser:\n  http://192.0.2.40\n", output.getvalue())
                 self.assertNotIn("http://192.0.2.40:80", output.getvalue())
+                self.assertTrue(security.enable.call_args.kwargs['credentials_only'])
 
     def test_real_controlling_terminal_answers_are_independent_of_piped_stdin(self):
         import fcntl
@@ -463,6 +470,52 @@ class NewInstallationTests(unittest.TestCase):
         self.assertTrue(socket["read_only"])
         self.assertEqual(services["runtipi-reverse-proxy"]["ports"], ["18170:80", "18171:443"])
 
+    def test_new_stack_mounts_host_cgroup_read_only_without_creating_it(self):
+        with mock.patch.object(NEW.Path, "is_dir", return_value=True):
+            config = NEW.compose(Path("/opt/orbis/server"), HEALTHY["image"], "/run/selected-docker.sock", 18170, 18171)
+        mount = next(m for m in config["services"]["runtipi"]["volumes"] if m["target"] == "/host/sys/fs/cgroup")
+        self.assertEqual(mount["source"], "/sys/fs/cgroup")
+        self.assertTrue(mount["read_only"])
+        self.assertEqual(mount["bind"], {"create_host_path": False})
+        with mock.patch.object(NEW.Path, "is_dir", return_value=False):
+            unavailable = NEW.compose(Path("/opt/orbis/server"), HEALTHY["image"], "/run/selected-docker.sock", 18170, 18171)
+        self.assertFalse(any(m["target"] == "/host/sys/fs/cgroup" for m in unavailable["services"]["runtipi"]["volumes"]))
+
+    def test_new_stack_isolates_database_and_queue_while_preserving_the_dashboard_external_network(self):
+        root = Path('/opt/orbis/server')
+        config = NEW.compose(root, HEALTHY['image'], '/run/selected-docker.sock', 18170, 18171)
+        services, networks = config['services'], config['networks']
+        self.assertEqual(services['runtipi']['networks'], ['tipi_main_network', 'tipi_core_network'])
+        self.assertEqual(services['runtipi-reverse-proxy']['networks'], ['tipi_main_network'])
+        for name in ('runtipi-db', 'runtipi-queue'):
+            self.assertEqual(services[name]['networks'], ['tipi_core_network'])
+            self.assertNotIn('ports', services[name])
+        self.assertTrue(networks['tipi_core_network']['internal'])
+        self.assertEqual(networks['tipi_core_network']['name'], NEW.CORE_NETWORK)
+        self.assertFalse(networks['tipi_main_network'].get('internal', False))
+        self.assertEqual(networks['tipi_core_network']['labels']['io.orbis.root.sha256'], hashlib.sha256(str(root).encode()).hexdigest())
+
+    def test_either_existing_controller_network_blocks_new_install_before_allocating_storage(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            reader = mock.Mock()
+            reader.containers.return_value = []
+            for name in (NEW.NETWORK, NEW.CORE_NETWORK):
+                with self.subTest(name=name):
+                    reader._read.return_value = name + '\n'
+                    with self.assertRaisesRegex(ValueError, 'network already exists'):
+                        NEW.require_empty(root, reader, 18170, 18171)
+                    self.assertEqual(list(root.iterdir()), [])
+
+    def test_new_stack_keeps_cli_credentials_in_a_dedicated_persistent_bind(self):
+        root = Path('/opt/orbis/server')
+        config = NEW.compose(root, HEALTHY['image'], '/run/selected-docker.sock', 18170, 18171)
+        selected = next(m for m in config['services']['runtipi']['volumes'] if m['target'] == '/data/.secrets')
+        self.assertEqual(selected['source'], str(root / '.secrets'))
+        self.assertFalse(selected['read_only'])
+        self.assertEqual(selected['bind'], {'create_host_path': False})
+        self.assertFalse(any(m.get('source') == selected['source'] for m in config['services']['runtipi-reverse-proxy']['volumes']))
+
     def test_nonempty_root_and_invalid_ports_fail_before_docker_reads(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary); (root / "existing-data").write_bytes(b"keep")
@@ -622,6 +675,7 @@ class Interrupted(BaseException):
 
 class HostEnableTests(unittest.TestCase):
     def setUp(self):
+        self.stage_service_files = ENABLE.SETUP._stage_service_files
         self.temporary = tempfile.TemporaryDirectory(); self.addCleanup(self.temporary.cleanup)
         self.parent = Path(self.temporary.name).resolve(); self.root = self.parent / "server"; self.root.mkdir()
         for name in ["docker-compose.yml", ".env"]:
@@ -681,6 +735,29 @@ class HostEnableTests(unittest.TestCase):
         ENABLE.SETUP.preflight.assert_called_once_with(self.root, "test", self.parent, allow_existing=True)
         self.assertEqual(self.app.read_bytes(), b"accepted app data")
 
+    def test_narrow_enable_binds_role_through_journal_copy_listener_and_final_verification(self):
+        self.status.update(serviceRole='credentials-only', credentialProtocol=1, capabilities=[])
+        ENABLE.SETUP.authenticated_socket_status.side_effect = lambda *args, **kwargs: self.authenticated()
+        result = ENABLE.enable(self.root, 'test', self.parent, credentials_only=True)
+        self.assertEqual(result['result'], 'account-security-active')
+        self.assertIs(self.record()['credentialsOnly'], True)
+        self.assertIs(ENABLE.SETUP._stage_service_files.call_args.kwargs['credentials_only'], True)
+        self.assertIs(ENABLE.SETUP._verify_service.call_args.kwargs['credentials_only'], True)
+        self.assertTrue(all(call.kwargs == {'credentials_only': True}
+                            for call in ENABLE.SETUP.authenticated_socket_status.call_args_list))
+        self.assertEqual(self.app.read_bytes(), b'accepted app data')
+
+    def test_interrupted_narrow_setup_cannot_resume_as_full_administration(self):
+        with mock.patch.object(ENABLE.SETUP, '_start_service', side_effect=Interrupted), self.assertRaises(Interrupted):
+            ENABLE.enable(self.root, 'test', self.parent, credentials_only=True)
+        original = ENABLE.journal_path(self.root, 'test').read_bytes()
+        count = ENABLE.SETUP._stage_service_files.call_count
+        with self.assertRaisesRegex(ValueError, 'original verified installer sources'):
+            ENABLE.enable(self.root, 'test', self.parent)
+        self.assertEqual(ENABLE.SETUP._stage_service_files.call_count, count)
+        self.assertEqual(ENABLE.journal_path(self.root, 'test').read_bytes(), original)
+        self.assertEqual(self.app.read_bytes(), b'accepted app data')
+
     def test_interrupted_helper_enable_recovers_forward_without_rewinding_app_data(self):
         self.interrupt_start()
         self.app.write_bytes(b"accepted after interruption")
@@ -688,6 +765,63 @@ class HostEnableTests(unittest.TestCase):
         self.assertEqual(self.app.read_bytes(), b"accepted after interruption")
         self.assertEqual(self.record()["stage"], "complete")
         self.assertTrue(ENABLE.SETUP._stage_service_files.call_args.kwargs["resume"])
+        self.assertEqual(ENABLE.SETUP._stage_service_files.call_args.kwargs["expected_sources"], self.record()["sources"])
+
+    def test_verified_setup_resume_binds_original_extraction_and_copy_before_start(self):
+        extraction = self.parent / "verified"
+        source = extraction / "scripts"
+        crossed = self.parent / "crossed" / "scripts"
+        selection, receipt = "c" * 64, "e" * 64
+        start = ENABLE.SETUP._start_service
+        with mock.patch.object(ENABLE.SETUP, "hold_source_selection", return_value=contextlib.nullcontext()):
+            ENABLE.SETUP._stage_service_files.side_effect = None
+            ENABLE.SETUP._stage_service_files.return_value = receipt
+            with mock.patch.object(ENABLE.SETUP, "_start_service", side_effect=Interrupted), self.assertRaises(Interrupted):
+                ENABLE.enable(self.root, "test", source, source_custody=selection)
+            self.assertEqual(self.record()["sourceCustodyDirectory"], str(extraction))
+            self.assertEqual(self.record()["sourceCustodySha256"], selection)
+            self.assertEqual(self.record()["hostCopyCustodySha256"], receipt)
+            with self.assertRaisesRegex(ValueError, "original verified installer sources"):
+                ENABLE.enable(self.root, "test", crossed, source_custody=selection)
+            ENABLE.SETUP._stage_service_files.return_value = "f" * 64
+            with self.assertRaisesRegex(ValueError, "installed Host copy changed"):
+                ENABLE.enable(self.root, "test", source, source_custody=selection)
+            start.assert_not_called()
+            ENABLE.SETUP._stage_service_files.return_value = receipt
+            result = ENABLE.enable(self.root, "test", source, source_custody=selection)
+            self.assertEqual(result["hostCopyCustodySha256"], receipt)
+            self.assertEqual(self.record()["stage"], "complete")
+
+    def _assert_changed_journal_sources_refuse(self, verify_only):
+        code = self.parent / "source.py"; unit = self.parent / "source.service"
+        driver = self.parent / "orbis-host-service-setup.py"; enable = self.parent / "orbis-host-service-enable.py"
+        paths = [code, driver, enable, unit]
+        for path in paths:
+            path.write_bytes(b"inert reviewed " + path.name.encode())
+        hashes = {str(path.relative_to(self.parent.parent)): hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+        ENABLE.source_hashes.return_value = hashes
+        if verify_only:
+            with mock.patch.object(ENABLE.SETUP, "_verify_service", side_effect=Interrupted), self.assertRaises(Interrupted):
+                self.run_enable()
+            self.assertEqual(self.record()["stage"], "verifying")
+        starts = self.events.count("started")
+        def change_before_pin(*args, **kwargs):
+            code.write_bytes(b"different unreviewed source")
+            return self.stage_service_files(*args, **kwargs)
+        with mock.patch.object(ENABLE.SETUP, "source_files", return_value=([code], unit)), \
+                mock.patch.object(ENABLE.SETUP, "_stage_service_files", side_effect=change_before_pin):
+            with self.assertRaisesRegex(ValueError, "reviewed setup journal"):
+                self.run_enable()
+        self.assertEqual(self.events.count("started"), starts)
+        self.assertFalse(ENABLE.SETUP.INSTALL_DIR.exists())
+        self.assertEqual(self.record()["sources"], hashes)
+        self.assertEqual(self.app.read_bytes(), b"accepted app data")
+
+    def test_source_changed_after_journal_check_refuses_before_first_start(self):
+        self._assert_changed_journal_sources_refuse(False)
+
+    def test_source_changed_after_journal_check_refuses_verification_only_restart(self):
+        self._assert_changed_journal_sources_refuse(True)
 
     def test_interruption_between_override_and_enrollment_resumes_exact_transition(self):
         with mock.patch.object(ENABLE.HOST, "write_state", side_effect=Interrupted), self.assertRaises(Interrupted):
@@ -935,7 +1069,7 @@ class ExplicitChannelTests(GuidedFixture):
     def test_stale_helper_capabilities_stop_before_channel_change_or_core_plan(self):
         current = {**MANIFEST, "tag": "v1.0.0", "digest": "sha256:" + "d" * 64}
         channel = {"channel": "stable", "revision": "initial"}
-        upgrade = SimpleNamespace(SERVICE=SimpleNamespace(installed_manifest=lambda *_: current, read_channel=lambda *_: channel), SETUP=SimpleNamespace(SOCKET_FILE=Path("/unused/socket")), upgrade=mock.Mock())
+        upgrade = SimpleNamespace(SERVICE=SimpleNamespace(installed_manifest=lambda *_: current, read_channel=lambda *_: channel), SETUP=SimpleNamespace(SOCKET_FILE=Path("/unused/socket"), installed_credentials_only=lambda *_: False), upgrade=mock.Mock())
         enable = SimpleNamespace(enable=mock.Mock())
         display = SimpleNamespace(set_remaining_steps=lambda _: None, step=lambda *_: contextlib.nullcontext())
         for capabilities in (None, [], ["restart.v1"], "restart.v1 packages.refresh.v1 release-channels.v1"):
@@ -944,10 +1078,14 @@ class ExplicitChannelTests(GuidedFixture):
                     GUIDE.update_existing(Path("/unused"), SimpleNamespace(context="test"), MANIFEST, display, selected_channel="nightly")
                 self.assertEqual(failure.exception.code, "host-service-capabilities-unsupported")
                 request.assert_called_once_with(Path("/unused/socket"), "/v1/status")
-        source = ast.parse(Path(__file__).with_name("orbis-host-service.py").read_text())
-        declared = [{value.value for value in node.elts if isinstance(value, ast.Constant) and isinstance(value.value, str)} for node in ast.walk(source) if isinstance(node, ast.List)]
         required = {"restart.v1", "packages.refresh.v1", "release-channels.v1"}
-        self.assertGreaterEqual(sum(required.issubset(values) for values in declared), 2)
+        for enrolled in (False, True):
+            service = SimpleNamespace(root=Path("/unused"), context="test", job_file=Path("/unused/job"),
+                                      state_matches=lambda _saved: enrolled)
+            with mock.patch.object(GUIDE.CHANNELS.HOST, "saved_state", return_value=MANIFEST), mock.patch.object(GUIDE.CHANNELS.HOST, "current_core", return_value=HEALTHY), mock.patch.object(GUIDE.CHANNELS, "read_private", return_value=None), mock.patch.object(GUIDE.CHANNELS.PACKAGES, "smart_tools_supported", return_value=False):
+                actual = GUIDE.CHANNELS.HostService.status(service)
+            self.assertEqual(actual["enrolled"], enrolled)
+            GUIDE.require_helper_capabilities(actual)
         GUIDE.require_helper_capabilities({"capabilities": sorted(required)})
 
     def test_modern_update_does_not_install_unused_backup_tools(self):
@@ -959,7 +1097,7 @@ class ExplicitChannelTests(GuidedFixture):
                 current = {**target, 'tag': 'v1.0.0', 'digest': 'sha256:' + 'd' * 64}
                 channel = {'channel': 'stable', 'revision': 'initial'}
                 upgrade = SimpleNamespace(SERVICE=SimpleNamespace(installed_manifest=lambda *_: current,
-                    read_channel=lambda *_: channel), SETUP=SimpleNamespace(SOCKET_FILE=Path('/unused/socket')),
+                    read_channel=lambda *_: channel), SETUP=SimpleNamespace(SOCKET_FILE=Path('/unused/socket'), installed_credentials_only=lambda *_: False),
                     upgrade=mock.Mock())
                 enable = SimpleNamespace(enable=mock.Mock())
                 calls, steps = [], []
@@ -992,7 +1130,7 @@ class ExplicitChannelTests(GuidedFixture):
     def test_nightly_policy_keeps_following_nightly_when_latest_artifact_is_stable(self):
         current = {**MANIFEST, "tag": "v1.0.0", "digest": "sha256:" + "d" * 64}
         channel = {"channel": "nightly", "revision": "initial"}
-        upgrade = SimpleNamespace(SERVICE=SimpleNamespace(installed_manifest=lambda *_: current, read_channel=lambda *_: channel), SETUP=SimpleNamespace(SOCKET_FILE=Path("/unused/socket")), upgrade=mock.Mock())
+        upgrade = SimpleNamespace(SERVICE=SimpleNamespace(installed_manifest=lambda *_: current, read_channel=lambda *_: channel), SETUP=SimpleNamespace(SOCKET_FILE=Path("/unused/socket"), installed_credentials_only=lambda *_: False), upgrade=mock.Mock())
         enable = SimpleNamespace(enable=mock.Mock())
         identifier = "a-test-job"
         calls = []

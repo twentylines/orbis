@@ -168,12 +168,17 @@ export async function inventoryBackup(
   const visit = async (source: string, name: string, root: string): Promise<void> => {
     signal.throwIfAborted();
     if (!safeName(name) || names.has(name) || !inside(root, source)) throw new BackupRequirementError('Backup source contains an unsupported path.');
-    // Reset intent belongs to this host. Replaying its journal or staged preferences from an archive can resume an unrelated reset.
+    // Host-local reset and migration recovery records must not be replayed from an ordinary archive.
     const parent = path.posix.dirname(name);
     const resetStage =
       (parent === 'data' || resetScopes.some((scope) => parent === `data/state/${scope}`) || parent === 'data/state') &&
       /^\.orbis-reset-stage-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(path.posix.basename(name));
-    if (name === 'data/state/orbis-reset' || resetStage) {
+    if (
+      name === 'data/state/orbis-reset' ||
+      name === 'data/state/orbis-app-migrations' ||
+      name === 'data/state/time-machine/image-pins/ordinary-results' ||
+      resetStage
+    ) {
       const stat = await fs.lstat(source);
       if (
         !stat.isDirectory() ||
@@ -182,7 +187,11 @@ export async function inventoryBackup(
         (process.getuid && stat.uid !== process.getuid()) ||
         (await fs.realpath(source)) !== source
       )
-        throw new BackupRequirementError('Reset recovery files need local review before creating a full backup.');
+        throw new BackupRequirementError(
+          name === 'data/state/orbis-app-migrations'
+            ? 'App migration recovery files need local review before creating a full backup.'
+            : 'Reset recovery files need local review before creating a full backup.',
+        );
       return;
     }
     if (source !== root && path.dirname(source) === root && path.basename(source).startsWith('.orbis-restore-')) {

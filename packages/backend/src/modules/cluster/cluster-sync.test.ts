@@ -152,6 +152,34 @@ async function run(expected: Record<string, string>) {
   return source.run(1, targetId, { revision: 1, expected });
 }
 
+it('autosaves the reviewed automatic policy without rebasing a plan or writing to the other server', async () => {
+  await optIn(['customisation']);
+  const before = (await sourceStore.read(sourceId)).plans[0];
+  const targetBefore = await targetStore.read(targetId);
+  expect(await source.setPlanAutomatic(1, targetId, { revision: 1, automatic: true })).toEqual({
+    saved: true,
+    revision: 2,
+    automatic: true,
+  });
+  expect((await sourceStore.read(sourceId)).plans[0]).toEqual({ ...before, revision: 2, automatic: true });
+  expect(await targetStore.read(targetId)).toEqual(targetBefore);
+  vi.mocked(clusterRequest).mockRejectedValueOnce(new Error('unavailable'));
+  const calls = vi.mocked(clusterRequest).mock.calls.length;
+  expect(await source.setPlanAutomatic(1, targetId, { revision: 2, automatic: false })).toEqual({ saved: true, revision: 3, automatic: false });
+  expect(vi.mocked(clusterRequest)).toHaveBeenCalledTimes(calls);
+  expect((await sourceStore.read(sourceId)).plans[0]).toEqual({ ...before, revision: 3, automatic: false });
+  await expect(source.setPlanAutomatic(1, targetId, { revision: 2, automatic: true })).rejects.toThrow('review sync choices');
+});
+
+it('keeps first setup, account and receiving baseline changes behind explicit review', async () => {
+  await expect(source.setPlanAutomatic(1, targetId, { revision: 0, automatic: true })).rejects.toThrow('review sync choices');
+  await optIn(['customisation']);
+  await expect(source.setPlanAutomatic(2, targetId, { revision: 1, automatic: true })).rejects.toThrow('your account');
+  await target.receiving(2, { revision: 1, categories: ['customisation'] });
+  await expect(source.setPlanAutomatic(1, targetId, { revision: 1, automatic: true })).rejects.toThrow('Receiving choices');
+  expect((await sourceStore.read(sourceId)).plans[0]).toMatchObject({ revision: 1, automatic: false });
+});
+
 it('pairing never opts in, exports account secrets or applies settings implicitly', async () => {
   const before = await targetPrefs.read(2);
   const status = await source.status(1);
@@ -278,6 +306,9 @@ it('binds signed requests to paired source/target identities, prevents replay an
 });
 it('rejects unsafe or unsupported payload fields and stale receiving consent without modifying settings', async () => {
   const safe = projectCustomisation(await sourcePrefs.read(1));
+  expect(safe.appearance).not.toHaveProperty('materialMode');
+  expect(safe.appearance).not.toHaveProperty('themeColour');
+  expect(safe.appearance).not.toHaveProperty('wallpaperColours');
   expect(customisationSchema({ ...safe, serverName: 'overwrite-host' })).toBeInstanceOf(type.errors);
   expect(customisationSchema({ ...safe, appearance: { wallpaperImage: 'a'.repeat(64) } })).toBeInstanceOf(type.errors);
   expect(syncPeerSchema({ version: 2, action: 'status', sourceId, targetId })).toBeInstanceOf(type.errors);
@@ -286,6 +317,32 @@ it('rejects unsafe or unsupported payload fields and stale receiving consent wit
   const reloaded = await new ClusterSyncStore(targetConfig).read(targetId);
   expect(reloaded.receiving.userId).toBe(2);
   expect((await fs.stat(path.join(root, 'target', 'state', 'cluster-sync', 'settings.json'))).mode & 0o777).toBe(0o600);
+});
+
+it('syncs a colour preset and explicitly inactive fine controls into a legacy receiving account', async () => {
+  const local = await targetPrefs.read(2);
+  const { materialMode: _oldMode, themeColour: _oldColour, ...legacyAppearance } = local.appearance ?? {};
+  const file = path.join(root, 'target', 'state', 'desktop', '2.json');
+  await fs.writeFile(file, JSON.stringify({ ...local, appearance: legacyAppearance }), { mode: 0o600 });
+  await sourcePrefs.write(1, {
+    ...DEFAULT_DESKTOP_PREFERENCES,
+    preset: 'burgundy',
+    appearance: {
+      ...DEFAULT_DESKTOP_PREFERENCES.appearance,
+      materialMode: 'default',
+      surfaceOpacity: 0,
+      chromeOpacity: 39,
+      themeColour: '#9e2448',
+      wallpaperColours: true,
+    },
+  });
+  expect((await run(await optIn(['customisation']))).status).toBe('synced');
+  const reloaded = await new DesktopPreferencesService(targetConfig).read(2);
+  expect(reloaded).toMatchObject({
+    preset: 'burgundy',
+    appearance: { materialMode: 'default', surfaceOpacity: 0, chromeOpacity: 39, themeColour: '#9e2448', wallpaperColours: false },
+  });
+  expect(JSON.parse(await fs.readFile(file, 'utf8')).appearance.materialMode).toBe('default');
 });
 
 it('requires new receiving consent and primary choices after leaving and pairing again', async () => {
@@ -409,6 +466,25 @@ it('persists actual same-origin UI API choices and restores them after reload wh
       .send({ revision: 2, expected: reloaded.body.hosts[0].revisions })
       .expect(201);
     expect((await new DesktopPreferencesService(targetConfig).read(2)).preset).toBe('forest');
+    await api().put(`${base}/plans/${targetId}/automatic`).set('x-fixture-role', 'operator').send({ revision: 2, automatic: false }).expect(403);
+    await api()
+      .put(`${base}/plans/${targetId}/automatic`)
+      .set('Origin', origin)
+      .set('x-fixture-role', 'cli')
+      .send({ revision: 2, automatic: false })
+      .expect(403);
+    await api()
+      .put(`${base}/plans/${targetId}/automatic`)
+      .set('Origin', origin)
+      .set('x-fixture-role', 'operator')
+      .send({ revision: 2, automatic: false })
+      .expect(200, { saved: true, revision: 3, automatic: false });
+    expect((await new ClusterSyncStore(sourceConfig).read(sourceId)).plans[0]).toMatchObject({
+      categories: ['customisation'],
+      automatic: false,
+      revision: 3,
+      sourceUserId: 1,
+    });
   } finally {
     await app.close();
   }

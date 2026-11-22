@@ -8,6 +8,7 @@ import type Dockerode from 'dockerode';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { DOCKERODE } from '../docker/docker.module';
 import { BackupRequirementError } from './backup-files';
+import { requireBackupInstallHoldsClear } from './backup-install-admission';
 import { BackupDockerVolumes, type BackupVolumeArchive, type BackupVolumeInventory, type BackupVolumePlan } from './backup-docker-volumes';
 
 export type BackupContainer = { id: string; project: string; running: boolean };
@@ -190,12 +191,14 @@ export class BackupRuntimeService {
 
   async resume(containers: BackupContainer[]) {
     let failed = false;
+    const { dataDir } = this.config.get('directories');
     for (const container of containers.filter((item) => item.running)) {
       try {
         const handle = this.docker.getContainer(container.id);
         const state = await handle.inspect();
         if (state.Config.Labels?.['com.docker.compose.project'] !== container.project || state.State.Paused)
           throw new BackupRequirementError('App ownership or state changed.');
+        await requireBackupInstallHoldsClear(dataDir, [container.project], 'live');
         if (!state.State.Running) await handle.start();
         if (!(await handle.inspect()).State.Running) throw new BackupRequirementError('App did not resume.');
       } catch {

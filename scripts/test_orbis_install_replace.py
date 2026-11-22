@@ -61,7 +61,7 @@ class ReplacementTests(unittest.TestCase):
         }
         self.record = {
             "schema": REPLACE.SCHEMA, "id": "00000000-0000-4000-8000-000000000001", "retainedName": "orbis-previous-transaction", "stage": "holding",
-            "review": {"target": TARGET, "controllerName": "runtipi", "image": {"imageId": NEW_IMAGE}, "checkpoint": {"roles": {OLD: "controller"}, "storage": {"containerStates": [{"id": OLD, "restartPolicy": {"Name": "unless-stopped", "MaximumRetryCount": 0}}]}}},
+            "review": {"mode": "keep", "target": TARGET, "controllerName": "runtipi", "image": {"imageId": NEW_IMAGE}, "checkpoint": {"roles": {OLD: "controller"}, "storage": {"containerStates": [{"id": OLD, "restartPolicy": {"Name": "unless-stopped", "MaximumRetryCount": 0}}]}}},
         }
         self.record["quiescedConfiguration"] = REPLACE.APPS.digest({key: self.raw[key] for key in ("Config", "HostConfig")})
         patcher = mock.patch.object(REPLACE, "inspect", side_effect=lambda _, key: copy.deepcopy(self.raw if key == OLD else self.created))
@@ -263,8 +263,12 @@ class ReplacementTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             (root / ".env").write_text('JWT_SECRET=rotated-fixture-key\n')
+            (root / 'state').mkdir()
             self.record["review"].update(mode="fresh", root=folder)
-            self.record["freshReset"] = {"jwtHash": REPLACE.FRESH.key_hash("rotated-fixture-key"), "cacheRevoked": True}
+            self.record['review']['fresh'] = {'reviewed': 'synthetic-authentication-state'}
+            self.record["freshReset"] = {"jwtHash": REPLACE.FRESH.key_hash("rotated-fixture-key"), "cacheRevoked": True,
+                'passkeysRevoked': True, 'reviewSha256': REPLACE.FRESH.review_digest(self.record['review']['fresh']),
+                'authenticationSha256': REPLACE.FRESH.review_digest(REPLACE.FRESH.authentication(root))}
             self.raw["Config"]["Env"].append("JWT_SECRET=old-fixture-key")
             self.record["quiescedConfiguration"] = REPLACE.APPS.digest({key: self.raw[key] for key in ("Config", "HostConfig")})
             body = self.create("resume")
@@ -275,9 +279,144 @@ class ReplacementTests(unittest.TestCase):
 
     def test_fresh_cannot_publish_before_credential_revocation_is_recorded(self):
         self.record["review"]["mode"] = "fresh"
-        with self.assertRaisesRegex(REPLACE.ReplacementError, "revocation must finish"):
+        with self.assertRaisesRegex(REPLACE.ReplacementError, "Root ownership permit"):
             REPLACE.finish(self.record, self.reader)
         self.assertEqual(self.record["stage"], "holding")
+
+    def fresh_receipt(self):
+        if not hasattr(self, 'fresh_root'):
+            temporary = tempfile.TemporaryDirectory()
+            self.addCleanup(temporary.cleanup)
+            self.fresh_root = Path(temporary.name).resolve()
+            (self.fresh_root / 'state').mkdir()
+        self.record['review'].update(mode='fresh', fresh={'reviewed': 'synthetic-authentication-state'}, root=str(self.fresh_root))
+        receipt = {'jwtHash': 'a' * 64, 'cacheRevoked': True, 'passkeysRevoked': True,
+                   'reviewSha256': REPLACE.FRESH.review_digest(self.record['review']['fresh']),
+                   'authenticationSha256': REPLACE.FRESH.review_digest(REPLACE.FRESH.authentication(self.fresh_root))}
+        self.record['freshReset'] = receipt
+        return receipt
+
+    def test_old_fresh_receipt_holds_before_any_candidate_or_finish_side_effect(self):
+        self.record['review'].update(mode='fresh', fresh={'reviewed': 'synthetic-authentication-state'})
+        self.record['freshReset'] = {'jwtHash': 'a' * 64, 'cacheRevoked': True}
+        original = copy.deepcopy(self.record)
+        for phase in ('hold', 'resume', 'normal'):
+            with self.subTest(phase=phase), mock.patch.object(REPLACE, 'save') as save, mock.patch.object(REPLACE, 'Engine') as engine:
+                with self.assertRaisesRegex(REPLACE.ReplacementError, 'revocation must finish'):
+                    REPLACE.create_candidate(self.record, self.reader, phase)
+                save.assert_not_called()
+                engine.assert_not_called()
+            with self.assertRaisesRegex(REPLACE.ReplacementError, 'revocation must finish'):
+                REPLACE.payload(self.record, self.reader, phase)
+        with mock.patch.object(REPLACE, 'save') as save, mock.patch.object(REPLACE, 'start_originals') as start:
+            with self.assertRaisesRegex(REPLACE.ReplacementError, 'Root ownership permit'):
+                REPLACE.finish(self.record, self.reader)
+            save.assert_not_called()
+            start.assert_not_called()
+        self.assertEqual(self.record, original)
+
+    def test_fresh_revocation_flags_are_strict_booleans_and_receipt_binds_review(self):
+        for field in ('cacheRevoked', 'passkeysRevoked'):
+            for invalid in (None, False, 1, 'true', {}, []):
+                receipt = self.fresh_receipt()
+                receipt[field] = invalid
+                with self.subTest(field=field, kind=type(invalid).__name__), self.assertRaises(REPLACE.ReplacementError):
+                    REPLACE.require_fresh_revocation(self.record)
+        receipt = self.fresh_receipt()
+        self.record['review']['fresh']['reviewed'] = 'different-reviewed-state'
+        with self.assertRaisesRegex(REPLACE.ReplacementError, 'current review'):
+            REPLACE.require_fresh_revocation(self.record)
+        self.assertNotEqual(receipt['reviewSha256'], REPLACE.FRESH.review_digest(self.record['review']['fresh']))
+
+    def test_current_fresh_receipt_cannot_substitute_for_root_ownership(self):
+        self.fresh_receipt()
+        before = copy.deepcopy(self.record)
+        with mock.patch.object(REPLACE, 'save') as save, mock.patch.object(REPLACE, 'start_originals') as start:
+            with self.assertRaisesRegex(REPLACE.ReplacementError, 'Root ownership permit'):
+                REPLACE.finish(self.record, self.reader)
+            save.assert_not_called()
+            start.assert_not_called()
+        self.assertEqual(self.record, before)
+
+    def test_finished_journal_and_copied_recovery_location_cannot_be_replayed(self):
+        self.fresh_receipt()
+        self.record['stage'] = 'complete'
+        original = copy.deepcopy(self.record)
+        with mock.patch.object(REPLACE, 'save') as save:
+            with self.assertRaisesRegex(REPLACE.ReplacementError, 'cannot be replayed'):
+                REPLACE.finish(self.record, self.reader)
+            save.assert_not_called()
+        self.assertEqual(self.record, original)
+        self.reader.context = 'explicit-context'
+        self.record['stage'] = 'committing'
+        self.record['review'].update(root='/original-installation', dockerContext=self.reader.context, journal='/private/original-journal.json')
+        with mock.patch.object(REPLACE.TX.RESTORE, 'private_json', return_value=self.record), mock.patch.object(REPLACE, 'validate_review'), \
+                mock.patch.object(REPLACE, 'finish') as finish, mock.patch.object(REPLACE, 'check_originals') as check:
+            with self.assertRaisesRegex(REPLACE.ReplacementError, 'another installation'):
+                REPLACE.recover(Path('/original-installation'), self.reader, Path('/private/copied-journal.json'), host_writers_stopped=True)
+            finish.assert_not_called()
+            check.assert_not_called()
+
+    def test_old_and_current_receipt_recovery_hold_without_root_ownership(self):
+        self.fresh_receipt()
+        self.reader.context = 'explicit-context'
+        journal = Path('/private/current-journal.json')
+        self.record['stage'] = 'committing'
+        self.record['review'].update(dockerContext=self.reader.context, journal=str(journal))
+        root = Path(self.record['review']['root'])
+        original = copy.deepcopy(self.record)
+        self.record['freshReset'].pop('passkeysRevoked')
+        old = copy.deepcopy(self.record)
+        with mock.patch.object(REPLACE.TX.RESTORE, 'private_json', side_effect=lambda _: copy.deepcopy(self.record)), \
+                mock.patch.object(REPLACE, 'validate_review'), mock.patch.object(REPLACE, 'finish', return_value={'result': 'fixture-resumed'}) as finish, \
+                mock.patch.object(REPLACE, 'check_originals') as check, mock.patch.object(REPLACE, 'save') as save:
+            with self.assertRaisesRegex(REPLACE.ReplacementError, 'Root ownership permit'):
+                REPLACE.recover(root, self.reader, journal, host_writers_stopped=True)
+            finish.assert_not_called()
+            check.assert_not_called()
+            save.assert_not_called()
+            self.assertEqual(self.record, old)
+            self.record = original
+            with self.assertRaisesRegex(REPLACE.ReplacementError, 'Root ownership permit'):
+                REPLACE.recover(root, self.reader, journal, host_writers_stopped=True)
+            finish.assert_not_called()
+            check.assert_not_called()
+            save.assert_not_called()
+            self.assertEqual(self.record, original)
+
+    def test_recreated_passkey_or_replaced_authentication_parent_cannot_use_valid_revocation_receipt(self):
+        self.fresh_receipt()
+        auth = self.fresh_root / 'state/auth'
+        auth.mkdir(mode=0o700)
+        file = auth / 'passkeys.json'
+        file.write_text('{"old-credential":"retained"}')
+        file.chmod(0o600)
+        with mock.patch.object(REPLACE, 'save') as save, mock.patch.object(REPLACE, 'start_originals') as start:
+            with self.assertRaisesRegex(REPLACE.ReplacementError, 'Root ownership permit'):
+                REPLACE.finish(self.record, self.reader)
+            save.assert_not_called()
+            start.assert_not_called()
+        self.assertEqual(file.read_text(), '{"old-credential":"retained"}')
+        state = self.fresh_root / 'state'
+        state.rename(self.fresh_root / 'retained-old-state')
+        state.mkdir()
+        with self.assertRaisesRegex(REPLACE.ReplacementError, 'keep the installation stopped'):
+            REPLACE.require_fresh_revocation(self.record)
+        self.assertEqual((self.fresh_root / 'retained-old-state/auth/passkeys.json').read_text(), '{"old-credential":"retained"}')
+
+    def test_forward_recovery_preserves_new_keys_after_validated_normal_candidate_admission(self):
+        self.fresh_receipt()
+        self.record.update(stage='committing', candidatePhase='normal', candidate={'id': NEW, 'definition': 'c' * 64, 'validated': True})
+        auth = self.fresh_root / 'state/auth'
+        auth.mkdir(mode=0o700)
+        file = auth / 'passkeys.json'
+        file.write_text('{"new-account-key":"keep after activation"}')
+        file.chmod(0o600)
+        REPLACE.require_fresh_revocation(self.record)
+        self.assertEqual(file.read_text(), '{"new-account-key":"keep after activation"}')
+        self.record['freshReset']['passkeysRevoked'] = 1
+        with self.assertRaisesRegex(REPLACE.ReplacementError, 'revocation must finish'):
+            REPLACE.require_fresh_revocation(self.record)
 
 
 if __name__ == "__main__":

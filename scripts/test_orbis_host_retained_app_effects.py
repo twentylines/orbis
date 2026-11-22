@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -18,6 +19,7 @@ def load(filename, name):
 
 
 M = load('orbis-host-retained-app-effects.py', 'retained_app_effects_test')
+D = load('orbis-host-retained-app-driver.py', 'retained_app_driver_test')
 F = load('test_orbis_host_app_create_intent.py', 'retained_app_effects_actual_fixture')
 A = load('orbis-host-retained-authority.py', 'retained_app_effects_test_authority')
 C = load('orbis-host-capture-authority.py', 'retained_app_effects_test_capture')
@@ -77,7 +79,7 @@ class Engine:
         if self.lose == 'create': self.lose = None; raise LostReply('lost create reply')
         return identity
 
-    def start(self, identity):
+    def start(self, identity, _plan):
         self.event('start', identity)
         raw = self.objects[identity]
         raw['State'].update(Running=True, Status='running', StartedAt='2026-11-02T00:00:00Z')
@@ -100,8 +102,8 @@ class Engine:
 class EffectsTests(unittest.TestCase):
     def setUp(self):
         # tempfile's public /tmp ancestors deliberately do not satisfy root policy.
-        self.temp = tempfile.TemporaryDirectory(prefix='.app-effects-test-', dir=Path(__file__).parent)
-        self.path = Path(self.temp.name); os.chmod(self.path, 0o700)
+        self.temp = tempfile.TemporaryDirectory(prefix='.app-effects-test-', dir=os.environ.get('ORBIS_PRIVATE_TEST_TMP') or Path(__file__).parent)
+        self.path = Path(self.temp.name) / 'effects'; self.path.mkdir(mode=0o700)
         self.values = [F.fixture(1, True), F.fixture(2, False)]
         self.plans = [{'appUrn': value[0]['appUrn'], 'service': value[0]['service'], 'ordinal': value[0]['ordinal'],
                        'sourceId': value[0]['inspect']['Id'], 'wasRunning': value[0]['wasRunning'],
@@ -113,18 +115,125 @@ class EffectsTests(unittest.TestCase):
             raw['State'].update(Paused=False, Restarting=False, Status='exited', StartedAt='2026-10-01T00:00:00Z', FinishedAt='2026-11-01T00:00:00Z')
             self.destinations.append(raw)
         self.engine = Engine(self.path, self.values)
+        self.data = self.path.parent / 'installed-data'
+        self.state = self.data / 'state'
+        self.state.mkdir(parents=True)
         self.engine.objects = {raw['Id']: copy.deepcopy(raw) for raw in self.destinations}
         self.decision, self.deadline, self.allowed = 'NONE', int(time.time()) + 600, True
         self.auth_events, self.port_checks, self.destination_checks = [], 0, []
         self.kwargs = dict(restore_id='11111111-1111-4111-8111-111111111111', point_id='22222222-2222-4222-8222-222222222222',
                            operation_sha256='a' * 64, authority_sha256='b' * 64, plans=self.plans, destinations=self.destinations,
                            engine=self.engine, comparator=F.comparator(self.values[0][1]), verify_destination=self.destination,
-                           verify_ports=self.ports, authorize=self.authorize, storage=STORAGE)
+                           verify_ports=self.ports, verify_install_holds=self.install_holds,
+                           authorize=self.authorize, storage=STORAGE)
         self.driver = self.new_driver()
 
     def tearDown(self): self.temp.cleanup()
 
     def new_driver(self): return M.RetainedAppEffects(self.path, **self.kwargs)
+
+    def install_holds(self, plans, *, starting=False):
+        urns = [plan['appUrn'] for plan in plans if plan['wasRunning']]
+        if urns:
+            with A.protected_directory(self.state, private=False) as state:
+                M.require_clear_install_holds(state, urns, owner=os.getuid(), mount_id=lambda _: 1)
+
+    def make_receipt(self, urn=None):
+        key = hashlib.sha256((urn or self.plans[0]['appUrn']).encode()).hexdigest()
+        directory = self.state / 'orbis-install-requests' / key
+        directory.parent.mkdir(mode=0o700, exist_ok=True)
+        directory.mkdir(mode=0o700, exist_ok=True)
+        return directory
+
+    def test_prepared_running_plan_refuses_intact_hold_before_any_engine_effect(self):
+        self.probe_commit()
+        marker = self.make_receipt() / 'interrupted-install'
+        marker.touch(mode=0o600)
+        previous = len(self.engine.events)
+        with self.assertRaisesRegex(ValueError, 'unfinished install recovery'):
+            self.new_driver().activate()
+        self.assertEqual(previous, len(self.engine.events))
+        self.assertTrue(marker.exists())
+
+    def test_final_engine_adapter_checks_late_hold_after_inventory_ports_and_intent(self):
+        self.probe_commit()
+        raw_start = self.engine.start
+        post = mock.Mock(side_effect=lambda method, route: raw_start(route.split('/')[2], None))
+        marker = self.make_receipt() / 'interrupted-install'
+
+        def request(method, route, *, before_request):
+            before_request()
+            post(method, route)
+
+        effects = self.new_driver()
+        adapter = SimpleNamespace(runtime=SimpleNamespace(engine=request), plan=self.kwargs, effects=effects,
+                                  verify_inventory=mock.Mock(), verify_network_definitions=mock.Mock(),
+                                  verify_ports=lambda *_args, **_kwargs: marker.touch(mode=0o600),
+                                  verify_install_holds=self.install_holds)
+        self.engine.start = D.Engine(adapter).start
+        with self.assertRaisesRegex(ValueError, 'unfinished install recovery'):
+            effects.activate()
+        self.assertTrue(marker.exists())
+        self.assertTrue(self.read()['desired'][0]['startIntent'])
+        self.assertFalse(self.read()['desired'][0]['started'])
+        post.assert_not_called()
+        before = len(self.engine.events)
+        with self.assertRaisesRegex(ValueError, 'unfinished install recovery'):
+            self.new_driver().activate()
+        self.assertEqual(len(self.engine.events), before)
+        post.assert_not_called()
+
+    def test_missing_required_store_is_not_legacy_absence_on_committed_retry(self):
+        self.probe_commit()
+        self.data.rename(self.path / 'detached-state')
+        with self.assertRaises(OSError):
+            self.new_driver().activate()
+        self.assertFalse(any(item[0] == 'start' for item in self.engine.events))
+
+    def test_empty_private_legacy_directory_allows_running_intent(self):
+        self.make_receipt()
+        self.probe_commit()
+        self.assertEqual(self.new_driver().activate()['desiredStarted'], 1)
+
+    def test_quiescent_hold_does_not_block_create_of_stopped_plans(self):
+        self.plans[0]['wasRunning'] = False
+        marker = self.make_receipt() / 'interrupted-install'
+        marker.touch(mode=0o600)
+        self.driver = self.new_driver()
+        self.probe_commit()
+        result = self.new_driver().activate()
+        self.assertEqual((result['desiredCreated'], result['desiredStarted']), (2, 0))
+        self.assertTrue(marker.exists())
+
+    def test_unprivate_symlink_and_nested_mount_receipt_observations_refuse(self):
+        directory = self.make_receipt()
+        directory.chmod(0o755)
+        with self.assertRaisesRegex(ValueError, 'storage could not be verified'):
+            self.install_holds(self.plans)
+        directory.rmdir()
+        directory.symlink_to(self.path, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'storage could not be verified'):
+            self.install_holds(self.plans)
+        directory.unlink()
+        directory.mkdir(mode=0o700)
+        with A.protected_directory(self.state, private=False) as state:
+            inode = directory.stat().st_ino
+            with self.assertRaisesRegex(ValueError, 'storage could not be verified'):
+                M.require_clear_install_holds(state, [self.plans[0]['appUrn']], owner=os.getuid(),
+                                             mount_id=lambda fd: 2 if os.fstat(fd).st_ino == inode else 1)
+
+    def test_disappearing_receipt_directory_does_not_prove_absence(self):
+        directory = self.make_receipt()
+        original_scandir = os.scandir
+
+        def replaced(fd):
+            directory.rename(self.path / 'detached-receipts')
+            directory.mkdir(mode=0o700)
+            return original_scandir(fd)
+
+        with mock.patch.object(M.os, 'scandir', side_effect=replaced):
+            with self.assertRaisesRegex(ValueError, 'storage could not be verified'):
+                self.install_holds(self.plans)
 
     def authorize(self, scope, action):
         self.auth_events.append((copy.deepcopy(scope), action))

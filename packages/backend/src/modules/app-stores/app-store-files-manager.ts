@@ -1,4 +1,10 @@
+import { copyAppPackage } from './app-package-copy';
+import { readAppPackageAsset } from './app-package-links';
 import path from 'node:path';
+import fs from 'node:fs';
+import crypto from 'node:crypto';
+import { loadUmbrelPackage, materializeUmbrelPackage } from './umbrel-package';
+import { withAppRepositoryCustody } from './app-store-lock';
 import { APP_REL_COMPOSE_FILENAME } from '@/common/constants';
 import { extractAppUrn } from '@/common/helpers/app-helpers';
 import { execFileAsync } from '@/common/helpers/exec-helpers';
@@ -24,6 +30,32 @@ export class AppStoreFilesManager {
     return path.join(directories.dataDir, 'apps');
   }
 
+  private getRepoRoot() {
+    const { directories } = this.configuration.getConfig();
+    return path.join(directories.dataDir, 'repos', this.storeConfig.slug);
+  }
+
+  private async getAppRepoDirectory(appUrn: AppUrn) {
+    const { appName } = extractAppUrn(appUrn);
+    const native = path.join(this.getAppStoreFolder(), appName);
+    if (await this.filesystem.isDirectory(native)) return native;
+    return path.join(this.getRepoRoot(), appName);
+  }
+
+  private async readUmbrelPackage(appUrn: AppUrn, directory: string) {
+    const { appInstalledDir } = this.getAppPaths(appUrn);
+    const previousPath = path.join(appInstalledDir, 'config.json');
+    const previous = (await this.filesystem.isFile(previousPath))
+      ? await this.filesystem.readJsonFile<{ catalog_revision?: string; tipi_version?: number }>(previousPath)
+      : null;
+    const official = /^https:\/\/github\.com\/getumbrel\/umbrel-apps(?:\.git)?(?:\/tree\/[^?#]+)?\/?$/.test(this.storeConfig.url ?? '');
+    return loadUmbrelPackage(directory, appUrn, previous ?? undefined, official);
+  }
+
+  private getUmbrelPackage(appUrn: AppUrn, directory: string) {
+    return withAppRepositoryCustody(path.resolve(this.getRepoRoot()), () => this.readUmbrelPackage(appUrn, directory));
+  }
+
   private getAppStoreFolder() {
     const { directories } = this.configuration.getConfig();
     return path.join(directories.dataDir, 'repos', this.storeConfig.slug, 'apps');
@@ -43,6 +75,10 @@ export class AppStoreFilesManager {
 
   private async getAppInfoFromDirectory(appUrn: AppUrn, appDirectory: string) {
     const configPath = path.join(appDirectory, 'config.json');
+
+    if (!(await this.filesystem.isFile(configPath)) && (await this.filesystem.isFile(path.join(appDirectory, 'umbrel-app.yml')))) {
+      return (await this.getUmbrelPackage(appUrn, appDirectory)).info;
+    }
 
     if (!(await this.filesystem.isFile(configPath))) {
       return;
@@ -64,8 +100,7 @@ export class AppStoreFilesManager {
       return null;
     }
 
-    const descriptionPath = path.join(appDirectory, 'metadata', 'description.md');
-    const description = (await this.filesystem.isFile(descriptionPath)) ? ((await this.filesystem.readTextFile(descriptionPath)) ?? '') : '';
+    const description = (await readAppPackageAsset(appDirectory, 'metadata/description.md').catch(() => undefined))?.bytes.toString('utf8') ?? '';
 
     return { ...parsedConfig, description };
   }
@@ -76,7 +111,7 @@ export class AppStoreFilesManager {
    */
   public async getAppInfoFromAppStore(appUrn: AppUrn) {
     try {
-      const { appRepoDir } = this.getAppPaths(appUrn);
+      const appRepoDir = await this.getAppRepoDirectory(appUrn);
 
       return await this.getAppInfoFromDirectory(appUrn, appRepoDir);
     } catch (error) {
@@ -96,7 +131,15 @@ export class AppStoreFilesManager {
   }
 
   public async getSourceDockerComposeYaml(appUrn: AppUrn) {
-    const { appRepoDir } = this.getAppPaths(appUrn);
+    const appRepoDir = await this.getAppRepoDirectory(appUrn);
+    if (
+      !(await this.filesystem.isFile(path.join(appRepoDir, 'config.json'))) &&
+      (await this.filesystem.isFile(path.join(appRepoDir, 'umbrel-app.yml')))
+    ) {
+      const app = await this.getUmbrelPackage(appUrn, appRepoDir);
+      if (!app.compose) throw new Error(app.info.compatibility?.reasons.join(' ') || 'Unsupported Umbrel application.');
+      return { path: path.join(appRepoDir, APP_REL_COMPOSE_FILENAME), content: app.compose };
+    }
 
     const appYamlPath = path.join(appRepoDir, APP_REL_COMPOSE_FILENAME);
 
@@ -133,33 +176,68 @@ export class AppStoreFilesManager {
    * @param appUrn - The app id
    */
   public async copyAppFromRepoToInstalled(appUrn: AppUrn) {
-    const { appRepoDir, appDataDir, appInstalledDir } = this.getAppPaths(appUrn);
+    return withAppRepositoryCustody(path.resolve(this.getRepoRoot()), async () => {
+      const { appDataDir, appInstalledDir } = this.getAppPaths(appUrn);
+      const appRepoDir = await this.getAppRepoDirectory(appUrn);
+      if (!(await this.filesystem.isDirectory(appRepoDir))) {
+        if (await this.filesystem.isDirectory(appInstalledDir)) return;
+        throw new Error('The app package is not available in its catalogue.');
+      }
+      if (!(await this.filesystem.createDirectory(path.dirname(appInstalledDir))))
+        throw new Error('The installed app directory could not be created.');
+      const staging = `${appInstalledDir}.package-stage-${crypto.randomUUID()}`;
+      const backup = `${appInstalledDir}.package-backup-${crypto.randomUUID()}`;
+      let backedUp = false;
+      try {
+        if (
+          !(await this.filesystem.isFile(path.join(appRepoDir, 'config.json'))) &&
+          (await this.filesystem.isFile(path.join(appRepoDir, 'umbrel-app.yml')))
+        ) {
+          const app = await this.readUmbrelPackage(appUrn, appRepoDir);
+          if (!app.info.available || !app.compose) throw new Error(app.info.compatibility?.reasons.join(' ') || 'Unsupported Umbrel application.');
+          await materializeUmbrelPackage(staging, app);
+        } else {
+          await copyAppPackage(this.filesystem.getSafeFilePath(appRepoDir), this.filesystem.getSafeFilePath(staging));
+        }
+        if (!(await this.filesystem.createDirectory(appDataDir))) throw new Error('The app data directory could not be created.');
+        if (await this.filesystem.pathExists(appInstalledDir)) {
+          await fs.promises.rename(appInstalledDir, backup);
+          backedUp = true;
+        }
+        try {
+          await fs.promises.rename(staging, appInstalledDir);
+        } catch (error) {
+          if (backedUp) {
+            await fs.promises.rename(backup, appInstalledDir);
+            backedUp = false;
+          }
+          throw error;
+        }
+        if (backedUp) {
+          await fs.promises.rm(backup, { recursive: true });
+          backedUp = false;
+        }
+      } finally {
+        await fs.promises.rm(staging, { recursive: true, force: true });
+      }
+    });
+  }
 
-    if (!(await this.filesystem.isDirectory(appRepoDir))) {
-      if (await this.filesystem.isDirectory(appInstalledDir)) {
-        this.logger.warn(`App ${appUrn} already installed, but not found in repo ${this.storeConfig.slug}. Using installed version.`);
+  public async stageAppUpdate(appUrn: AppUrn, destination: string) {
+    return withAppRepositoryCustody(path.resolve(this.getRepoRoot()), async () => {
+      const appRepoDir = await this.getAppRepoDirectory(appUrn);
+      if (
+        !(await this.filesystem.isFile(path.join(appRepoDir, 'config.json'))) &&
+        (await this.filesystem.isFile(path.join(appRepoDir, 'umbrel-app.yml')))
+      ) {
+        const app = await this.readUmbrelPackage(appUrn, appRepoDir);
+        if (!app.info.available || !app.compose) throw new Error('The target Umbrel application is unavailable.');
+        await materializeUmbrelPackage(destination, app);
         return;
       }
-
-      this.logger.warn(`App ${appUrn} not found in repo ${this.storeConfig.slug}`);
-      throw new Error(`App ${appUrn} not found in repo ${this.storeConfig.slug}`);
-    }
-
-    // delete eventual app folder if exists
-    this.logger.info(`Deleting app ${appUrn} folder if exists`);
-    await this.filesystem.removeDirectory(appInstalledDir);
-
-    // Create app folder
-    this.logger.info(`Creating app ${appUrn} folder`);
-    await this.filesystem.createDirectory(appInstalledDir);
-
-    // Create app data folder
-    this.logger.info(`Creating app ${appUrn} data folder`);
-    await this.filesystem.createDirectory(appDataDir);
-
-    // Copy app folder from repo
-    this.logger.info(`Copying app ${appUrn} from repo ${this.storeConfig.slug}`);
-    await this.filesystem.copyDirectory(appRepoDir, appInstalledDir);
+      if (!(await this.filesystem.isDirectory(appRepoDir))) throw new Error('The target app package is unavailable.');
+      await copyAppPackage(this.filesystem.getSafeFilePath(appRepoDir), this.filesystem.getSafeFilePath(destination));
+    });
   }
 
   /**
@@ -172,7 +250,7 @@ export class AppStoreFilesManager {
    */
   public async getAppUpdateInfo(appUrn: AppUrn) {
     const config = await this.getAppInfoFromAppStore(appUrn);
-    const paths = this.getAppPaths(appUrn);
+    const paths = { ...this.getAppPaths(appUrn), appRepoDir: await this.getAppRepoDirectory(appUrn) };
 
     if (config) {
       return {
@@ -196,7 +274,8 @@ export class AppStoreFilesManager {
    * @returns The list of app ids
    */
   public async getAvailableAppUrns() {
-    const appsRepoFolder = this.getAppStoreFolder();
+    const nativeFolder = this.getAppStoreFolder();
+    const appsRepoFolder = (await this.filesystem.isDirectory(nativeFolder)) ? nativeFolder : this.getRepoRoot();
 
     if (!(await this.filesystem.isDirectory(appsRepoFolder))) {
       this.logger.error(`Apps repo ${this.storeConfig.slug} not found. Make sure your repo is configured correctly.`);
@@ -212,7 +291,10 @@ export class AppStoreFilesManager {
         .map(async (app) => {
           const appPath = path.join(appsRepoFolder, app);
           const isDir = await this.filesystem.isDirectory(appPath);
-          return isDir ? app : null;
+          if (!isDir) return null;
+          if (appsRepoFolder !== nativeFolder && !/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(app)) return null;
+          if (appsRepoFolder !== nativeFolder && !(await this.filesystem.isFile(path.join(appPath, 'umbrel-app.yml')))) return null;
+          return app;
         }),
     );
 
@@ -312,28 +394,56 @@ export class AppStoreFilesManager {
   }
 
   public async getAppImage(appUrn: AppUrn) {
-    const { appInstalledDir, appRepoDir } = this.getAppPaths(appUrn);
+    const { appInstalledDir } = this.getAppPaths(appUrn);
+    const appRepoDir = await this.getAppRepoDirectory(appUrn);
     const { appDir } = this.configuration.get('directories');
-
-    const defaultFilePath = path.join(appInstalledDir, 'metadata', 'logo.jpg');
-    const appRepoFilePath = path.join(appRepoDir, 'metadata', 'logo.jpg');
-
-    let filePath = path.join(appDir, 'assets', 'default-app-logo.jpg');
-
-    if (await this.filesystem.isFile(defaultFilePath)) {
-      filePath = defaultFilePath;
-    } else if (await this.filesystem.isFile(appRepoFilePath)) {
-      filePath = appRepoFilePath;
+    for (const name of ['metadata/logo.jpg', 'metadata/icon.png', 'metadata/icon.jpg', 'metadata/icon.svg']) {
+      for (const directory of [appInstalledDir, appRepoDir]) {
+        const exists = await fs.promises.lstat(path.join(directory, name)).then(
+          (info) => info.isFile() || info.isSymbolicLink(),
+          () => false,
+        );
+        const selected = exists ? await readAppPackageAsset(directory, name).catch(() => undefined) : undefined;
+        if (selected) return { image: selected.bytes, etag: selected.etag, contentType: selected.contentType, remoteUrl: undefined };
+      }
     }
-
-    const file = await this.filesystem.readBinaryFile(filePath);
-    const etag = await this.filesystem.getFileEtag(filePath);
-
-    return { image: file, etag };
+    for (const name of ['icon.png', 'icon.jpg', 'icon.svg']) {
+      const exists = await fs.promises.lstat(path.join(appRepoDir, name)).then(
+        (info) => info.isFile() || info.isSymbolicLink(),
+        () => false,
+      );
+      const selected = exists ? await readAppPackageAsset(appRepoDir, name, 1024 * 1024).catch(() => undefined) : undefined;
+      if (selected) return { image: selected.bytes, etag: selected.etag, contentType: selected.contentType, remoteUrl: undefined };
+    }
+    if (
+      /^https:\/\/github\.com\/getumbrel\/umbrel-apps(?:\.git)?(?:\/tree\/[^?#]+)?\/?$/.test(this.storeConfig.url ?? '') &&
+      (await this.filesystem.isFile(path.join(appRepoDir, 'umbrel-app.yml')))
+    ) {
+      const { appName } = extractAppUrn(appUrn);
+      return {
+        image: null,
+        etag: undefined,
+        contentType: 'image/svg+xml',
+        remoteUrl: `https://raw.githubusercontent.com/getumbrel/umbrel-apps-gallery/master/${appName}/icon.svg`,
+      };
+    }
+    const fallback = path.join(appDir, 'assets', 'default-app-logo.jpg');
+    return {
+      image: await this.filesystem.readBinaryFile(fallback),
+      etag: await this.filesystem.getFileEtag(fallback),
+      contentType: 'image/jpeg',
+      remoteUrl: undefined,
+    };
   }
 
   public async getConfigJson(appUrn: AppUrn) {
-    const { appRepoDir } = this.getAppPaths(appUrn);
+    const appRepoDir = await this.getAppRepoDirectory(appUrn);
+    if (
+      !(await this.filesystem.isFile(path.join(appRepoDir, 'config.json'))) &&
+      (await this.filesystem.isFile(path.join(appRepoDir, 'umbrel-app.yml')))
+    ) {
+      return { path: path.join(appRepoDir, 'umbrel-app.yml'), content: (await this.getUmbrelPackage(appUrn, appRepoDir)).info };
+    }
 
     const configPath = path.join(appRepoDir, 'config.json');
 

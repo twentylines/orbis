@@ -23,6 +23,7 @@ export class TasksController {
   }
 
   @Get()
+  @Header('Cache-Control', 'private, no-store')
   get() {
     return this.tasks.read();
   }

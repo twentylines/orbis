@@ -229,6 +229,11 @@ export class MarketplaceService {
     return store.copyAppFromRepoToInstalled(appUrn);
   }
 
+  public async stageAppUpdate(appUrn: AppUrn, destination: string) {
+    const { store } = this.getStoreFromUrn(appUrn);
+    return store.stageAppUpdate(appUrn, destination);
+  }
+
   public async copyDataDir(appUrn: AppUrn, envMap: Map<string, string>) {
     const { store } = this.getStoreFromUrn(appUrn);
     return store.copyDataDir(appUrn, envMap);

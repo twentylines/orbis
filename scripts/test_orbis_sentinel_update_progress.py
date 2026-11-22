@@ -255,8 +255,18 @@ persist('rolled-back')
             path.symlink_to(self.root / 'private')
             self.assertEqual(INSTALL.read_update_progress(), {'version': 1, 'available': False, 'jobs': []})
 
+    def test_narrow_credential_role_does_not_expose_update_progress(self):
+        handler = SimpleNamespace(path='/v1/sentinel/update-progress',
+            server=SimpleNamespace(service=SimpleNamespace(credentials_only=True)))
+        with mock.patch.object(SERVICE.CredentialHandler, 'do_GET') as restricted, \
+                mock.patch.object(SERVICE, 'load_script') as load:
+            SERVICE.Handler.do_GET(handler)
+        restricted.assert_called_once_with(handler)
+        load.assert_not_called()
+
     def test_host_read_route_enforces_peer_and_body_before_accessing_state(self):
-        handler = SimpleNamespace(path='/v1/sentinel/update-progress', connection=object(), headers=Message(), send_json=mock.Mock())
+        handler = SimpleNamespace(path='/v1/sentinel/update-progress', connection=object(), headers=Message(),
+            server=SimpleNamespace(service=SimpleNamespace(credentials_only=False)), send_json=mock.Mock())
         module = SimpleNamespace(read_update_progress=mock.Mock(return_value={'version': 1, 'available': True, 'jobs': []}))
         with mock.patch.object(SERVICE, 'load_script', return_value=module), mock.patch.object(SERVICE, 'trusted_capture_peer') as trusted:
             trusted.return_value = False

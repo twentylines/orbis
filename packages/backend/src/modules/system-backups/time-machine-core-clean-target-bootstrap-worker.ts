@@ -1,3 +1,4 @@
+import { backupDatabaseProfileQuery, readBackupDatabaseProfile } from './backup-database-profile';
 import { createHash } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
 import fs, { type FileHandle } from 'node:fs/promises';
@@ -446,9 +447,18 @@ async function requireLedgerSequence(client: Client, maximum: number) {
   const sequence = await client.query('SELECT last_value::text AS value,is_called AS called FROM drizzle.__drizzle_migrations_id_seq');
   if (sequence.rows.length !== 1 || sequence.rows[0]?.value !== String(maximum) || sequence.rows[0]?.called !== true) throw fail();
 }
-const applicationTables = ['user', 'link', 'app', 'app_store', 'orbis_reset_receipt'] as const;
-async function emptyTables(client: Client, seed: boolean) {
-  for (const table of applicationTables) {
+const applicationTables = (version: 1 | 2, commits = false) =>
+  [
+    'user',
+    'link',
+    'app',
+    'app_store',
+    'orbis_reset_receipt',
+    ...(version === 2 ? ['app_migration' as const] : []),
+    ...(commits ? ['app_migration_commit' as const] : []),
+  ] as const;
+async function emptyTables(client: Client, seed: boolean, version: 1 | 2, commits = false) {
+  for (const table of applicationTables(version, commits)) {
     const result = await client.query(`SELECT count(*)::text AS count FROM public."${table}"`);
     if (result.rows.length !== 1 || result.rows[0]?.count !== (seed && table === 'app_store' ? '1' : '0')) throw fail();
   }
@@ -689,7 +699,11 @@ export async function bootstrapCoreCleanTarget(options: { input: string; output:
       if (!ledgerCommitted) await client.query('ROLLBACK').catch(() => undefined);
     }
     phase = 'sanitize';
-    await emptyTables(client, true);
+    const version = readBackupDatabaseProfile((await client.query(backupDatabaseProfileQuery)).rows[0]);
+    const commits = migrated.schema === 'orbis.core-database-structure.v3';
+    if (commits ? version !== 2 || migrated.rows.app_migration_commit !== 0 : migrated.schema !== `orbis.core-database-structure.v${version}`)
+      throw fail();
+    await emptyTables(client, true, version, commits);
     await write('migration-completion.json', {
       schema: `orbis.core-clean-target-migration-completion.${outputVersion}`,
       ...bound,
@@ -706,10 +720,10 @@ export async function bootstrapCoreCleanTarget(options: { input: string; output:
     await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
     try {
       await client.query(
-        'LOCK TABLE public."user",public.link,public.app,public.app_store,public.orbis_reset_receipt,drizzle.__drizzle_migrations IN ACCESS EXCLUSIVE MODE',
+        `LOCK TABLE public."user",public.link,public.app,public.app_store,public.orbis_reset_receipt,drizzle.__drizzle_migrations${version === 2 ? ',public.app_migration' : ''}${commits ? ',public.app_migration_commit' : ''} IN ACCESS EXCLUSIVE MODE`,
       );
       await targetIdentity(client, request.target, 'pg_catalog', executionProfile);
-      await emptyTables(client, true);
+      await emptyTables(client, true, version, commits);
       await requireLedger(client, request.expectedMigrationLedgerSha256, expectedLedger.length);
       const selected = await client.query('SELECT * FROM public.app_store LIMIT 2');
       if (selected.rows.length !== 1) throw fail();
@@ -728,7 +742,7 @@ export async function bootstrapCoreCleanTarget(options: { input: string; output:
         seedColumns.map((name) => seed[name]),
       );
       if (removed.rowCount !== 1) throw fail();
-      await emptyTables(client, false);
+      await emptyTables(client, false, version, commits);
       await requireLedger(client, request.expectedMigrationLedgerSha256, expectedLedger.length);
       await unchanged();
       await targetIdentity(client, request.target, 'pg_catalog', executionProfile);
@@ -742,11 +756,12 @@ export async function bootstrapCoreCleanTarget(options: { input: string; output:
     if (
       structure.catalogSha256 !== request.expectedCatalogSha256 ||
       structure.major !== migrated.major ||
-      applicationTables.some((table) => structure.rows[table] !== 0) ||
+      structure.schema !== migrated.schema ||
+      applicationTables(version, commits).some((table) => structure.rows[table] !== 0) ||
       structure.rows.__drizzle_migrations !== expectedLedger.length
     )
       throw fail();
-    await emptyTables(client, false);
+    await emptyTables(client, false, version);
     await requireLedger(client, request.expectedMigrationLedgerSha256, expectedLedger.length);
     await requireLedgerSequence(client, maximumLedgerId);
     await targetIdentity(client, request.target, 'pg_catalog', executionProfile);

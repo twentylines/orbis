@@ -8,6 +8,8 @@ rolls back; after activation begins, recovery finishes the recorded cutover.
 
 import argparse
 import copy
+from contextlib import contextmanager
+from contextvars import ContextVar
 import hashlib
 import http.client
 import importlib.util
@@ -18,6 +20,7 @@ import socket
 import subprocess
 import sys
 import time
+from types import ModuleType
 import uuid
 from pathlib import Path
 
@@ -34,15 +37,66 @@ TX = load("orbis-install-transaction.py", "orbis_transaction_for_replacement")
 COMPAT = load("orbis-install-compat.py", "orbis_compat_for_replacement")
 FRESH = load("orbis-install-fresh.py", "orbis_fresh_for_replacement")
 UPDATE = load("orbis-host-update.py", "orbis_update_for_replacement")
+OWNERSHIP = load("orbis-host-fresh-ownership.py", "orbis_fresh_ownership_for_replacement")
+_FRESH_PERMIT = ContextVar('orbis_replacement_fresh_permit', default=None)
 APPS = TX.APPS
 HOST = APPS.HOST
 SCHEMA = "orbis.installation-replacement.v1"
+OWNERSHIP_PROTOCOL = 'orbis.fresh-ownership-entry.v1'
+INSTALLER_STORAGE_PROTOCOL = 'orbis.installer.storage.v1'
 TERMINAL = {"complete", "rolled-back"}
 PRECOMMIT = {"prepared", "checkpointing", "checkpointed", "retaining-original", "holding", "held", "resetting", "reset", "resuming", "resumed", "rolling-back"}
 
 
 class ReplacementError(ValueError):
     pass
+
+
+@contextmanager
+def ownership_scope(permit, record):
+    """Bind only the exact Root issuer attached to this replacement module."""
+    if (type(permit) is not OWNERSHIP.Permit or permit.issuer.runtime is None
+            or permit.issuer.runtime.r._FRESH_PERMIT is not _FRESH_PERMIT
+            or permit.issuer.host is not HOST):
+        raise ReplacementError('The replacement requires its own live Root ownership issuer')
+    permit._frame(record)
+    token = _FRESH_PERMIT.set(permit)
+    try:
+        yield
+    finally:
+        _FRESH_PERMIT.reset(token)
+
+
+def require_ownership_authority(mode, *, record=None):
+    """Admit only Keep or the exact bound Root finishing transaction.
+
+    A JWT/cache revocation receipt and an idle lifecycle lock do not prove
+    recovery revocation. The existing Main credential lease also cannot cover
+    replacing its producer. Review/apply/recovery acquire their own positive
+    transaction scope. Neither missing admission nor a caller-supplied receipt
+    may bypass this guard. Keep retains its existing ownership.
+    """
+    permit = _FRESH_PERMIT.get()
+    if (mode == 'fresh' and record is not None and type(permit) is OWNERSHIP.Permit
+            and permit.issuer.runtime.r._FRESH_PERMIT is _FRESH_PERMIT):
+        permit.authorize_controller(record)
+        return
+    if mode != 'keep':
+        raise ReplacementError('Fresh replacement requires a positively bound Root ownership permit; preserve the original installation, journal and checkpoint for local review')
+
+
+def ownership_issuer(root, reader, guard):
+    module = sys.modules.get(__name__)
+    if module is None or getattr(module, 'validate_review', None) is not validate_review:
+        module = ModuleType(__name__)
+        module.__dict__.update(globals())
+    issuer = OWNERSHIP.Issuer(HOST, root, reader, validate_review)
+    try:
+        issuer._guard(guard)
+    except (AttributeError, ValueError, TypeError):
+        raise ReplacementError('Fresh replacement requires its live Root ownership permit lock') from None
+    issuer.attach_replacement(module)
+    return issuer
 
 
 class UnixConnection(http.client.HTTPConnection):
@@ -126,9 +180,28 @@ def semantic_review(value):
     return {key: TX.semantic_review(item) if key == "checkpoint" else item for key, item in value.items() if key != "reviewId"}
 
 
-def review(root, reader, target, bundle, journal, *, mode="keep", backup_scope="full"):
+def review(root, reader, target, bundle, journal, *, mode="keep", backup_scope="full", ownership=None):
     if mode not in {"keep", "fresh"}:
         raise ReplacementError("Choose Keep or Fresh replacement")
+    if mode == 'fresh' and ownership is not None:
+        issuer = ownership_issuer(root, reader, ownership)
+        if ownership.read() is not None:
+            raise ReplacementError('Recover the pending Root ownership transaction before another review')
+        with OWNERSHIP.L.authorized(HOST, root, reader, target) as proof:
+            decision = proof.verify()
+            value = _review(root, reader, target, bundle, journal, mode=mode, backup_scope=backup_scope)
+            value['freshOwnership'] = decision
+            value['ownershipProtocol'] = OWNERSHIP_PROTOCOL
+            value['reviewId'] = APPS.digest({key: item for key, item in value.items() if key != 'reviewId'})
+            validate_review(value)
+            if proof.verify() != decision:
+                raise ReplacementError('The Root ownership decision changed during review')
+            return value
+    require_ownership_authority(mode)
+    return _review(root, reader, target, bundle, journal, mode=mode, backup_scope=backup_scope)
+
+
+def _review(root, reader, target, bundle, journal, *, mode, backup_scope):
     target = HOST.PLAN.require_installation_protocol(target)
     if HOST.PLAN.read_version(root) != target["runtipiCompatibility"].removeprefix("v"):
         raise ReplacementError("The installed Runtipi version needs a separate compatibility review")
@@ -183,7 +256,46 @@ def original(record, reader):
     return raw
 
 
+def require_fresh_revocation(record):
+    value = record['review']
+    if value.get('mode') != 'fresh':
+        return
+    permit = _FRESH_PERMIT.get()
+    if permit is not None:
+        if type(permit) is not OWNERSHIP.Permit or permit.issuer.runtime.r._FRESH_PERMIT is not _FRESH_PERMIT:
+            raise ReplacementError('The replacement ownership issuer changed')
+        permit.authorize_controller(record)
+        return
+    receipt = record.get('freshReset')
+    if (type(receipt) is not dict or receipt.get('cacheRevoked') is not True or receipt.get('passkeysRevoked') is not True
+            or type(receipt.get('jwtHash')) is not str or not re.fullmatch(r'[0-9a-f]{64}', receipt['jwtHash'])
+            or type(receipt.get('authenticationSha256')) is not str or not re.fullmatch(r'[0-9a-f]{64}', receipt['authenticationSha256'])
+            or type(value.get('fresh')) is not dict or receipt.get('reviewSha256') != FRESH.review_digest(value['fresh'])):
+        raise ReplacementError('Fresh account revocation must finish under the current review before activation; keep the installation stopped and preserve its journal and backup')
+    # Once a validated normal candidate can receive new account writes, forward
+    # recovery must preserve them instead of demanding the pre-activation empty
+    # key store. The protected candidate definition is checked by the caller.
+    if (record.get('stage') == 'committing' and record.get('candidatePhase') == 'normal'
+            and type(record.get('candidate')) is dict and record['candidate'].get('validated') is True):
+        return
+    try:
+        current = FRESH.authentication(Path(value['root']))
+        if current['passkeys'] is not None or receipt.get('authenticationSha256') != FRESH.review_digest(current):
+            raise FRESH.FreshError('Authentication state changed after revocation')
+    except (FRESH.FreshError, KeyError, TypeError):
+        raise ReplacementError('Fresh authentication revocation needs recovery; keep the installation stopped and preserve its journal and backup') from None
+
+
 def payload(record, reader, phase):
+    if phase != 'hold' or 'freshReset' in record:
+        require_fresh_revocation(record)
+    return _controller_payload(record, reader, phase)
+
+
+def _controller_payload(record, reader, phase):
+    """Build creation intent; public callers use the guarded payload wrapper."""
+    if phase not in ('hold', 'resume', 'normal'):
+        raise ReplacementError('The replacement controller phase is unsupported')
     raw = original(record, reader)
     value = record["review"]
     body = copy.deepcopy(raw["Config"])
@@ -257,6 +369,10 @@ def candidate_definition(raw):
 
 def matches_intent(record, reader, raw):
     intended = payload(record, reader, record["candidatePhase"])
+    _matches_body(record, raw, intended)
+
+
+def _matches_body(record, raw, intended):
     for key, item in intended.items():
         if key in {"HostConfig", "NetworkingConfig"}:
             continue
@@ -339,6 +455,8 @@ def remove_candidate(record, reader):
 
 
 def create_candidate(record, reader, phase):
+    if phase != 'hold' or 'freshReset' in record:
+        require_fresh_revocation(record)
     if candidate(record, reader) is not None:
         raise ReplacementError("Remove the previous candidate before changing installation phase")
     record["candidatePhase"] = phase
@@ -366,7 +484,7 @@ def create_candidate(record, reader, phase):
     return identifier
 
 
-def check_originals(record, reader):
+def check_original_containers(record, reader):
     value = record["review"]
     if APPS.digest_daemon(reader) != value["checkpoint"]["storage"]["daemonFingerprint"]:
         raise ReplacementError("The selected Docker daemon changed")
@@ -382,9 +500,23 @@ def check_originals(record, reader):
             raise ReplacementError("An original app or core service changed during replacement")
         if expected["state"] != "running" and actual["state"] != expected["state"]:
             raise ReplacementError("An originally stopped app changed state during replacement")
-    for item in value["checkpoint"]["storage"]["resources"]:
+
+
+def check_original_resources(record, reader):
+    for item in record["review"]["checkpoint"]["storage"]["resources"]:
         if TX.STORAGE.resource_identity(item) != item:
             raise ReplacementError("An installation storage source changed identity")
+
+
+def check_originals(record, reader):
+    permit = _FRESH_PERMIT.get()
+    if record['review'].get('mode') == 'fresh' and permit is not None:
+        if type(permit) is not OWNERSHIP.Permit or permit.issuer.reader is not reader:
+            raise ReplacementError('The replacement ownership reader changed')
+        permit.authorize_originals(record)
+        return
+    check_original_containers(record, reader)
+    check_original_resources(record, reader)
 
 
 def start_originals(record, reader, roles):
@@ -426,6 +558,14 @@ def completed_checkpoint(record, reader):
 
 def rollback(record, reader):
     value = record["review"]
+    permit = _FRESH_PERMIT.get()
+    if value.get('mode') == 'fresh' and permit is not None:
+        if type(permit) is not OWNERSHIP.Permit or permit.issuer.reader is not reader:
+            raise ReplacementError('The replacement rollback issuer changed')
+        permit.rollback(record)
+        return {"schema": SCHEMA, "result": "original-runtipi-recovered", "journal": value['journal']}
+    # A stage label alone cannot authorize restoring an enrolled installation.
+    require_ownership_authority(value.get('mode'))
     if record["stage"] not in PRECOMMIT:
         raise ReplacementError("Public activation has begun; recover this transaction to finish the recorded cutover")
     if completed_checkpoint(record, reader):
@@ -444,9 +584,14 @@ def rollback(record, reader):
 
 
 def finish(record, reader):
+    if record['stage'] in TERMINAL:
+        raise ReplacementError('The replacement is already complete or recovered; it cannot be replayed')
     value = record["review"]
-    if value.get("mode") == "fresh" and (not record.get("freshReset", {}).get("cacheRevoked") or not re.fullmatch(r"[0-9a-f]{64}", str(record["freshReset"].get("jwtHash", "")))):
-        raise ReplacementError("Fresh account revocation must finish before public activation")
+    require_ownership_authority(value.get('mode'), record=record)
+    require_fresh_revocation(record)
+    permit = _FRESH_PERMIT.get() if value.get('mode') == 'fresh' else None
+    if permit is not None:
+        permit.record_forward(record)
     record["stage"] = "committing"
     save(record)
     check_originals(record, reader)
@@ -471,6 +616,8 @@ def finish(record, reader):
             reader.change(["start", raw["Id"]], timeout=180)
         TX.require_healthy(reader, raw["Id"], timeout=180)
     start_originals(record, reader, {"database", "queue", "app", "proxy"})
+    if permit is not None:
+        permit.record_normal(record)
     # Enroll the persistent Compose image/build override, without installer flags.
     HOST.write_state(Path(value["root"]), HOST.installation_fingerprint(Path(value["root"]), value["target"], reader.context))
     for expected in TX.ordered(value["checkpoint"], starting=True):
@@ -491,11 +638,29 @@ def finish(record, reader):
     TX.require_healthy(reader, raw["Id"], timeout=180)
     record["stage"] = "complete"
     save(record)
+    if permit is not None:
+        permit.complete(record)
     return {"schema": SCHEMA, "result": "orbis-installed", "mode": value["mode"], "releaseTag": value["target"]["tag"], "journal": value["journal"], "backup": value["checkpoint"]["storage"]["bundle"]}
 
 
-def apply(root, reader, value, *, host_writers_stopped):
+def apply(root, reader, value, *, host_writers_stopped, ownership=None):
     validate_review(value)
+    if value.get('mode') == 'fresh' and ownership is not None:
+        issuer = ownership_issuer(root, reader, ownership)
+        if not host_writers_stopped or value.get('ownershipProtocol') != OWNERSHIP_PROTOCOL:
+            raise ReplacementError('Fresh requires the current protected review and stopped native writers')
+        current = review(root, reader, value['target'], Path(value['checkpoint']['storage']['bundle']),
+                         Path(value['journal']), mode='fresh', backup_scope=value['checkpoint']['storage'].get('backupScope', 'full'), ownership=ownership)
+        if semantic_review(current) != semantic_review(value):
+            raise ReplacementError('The installation changed; review Fresh again')
+        record = {'schema': SCHEMA, 'id': str(uuid.uuid4()), 'stage': 'prepared', 'review': value,
+                  'ownershipProtocol': OWNERSHIP_PROTOCOL}
+        record['retainedName'] = 'orbis-previous-' + record['id']
+        with issuer.begin(ownership, value, record['id']) as permit:
+            record['ownershipPermit'] = permit.reference
+            with ownership_scope(permit, record):
+                return _apply_record(record, reader, permit=permit)
+    require_ownership_authority(value.get('mode'))
     if not host_writers_stopped:
         raise ReplacementError("Confirm native host and remote storage writers are stopped before replacement")
     fresh = review(root, reader, value["target"], Path(value["checkpoint"]["storage"]["bundle"]), Path(value["journal"]), mode=value["mode"], backup_scope=value["checkpoint"]["storage"].get("backupScope", "full"))
@@ -504,13 +669,23 @@ def apply(root, reader, value, *, host_writers_stopped):
     record = {"schema": SCHEMA, "id": str(uuid.uuid4()), "stage": "prepared", "review": value}
     record["retainedName"] = "orbis-previous-" + record["id"]
     save(record)
+    return _apply_record(record, reader)
+
+
+def _apply_record(record, reader, *, permit=None):
+    value = record['review']
+    root = Path(value['root'])
     try:
+        if permit is not None:
+            save(record)
         record["stage"] = "checkpointing"
         save(record)
         TX.checkpoint(root, reader, value["checkpoint"], host_writers_stopped=True)
         raw = inspect(reader, role(value, "controller"))
         record.update(stage="checkpointed", quiescedConfiguration=APPS.digest({key: raw[key] for key in ("Config", "HostConfig")}))
         save(record)
+        if permit is not None:
+            permit.record_cutover(record)
         # Restart only infrastructure to inspect the now-quiescent database/broker.
         start_originals(record, reader, {"database", "queue"})
         TX.require_healthy(reader, role(value, "database"), timeout=180)
@@ -529,6 +704,8 @@ def apply(root, reader, value, *, host_writers_stopped):
         create_candidate(record, reader, "hold")
         record["stage"] = "held"
         save(record)
+        if permit is not None:
+            permit.record_hold(record)
         remove_candidate(record, reader)
         if value["mode"] == "fresh":
             record["stage"] = "resetting"
@@ -537,16 +714,36 @@ def apply(root, reader, value, *, host_writers_stopped):
             for identifier, selected_role in value["checkpoint"]["roles"].items():
                 if selected_role not in {"database", "queue"} and reader.app(identifier)["state"] not in {"exited", "created"}:
                     raise ReplacementError("Keep every controller, proxy and app stopped during Fresh account reset")
-            record["freshReset"] = FRESH.reset(root, reader, role(value, "database"), value["fresh"])
+            record["freshReset"] = permit.reset_accounts(record) if permit is not None else FRESH.reset(root, reader, role(value, "database"), value["fresh"])
             record["stage"] = "reset"
             save(record)
+            if permit is not None:
+                permit.publish_birth(record)
         record["stage"] = "resuming"
         save(record)
+        if permit is not None:
+            permit.arm_resume(record)
         create_candidate(record, reader, "resume")
         record["stage"] = "resumed"
         save(record)
         return finish(record, reader)
     except Exception as error:
+        if permit is not None:
+            selected = permit.reference
+            def exists(name):
+                return os.path.lexists(OWNERSHIP.phase_path(root, selected['operationId'], name, HOST))
+            if any(exists(name) for name in ('complete', 'rolled-back', 'aborted', 'forward', 'normal')):
+                # A published outcome pins the final journal; a lost retirement
+                # reply must not overwrite it with generic failure metadata.
+                raise ReplacementError('The protected transaction needs recovery to settle its recorded outcome; preserve the journal') from error
+            try:
+                if exists('cutover') or exists('rollback'):
+                    permit.rollback(record)
+                else:
+                    permit.abort_pre_cutover(record)
+            except Exception as recovery:
+                raise ReplacementError('Fresh needs protected recovery; preserve the original, journal, checkpoint and Root receipts') from recovery
+            raise ReplacementError('Replacement failed; the original Runtipi installation was recovered') from error
         record["failure"] = {
             "stage": record["stage"], "type": type(error).__name__,
             "message": str(error) if isinstance(error, (ReplacementError, COMPAT.CompatibilityError, FRESH.FreshError, TX.TransactionError, TX.STORAGE.StorageError)) else "A replacement step could not finish",
@@ -565,7 +762,45 @@ def apply(root, reader, value, *, host_writers_stopped):
         raise ReplacementError("Activation needs recovery to finish; preserve the journal and run recover") from error
 
 
-def recover(root, reader, journal, *, host_writers_stopped):
+def installed_result(record):
+    value = record['review']
+    return {'schema': SCHEMA, 'result': 'orbis-installed', 'mode': value['mode'], 'releaseTag': value['target']['tag'],
+            'journal': value['journal'], 'backup': value['checkpoint']['storage']['bundle']}
+
+
+def recover_owned(root, reader, record, guard):
+    issuer = ownership_issuer(root, reader, guard)
+    if (record.get('ownershipProtocol') != OWNERSHIP_PROTOCOL or record['review'].get('ownershipProtocol') != OWNERSHIP_PROTOCOL):
+        raise ReplacementError('Fresh recovery requires the original compatible protected executor')
+    selected = OWNERSHIP.reference(record.get('ownershipPermit'))
+    def exists(name):
+        return os.path.lexists(OWNERSHIP.phase_path(root, selected['operationId'], name, HOST))
+    if exists('complete'):
+        with issuer.resume_completed(guard, record, selected) as permit:
+            permit.complete(record)
+        return installed_result(record)
+    if exists('rolled-back'):
+        with issuer.resume_rollback(guard, record, selected) as permit:
+            permit.rollback(record)
+        return {'schema': SCHEMA, 'result': 'original-runtipi-recovered', 'journal': record['review']['journal']}
+    if exists('aborted'):
+        with issuer.resume_abort(guard, record, selected) as permit:
+            permit.abort_pre_cutover(record)
+        return {'schema': SCHEMA, 'result': 'original-runtipi-recovered', 'journal': record['review']['journal']}
+    with issuer.transaction(guard, record, selected) as permit:
+        with ownership_scope(permit, record):
+            if exists('forward') or exists('normal'):
+                if record.get('stage') == 'complete':
+                    permit.complete(record)
+                    return installed_result(record)
+                return finish(record, reader)
+            if exists('cutover') or exists('rollback'):
+                return rollback(record, reader)
+            permit.abort_pre_cutover(record)
+            return {'schema': SCHEMA, 'result': 'original-runtipi-recovered', 'journal': record['review']['journal']}
+
+
+def recover(root, reader, journal, *, host_writers_stopped, ownership=None):
     if not host_writers_stopped:
         raise ReplacementError("Confirm native host and remote storage writers are stopped before recovery")
     record = TX.RESTORE.private_json(journal)
@@ -575,9 +810,14 @@ def recover(root, reader, journal, *, host_writers_stopped):
     validate_review(value)
     if value["root"] != str(root) or value["dockerContext"] != reader.context or value["journal"] != str(journal):
         raise ReplacementError("The journal belongs to another installation or Docker context")
-    check_originals(record, reader)
+    if value.get('mode') == 'fresh' and ownership is not None:
+        return recover_owned(root, reader, record, ownership)
     if record["stage"] in TERMINAL:
         raise ReplacementError("The replacement is already complete or recovered; it cannot be replayed")
+    require_ownership_authority(value.get('mode'))
+    if value.get('mode') == 'fresh' and ('freshReset' in record or record['stage'] in {'reset', 'resuming', 'resumed', 'committing'}):
+        require_fresh_revocation(record)
+    check_originals(record, reader)
     if record["stage"] == "committing":
         return finish(record, reader)
     if "quiescedConfiguration" not in record:
@@ -589,6 +829,11 @@ def recover(root, reader, journal, *, host_writers_stopped):
         save(record)
         return {"schema": SCHEMA, "result": "original-runtipi-recovered", "journal": str(journal)}
     return rollback(record, reader)
+
+
+def require_host():
+    if sys.platform != 'linux' or os.geteuid() != 0:
+        raise ReplacementError('Run replacement as root on the Linux Docker host')
 
 
 def main():
@@ -606,21 +851,25 @@ def main():
     parser.add_argument("--host-writers-stopped", action="store_true")
     args = parser.parse_args()
     try:
-        if sys.platform != "linux" or os.geteuid() != 0:
-            raise ReplacementError("Run replacement as root on the Linux Docker host")
+        require_host()
         root = args.root.expanduser().resolve(strict=True)
         reader = APPS.Docker(args.docker_context)
         journal = args.journal.expanduser()
-        with HOST.host_lock(root) as descriptor:
-            reader.lock_fd = descriptor
+        with HOST.credential_fence_lock(root, reader.context) as guard:
+            reader.lock_fd = HOST.LOCK_DESCRIPTOR.get()
             if args.action == "review":
                 if args.manifest is None or args.backup is None:
                     raise ReplacementError("A published release manifest and new private backup are required")
-                result = review(root, reader, json.loads(args.manifest.read_text()), args.backup.expanduser(), journal, mode=args.mode or "keep", backup_scope=args.backup_scope)
+                if args.mode != 'fresh' and guard.read() is not None:
+                    raise ReplacementError('A protected account transaction needs recovery first')
+                result = review(root, reader, json.loads(args.manifest.read_text()), args.backup.expanduser(), journal, mode=args.mode or "keep", backup_scope=args.backup_scope, ownership=guard)
             else:
                 HOST.require_confirmation(root, args.confirm_root)
                 if args.action == "recover":
-                    result = recover(root, reader, journal, host_writers_stopped=args.host_writers_stopped)
+                    pending = TX.RESTORE.private_json(journal)
+                    if pending.get('review', {}).get('mode') != 'fresh' and guard.read() is not None:
+                        raise ReplacementError('A protected account transaction needs recovery first')
+                    result = recover(root, reader, journal, host_writers_stopped=args.host_writers_stopped, ownership=guard)
                 else:
                     if args.review is None:
                         raise ReplacementError("A private saved replacement review is required")
@@ -629,7 +878,9 @@ def main():
                         raise ReplacementError("The requested mode differs from the saved replacement review")
                     if value.get("journal") != str(journal):
                         raise ReplacementError("The review belongs to another journal")
-                    result = apply(root, reader, value, host_writers_stopped=args.host_writers_stopped)
+                    if value.get('mode') != 'fresh' and guard.read() is not None:
+                        raise ReplacementError('A protected account transaction needs recovery first')
+                    result = apply(root, reader, value, host_writers_stopped=args.host_writers_stopped, ownership=guard)
         print(json.dumps(result, indent=2))
         return 0
     except (OSError, ValueError, RuntimeError, KeyError, TypeError, subprocess.TimeoutExpired) as error:

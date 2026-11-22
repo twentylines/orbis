@@ -9,7 +9,9 @@ import hashlib
 import importlib.util
 import io
 import os
+import re
 import secrets
+import stat
 import tarfile
 import time
 import uuid
@@ -41,6 +43,405 @@ CAPABILITY = {'schema': 'orbis.controller-overlay-startup.v1', 'version': 1, 'pr
               'preserveRunningApps': True, 'environment': 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1'}
 NO_BACKUP_CAPABILITY = {**CAPABILITY, 'schema': 'orbis.controller-overlay-startup.v2', 'version': 2,
                         'updateBackupPolicy': 'none'}
+CLI_CAPABILITY = {**NO_BACKUP_CAPABILITY, 'schema': 'orbis.controller-overlay-startup.v3', 'version': 3,
+                  'cliIdentity': {'path': '/data/.secrets/cli-secret', 'encoding': 'hex32', 'creator': 'backend'}}
+CLI_STORAGE = 'orbis.controller-cli-storage.v1'
+CLI_OWNER = 0
+CLI_TARGET = '/data/.secrets'
+
+
+def cli_file_identity(value):
+    return tuple(getattr(value, key) for key in ('st_dev', 'st_ino', 'st_mode', 'st_uid', 'st_gid', 'st_nlink',
+                                                'st_size', 'st_mtime_ns', 'st_ctime_ns'))
+
+
+def cli_storage(root, *, create=False):
+    """Observe private target identity without copying a key into update state."""
+    root = Path(root)
+    if not root.is_absolute() or os.path.normpath(str(root)) != str(root):
+        raise ValueError('CLI authentication root is invalid')
+    descriptors = [os.open('/', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)]
+    bindings = []
+    try:
+        for part in root.parts[1:]:
+            parent = descriptors[-1]
+            current = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+            descriptors.append(current)
+            bindings.append((parent, part, current))
+        parent = descriptors[-1]
+        if stat.S_IMODE(os.fstat(parent).st_mode) & 0o022:
+            raise ValueError('CLI authentication root is writable by other users')
+        if create:
+            try:
+                os.mkdir('.secrets', 0o700, dir_fd=parent)
+            except FileExistsError:
+                pass
+        directory = os.open('.secrets', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+        descriptors.append(directory)
+        bindings.append((parent, '.secrets', directory))
+        details = os.fstat(directory)
+        if details.st_uid != CLI_OWNER or stat.S_IMODE(details.st_mode) != 0o700:
+            raise ValueError('CLI authentication directory is not private')
+        digest = None
+        try:
+            key = os.open('cli-secret', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+        except FileNotFoundError:
+            pass
+        else:
+            try:
+                before = os.fstat(key)
+                if (not stat.S_ISREG(before.st_mode) or before.st_uid != CLI_OWNER
+                        or stat.S_IMODE(before.st_mode) != 0o600 or before.st_nlink != 1 or before.st_size != 64):
+                    raise ValueError('CLI authentication key is invalid or not private')
+                data = os.read(key, 65)
+                if (not re.fullmatch(rb'[a-f0-9]{64}', data) or cli_file_identity(before) != cli_file_identity(os.fstat(key))
+                        or cli_file_identity(before) != cli_file_identity(os.stat('cli-secret', dir_fd=directory, follow_symlinks=False))):
+                    raise ValueError('CLI authentication key changed or is invalid')
+                digest = hashlib.sha256(data).hexdigest()
+            finally:
+                os.close(key)
+        for parent_fd, part, descriptor in bindings:
+            before = os.fstat(descriptor)
+            after = os.stat(part, dir_fd=parent_fd, follow_symlinks=False)
+            if (before.st_dev, before.st_ino, before.st_uid, before.st_mode) != (after.st_dev, after.st_ino, after.st_uid, after.st_mode):
+                raise ValueError('CLI authentication directory changed')
+        if create:
+            os.fsync(directory)
+            os.fsync(parent)
+        return {'schema': CLI_STORAGE, 'source': str(root / '.secrets'), 'destination': CLI_TARGET,
+                'device': details.st_dev, 'inode': details.st_ino, 'owner': details.st_uid, 'keySha256': digest}
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
+def cli_mounts(body):
+    host = body.get('HostConfig') or {}
+    if any(value is not None and not isinstance(value, list) for value in (host.get('Binds'), host.get('Mounts'))):
+        raise ValueError('CLI authentication mount intent is invalid')
+    result = []
+    for mount in host.get('Mounts') or []:
+        if not isinstance(mount, dict):
+            raise ValueError('CLI authentication mount intent is invalid')
+        result.append({'Type': mount.get('Type'), 'Source': mount.get('Source'),
+                       'Destination': mount.get('Target'), 'RW': not mount.get('ReadOnly', False)})
+    for mount in host.get('Binds') or []:
+        parts = mount.split(':') if isinstance(mount, str) else []
+        if len(parts) not in (2, 3):
+            raise ValueError('CLI authentication bind intent is invalid')
+        result.append({'Type': 'bind', 'Source': parts[0], 'Destination': parts[1],
+                       'RW': 'ro' not in parts[2].split(',') if len(parts) == 3 else True})
+    return result
+
+
+def require_cli_mounts(root, mounts, *, required):
+    if not isinstance(mounts, list) or any(not isinstance(mount, dict) for mount in mounts):
+        raise ValueError('CLI authentication mount information is invalid')
+    source = str(root / '.secrets')
+    selected = []
+    for mount in mounts:
+        target, origin = mount.get('Destination'), mount.get('Source')
+        if not isinstance(target, str) or os.path.normpath(target) != target:
+            raise ValueError('CLI authentication mount target is invalid')
+        if target == CLI_TARGET:
+            if mount.get('Type') != 'bind' or origin != source or mount.get('RW') is not True:
+                raise ValueError('CLI authentication requires its private target bind')
+            selected.append(mount)
+        elif target.startswith(CLI_TARGET + '/') or CLI_TARGET.startswith(target.rstrip('/') + '/'):
+            if not (target == '/data' and mount.get('Type') == 'bind' and origin == str(root)):
+                raise ValueError('A mount shadows CLI authentication storage')
+        if mount.get('Type') == 'bind' and origin != str(root):
+            if not isinstance(origin, str) or not Path(origin).is_absolute() or os.path.normpath(origin) != origin:
+                raise ValueError('CLI authentication mount source is invalid')
+            if (Path(origin) == Path(source) or Path(origin).is_relative_to(source) or Path(source).is_relative_to(origin)) and target != CLI_TARGET:
+                raise ValueError('Another mount exposes CLI authentication storage')
+        elif mount.get('Type') == 'bind' and origin == str(root) and target != '/data':
+            raise ValueError('Another mount exposes CLI authentication storage')
+    if (required and len(selected) != 1) or len(selected) > 1:
+        raise ValueError('The CLI authentication bind is missing or duplicated')
+    return bool(selected)
+
+
+CORE_NETWORK = 'runtipi_tipi_core_network'
+NETWORK_CAPABILITY = {**CLI_CAPABILITY, 'schema': 'orbis.controller-overlay-startup.v4', 'version': 4,
+                      'coreNetwork': {'name': CORE_NETWORK, 'internal': True, 'peers': ['runtipi-db', 'runtipi-queue']}}
+
+
+class CoreNetwork:
+    """Journal endpoint changes separately from immutable peer definitions."""
+    def __init__(self, updater):
+        self.u = updater
+        self.r = updater.runtime
+
+    def network(self, identifier, *, optional=False):
+        body = self.r.engine('GET', '/networks/' + identifier, allow_missing=optional)
+        return None if body is None else self.u.P.metadata(body, byte_limit=8 * 1024 * 1024)
+
+    def definition(self, network):
+        if (network.get('Name') != CORE_NETWORK or network.get('Driver') != 'bridge' or network.get('Scope') != 'local'
+                or network.get('Internal') is not True or network.get('Ingress') is True or network.get('Options')
+                or not re.fullmatch(r'[a-f0-9]{64}', network.get('Id', ''))):
+            raise ValueError('The private controller network changed or is not isolated')
+        fields = ('Id', 'Name', 'Driver', 'Scope', 'Internal', 'Attachable', 'Ingress', 'EnableIPv6', 'IPAM', 'Options', 'Labels')
+        return hashlib.sha256(self.u.P.canonical({key: network.get(key) for key in fields})).hexdigest()
+
+    def prepare(self, record):
+        plan = record.get('coreNetwork')
+        if plan is not None and plan.get('id') is not None:
+            if plan.get('retirement') is not None:
+                raise ValueError('A rolled-back controller network cannot be reused for forward activation')
+            self.verify(record)
+            return
+        if plan is None:
+            source_networks = record['source']['NetworkSettings']['Networks']
+            common = set(source_networks) & set(record['proxy']['NetworkSettings']['Networks'])
+            if len(common) != 1:
+                raise CapabilityError('The controller network migration requires one reviewed public network')
+            main = next(iter(common))
+            if main == CORE_NETWORK or set(source_networks) - {main, CORE_NETWORK}:
+                raise CapabilityError('The source controller has an unsupported network topology')
+            identities = {name: endpoint.get('NetworkID') for name, endpoint in source_networks.items()}
+            if any(not isinstance(value, str) or not re.fullmatch(r'[a-f0-9]{64}', value) for value in identities.values()):
+                raise ValueError('The source network identity is invalid')
+            initial = CORE_NETWORK if CORE_NETWORK in source_networks else main
+            for peer in record['peers'].values():
+                networks = peer['NetworkSettings']['Networks']
+                if (set(networks) != {initial} or networks[initial].get('NetworkID') != identities[initial]
+                        or peer['HostConfig'].get('NetworkMode') not in {initial, identities[initial]}):
+                    raise CapabilityError('The database or queue has an unsupported network topology')
+            plan = {'schema': 'orbis.controller-core-network.v1', 'main': main, 'sourceIds': identities,
+                    'rootSha256': hashlib.sha256(str(self.u.root).encode()).hexdigest(), 'id': None,
+                    'definition': None, 'goal': 'source', 'active': None, 'retirement': None,
+                    'peers': {name: sorted(peer['NetworkSettings']['Networks']) for name, peer in record['peers'].items()}}
+            record['coreNetwork'] = plan
+            self.u.save(record)
+        network = self.network(CORE_NETWORK, optional=True)
+        if network is None:
+            self.u.preserved(record)
+            self.r.engine('POST', '/networks/create', {'Name': CORE_NETWORK, 'CheckDuplicate': True, 'Driver': 'bridge',
+                'Internal': True, 'Labels': {'orbis.managed': 'true', 'io.orbis.root.sha256': plan['rootSha256'],
+                                             'io.orbis.controller-update': record['nonce']}})
+            network = self.network(CORE_NETWORK)
+        labels = network.get('Labels') or {}
+        if (CORE_NETWORK not in plan['sourceIds'] and
+                (labels.get('orbis.managed') != 'true' or labels.get('io.orbis.root.sha256') != plan['rootSha256']
+                 or labels.get('io.orbis.controller-update') != record['nonce'])):
+            raise ValueError('An unreviewed private controller network already exists')
+        if CORE_NETWORK in plan['sourceIds'] and network.get('Id') != plan['sourceIds'][CORE_NETWORK]:
+            raise ValueError('The source private network identity changed')
+        plan.update(id=network['Id'], definition=self.definition(network))
+        endpoints = record['body']['NetworkingConfig']['EndpointsConfig']
+        endpoints.setdefault(CORE_NETWORK, {'Aliases': ['runtipi']})
+        self.u.save(record)
+        self.verify(record)
+
+    def active_transition(self, record, plan):
+        active = plan['active']
+        if active is None:
+            return None
+        name = active.get('peer')
+        if name not in record['peers'] or set(active) != {'peer', 'from', 'to', 'network', 'method'}:
+            raise ValueError('The protected network transition is invalid')
+        before, after = set(active['from']), set(active['to'])
+        desired = self.desired(record, plan, name)
+        if (active['from'] != plan['peers'][name] or active['to'] != sorted(after)
+                or not before or not after or before - {plan['main'], CORE_NETWORK} or after - {plan['main'], CORE_NETWORK}):
+            raise ValueError('The protected network transition is invalid')
+        if active['method'] == 'connect':
+            valid = after == before | {active['network']} and active['network'] in desired - before
+        else:
+            valid = (active['method'] == 'disconnect' and after == before - {active['network']}
+                     and active['network'] in before - desired and desired <= before)
+        if not valid:
+            raise ValueError('The protected network transition changed')
+        return active
+
+    def desired(self, record, plan, name):
+        return {CORE_NETWORK} if plan['goal'] == 'target' else set(record['peers'][name]['NetworkSettings']['Networks'])
+
+    def verify(self, record):
+        plan = record.get('coreNetwork')
+        if plan is None:
+            return
+        if (set(plan) != {'schema', 'main', 'sourceIds', 'rootSha256', 'id', 'definition', 'goal', 'active', 'peers', 'retirement'}
+                or plan['schema'] != 'orbis.controller-core-network.v1' or plan['goal'] not in {'source', 'target'}
+                or plan['retirement'] not in {None, 'intent', 'complete'}
+                or set(plan['peers']) != set(record['peers'])
+                or plan['rootSha256'] != hashlib.sha256(str(self.u.root).encode()).hexdigest()
+                or plan['sourceIds'] != {name: item.get('NetworkID') for name, item in record['source']['NetworkSettings']['Networks'].items()}):
+            raise ValueError('The protected controller network plan changed')
+        if plan['id'] is None:
+            if plan['definition'] is not None or plan['active'] is not None or plan['goal'] != 'source' or plan['retirement'] is not None:
+                raise ValueError('The controller network preparation is incomplete')
+            for name, peer in record['peers'].items():
+                if self.r.definition(self.r.inspect(peer['Id'])) != record['peerDefinitions'][name]:
+                    raise ValueError('A controller peer changed before private network preparation')
+            return
+        if plan['retirement'] is not None:
+            if (plan['goal'] != 'source' or plan['active'] is not None or CORE_NETWORK in plan['sourceIds']
+                    or record.get('sourceBootstrapProfile', {}).get('profile') != BOOTSTRAP.LEGACY
+                    or any(set(plan['peers'][name]) != self.desired(record, plan, name) for name in record['peers'])):
+                raise ValueError('The controller rollback network retirement is invalid')
+            network = self.network(plan['id'], optional=True)
+            if network is not None and (plan['retirement'] == 'complete' or self.definition(network) != plan['definition']):
+                raise ValueError('The retired private controller network changed')
+        elif self.definition(self.network(plan['id'])) != plan['definition']:
+            raise ValueError('The private controller network definition changed')
+        active = self.active_transition(record, plan)
+        identities = {**plan['sourceIds'], CORE_NETWORK: plan['id']}
+        for name, prior in record['peers'].items():
+            raw = self.r.inspect(prior['Id'])
+            networks = raw['NetworkSettings']['Networks']
+            allowed = [plan['peers'][name]]
+            if active is not None and active['peer'] == name:
+                allowed.append(active['to'])
+                if raw['State'].get('Running'):
+                    raise ValueError('A controller peer started during its network transition')
+            if sorted(networks) not in allowed:
+                raise ValueError('A controller peer network set changed')
+            for net, endpoint in networks.items():
+                if net not in identities or endpoint.get('NetworkID') not in ({identities[net]} if raw['State'].get('Running') else {identities[net], '', None}):
+                    raise ValueError('A controller peer network identity changed')
+                expected = self.endpoint(record, name, net)
+                aliases = endpoint.get('Aliases') or []
+                generated = {name, prior['Id'], prior['Id'][:12]}
+                if (not isinstance(aliases, list) or not set(expected.get('Aliases') or []) <= set(aliases)
+                        or set(aliases) - set(expected.get('Aliases') or []) - generated
+                        or endpoint.get('IPAMConfig') != expected.get('IPAMConfig')
+                        or (endpoint.get('Links') or []) != (expected.get('Links') or [])
+                        or (endpoint.get('DriverOpts') or {}) != (expected.get('DriverOpts') or {})):
+                    raise ValueError('A controller peer network address or aliases changed')
+                dns = endpoint.get('DNSNames')
+                if dns is not None and (not isinstance(dns, list) or set(dns) - set(aliases) - generated):
+                    raise ValueError('A controller peer network DNS identity changed')
+            normalized = copy.deepcopy(raw)
+            normalized['NetworkSettings']['Networks'] = copy.deepcopy(prior['NetworkSettings']['Networks'])
+            if raw['Name'] != '/' + name or self.r.definition(normalized) != record['peerDefinitions'][name]:
+                raise ValueError('A controller peer changed outside its reviewed network transition')
+        body = self.r.engine('GET', '/containers/json?all=true')
+        inventory = self.u.P.metadata(b'{"containers":' + body + b'}', byte_limit=8 * 1024 * 1024 + 16)['containers']
+        if not isinstance(inventory, list) or len(inventory) > 2048:
+            raise ValueError('The private network membership inventory is invalid')
+        allowed = {record['source']['Id'], *(peer['Id'] for peer in record['peers'].values())}
+        if record.get('candidateId'):
+            allowed.add(record['candidateId'])
+        for row in inventory:
+            if not isinstance(row, dict):
+                raise ValueError('The private network membership inventory is invalid')
+            if CORE_NETWORK not in (row.get('NetworkSettings') or {}).get('Networks', {}):
+                continue
+            if plan['retirement'] is not None:
+                raise ValueError('The rollback network retirement still has attached containers')
+            identifier = row.get('Id')
+            if identifier in allowed:
+                continue
+            candidate = self.r.inspect(identifier)
+            if (candidate['Name'] != '/' + record['candidateName'] or candidate['Image'] != record['targetImageId']
+                    or candidate['State'].get('Running') or candidate['Config'].get('Labels', {}).get('io.orbis.controller-update') != self.u.key):
+                raise ValueError('An unrelated container joined the private controller network')
+            self.r.check_intent(candidate, record['body'])
+
+    def endpoint(self, record, name, network):
+        prior = record['peers'][name]['NetworkSettings']['Networks']
+        if network in prior:
+            return {key: copy.deepcopy(prior[network].get(key)) for key in ('Aliases', 'IPAMConfig', 'Links', 'DriverOpts')
+                    if prior[network].get(key) is not None}
+        aliases = {name}
+        for endpoint in prior.values():
+            aliases.update(endpoint.get('Aliases') or [])
+        return {'Aliases': sorted(aliases)}
+
+    def move(self, record, goal):
+        plan = record.get('coreNetwork')
+        if plan is None:
+            return
+        if goal not in {'source', 'target'} or plan.get('id') is None:
+            raise ValueError('The controller network destination is invalid')
+        if plan['retirement'] is not None and goal != 'source':
+            raise ValueError('A retired rollback network cannot be used for forward activation')
+        self.u.preserved(record)
+        desired = {name: ({CORE_NETWORK} if goal == 'target' else set(peer['NetworkSettings']['Networks']))
+                   for name, peer in record['peers'].items()}
+        if plan['active'] is None and all(set(plan['peers'][name]) == networks for name, networks in desired.items()):
+            if plan['goal'] != goal:
+                plan['goal'] = goal
+                self.u.save(record)
+            return
+        controllers = [record['source']['Id']]
+        if record.get('sourceRetirement', {}).get('reconstructionId'):
+            controllers = [record['sourceRetirement']['reconstructionId']]
+        if record.get('candidateId'):
+            controllers.append(record['candidateId'])
+        for identifier in controllers:
+            raw = self.u.optional_container(identifier)
+            if raw is not None and raw['State'].get('Running'):
+                raise ValueError('Controllers must be stopped before moving private network endpoints')
+        for peer in record['peers'].values():
+            raw = self.r.inspect(peer['Id'])
+            if raw['State'].get('Running') or raw['HostConfig'].get('RestartPolicy', {}).get('Name') != 'no':
+                raise ValueError('Controller peers must be stopped and restart-disabled before changing networks')
+        active = plan['active']
+        if active is not None:
+            actual = sorted(self.r.inspect(record['peers'][active['peer']]['Id'])['NetworkSettings']['Networks'])
+            if actual == active['to']:
+                plan['peers'][active['peer']] = actual
+            plan['active'] = None
+        plan['goal'] = goal
+        self.u.save(record)
+        for name, peer in record['peers'].items():
+            desired = self.desired(record, plan, name)
+            while set(plan['peers'][name]) != desired:
+                before = set(plan['peers'][name])
+                adding = desired - before
+                net = sorted(adding or before - desired)[0]
+                method = 'connect' if adding else 'disconnect'
+                after = before | {net} if adding else before - {net}
+                plan['active'] = {'peer': name, 'from': sorted(before), 'to': sorted(after), 'network': net, 'method': method}
+                self.u.save(record)
+                self.u.preserved(record)
+                identifier = plan['id'] if net == CORE_NETWORK else plan['sourceIds'][net]
+                body = {'Container': peer['Id'], 'EndpointConfig': self.endpoint(record, name, net)} if adding else {'Container': peer['Id'], 'Force': False}
+                try:
+                    self.r.engine('POST', '/networks/' + identifier + '/' + method, body)
+                except (ValueError, RuntimeError):
+                    self.u.preserved(record)
+                    if sorted(self.r.inspect(peer['Id'])['NetworkSettings']['Networks']) != sorted(after):
+                        raise
+                self.u.preserved(record)
+                if sorted(self.r.inspect(peer['Id'])['NetworkSettings']['Networks']) != sorted(after):
+                    raise ValueError('The controller network transition was not observed')
+                plan['peers'][name] = sorted(after)
+                plan['active'] = None
+                self.u.save(record)
+        self.u.preserved(record)
+
+    def retire_for_legacy_rollback(self, record):
+        plan = record.get('coreNetwork')
+        if (plan is None or CORE_NETWORK in plan['sourceIds']
+                or record.get('sourceBootstrapProfile', {}).get('profile') != BOOTSTRAP.LEGACY):
+            return
+        self.u.preserved(record)
+        if plan['goal'] != 'source' or plan['active'] is not None:
+            raise ValueError('The source topology must be restored before private network retirement')
+        if plan['retirement'] == 'complete':
+            return
+        if plan['retirement'] is None:
+            plan['retirement'] = 'intent'
+            self.u.save(record)
+        # The intent above permits absence only after every original endpoint
+        # is restored and an all-container inventory proves this network empty.
+        self.u.preserved(record)
+        if self.network(plan['id'], optional=True) is not None:
+            try:
+                self.r.engine('DELETE', '/networks/' + plan['id'])
+            except (ValueError, RuntimeError):
+                if self.network(plan['id'], optional=True) is not None:
+                    raise
+        if self.network(plan['id'], optional=True) is not None:
+            raise ValueError('The private rollback network has not retired')
+        plan['retirement'] = 'complete'
+        self.u.save(record)
+        self.u.preserved(record)
 
 
 class CapabilityError(ValueError):
@@ -638,6 +1039,8 @@ class ControllerUpdate:
 
     def preserved(self, record):
         self.require_reset_mount(record)
+        self.require_cli_storage(record)
+        CoreNetwork(self).verify(record)
         if self.runtime.reader._object(['info', '--format', '{{json .}}']).get('ID') != record['daemonId']:
             raise ValueError('Controller update Docker daemon changed')
         proxy = self.runtime.inspect(record['proxy']['Id'])
@@ -652,6 +1055,8 @@ class ControllerUpdate:
                     or raw['State'].get('Running') != prior['running'] or raw['State'].get('StartedAt') != prior['startedAt']):
                 raise ValueError('A preserved application container changed')
         for name, prior in record['peers'].items():
+            if record.get('coreNetwork') is not None:
+                continue
             raw = self.runtime.inspect(prior['Id'])
             self.runtime.verify_networks({'source': {'container': prior}}, raw)
             if raw['Name'] != '/' + name or self.runtime.definition(raw) != record['peerDefinitions'][name]:
@@ -834,18 +1239,68 @@ class ControllerUpdate:
                 raise CapabilityError('The target does not support preserving live network access during controller updates')
             body = archive.extractfile(entries[0]).read(4097)
         capability = self.P.metadata(body, byte_limit=4096)
-        if capability != CAPABILITY and not (without_backup and capability == NO_BACKUP_CAPABILITY):
+        if capability not in (CAPABILITY, CLI_CAPABILITY, NETWORK_CAPABILITY) and not (without_backup and capability == NO_BACKUP_CAPABILITY):
             raise CapabilityError('The target does not support preserving live network access during controller updates')
+        if capability in (CLI_CAPABILITY, NETWORK_CAPABILITY):
+            self.prepare_cli_storage(record)
+            self.save(record)
         self.runtime.change(['rm', probe['Id']])
         record.pop('probeId', None)
         self.review_source_bootstrap(record)
         if record['sourceBootstrapProfile']['profile'] == BOOTSTRAP.LEGACY:
-            record['sourceBootstrapNetworks'] = BOOTSTRAP.preserved_networks(self, record)
+            if record.get('coreNetwork') is None:
+                record['sourceBootstrapNetworks'] = BOOTSTRAP.preserved_networks(self, record)
+            elif 'sourceBootstrapNetworks' not in record:
+                raise ValueError('The original legacy bootstrap network review is missing')
+        if capability == NETWORK_CAPABILITY:
+            CoreNetwork(self).prepare(record)
         if record.get('sourceRetirement'):
             self.retain_source_image(record)
         record['phase'] = 'prepared'
         self.save(record)
         return record
+
+    def prepare_cli_storage(self, record):
+        if record.get('cliStorage') is not None:
+            self.require_cli_storage(record)
+            return
+        body = record['body']
+        user = body.get('User') or ''
+        host = body['HostConfig']
+        daemon = self.runtime.reader._object(['info', '--format', '{{json .}}'])
+        security = daemon.get('SecurityOptions')
+        if (user not in {'', '0', 'root', '0:0', 'root:root'} or host.get('UsernsMode') not in (None, '', 'host')
+                or not isinstance(security, list) or any(not isinstance(value, str) for value in security)
+                or any('rootless' in value or ('userns' in value and host.get('UsernsMode') != 'host') for value in security)):
+            raise CapabilityError('The target CLI authentication requires a verified root-owned private bind')
+        observed = require_cli_mounts(self.root, record['source'].get('Mounts'), required=False)
+        intended = require_cli_mounts(self.root, cli_mounts(body), required=False)
+        if observed != intended:
+            raise ValueError('The source CLI authentication bind intent changed')
+        storage = cli_storage(self.root, create=True)
+        if not intended:
+            if host.get('Mounts') is None:
+                host['Mounts'] = []
+            host['Mounts'].append({'Type': 'bind', 'Source': storage['source'], 'Target': CLI_TARGET,
+                                   'ReadOnly': False, 'BindOptions': {'Propagation': 'rprivate'}})
+        record['cliStorage'] = storage
+        self.require_cli_storage(record)
+
+    def require_cli_storage(self, record, *, candidate=None, require_key=False):
+        storage = record.get('cliStorage')
+        if storage is None:
+            return
+        current = cli_storage(self.root)
+        if (set(storage) != set(current) or any(storage[key] != current[key] for key in current if key != 'keySha256')
+                or storage['keySha256'] is not None and storage['keySha256'] != current['keySha256']):
+            raise ValueError('The private target CLI authentication storage changed')
+        require_cli_mounts(self.root, cli_mounts(record['body']), required=True)
+        if candidate is not None:
+            require_cli_mounts(self.root, candidate.get('Mounts'), required=True)
+        if require_key:
+            if current['keySha256'] is None:
+                raise ValueError('The healthy controller did not establish its private CLI authentication key')
+            storage['keySha256'] = current['keySha256']
 
     def verify_source(self, record):
         retirement = record.get('sourceRetirement') or {}
@@ -864,7 +1319,11 @@ class ControllerUpdate:
                 self.runtime.change(['start', raw['Id']])
 
     def check_candidate_networks(self, record, candidate):
-        self.runtime.verify_networks({'source': {'container': record['source']}}, candidate)
+        source = record['source']
+        if record.get('coreNetwork') is not None:
+            source = copy.deepcopy(source)
+            source['NetworkSettings']['Networks'][CORE_NETWORK] = {'NetworkID': record['coreNetwork']['id']}
+        self.runtime.verify_networks({'source': {'container': source}}, candidate)
         intended = record['body']['NetworkingConfig']['EndpointsConfig']
         actual = candidate['NetworkSettings']['Networks']
         if set(actual) != set(intended):
@@ -903,6 +1362,7 @@ class ControllerUpdate:
             self.runtime.check_intent(candidate, record['body'])
             self.check_candidate_networks(record, candidate)
             self.require_reset_mount(record, candidate=candidate)
+            self.require_cli_storage(record, candidate=candidate)
             if candidate['Image'] != record['targetImageId'] or candidate['State'].get('Running'):
                 raise ValueError('Controller candidate differs from its protected intent')
             record['candidateId'] = candidate['Id']
@@ -912,6 +1372,7 @@ class ControllerUpdate:
         self.runtime.check_intent(candidate, record['body'])
         self.check_candidate_networks(record, candidate)
         self.require_reset_mount(record, candidate=candidate)
+        self.require_cli_storage(record, candidate=candidate)
         if ((original is not None and original['State'].get('Running')) or self.runtime.definition(candidate) != record['candidateDefinition']
                 or candidate['Image'] != record['targetImageId']):
             raise ValueError('The stopped controller or candidate changed')
@@ -929,6 +1390,7 @@ class ControllerUpdate:
         if unbacked(record):
             record['unbackedWritesPossible'] = True
             self.save(record)
+        CoreNetwork(self).move(record, 'target')
         self.start_peers(record)
         if progress is not None:
             progress('restarting')
@@ -955,6 +1417,8 @@ class ControllerUpdate:
             if raw['Image'] != image or raw['Name'] != '/runtipi':
                 raise ValueError('Controller identity changed during startup')
             if raw['State'].get('Running') and (raw['State'].get('Health') or {}).get('Status') == 'healthy':
+                if identifier == record.get('candidateId'):
+                    self.require_cli_storage(record, candidate=raw, require_key=True)
                 return
             if time.monotonic() >= deadline or raw['State'].get('Status') in {'exited', 'dead'}:
                 raise RuntimeError('The reviewed controller did not become healthy')
@@ -1024,6 +1488,8 @@ class ControllerUpdate:
             self.runtime.change(['rename', original['Id'], 'runtipi'])
         elif original['Name'] != '/runtipi':
             raise ValueError('The original controller recovery name changed')
+        CoreNetwork(self).move(record, 'source')
+        CoreNetwork(self).retire_for_legacy_rollback(record)
         return record
 
     def verify_source_bootstrap(self):
@@ -1056,6 +1522,8 @@ class ControllerUpdate:
         if record.get('sourceBootstrapEnablement') is not None:
             self.bootstrap_source(record, 'rollback')
         original = self.verify_source(record)
+        CoreNetwork(self).move(record, 'source')
+        CoreNetwork(self).retire_for_legacy_rollback(record)
         self.start_peers(record)
         if not original['State'].get('Running'):
             self.verify_source_bootstrap()

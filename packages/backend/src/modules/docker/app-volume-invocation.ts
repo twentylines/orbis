@@ -1,18 +1,27 @@
 import { constants } from 'node:fs';
 import fs, { type FileHandle } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { encodePinnedCompose } from './app-volume-compose';
+import { appComposeEnvironment } from './app-compose-environment';
 import type { AppVolumePins } from './app-volume-pins';
 
 const fail = () => new Error('Restored volume configuration could not be prepared safely.');
 const execute = promisify(execFile);
-export async function readEffectiveAppCompose(args: readonly string[], signal?: AbortSignal): Promise<unknown> {
+export async function readEffectiveAppCompose(
+  args: readonly string[],
+  signal?: AbortSignal,
+  options?: { keepRelativePaths?: true; resolveImageDigests?: true; localSocket?: true },
+): Promise<unknown> {
   try {
-    const { stdout } = await execute('docker-compose', [...args, 'config', '--format', 'json'], {
+    const config = [...args, 'config', '--format', 'json'];
+    if (options?.keepRelativePaths) config.push('--no-path-resolution');
+    if (options?.resolveImageDigests) config.push('--resolve-image-digests');
+    const { stdout } = await execute('docker-compose', config, {
       encoding: 'utf8',
+      env: appComposeEnvironment(options?.localSocket),
       maxBuffer: 16 * 1024 * 1024,
       timeout: 30_000,
       killSignal: 'SIGKILL',
@@ -24,7 +33,7 @@ export async function readEffectiveAppCompose(args: readonly string[], signal?: 
     throw fail();
   }
 }
-export async function prepareAppVolumeInvocation(options: { effective: unknown; pins: AppVolumePins; directory: string; projectDirectory: string }) {
+async function openComposeInvocation(options: { bytes: Buffer; project: string; directory: string; projectDirectory: string }) {
   if (
     process.platform !== 'linux' ||
     !path.isAbsolute(options.directory) ||
@@ -33,7 +42,6 @@ export async function prepareAppVolumeInvocation(options: { effective: unknown; 
     path.resolve(options.projectDirectory) !== options.projectDirectory
   )
     throw fail();
-  const bytes = encodePinnedCompose(options.effective, options.pins);
   await fs.mkdir(options.directory, { recursive: true, mode: 0o700 });
   if ((await fs.realpath(options.directory)) !== options.directory) throw fail();
   const parent = await fs.open(options.directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
@@ -45,11 +53,11 @@ export async function prepareAppVolumeInvocation(options: { effective: unknown; 
     if (!stat.isDirectory() || stat.mode & 0o077 || (process.getuid && stat.uid !== process.getuid())) throw fail();
     file = `/proc/self/fd/${parent.fd}/${randomUUID()}.json`;
     output = await fs.open(file, constants.O_RDWR | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-    await output.writeFile(bytes);
+    await output.writeFile(options.bytes);
     input = await fs.open(`/proc/self/fd/${output.fd}`, constants.O_RDONLY);
     const before = await output.stat();
     const after = await input.stat();
-    if (before.dev !== after.dev || before.ino !== after.ino || after.size !== bytes.length) throw fail();
+    if (before.dev !== after.dev || before.ino !== after.ino || after.size !== options.bytes.length) throw fail();
     await fs.unlink(file);
     file = undefined;
     await output.close();
@@ -58,7 +66,7 @@ export async function prepareAppVolumeInvocation(options: { effective: unknown; 
     input = undefined;
     let closed = false;
     return {
-      args: ['--project-name', options.pins.project, '--project-directory', options.projectDirectory, '--file', '/proc/self/fd/3'],
+      args: ['--project-name', options.project, '--project-directory', options.projectDirectory, '--file', '/proc/self/fd/3'],
       fd: descriptor.fd,
       release: async () => {
         if (closed) return;
@@ -72,4 +80,21 @@ export async function prepareAppVolumeInvocation(options: { effective: unknown; 
     if (file) await fs.unlink(file).catch(() => undefined);
     await parent.close();
   }
+}
+
+export function prepareAppVolumeInvocation(options: { effective: unknown; pins: AppVolumePins; directory: string; projectDirectory: string }) {
+  return openComposeInvocation({ ...options, bytes: encodePinnedCompose(options.effective, options.pins), project: options.pins.project });
+}
+
+export async function prepareFrozenUpdateInvocation(options: {
+  effective: unknown;
+  pins?: AppVolumePins;
+  project: string;
+  directory: string;
+  projectDirectory: string;
+}) {
+  const bytes = options.pins ? encodePinnedCompose(options.effective, options.pins) : Buffer.from(JSON.stringify(options.effective));
+  if (bytes.length > 16 * 1024 * 1024) throw fail();
+  const invocation = await openComposeInvocation({ ...options, bytes });
+  return { ...invocation, sha256: createHash('sha256').update(bytes).digest('hex') };
 }

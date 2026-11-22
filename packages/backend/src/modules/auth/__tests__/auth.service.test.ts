@@ -8,6 +8,8 @@ import { type MockProxy, mock, mockReset } from 'vitest-mock-extended';
 import { AuthService } from '../auth.service';
 import { TotpAuthenticator } from '../utils/totp-authenticator';
 import { SessionManager } from '../session.manager';
+import { CredentialSynchronization } from '../../sentinel-recovery/credential-synchronization.service';
+import { credentialChangeFixture } from './credential-change.fixture';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -32,10 +34,12 @@ describe('AuthService', () => {
   };
 
   beforeEach(async () => {
+    const users = mock<UserRepository>();
+    const changes = credentialChangeFixture(users);
     const moduleRef = await Test.createTestingModule({
       providers: [AuthService],
     })
-      .useMocker(mock)
+      .useMocker((token) => (token === UserRepository ? users : token === CredentialSynchronization ? changes.sync : mock()))
       .compile();
 
     authService = moduleRef.get(AuthService);
@@ -239,6 +243,84 @@ describe('AuthService', () => {
       message: 'AUTH_ERROR_TOTP_INVALID_CODE',
     });
     expect(userRepository.updateUser).not.toHaveBeenCalled();
+  });
+
+  it('rechecks a queued password change against the first committed password before granting a second write', async () => {
+    const account = { ...totpUser, password: 'hash:old-password' };
+    userRepository.getUserById.mockImplementation(async () => ({ ...account }));
+    userRepository.updateUser.mockImplementation(async (_id, data) => Object.assign(account, data));
+    passwordService.hash.mockImplementation(async (value) => `hash:${value}`);
+    let entered!: () => void;
+    const proving = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    passwordService.verify.mockImplementation(async (value, stored) => {
+      if (++calls === 1) {
+        entered();
+        await held;
+      }
+      return stored === `hash:${value}`;
+    });
+    const first = authService.changePassword({ userId: 1, currentPassword: 'old-password', newPassword: 'first-new-password' });
+    await proving;
+    const second = authService.changePassword({ userId: 1, currentPassword: 'old-password', newPassword: 'second-new-password' });
+    const refused = expect(second).rejects.toThrow('AUTH_ERROR_INVALID_PASSWORD');
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(passwordService.verify).toHaveBeenCalledTimes(1);
+      expect(userRepository.updateUser).not.toHaveBeenCalled();
+    } finally {
+      release();
+    }
+    expect(await first).toBe(true);
+    await refused;
+    expect(account.password).toBe('hash:first-new-password');
+    expect(userRepository.updateUser).toHaveBeenCalledTimes(1);
+    expect(sessionManager.destroyAllSessionsByUserId).toHaveBeenCalledTimes(1);
+  });
+
+  it('cannot enable a previously staged TOTP secret while a new URI is being prepared', async () => {
+    const account = { ...totpUser, totpEnabled: false, totpSecret: 'enc:old-secret' };
+    userRepository.getUserById.mockImplementation(async () => ({ ...account }));
+    userRepository.updateUser.mockImplementation(async (_id, data) => Object.assign(account, data));
+    encryptionService.encrypt.mockImplementation((value) => `enc:${value}`);
+    encryptionService.decrypt.mockImplementation((value) => value.slice(4));
+    vi.spyOn(TotpAuthenticator, 'generateSecret').mockReturnValue('new-secret');
+    vi.spyOn(TotpAuthenticator, 'keyuri').mockReturnValue('otpauth://synthetic');
+    vi.spyOn(TotpAuthenticator, 'check').mockImplementation((code, secret) => code === '111111' && secret === 'old-secret');
+    let entered!: () => void;
+    const proving = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    passwordService.verify.mockImplementation(async () => {
+      entered();
+      await held;
+      return true;
+    });
+    const preparing = authService.getTotpUri({ userId: 1, password: 'fixture-password' });
+    await proving;
+    const enabling = authService.setupTotp({ userId: 1, totpCode: '111111' });
+    const refused = expect(enabling).rejects.toThrow('AUTH_ERROR_TOTP_INVALID_CODE');
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(TotpAuthenticator.check).not.toHaveBeenCalled();
+    } finally {
+      release();
+    }
+    expect(await preparing).toEqual({ uri: 'otpauth://synthetic', key: 'new-secret' });
+    await refused;
+    expect(account.totpEnabled).toBe(false);
+    expect(account.totpSecret).toBe('enc:new-secret');
+    expect(TotpAuthenticator.check).toHaveBeenCalledWith('111111', 'new-secret');
   });
 
   describe('getCookieDomain', () => {

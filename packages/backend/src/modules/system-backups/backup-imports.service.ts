@@ -31,6 +31,7 @@ import { restoreStartupRole } from './backup-restore-startup';
 import { BackupRestoreJournal } from './backup-restore-journal';
 import { acquireRestoreLease } from './backup-restore-lease';
 import { BackupSourcePinnedError, createBackupSourceSeal, pinBackupSource, type BackupSourceSeal } from './backup-restore-source';
+import { requireArchivedBackupInstallHoldsClear } from './backup-install-admission';
 import type { TimeMachineRestoreBinding } from '@runtipi/common/schemas/time-machine-restore';
 import { consumeRetainedRestorePermit, requireRetainedRestoreReceipt, type RetainedRestorePermit } from './time-machine-restore-admission';
 import { reuseRestoreArchive } from './backup-restore-reuse';
@@ -588,6 +589,15 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
       });
       if (job.expectedManifestSha256 && result.integrity.manifest.sha256 !== job.expectedManifestSha256)
         throw new BackupRequirementError('The saved restore archive does not match its reviewed source.');
+      await requireArchivedBackupInstallHoldsClear(
+        path.join(directory, 'content', 'data'),
+        [
+          ...result.manifest.containers.filter((container) => container.running).map((container) => container.project),
+          ...(appRuntime?.metadata.containers.filter((container) => container.wasRunning).map((container) => container.appUrn.replace(':', '_')) ??
+            []),
+        ],
+        result.manifest,
+      );
       await fs.rm(archive);
       job.stage = 'database';
       job.message = 'Reviewing database records in an isolated workspace.';

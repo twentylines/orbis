@@ -41,6 +41,59 @@ def fail():
     return ValueError('Protected retained app effects could not be verified')
 
 
+def install_storage_unavailable():
+    return ValueError('Retained app install recovery storage could not be verified')
+
+
+def directory_stamp(details):
+    return (details.st_dev, details.st_ino, details.st_uid, details.st_gid, details.st_mode,
+            details.st_nlink, details.st_mtime_ns, details.st_ctime_ns)
+
+
+@contextmanager
+def receipt_directory(parent, name, *, owner, mount_id, expected_mount):
+    try:
+        descriptor = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent)
+    except FileNotFoundError:
+        yield None
+        try:
+            os.stat(name, dir_fd=parent, follow_symlinks=False)
+        except FileNotFoundError:
+            return
+        raise install_storage_unavailable()
+    try:
+        before = os.fstat(descriptor)
+        if before.st_uid != owner or before.st_mode & 0o077 or mount_id(descriptor) != expected_mount:
+            raise install_storage_unavailable()
+        yield descriptor
+        if (directory_stamp(before) != directory_stamp(os.fstat(descriptor))
+                or directory_stamp(before) != directory_stamp(os.stat(name, dir_fd=parent, follow_symlinks=False))
+                or mount_id(descriptor) != expected_mount):
+            raise install_storage_unavailable()
+    finally:
+        os.close(descriptor)
+
+
+def require_clear_install_holds(state, running_urns, *, owner, mount_id):
+    """The caller pins the required live state root and verifies it on exit."""
+    expected_mount = mount_id(state)
+    try:
+        with receipt_directory(state, 'orbis-install-requests', owner=owner,
+                               mount_id=mount_id, expected_mount=expected_mount) as namespace:
+            if namespace is None:
+                return
+            for urn in sorted(set(running_urns)):
+                name = hashlib.sha256(urn.encode('utf-8')).hexdigest()
+                with receipt_directory(namespace, name, owner=owner,
+                                       mount_id=mount_id, expected_mount=expected_mount) as receipt:
+                    if receipt is not None:
+                        with os.scandir(receipt) as entries:
+                            if next(entries, None) is not None:
+                                raise ValueError('A retained app scheduled to start has unfinished install recovery')
+    except OSError as error:
+        raise install_storage_unavailable() from error
+
+
 def canonical(value):
     COMPILER._bounded(value)
     return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode('utf8')
@@ -68,7 +121,7 @@ def default_storage():
 class RetainedAppEffects:
     """Synchronous, resumable exact-ID effects; all callbacks are mandatory.
 
-    engine: inspect(id), find_name(name), create(name, body), start(id), remove(id).
+    engine: inspect(id), find_name(name), create(name, body), start(id, plan), remove(id).
     inspect/find_name return a complete snapshot or None ONLY for authoritative
     daemon 404 / exact successful empty lookup, never transport errors/timeouts.
     create returns a full 64-hex ID, never a prefix. remove must mean non-force,
@@ -79,6 +132,8 @@ class RetainedAppEffects:
     verify_destination(original, current) and verify_ports(plans, destinations)
     must return True after independent root checks. comparator is the shared
     DockerRestoreRuntime.check_intent bound to the independently trusted runtime.
+    verify_install_holds(plans) verifies the required live store for running
+    intents before activation. The engine adapter repeats it before sending a start.
     storage is root-owned helper injection, never caller JSON or HTTP content.
     Optional probe_plans must be the same full plans with ONLY bind Source paths
     transformed into root-verified incoming sibling roots. Their separate digest
@@ -88,8 +143,8 @@ class RetainedAppEffects:
     """
     def __init__(self, directory, *, restore_id, point_id, operation_sha256,
                  authority_sha256, plans, destinations, engine, comparator,
-                 verify_destination, verify_ports, authorize, storage=None, probe_plans=None):
-        if not all(callable(item) for item in (comparator, verify_destination, verify_ports, authorize)):
+                 verify_destination, verify_ports, verify_install_holds, authorize, storage=None, probe_plans=None):
+        if not all(callable(item) for item in (comparator, verify_destination, verify_ports, verify_install_holds, authorize)):
             raise fail()
         for method in ('inspect', 'find_name', 'create', 'start', 'remove'):
             if not callable(getattr(engine, method, None)): raise fail()
@@ -97,6 +152,7 @@ class RetainedAppEffects:
         self.store = default_storage() if storage is None else storage
         self.engine, self.comparator = engine, comparator
         self.verify_destination, self.verify_ports, self.authorize = verify_destination, verify_ports, authorize
+        self.verify_install_holds = verify_install_holds
         self.plans, self.destinations = copy.deepcopy(plans), copy.deepcopy(destinations)
         self.probe_plans = copy.deepcopy(plans if probe_plans is None else probe_plans)
         self._validate_definitions()
@@ -474,6 +530,7 @@ class RetainedAppEffects:
 
     def activate(self):
         with self._locked({'COMMIT'}):
+            self.verify_install_holds(copy.deepcopy(self.plans))
             for index, row in enumerate(self.progress['probes']):
                 if not row['removed']: raise fail()
                 self._remove_probe(index, {'COMMIT'})
@@ -499,7 +556,7 @@ class RetainedAppEffects:
                 else:
                     self._stopped(raw, not row['startIntent'])
                     row['startIntent'] = True; self._save({'COMMIT'})
-                    self._call('start', row['id'], decisions={'COMMIT'})
+                    self._call('start', row['id'], plan, decisions={'COMMIT'})
                     self._checked(self._inspect(row['id'], {'COMMIT'}), self._compiled(index, False), running=True)
                     row['started'] = True; self._save({'COMMIT'})
             self._verify()

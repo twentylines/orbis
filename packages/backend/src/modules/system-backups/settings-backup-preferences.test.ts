@@ -7,12 +7,35 @@ const source = () => ({
   ...structuredClone(DEFAULT_DESKTOP_PREFERENCES),
   preset: 'forest' as const,
   density: 'compact' as const,
-  appearance: { ...defaultDesktopAppearance, accent: '#aabbcc', wallpaperX: 42, dockSize: 'large' as const, textScale: 125 },
+  appearance: { ...defaultDesktopAppearance, accent: '#aabbcc', wallpaperColours: true, wallpaperX: 42, dockSize: 'large' as const, textScale: 125 },
 });
 
 it('preserves every supported preference when all four categories are restored', () => {
   const value = source();
   expect(mergeSettingsPreferences(structuredClone(DEFAULT_DESKTOP_PREFERENCES), splitSettingsPreferences(value))).toEqual(value);
+});
+
+it('restores explicit Default and its remembered fine values or infers Custom from legacy theme backups', () => {
+  const previous = source();
+  const value = {
+    ...previous,
+    preset: 'amber' as const,
+    appearance: { ...previous.appearance, materialMode: 'default' as const, surfaceOpacity: 0, themeColour: '#edbe44' },
+  };
+  const patch = splitSettingsPreferences(value).themes;
+  expect(mergeSettingsPreferences(previous, { themes: patch })).toEqual(value);
+  const legacy = mergeSettingsPreferences(previous, { themes: { appearance: { surfaceOpacity: 95 } } });
+  expect(legacy.appearance).toMatchObject({ materialMode: 'custom', surfaceOpacity: 95, themeColour: null });
+});
+
+it('keeps provider-specific wallpaper selection out of backups and clears it when restoring a portable wallpaper', () => {
+  const original = source();
+  const online = { ...original, appearance: { ...original.appearance, wallpaperUnsplash: 'photo_example-123' } };
+  const patches = splitSettingsPreferences(online);
+  expect(patches).toEqual(splitSettingsPreferences(original));
+  expect(mergeSettingsPreferences(online, { dashboard: patches.dashboard }).appearance?.wallpaperUnsplash).toBe('photo_example-123');
+  expect(mergeSettingsPreferences(online, { wallpapers: patches.wallpapers }).appearance?.wallpaperUnsplash).toBeNull();
+  expect(() => validateSettingsPreferencePatch('wallpapers', { appearance: { wallpaperUnsplash: 'photo_example-123' } })).toThrow();
 });
 
 it('restores dashboard layout without changing omitted theming, wallpaper or general preferences', () => {

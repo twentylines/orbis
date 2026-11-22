@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { backupDatabaseColumns, backupDatabaseTables, type BackupDatabaseTable } from './backup-database-records';
+import { backupDatabaseColumns, backupDatabaseTables, backupMigrationDigest, type BackupDatabaseTable } from './backup-database-records';
 import { prepareRestoreDatabase, type RestoreDatabaseConnection, type RestoreDatabaseOwner } from './backup-restore-database';
 import type { BackupDatabaseReview } from './backup-database.service';
 
@@ -68,6 +68,7 @@ let ownerRecord: { name: string; user: string; marker: string | null; oid: numbe
 let tableRows: Record<BackupDatabaseTable, Row[]>;
 let queryLog: Array<{ database: string; sql: string; values: unknown[] }>;
 let dropped: string[];
+let profile: 1 | 2;
 let committed = false;
 let transactionStarted = false;
 let migrationSeeded = false;
@@ -78,6 +79,7 @@ beforeEach(async () => {
   await fs.chmod(directory, 0o700);
   file = path.join(directory, 'records.ndjson');
   connection = { host: 'localhost', port: 5432, user: 'fixture_owner', password: 'disposable fixture', database: mainDatabase };
+  profile = 1;
   entries = databaseRows();
   bytes = encode(entries);
   expected = review(bytes, entries);
@@ -147,7 +149,25 @@ beforeEach(async () => {
       }
       return { rowCount: null, rows: [] };
     }
+    if (sql.includes('AS ledger_cascade'))
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            has_ledger: profile === 2,
+            baseline_columns: profile - 1,
+            boolean_baseline: profile - 1,
+            ledger_cascade: profile - 1,
+            ledger_key: profile - 1,
+          },
+        ],
+      };
+    if (sql.startsWith('SELECT id,migrations_baselined')) return { rowCount: tableRows.app.length, rows: tableRows.app };
+    if (sql.startsWith('SELECT app_id,migration_id')) return { rowCount: tableRows.app_migration.length, rows: tableRows.app_migration };
+    if (sql.startsWith('SELECT 1 FROM public.app WHERE migrations_baselined'))
+      return { rowCount: 0, rows: tableRows.app.filter((row) => row.migrations_baselined) };
     if (sql.startsWith('TRUNCATE ')) {
+      if (profile === 2 && !sql.includes('public."app_migration"')) throw new Error('FK-related table omitted from truncation');
       if (!sql.endsWith(' RESTART IDENTITY')) throw new Error('Unexpected table reset statement');
       tableRows = emptyTables();
       transactionStarted = true;
@@ -157,9 +177,9 @@ beforeEach(async () => {
       if (!transactionStarted) throw new Error('Insert occurred outside the restore transaction');
       if (throwOn === 'insert') throw new Error('fixture insert failure with private detail');
       const match = /^INSERT INTO public\."([^"]+)"/.exec(sql);
-      if (!match || !backupDatabaseTables.includes(match[1] as BackupDatabaseTable)) throw new Error('Unexpected insert target');
+      if (!match || !backupDatabaseTables(profile).includes(match[1] as BackupDatabaseTable)) throw new Error('Unexpected insert target');
       const table = match[1] as BackupDatabaseTable;
-      const row = Object.fromEntries(backupDatabaseColumns(table).map((column, index) => [column, values[index]]));
+      const row = Object.fromEntries(backupDatabaseColumns(table, profile).map((column, index) => [column, values[index]]));
       tableRows[table].push(row);
       return { rowCount: 1, rows: [] };
     }
@@ -189,6 +209,7 @@ function passwordHash() {
 
 function databaseRows(): Entry[] {
   const rows: Record<BackupDatabaseTable, Row> = {
+    app_migration: {},
     user: {
       id: 1,
       username: usernamePayload,
@@ -250,7 +271,7 @@ function databaseRows(): Entry[] {
       is_visible_on_guest_dashboard: false,
     },
   };
-  return backupDatabaseTables.map((table) => ({ table, row: rows[table] }));
+  return backupDatabaseTables(1).map((table) => ({ table, row: rows[table] }));
 }
 
 function encode(records: Entry[]) {
@@ -260,7 +281,7 @@ function encode(records: Entry[]) {
 function review(data: Buffer, records: Entry[]): BackupDatabaseReview {
   return {
     counts: Object.fromEntries(
-      backupDatabaseTables.map((table) => [table, records.filter((entry) => entry.table === table).length]),
+      backupDatabaseTables(1).map((table) => [table, records.filter((entry) => entry.table === table).length]),
     ) as BackupDatabaseReview['counts'],
     bytes: data.length,
     sha256: createHash('sha256').update(data).digest('hex'),
@@ -268,7 +289,7 @@ function review(data: Buffer, records: Entry[]): BackupDatabaseReview {
 }
 
 function emptyTables(): Record<BackupDatabaseTable, Row[]> {
-  return { user: [], app_store: [], app: [], link: [] };
+  return { user: [], app_store: [], app: [], link: [], app_migration: [] };
 }
 
 function options(
@@ -333,6 +354,49 @@ it('clears migration seeds, restores parameterized rows with apps stopped, and t
   const sequenceCalls = queryLog.filter(({ sql }) => sql.startsWith('SELECT pg_catalog.setval'));
   expect(sequenceCalls.map(({ values }) => values[0])).toEqual(['public."user_id_seq"', 'public."app_id_seq"', 'public."link_id_seq"']);
   expect(fakePg.migrateCalls[0]?.options).toEqual({ migrationsFolder: '/private/fixture/migrations' });
+});
+
+it('upgrades a legacy archive into the FK-aware schema with an empty unbaselined ledger', async () => {
+  profile = 2;
+  await prepareRestoreDatabase(options());
+  expect(tableRows.app[0]?.migrations_baselined).toBe(false);
+  expect(tableRows.app_migration).toEqual([]);
+  expect(queryLog.find(({ sql }) => sql.startsWith('TRUNCATE '))?.sql).toContain('public."app_migration"');
+});
+
+it('inserts the reviewed ledger after its application and verifies flag and ID projection', async () => {
+  profile = 2;
+  const application = entries.find(({ table }) => table === 'app');
+  if (!application) throw new Error('Fixture application missing');
+  application.row.migrations_baselined = true;
+  entries.push({ table: 'app_migration', row: { app_id: 7, migration_id: '001-initial' } });
+  const data = encode(entries);
+  await fs.writeFile(file, data);
+  const reviewed = review(data, entries);
+  source.expected = {
+    ...reviewed,
+    counts: { ...reviewed.counts, app_migration: 1 },
+    migrationSha256: backupMigrationDigest(new Map([[7, true]]), new Map([[7, ['001-initial']]])),
+  };
+  await prepareRestoreDatabase(options());
+  expect(queryLog.filter(({ sql }) => sql.startsWith('INSERT')).map(({ sql }) => sql.split(' ')[2])).toEqual([
+    'public."user"',
+    'public."app_store"',
+    'public."app"',
+    'public."link"',
+    'public."app_migration"',
+  ]);
+  expect(tableRows.app_migration).toEqual([{ app_id: 7, migration_id: '001-initial' }]);
+  const prior = fakePg.handler;
+  committed = false;
+  fakePg.handler = async (client, sql, values) => {
+    const result = await prior(client, sql, values);
+    if (sql.startsWith('SELECT app_id,migration_id')) return { ...result, rows: [{ app_id: 7, migration_id: '002-altered' }] };
+    return result;
+  };
+  ownerRecord = undefined;
+  await expect(prepareRestoreDatabase(options())).rejects.toThrow();
+  expect(committed).toBe(false);
 });
 
 it('rejects an existing database name before creation', async () => {

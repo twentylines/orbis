@@ -18,6 +18,10 @@ export type RecoveryIdentity = {
 
 export function describeRecoveryIdentity(bytes: Uint8Array, expectedSha256: string) {
   const identity = readRecoveryIdentity(bytes, expectedSha256);
+  return identityDescription(identity, expectedSha256);
+}
+
+function identityDescription(identity: RecoveryIdentity, expectedSha256: string) {
   return {
     schema: 'orbis.sentinel-identity-description.v1' as const,
     identitySha256: expectedSha256,
@@ -27,6 +31,61 @@ export function describeRecoveryIdentity(bytes: Uint8Array, expectedSha256: stri
     totpEnabled: identity.totpEnabled,
     requireTotpAfterPasskey: identity.requireTotpAfterPasskey,
     credentials: Object.fromEntries(identity.credentials.filter((key) => key.rpID === identity.realm.rpID).map((key) => [key.id, key.counter])),
+  };
+}
+
+export function describeRecoveryIdentityContent(bytes: Uint8Array, expectedSha256: string) {
+  const identity = readRecoveryIdentity(bytes, expectedSha256);
+  return {
+    schema: 'orbis.sentinel-identity-content.v1' as const,
+    identitySha256: expectedSha256,
+    contentSha256: identityContentHash(identity),
+    description: identityDescription(identity, expectedSha256),
+  };
+}
+
+function identityContentHash(identity: RecoveryIdentity) {
+  const content = [
+    identity.schema,
+    identity.accountId,
+    identity.username,
+    identity.operator,
+    identity.passwordHash,
+    identity.totpEnabled,
+    identity.totpSecret,
+    identity.requireTotpAfterPasskey,
+    identity.userHandle,
+    [identity.realm.origin, identity.realm.rpID],
+    identity.credentials.map((key) => [key.id, key.publicKey, key.counter, key.rpID]),
+  ];
+  return createHash('sha256')
+    .update(JSON.stringify(['orbis.sentinel-identity-content.v1', content]))
+    .digest('hex');
+}
+
+/** Root supplies independently stored monotonic floors. Every other identity
+ * field and the complete credential/key/RPID domain remain in the content hash.
+ * The description still identifies the original immutable profile bytes.
+ */
+export function describeRecoveryEffectiveIdentityContent(bytes: Uint8Array, expectedSha256: string, floors: unknown) {
+  const identity = readRecoveryIdentity(bytes, expectedSha256);
+  if (
+    !exactRecoveryObject(
+      floors,
+      identity.credentials.map((key) => key.id),
+    )
+  )
+    throw new RecoveryIdentityError();
+  const credentials = identity.credentials.map((key) => {
+    const counter = floors[key.id];
+    if (typeof counter !== 'number' || !Number.isInteger(counter) || counter < key.counter || counter > 0xffffffff) throw new RecoveryIdentityError();
+    return { ...key, counter };
+  });
+  return {
+    schema: 'orbis.sentinel-effective-identity-content.v1' as const,
+    identitySha256: expectedSha256,
+    contentSha256: identityContentHash({ ...identity, credentials }),
+    description: identityDescription(identity, expectedSha256),
   };
 }
 
@@ -111,13 +170,115 @@ function credential(value: unknown): value is RecoveryCredential {
   );
 }
 
+export function readProtectedRecoveryJson(bytes: Uint8Array): unknown {
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength < 1 || bytes.byteLength > 65536) throw new RecoveryIdentityError();
+  // Preserve a BOM so the JSON grammar rejects it instead of silently stripping it.
+  const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+  let offset = 0;
+  let nodes = 0;
+  const space = () => {
+    while (offset < text.length && /[\x20\t\r\n]/.test(text[offset] ?? '')) offset++;
+  };
+  const string = () => {
+    const start = offset++;
+    while (offset < text.length) {
+      const char = text.charCodeAt(offset++);
+      if (char === 34) {
+        const value: unknown = JSON.parse(text.slice(start, offset));
+        if (typeof value !== 'string') throw new RecoveryIdentityError();
+        for (let index = 0; index < value.length; index++) {
+          const code = value.charCodeAt(index);
+          if (code >= 0xd800 && code <= 0xdbff) {
+            const next = value.charCodeAt(++index);
+            if (!(next >= 0xdc00 && next <= 0xdfff)) throw new RecoveryIdentityError();
+          } else if (code >= 0xdc00 && code <= 0xdfff) throw new RecoveryIdentityError();
+        }
+        return value;
+      }
+      if (char < 32) throw new RecoveryIdentityError();
+      if (char === 92) {
+        const escaped = text[offset++];
+        if (escaped === 'u') {
+          if (!/^[a-fA-F0-9]{4}$/.test(text.slice(offset, offset + 4))) throw new RecoveryIdentityError();
+          offset += 4;
+        } else if (escaped === undefined || !'"\\/bfnrt'.includes(escaped)) throw new RecoveryIdentityError();
+      }
+    }
+    throw new RecoveryIdentityError();
+  };
+  const value = (depth: number): unknown => {
+    if (depth > 16 || ++nodes > 2048) throw new RecoveryIdentityError();
+    space();
+    if (text[offset] === '"') return string();
+    if (text[offset] === '{') {
+      offset++;
+      const result: Record<string, unknown> = Object.create(null);
+      space();
+      if (text[offset] === '}') {
+        offset++;
+        return result;
+      }
+      while (offset < text.length) {
+        space();
+        if (text[offset] !== '"') throw new RecoveryIdentityError();
+        const key = string();
+        space();
+        if (Object.hasOwn(result, key) || text[offset++] !== ':') throw new RecoveryIdentityError();
+        result[key] = value(depth + 1);
+        space();
+        const end = text[offset++];
+        if (end === '}') return result;
+        if (end !== ',') throw new RecoveryIdentityError();
+      }
+      throw new RecoveryIdentityError();
+    }
+    if (text[offset] === '[') {
+      offset++;
+      const result: unknown[] = [];
+      space();
+      if (text[offset] === ']') {
+        offset++;
+        return result;
+      }
+      while (offset < text.length) {
+        result.push(value(depth + 1));
+        space();
+        const end = text[offset++];
+        if (end === ']') return result;
+        if (end !== ',') throw new RecoveryIdentityError();
+      }
+      throw new RecoveryIdentityError();
+    }
+    for (const [literal, parsed] of [
+      ['true', true],
+      ['false', false],
+      ['null', null],
+    ] as const) {
+      if (text.startsWith(literal, offset)) {
+        offset += literal.length;
+        return parsed;
+      }
+    }
+    const number = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/.exec(text.slice(offset))?.[0];
+    // Identity numeric fields are canonical safe integers, so another language
+    // cannot round a fractional source into an apparently equivalent account.
+    if (!number || !Number.isSafeInteger(Number(number)) || number !== String(Number(number))) throw new RecoveryIdentityError();
+    offset += number.length;
+    return Number(number);
+  };
+  const result = value(0);
+  space();
+  if (offset !== text.length) throw new RecoveryIdentityError();
+  return result;
+}
+
 export function readRecoveryIdentity(bytes: Uint8Array, expectedSha256: string): RecoveryIdentity {
   try {
     if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0 || bytes.byteLength > 65536 || !/^[a-f0-9]{64}$/.test(expectedSha256))
       throw new RecoveryIdentityError();
     const snapshot = Buffer.from(bytes);
     if (!timingSafeEqual(createHash('sha256').update(snapshot).digest(), Buffer.from(expectedSha256, 'hex'))) throw new RecoveryIdentityError();
-    const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(snapshot));
+    const value = readProtectedRecoveryJson(snapshot);
     if (
       !exactRecoveryObject(value, [
         'schema',

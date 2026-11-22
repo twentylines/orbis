@@ -21,7 +21,7 @@ import { BackupRestoreJournal } from './backup-restore-journal';
 import { readRestoreBootstrap, requestRestoreCancellation } from './backup-restore-bootstrap';
 import { BackupRestoreDockerRuntime, readRestoreOperation, snapshotRestoreContainer } from './backup-restore-runtime';
 import { discardUnstartedRestoreHandoff, prepareRestoreHandoff } from './backup-restore-handoff';
-import { restoreStartupRole } from './backup-restore-startup';
+import { restoreTerminalStartup, restoreStartupRole } from './backup-restore-startup';
 import { readRestoreProgress } from './backup-restore-progress';
 import { BackupRequirementError } from './backup-files';
 import { cleanupSettledRestoreAuxiliaries } from './backup-restore-terminal-cleanup';
@@ -29,6 +29,7 @@ import { readTerminalOwnership } from './backup-restore-terminal-record';
 import type { TimeMachineRestoreBinding } from '@runtipi/common/schemas/time-machine-restore';
 import { readRetainedRestoreReceipt, type RetainedRestorePermit } from './time-machine-restore-admission';
 import { TimeMachineStore } from './time-machine-store';
+import { readRootBoundImageExpectations } from './time-machine-retained-images';
 import { stageRetainedRuntime } from './time-machine-retained-stage';
 import { reviewRetainedRoot, RetainedRootTransaction } from './time-machine-retained-root-client';
 import { bindRetainedJournal, readRetainedBoundRecord } from './time-machine-retained-bootstrap';
@@ -40,6 +41,7 @@ import { readRootRestorationState } from '@/common/restoration-root-status';
 import { readOperationStatus, readRestorationStatus } from '@/common/restoration-status';
 import { ResetState } from '../system-reset/reset-state';
 import { acquireRestoreLease } from './backup-restore-lease';
+import { RestoreWorkerCompatibilityError, verifyStandaloneWorkerCapability } from './backup-restore-worker-capability';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const settled = (phase: string) => ['completed', 'rolled-back', 'discarded'].includes(phase);
@@ -72,6 +74,7 @@ export class BackupRestoresService implements OnModuleDestroy {
   private pending?: { id: string; release: () => void };
   private restart?: { id: string; controller: ReturnType<typeof snapshotRestoreContainer> };
   private recoveryHold?: { id: string; nonce: string };
+  private incompatibleWorker?: { id: string; nonce: string };
   private retainedWatch?: ReturnType<typeof setTimeout>;
   private closing = false;
   private readonly launches = new Map<string, Promise<void>>();
@@ -108,6 +111,12 @@ export class BackupRestoresService implements OnModuleDestroy {
         this.startupHeld = true;
         const receipt = await readRetainedRestoreReceipt(journal);
         if (receipt) this.watchRetainedTerminal(journal, receipt.ownerId);
+      } else if (journal) {
+        await this.requireStartedWorkerCompatibility(journal, await this.inspectJournalWorker(journal));
+        if (restoreTerminalStartup(journal.state.id) && ['rolled-back', 'discarded'].includes(journal.state.phase)) {
+          const progress = await readRestoreProgress(journal);
+          this.startupHeld = !matchingOutcome(journal.state.phase, progress?.status) && !(await this.inertDiscard(journal));
+        }
       }
       if (!journal && (await readRootRestorationState()) === 'checking') {
         const latest = await BackupRestoreJournal.latest(this.store());
@@ -252,10 +261,50 @@ export class BackupRestoresService implements OnModuleDestroy {
     const preparing = ['staging', 'preparing', 'discarded'].includes(journal.state.phase);
     const identity = preparing ? bootstrap.identity : await readRestoreOperation(journal);
     const runtime = new BackupRestoreDockerRuntime(this.docker, journal, identity, this.directories());
-    await runtime.verifyWorker(journal.state.worker, { preparing });
-    const worker = await this.docker.getContainer(journal.state.worker).inspect();
-    if (worker.State.Paused) throw failed();
-    return worker;
+    try {
+      return await runtime.inspectVerifiedWorker(journal.state.worker, { preparing });
+    } catch (error) {
+      if (error instanceof RestoreWorkerCompatibilityError) this.holdIncompatibleWorker(journal);
+      throw error;
+    }
+  }
+  private async inspectJournalWorker(journal: BackupRestoreJournal) {
+    const state = journal.state;
+    try {
+      const worker = await this.docker.getContainer(state.worker).inspect();
+      if (
+        worker.Id !== state.worker ||
+        worker.Config.Labels?.['io.orbis.restore'] !== state.id ||
+        worker.Config.Labels?.['io.orbis.restore.nonce'] !== state.nonce ||
+        worker.Config.Labels?.['io.orbis.restore.role'] !== 'worker'
+      )
+        throw failed();
+      return worker;
+    } catch (error) {
+      if ((error as { statusCode?: number }).statusCode !== 404) throw error;
+    }
+  }
+  private workerRecoveryBlocked(journal: BackupRestoreJournal) {
+    return this.incompatibleWorker?.id === journal.state.id && this.incompatibleWorker.nonce === journal.state.nonce;
+  }
+  private holdIncompatibleWorker(journal: BackupRestoreJournal) {
+    this.incompatibleWorker = { id: journal.state.id, nonce: journal.state.nonce };
+    this.holdRecovery(journal);
+  }
+  private async requireStartedWorkerCompatibility(journal: BackupRestoreJournal, worker?: Dockerode.ContainerInspectInfo) {
+    if (this.workerRecoveryBlocked(journal)) throw new RestoreWorkerCompatibilityError();
+    if (!worker) return;
+    const { Running, Restarting, Paused, StartedAt } = worker.State;
+    if (!Running && !Restarting && !Paused && worker.RestartCount === 0 && Date.parse(StartedAt) <= 0) return worker;
+    try {
+      const { identity } = await readRestoreBootstrap(journal);
+      return await verifyStandaloneWorkerCapability(this.docker, worker, { ...journal.state, image: identity.image });
+    } catch {
+      // A process already admitted by the Engine can still write progress.
+      // Its terminal report cannot release this controller's recovery hold.
+      this.holdIncompatibleWorker(journal);
+      throw new RestoreWorkerCompatibilityError();
+    }
   }
   private holdRecovery(journal: BackupRestoreJournal) {
     this.recoveryHold = { id: journal.state.id, nonce: journal.state.nonce };
@@ -263,7 +312,8 @@ export class BackupRestoresService implements OnModuleDestroy {
   }
   async status() {
     await this.prepareStartup();
-    const journal = await BackupRestoreJournal.latest(this.store());
+    const active = await BackupRestoreJournal.active(this.store());
+    const journal = active ?? (await BackupRestoreJournal.latest(this.store()));
     if (!journal) return { job: null };
     let retained = false;
     try {
@@ -290,20 +340,15 @@ export class BackupRestoresService implements OnModuleDestroy {
     }
     let worker: Dockerode.ContainerInspectInfo | undefined;
     try {
-      const value = await this.docker.getContainer(state.worker).inspect();
-      if (
-        value.Id !== state.worker ||
-        value.Config.Labels?.['io.orbis.restore'] !== state.id ||
-        value.Config.Labels?.['io.orbis.restore.nonce'] !== state.nonce ||
-        value.Config.Labels?.['io.orbis.restore.role'] !== 'worker'
-      )
-        throw failed();
-      worker = value;
+      worker = await this.inspectJournalWorker(journal);
+      if (!worker && !finished) progressUnavailable = true;
+      if (active) worker = await this.requireStartedWorkerCompatibility(journal, worker);
     } catch {
       if (!finished) progressUnavailable = true;
     }
-    const restarting = this.restart?.id === state.id;
-    const ready = this.pending?.id === state.id;
+    const blockedWorker = this.workerRecoveryBlocked(journal);
+    const restarting = !blockedWorker && this.restart?.id === state.id;
+    const ready = !blockedWorker && this.pending?.id === state.id;
     const running = worker?.State.Running || worker?.State.Restarting;
     const inert = finished && !progressUnavailable && !progress && (await this.inertDiscard(journal));
     const outcomePending = finished && !inert && !matchingOutcome(state.phase, progress?.status);
@@ -314,6 +359,7 @@ export class BackupRestoresService implements OnModuleDestroy {
       finished &&
       !progressUnavailable &&
       matchingOutcome(state.phase, progress?.status) &&
+      !blockedWorker &&
       !this.startupHeld &&
       !restarting &&
       !ready
@@ -322,10 +368,11 @@ export class BackupRestoresService implements OnModuleDestroy {
       setRestoreRecoveryRequired(false);
     }
     const needsRecovery =
-      !restarting &&
-      !ready &&
-      ((finished && (this.startupHeld || (outcomePending && (progressUnavailable || !running || progress?.status === 'recovery-required')))) ||
-        (!finished && (progressUnavailable || !running || progress?.status === 'recovery-required')));
+      blockedWorker ||
+      (!restarting &&
+        !ready &&
+        ((finished && (this.startupHeld || (outcomePending && (progressUnavailable || !running || progress?.status === 'recovery-required')))) ||
+          (!finished && (progressUnavailable || !running || progress?.status === 'recovery-required'))));
     const status = restarting
       ? 'running'
       : needsRecovery
@@ -349,7 +396,9 @@ export class BackupRestoresService implements OnModuleDestroy {
             ? 'Restore stopped before server data was changed. The uploaded backup was not applied.'
             : 'Restore rolled back. Your original server was recovered; the uploaded backup was not applied.'
           : status === 'recovery-required'
-            ? 'Restore recovery needs review. Your data has been preserved.'
+            ? blockedWorker
+              ? new RestoreWorkerCompatibilityError().message
+              : 'Restore recovery needs review. Your data has been preserved.'
             : outcomePending
               ? state.phase === 'completed'
                 ? 'Confirming restore completion.'
@@ -370,16 +419,17 @@ export class BackupRestoresService implements OnModuleDestroy {
         message,
         needsRecovery,
         progressUnavailable,
-        canCancel: !finished && state.decision !== 'commit',
+        canCancel: !blockedWorker && !finished && state.decision !== 'commit',
         canRecover:
           needsRecovery &&
+          !blockedWorker &&
           !progressInvalid &&
           (!finished ||
             (this.startupHeld && (inert || matchingOutcome(state.phase, progress?.status))) ||
             (state.phase !== 'completed' && Boolean(worker && !running && !worker.State.Paused))),
         ...(progress?.preparation ? { preparation: progress.preparation } : {}),
         ...(progress?.updatedAt ? { updatedAt: progress.updatedAt } : {}),
-        ...(progress?.check ? { check: progress.check } : {}),
+        ...(blockedWorker ? { check: 'worker-install-hold-capability' } : progress?.check ? { check: progress.check } : {}),
       },
     };
     try {
@@ -492,17 +542,15 @@ export class BackupRestoresService implements OnModuleDestroy {
     expectedRuntimeManifestSha256: string;
     admit: (journal: BackupRestoreJournal) => Promise<RetainedRestorePermit>;
   }) {
+    if (options.admitted.manifest.schema !== 'orbis.time-machine-runtime.v6')
+      throw new ConflictException('This historical restore needs protected app activation that its saved runtime cannot verify.');
     if (
       !uuid.test(options.importId) ||
       !/^[a-f0-9]{64}$/.test(options.expectedRuntimeManifestSha256) ||
       options.admitted.manifest.pointId !== options.binding.pointId ||
       options.admitted.manifest.legacy.manifestSha256 !== options.binding.manifestSha256 ||
       options.admitted.manifest.legacy.cipherSha256 !== options.binding.archiveSha256 ||
-      !(
-        (options.admitted.manifest.schema === 'orbis.time-machine-runtime.v3' && options.admitted.controllerAuthority.metadata.version === 1) ||
-        (options.admitted.manifest.schema === 'orbis.time-machine-runtime.v4' && options.admitted.controllerAuthority.metadata.version === 2) ||
-        (options.admitted.manifest.schema === 'orbis.time-machine-runtime.v6' && options.admitted.controllerAuthority.metadata.version === 4)
-      )
+      options.admitted.controllerAuthority.metadata.version !== 4
     )
       throw failed();
     await this.prepareStartup();
@@ -547,9 +595,7 @@ export class BackupRestoresService implements OnModuleDestroy {
         apps: plan.containers.map((container) => ({ id: container.id, project: container.project })),
         directories: this.directories(),
         signal: abort.signal,
-        preserveLiveProxy:
-          (options.admitted.manifest.schema === 'orbis.time-machine-runtime.v4' && options.admitted.controllerAuthority.metadata.version === 2) ||
-          (options.admitted.manifest.schema === 'orbis.time-machine-runtime.v6' && options.admitted.controllerAuthority.metadata.version === 4),
+        preserveLiveProxy: true,
         claimReviewedSource: async (journal, accept) => {
           const permit = await options.admit(journal);
           await this.imports.claimRetainedSource(options.importId, options.ownerId, options.binding, permit, {
@@ -653,6 +699,8 @@ export class BackupRestoresService implements OnModuleDestroy {
     signal: AbortSignal;
   }) {
     const { journal, binding, admitted, signal } = options;
+    if (admitted.manifest.schema !== 'orbis.time-machine-runtime.v6')
+      throw new ConflictException('This historical restore needs protected app activation that its saved runtime cannot verify.');
     if (
       !this.pending ||
       this.pending.id !== journal.state.id ||
@@ -787,6 +835,22 @@ export class BackupRestoresService implements OnModuleDestroy {
             await directory.close();
           }
         } else {
+          const status = await transaction.status(options.signal);
+          if (status.pointId !== options.pointId || status.admissionSha256 !== admission.sha256) throw failed();
+          if (status.decision === 'commit' && status.state !== 'complete') {
+            const binding = status.binding;
+            if (!binding || binding.nonce !== journal.state.nonce) throw failed();
+            const source = await readRootBoundImageExpectations({
+              dataDirectory: this.directories().data,
+              restoreId: journal.state.id,
+              manifestSha256: binding.sourceBinding.runtimeManifestSha256,
+              pointId: options.pointId,
+              target: binding.target,
+              signal: options.signal,
+            });
+            if (source.expectedManifest.schema !== 'orbis.time-machine-runtime.v6')
+              throw new ConflictException('This historical restore needs protected app activation that its saved runtime cannot verify.');
+          }
           await transaction.launch('recover', options.signal);
           this.watchRetainedTerminal(journal, options.ownerId);
         }
@@ -821,6 +885,7 @@ export class BackupRestoresService implements OnModuleDestroy {
     await this.ownController(journal);
     const bootstrap = await readRestoreBootstrap(journal);
     if (request && bootstrap.ownerId !== ownerId) throw failed();
+    await this.checkRecoveryWorkerCompatibility(journal);
     await requestRestoreCancellation(journal);
     return this.status();
   }
@@ -903,7 +968,6 @@ export class BackupRestoresService implements OnModuleDestroy {
   async recover(id: string, ownerId: number, credentials: Credentials | undefined, request?: Request) {
     const actor = request ? await this.auth.operatorActionContext(request) : undefined;
     if (actor && actor.userId !== ownerId) throw failed();
-    await this.prepareStartup();
     if (this.preparing) throw new ConflictException('Wait for restore preparation to finish before recovering.');
     const journal = await this.active(id);
     const retained = await this.isRetainedJournal(journal);
@@ -912,6 +976,8 @@ export class BackupRestoresService implements OnModuleDestroy {
       if (!credentials) throw failed();
       await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
     }
+    await this.prepareStartup();
+    if (this.preparing) throw new ConflictException('Wait for restore preparation to finish before recovering.');
     if (retained) {
       if (!request || !actor) throw failed();
       const receipt = await readRetainedRestoreReceipt(journal);
@@ -942,6 +1008,7 @@ export class BackupRestoresService implements OnModuleDestroy {
       return { ...(await this.status()), rootManaged: true as const };
     }
     const current = await this.ownController(journal);
+    await this.checkRecoveryWorkerCompatibility(journal);
     let progress: Awaited<ReturnType<typeof readRestoreProgress>>;
     try {
       progress = await readRestoreProgress(journal);
@@ -954,11 +1021,7 @@ export class BackupRestoresService implements OnModuleDestroy {
         return this.status();
       }
       if (journal.state.phase === 'completed') throw failed();
-      try {
-        await this.recoveryWorker(journal);
-      } catch {
-        throw failed();
-      }
+      await this.authorizeRecoveryWorker(journal);
       this.holdRecovery(journal);
       return this.status();
     }
@@ -966,13 +1029,39 @@ export class BackupRestoresService implements OnModuleDestroy {
       await readRestoreBootstrap(journal);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || journal.state.phase !== 'staging') throw failed();
+      const worker = await this.inspectJournalWorker(journal);
+      if (worker) {
+        try {
+          await verifyStandaloneWorkerCapability(this.docker, worker, { ...journal.state, image: current.Image });
+        } catch {
+          this.holdIncompatibleWorker(journal);
+          throw new ConflictException(new RestoreWorkerCompatibilityError().message);
+        }
+      }
       await discardUnstartedRestoreHandoff(this.docker, journal);
       if (this.startupHeld) this.restart = { id, controller: snapshotRestoreContainer(current) };
       else setRestoreRecoveryRequired(false);
       return this.status();
     }
+    await this.authorizeRecoveryWorker(journal);
     this.holdRecovery(journal);
     return this.status();
+  }
+  private async checkRecoveryWorkerCompatibility(journal: BackupRestoreJournal) {
+    try {
+      await this.requireStartedWorkerCompatibility(journal, await this.inspectJournalWorker(journal));
+    } catch (error) {
+      if (error instanceof RestoreWorkerCompatibilityError) throw new ConflictException(error.message);
+      throw failed();
+    }
+  }
+  private async authorizeRecoveryWorker(journal: BackupRestoreJournal) {
+    try {
+      await this.recoveryWorker(journal);
+    } catch (error) {
+      if (error instanceof RestoreWorkerCompatibilityError) throw new ConflictException(error.message);
+      throw failed();
+    }
   }
   // Called once after the authorized response is flushed, never while serializing it.
   launch(id: string) {
@@ -985,7 +1074,12 @@ export class BackupRestoresService implements OnModuleDestroy {
   private async startWorker(id: string) {
     try {
       const journal = await this.active(id);
+      if (await this.isRetainedJournal(journal)) throw failed();
+      await this.checkRecoveryWorkerCompatibility(journal);
       if (this.restart?.id === id) {
+        const state = await journal.refresh();
+        const progress = await readRestoreProgress(journal);
+        if (!settled(state.phase) || (!matchingOutcome(state.phase, progress?.status) && !(await this.inertDiscard(journal)))) throw failed();
         const current = await this.ownController(journal);
         if (snapshotRestoreContainer(current).fingerprint !== this.restart.controller.fingerprint) throw failed();
         await this.docker.getContainer(current.Id).restart({ t: 30 });

@@ -18,7 +18,7 @@ import stat
 import subprocess
 import tarfile
 import time
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 
@@ -40,6 +40,9 @@ CAPABILITY_COMMAND = "import {retainedWorkerCapability as c} from 'file:///app/r
 TERMINAL_CAPABILITY = {'schema': 'orbis.retained-terminal-settlement.v1', 'version': 1,
                        'states': ['staging', 'discarded', 'rolled-back', 'completed'], 'beforeUnlock': True}
 TERMINAL_CAPABILITY_PATH = '/app/retained-terminal-capability.json'
+INSTALL_HOLD_CAPABILITY = {'schema': 'orbis.restore-install-hold-effect.v1', 'version': 1,
+                           'policy': 'verified-live-store-before-app-resume.v1'}
+INSTALL_HOLD_CAPABILITY_PATH = '/app/restore-install-hold-capability.json'
 APP_ACTIVATION_CAPABILITY = {'schema': 'orbis.retained-app-activation.v1', 'version': 1,
                              'authority': 'root-candidate-resume.v1', 'execution': 'direct-retained-app-start.v1',
                              'ordinaryMutationsHeld': True, 'normalBootstrap': 'idempotent-after-root-settlement.v1'}
@@ -161,21 +164,22 @@ class DockerRestoreRuntime:
             raise fail()
 
     def require_target_settlement(self, identifier, *, historical_apps=False):
-        digests = {}
         app_path, app_capability = (APP_ENGINE_CAPABILITY_PATH, APP_ENGINE_CAPABILITY) if historical_apps else (APP_ACTIVATION_CAPABILITY_PATH, APP_ACTIVATION_CAPABILITY)
-        for path, expected in ((TERMINAL_CAPABILITY_PATH, TERMINAL_CAPABILITY),
-                               (app_path, app_capability)):
-            output = self.bounded_output(['docker', '--context', self.context, 'container', 'cp', identifier + ':' + path, '-'], 16384, 20)
-            with tarfile.open(fileobj=io.BytesIO(output), mode='r:') as archive:
-                entries = list(archive)
-                if (len(entries) != 1 or entries[0].name != Path(path).name
-                        or not entries[0].isfile() or not 0 < entries[0].size <= 4096):
-                    raise fail()
-                body = archive.extractfile(entries[0]).read(4097)
-                if len(body) != entries[0].size or self.P.canonical(self.P.metadata(body, byte_limit=4096)) != self.P.canonical(expected):
-                    raise fail()
-                digests[path] = hashed(body)
+        digests = {path: self.static_capability(identifier, path, expected) for path, expected in
+                   ((TERMINAL_CAPABILITY_PATH, TERMINAL_CAPABILITY), (app_path, app_capability))}
         return hashed(self.P.canonical(digests))
+
+    def static_capability(self, identifier, path, expected):
+        output = self.bounded_output(['docker', '--context', self.context, 'container', 'cp', identifier + ':' + path, '-'], 16384, 20)
+        with tarfile.open(fileobj=io.BytesIO(output), mode='r:') as archive:
+            entries = list(archive)
+            if (len(entries) != 1 or entries[0].name != Path(path).name
+                    or not entries[0].isfile() or not 0 < entries[0].size <= 4096):
+                raise fail()
+            body = archive.extractfile(entries[0]).read(4097)
+            if len(body) != entries[0].size or self.P.canonical(self.P.metadata(body, byte_limit=4096)) != self.P.canonical(expected):
+                raise fail()
+        return hashed(body)
 
     def bounded_output(self, arguments, maximum, timeout):
         lock = self.host.LOCK_DESCRIPTOR.get()
@@ -254,6 +258,104 @@ class DockerRestoreRuntime:
         with self.a.protected_directory(path if path.is_dir() else path.parent, private=False):
             pass
         return path
+
+    @staticmethod
+    def mount_id(descriptor):
+        body = Path('/proc/self/fdinfo', str(descriptor)).read_text()
+        matches = re.findall(r'^mnt_id:\s+([0-9]+)$', body, re.MULTILINE)
+        if len(matches) != 1:
+            raise fail()
+        return int(matches[0])
+
+    def install_state_source(self, raw):
+        state = '/data/state'
+        if (raw['Config'].get('User') not in (None, '', '0', '0:0', 'root', 'root:root')
+                or any(target == '/data' or target == state or target.startswith(state + '/')
+                       for target in raw['HostConfig'].get('Tmpfs') or {})
+                or any(mount['Destination'].startswith(state + '/') for mount in raw['Mounts'])):
+            raise fail()
+        return self.map_path(raw, state)
+
+    @contextmanager
+    def live_install_state(self, record, *, starting):
+        """Bind the promoted host state to the exact local coordinator mount."""
+        error = 'Retained app install recovery storage could not be verified'
+        try:
+            source = record['source']
+            socket_path = self.reader.socket()
+            if (not socket_path or socket_path != source['daemonSocket']
+                    or self.endpoint not in (None, socket_path)
+                    or self.json_bytes(self.engine('GET', '/info'))['ID'] != source['daemonId']):
+                raise fail()
+
+            def inspect(identifier):
+                if not re.fullmatch(r'[a-f0-9]{64}', identifier):
+                    raise fail()
+                raw = self.json_bytes(self.engine('GET', '/containers/' + identifier + '/json'))
+                if raw['Id'] != identifier:
+                    raise fail()
+                return raw
+
+            original = inspect(source['controllerId'])
+            candidate = inspect(record['candidateId'])
+            worker = inspect(record['workerId'])
+            for raw, definition in ((original, source['definition']), (candidate, record['definitions']['candidate']),
+                                    (worker, record['definitions']['coordinator'])):
+                if self.definition(raw) != definition or raw['State']['Paused'] or raw['State']['Restarting']:
+                    raise fail()
+            if (original['State']['Running'] is not False or starting and candidate['State']['Running'] is not False
+                    or worker['State']['Running'] is not True or worker['HostConfig']['ReadonlyRootfs'] is not True
+                    or worker['Image'] != source['imageId']):
+                raise fail()
+            quiesced = (original, candidate, worker) if starting else (original, worker)
+            if any(raw['HostConfig']['RestartPolicy'] != {'Name': 'no', 'MaximumRetryCount': 0} for raw in quiesced):
+                raise fail()
+
+            state_path = self.install_state_source(original)
+            if any(self.install_state_source(raw) != state_path for raw in (source['container'], worker, candidate)):
+                raise fail()
+            swap = self.json(Path(record['stage']['journalPath']) / 'roots' / 'state' / 'swap.json', 8 * 1024 * 1024)
+            if (swap.get('id') != record['id'] or swap.get('root') != '/data/state'
+                    or swap.get('phase') not in {'promoting', 'committed'} or swap.get('version') != 1):
+                raise fail()
+
+            pid = worker['State']['Pid']
+            if type(pid) is not int or pid <= 1:
+                raise fail()
+            process = Path('/proc') / str(pid)
+            cgroup = (process / 'cgroup').read_text()
+            status = (process / 'status').read_text()
+            if (len(cgroup) > 65536
+                    or not re.search(r'(?:/|:)(?:docker-)?' + worker['Id'] + r'(?:\.scope)?(?:/|\n|$)', cgroup)
+                    or not re.search(r'^Uid:[ \t]+0[ \t]+0[ \t]+0[ \t]+0$', status, re.MULTILINE)):
+                raise fail()
+            with ExitStack() as stack:
+                state = stack.enter_context(self.a.protected_directory(state_path, private=False))
+                root = os.open(process / 'root', os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+                stack.callback(os.close, root)
+                flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+                data = os.open('data', flags, dir_fd=root)
+                stack.callback(os.close, data)
+                bound = os.open('state', flags, dir_fd=data)
+                stack.callback(os.close, bound)
+                observed = os.fstat(state)
+                if ((str(observed.st_dev), str(observed.st_ino)) != (swap['device'], swap['inode'])
+                        or self.a.seal(os.fstat(bound)) != self.a.seal(observed)):
+                    raise fail()
+                state_keys = ('Pid', 'StartedAt', 'Running', 'Paused', 'Restarting')
+                for raw in (original, candidate, worker):
+                    after = inspect(raw['Id'])
+                    if (any(after['State'].get(key) != raw['State'].get(key) for key in state_keys)
+                            or after['HostConfig']['RestartPolicy'] != raw['HostConfig']['RestartPolicy']):
+                        raise fail()
+                yield state, bound
+                if (self.a.seal(os.stat('state', dir_fd=data, follow_symlinks=False)) != self.a.seal(observed)
+                        or self.a.seal(os.stat('data', dir_fd=root, follow_symlinks=False)) != self.a.seal(os.fstat(data))
+                        or self.a.seal(os.stat(process / 'root' / 'data', follow_symlinks=False)) != self.a.seal(os.fstat(data))
+                        or (process / 'cgroup').read_text() != cgroup):
+                    raise fail()
+        except (OSError, KeyError, TypeError, RuntimeError) as cause:
+            raise ValueError(error) from cause
 
     def definition(self, raw):
         host = normalized(raw['HostConfig'])
@@ -1160,7 +1262,7 @@ class DockerRestoreRuntime:
         return {'version': 1, 'transactionId': record['id'], 'requiredBytes': required,
                 'availableBytes': available, 'availableInodes': inodes}
 
-    def engine(self, method, route, body=None, *, maximum=8 * 1024 * 1024, allow_missing=False):
+    def engine(self, method, route, body=None, *, maximum=8 * 1024 * 1024, allow_missing=False, before_request=None):
         if self.endpoint is None:
             self.endpoint = self.reader.socket()
         if not self.endpoint:
@@ -1171,6 +1273,9 @@ class DockerRestoreRuntime:
         connection = Connection(self.endpoint)
         try:
             wire = None if body is None else self.P.canonical(body)
+            if before_request is not None:
+                connection.connect()
+                before_request()
             connection.request(method, '/v' + version + route, wire, {'Content-Type': 'application/json'} if body is not None else {})
             response = connection.getresponse()
             data = response.read(maximum + 1)
@@ -1467,6 +1572,7 @@ class DockerRestoreRuntime:
         if mount_key(candidate['Mounts']) != mount_key(record['source']['container']['Mounts']):
             raise fail()
         worker = self.create(record, 'coordinator', self.coordinator_body(record))
+        self.validate_worker(record)
         self.change(['start', worker['Id']])
         record['workerSnapshot'] = self.inspect(worker['Id'])
         self.manager.save(record)
@@ -1555,10 +1661,35 @@ class DockerRestoreRuntime:
         if self.definition(raw) != record['definitions']['coordinator'] or raw['Image'] != record['source']['imageId']:
             raise fail()
         self.check_intent(raw, record['intents']['coordinator']['body'])
+        self.require_install_hold_worker(raw)
         directory = self.manager.directory(record['id']) / 'retained' / 'migrations'
         for name, expected in record['migrationFiles'].items():
             if hashed(self.read_file(directory / name, 4 * 1024 * 1024)) != expected:
                 raise fail()
+
+    def validate_forward_activation(self, record):
+        self.validate_worker(record)
+        verifier = self.inspect(record['verifierId'])
+        self.verify_networks(record, verifier)
+        self.check_intent(verifier, record['intents']['verifier']['body'])
+        if (verifier['Id'] != record['verifierId'] or verifier['Image'] != record['target']['creationReference']
+                or self.definition(verifier) != record['definitions']['verifier']
+                or self.require_target_settlement(verifier['Id'], historical_apps=True) != record.get('targetSettlementCapabilitySha256')):
+            raise fail()
+
+    def require_install_hold_worker(self, raw):
+        # A static file in the pinned, read-only image is checked without
+        # executing old worker code, including on a previously issued grant.
+        try:
+            host = raw['HostConfig']
+            targets = [mount['Destination'] for mount in raw['Mounts']] + list(host.get('Tmpfs') or {})
+            if (host['ReadonlyRootfs'] is not True
+                    or host['RestartPolicy'] != {'Name': 'no', 'MaximumRetryCount': 0}
+                    or any(target in ('/', '/app') or target.startswith('/app/') for target in targets)):
+                raise fail()
+            self.static_capability(raw['Id'], INSTALL_HOLD_CAPABILITY_PATH, INSTALL_HOLD_CAPABILITY)
+        except (OSError, KeyError, TypeError, RuntimeError, ValueError, tarfile.TarError) as cause:
+            raise ValueError('Pinned retained worker lacks verified install recovery protection') from cause
 
     def validate_rebind(self, record):
         self.validate_overlay(record)
@@ -1865,19 +1996,37 @@ class DockerRestoreRuntime:
             self.change(['rename', candidate['Id'], 'runtipi'])
         self.a.atomic(self.root / 'orbis-compose.yml', self.a.override_content(record['target']['publication'], record['target']['creationReference']).encode())
 
+    def restore_controller_for_resume(self, record, identifier, image, definition, policies):
+        raw = self.inspect(identifier)
+        self.verify_networks(record, raw)
+        state = raw['State']
+        if (raw['Id'] != identifier or raw['Name'] != '/runtipi' or raw['Image'] != image
+                or self.definition(raw) != definition or raw['HostConfig'].get('RestartPolicy') not in policies
+                or type(state.get('Running')) is not bool or state.get('Paused') or state.get('Restarting') or state.get('Dead')):
+            raise fail()
+        return raw
+
+    def start_restore_controller(self, record, identifier, image, definition, intended):
+        disabled = {'Name': 'no', 'MaximumRetryCount': 0}
+        raw = self.restore_controller_for_resume(record, identifier, image, definition, (disabled, intended))
+        if raw['State']['Running']:
+            return
+        if raw['HostConfig']['RestartPolicy'] != disabled:
+            self.change(['update', '--restart', 'no', identifier])
+            raw = self.restore_controller_for_resume(record, identifier, image, definition, (disabled,))
+        if not raw['State']['Running']:
+            self.change(['start', identifier])
+
     def activate_candidate(self, record):
         if record['decision'] != 'commit':
             raise fail()
-        raw = self.inspect(record['candidateId'])
-        self.verify_networks(record, raw)
-        if raw['Image'] != record['target']['creationReference']:
-            raise fail()
+        identifier = record['candidateId']
         started = int(time.time() * 1000)
         record['candidateActivationLease'] = {'startedAt': started, 'expiresAt': started + 15 * 60 * 1000}
         self.manager.save(record)
-        if not raw['State'].get('Running'):
-            self.change(['start', raw['Id']])
-        self.health(record, raw['Id'], 'resume')
+        self.start_restore_controller(record, identifier, record['target']['creationReference'], record['definitions']['candidate'],
+                                      record['source']['container']['HostConfig']['RestartPolicy'])
+        self.health(record, identifier, 'resume')
         self.enroll_committed(record)
 
     def enroll_committed(self, record):
@@ -1908,7 +2057,11 @@ class DockerRestoreRuntime:
         record['terminalRestartPolicy'] = policy
         self.manager.save(record)
         flag = policy['Name'] + (':' + str(policy['MaximumRetryCount']) if policy['Name'] == 'on-failure' else '')
-        self.change(['update', '--restart', flag, record['candidateId']])
+        candidate = self.restore_controller_for_resume(record, record['candidateId'], record['target']['creationReference'],
+                                                       record['definitions']['candidate'], ({'Name': 'no', 'MaximumRetryCount': 0}, policy))
+        if not candidate['State']['Running']:
+            raise fail()
+        self.change(['update', '--restart', flag, candidate['Id']])
 
     def candidate_app_result_material(self, record):
         if record['stage']['metadata']['schema'] != 'orbis.time-machine-runtime.v6' or record.get('appStatusRestored') is not True: raise fail()
@@ -2590,15 +2743,14 @@ class DockerRestoreRuntime:
         for name, expected in source['files'].items():
             if self.host.file_digest(self.root / name) != expected:
                 raise fail()
-        raw = self.inspect(source['controllerId'])
-        self.verify_networks(record, raw)
-        if raw['Name'] != '/runtipi' or self.definition(raw) != source['definition']:
-            raise fail()
-        if not raw['State'].get('Running'):
-            self.change(['start', raw['Id']])
+        identifier, image, definition = source['controllerId'], source['imageId'], source['definition']
         policy = source['container']['HostConfig']['RestartPolicy']
+        self.start_restore_controller(record, identifier, image, definition, policy)
+        raw = self.restore_controller_for_resume(record, identifier, image, definition, ({'Name': 'no', 'MaximumRetryCount': 0}, policy))
+        if not raw['State']['Running']:
+            raise fail()
         flag = policy['Name'] + (':' + str(policy['MaximumRetryCount']) if policy['Name'] == 'on-failure' else '')
-        self.change(['update', '--restart', flag, raw['Id']])
+        self.change(['update', '--restart', flag, identifier])
         deadline = time.monotonic() + 120
         while time.monotonic() < deadline:
             current = self.inspect(raw['Id'])

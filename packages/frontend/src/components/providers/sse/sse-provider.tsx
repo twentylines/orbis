@@ -69,6 +69,7 @@ export const SSEProvider = ({ children }: PropsWithChildren) => {
       announcePreferences();
       window.dispatchEvent(new Event(clientStatusHintEvent));
       void refreshAppContext();
+      refreshTasks();
       refresh(undefined, true, true);
     },
     onPreferencesChanged: announcePreferences,

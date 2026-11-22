@@ -3,7 +3,7 @@ import { hash } from 'argon2';
 import { isoCBOR } from '@simplewebauthn/server/helpers';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { TotpAuthenticator } from '../auth/utils/totp-authenticator';
-import { verifyRecoveryCredentials } from './authentication';
+import { verifyRecoveryCredentials, verifyRecoveryPasskeyCounter } from './authentication';
 import { describeRecoveryIdentity, readRecoveryIdentity, RecoveryIdentityError, type RecoveryIdentity } from './identity';
 
 const password = 'synthetic-recovery-password';
@@ -87,6 +87,42 @@ function passkey({
   };
 }
 const authenticate = (request: unknown, profile = identity()) => verifyRecoveryCredentials({ ...encoded(profile), challenge, request });
+
+describe('counter-only worker proof', () => {
+  it('verifies a genuine assertion without pretending that the account TOTP/session ceremony completed', async () => {
+    const profile = identity({ totpEnabled: true, totpSecret: 'JBSWY3DPEHPK3PXP', requireTotpAfterPasskey: true });
+    const result = await verifyRecoveryPasskeyCounter({ ...encoded(profile), challenge, request: { response: passkey() } });
+    expect(result).toMatchObject({
+      schema: 'orbis.sentinel-passkey-counter.v1',
+      verified: true,
+      challenge,
+      credential: { id: credentialId, previousCounter: 3, newCounter: 4 },
+    });
+    expect(result).not.toHaveProperty('totpStep');
+    expect(result).not.toHaveProperty('method');
+    expect((await authenticate({ method: 'passkey', response: passkey() }, profile)).verified).toBe(false);
+  });
+  it('rejects signed wrong-nonce/realm/UV/counter and never accepts auth fields as a bypass', async () => {
+    const input = encoded();
+    for (const options of [
+      { client: { challenge: randomBytes(32).toString('base64url') } },
+      { client: { origin: 'https://other.example' } },
+      { flags: 1 },
+      { counter: 3 },
+    ]) {
+      expect((await verifyRecoveryPasskeyCounter({ ...input, challenge, request: { response: passkey(options) } })).verified).toBe(false);
+    }
+    for (const extra of [{ totpCode: '123456' }, { method: 'passkey' }, { password: 'not-a-counter-proof' }]) {
+      expect((await verifyRecoveryPasskeyCounter({ ...input, challenge, request: { response: passkey(), ...extra } })).verified).toBe(false);
+    }
+  });
+  it('handles fresh zero-counter signatures but leaves nonce consumption and latest-floor checking to Root', async () => {
+    const profile = identity({ credentials: [{ id: credentialId, publicKey, counter: 0, rpID }] });
+    const result = await verifyRecoveryPasskeyCounter({ ...encoded(profile), challenge, request: { response: passkey({ counter: 0 }) } });
+    expect(result).toMatchObject({ verified: true, credential: { previousCounter: 0, newCounter: 0 } });
+    expect(profile.credentials[0]?.counter).toBe(0);
+  });
+});
 
 describe('protected standalone recovery identity', () => {
   it('describes exact protected identity metadata without exporting either credential secret or an authentication claim', () => {

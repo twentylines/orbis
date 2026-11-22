@@ -95,6 +95,33 @@ it('captures the current Blush landscape while an earlier captured photograph re
   expect(historical.identity).toBe(digest(previous));
 });
 
+it.each([
+  ['burgundy', 3840, 2160],
+  ['amber', 3840, 2160],
+  ['rose', 3840, 2160],
+  ['orange', 2691, 1514],
+] as const)('captures the exact new %s built-in raster, colours and material', async (preset, width, height) => {
+  desktop = {
+    ...desktop,
+    preset,
+    appearance: { themeColour: '#ef4468', accent: '#ffc855', materialMode: 'custom', surfaceOpacity: 0 },
+  };
+  const bundled = path.resolve('../frontend/public/wallpapers');
+  const current = await fs.readFile(path.join(bundled, timeMachineBuiltinPhotographs[preset]));
+  const savedPreview = await preview();
+  expect(savedPreview).toMatchObject({
+    available: true,
+    desktop: { preset, appearance: { themeColour: '#ef4468', accent: '#ffc855', materialMode: 'custom', surfaceOpacity: 0 } },
+  });
+  expect(await snapshotWallpaper(snapshot, savedPreview, 1, [bundled])).toMatchObject({
+    source: 'captured-builtin',
+    identity: digest(current),
+    mime: 'image/webp',
+    width,
+    height,
+  });
+});
+
 it('selects the captured theme version and checks its real asset hash, dimensions and mime', async () => {
   const pack = bundledThemePacks[0];
   if (!pack?.assets[0]) throw new Error('Missing immutable theme fixture.');

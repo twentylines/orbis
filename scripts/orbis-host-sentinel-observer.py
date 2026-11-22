@@ -1,4 +1,5 @@
 """Read-only, narrowly scoped observer over an inherited Unix listener."""
+from contextlib import contextmanager
 import json
 import math
 import os
@@ -7,6 +8,7 @@ import select
 import socket
 import stat
 import struct
+import subprocess
 import threading
 import time
 
@@ -16,6 +18,248 @@ _UUID = re.compile(r'[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f
 _TAG = re.compile(r'v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?', re.ASCII)
 _CAPTURE_ROUTE = re.compile(rb'/v2/core-captures/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})/progress')
 CAPTURE_CAPABILITY = {'schema': 'orbis.sentinel-observer.capture.v1', 'protocolVersion': 1, 'kind': 'core-capture-progress'}
+COMPONENT_CAPABILITY = {'schema': 'orbis.sentinel-observer.component.v1', 'protocolVersion': 1, 'kind': 'core-component-status'}
+_VERSION = re.compile(r'(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?\Z', re.ASCII)
+
+
+def validate_component(value):
+    if (type(value) is not dict or set(value) != {'installedVersion', 'availableVersion', 'state'}
+            or value['availableVersion'] is not None
+            or type(value['state']) is not str
+            or value['state'] not in {'unknown', 'healthy', 'unavailable', 'updating', 'recovering'}):
+        raise ValueError('Component status is unavailable')
+    version = value['installedVersion']
+    if version is not None and (type(version) is not str or len(version) > 128 or not _VERSION.fullmatch(version)):
+        raise ValueError('Component status is unavailable')
+    return dict(value)
+
+
+_HANDOFF_STATES = ('accepted', 'stopping', 'held', 'returning', 'complete', 'attention')
+_HASH = re.compile(r'[a-f0-9]{64}', re.ASCII)
+_HANDOFF_ROUTE = b'/v4/controller-handoff/status'
+
+
+def validate_handoff(value):
+    if (type(value) is not dict or set(value) != {'version', 'handoff'}
+            or type(value['version']) is not int or value['version'] != 1):
+        raise ValueError('Handoff status is unavailable')
+    handoff = value['handoff']
+    if handoff is None:
+        return {'version': 1, 'handoff': None}
+    if (type(handoff) is not dict or type(handoff.get('state')) is not str
+            or handoff['state'] not in _HANDOFF_STATES
+            or type(handoff.get('planId')) is not str or not _UUID.fullmatch(handoff['planId'])):
+        raise ValueError('Handoff status is unavailable')
+    held = handoff['state'] == 'held'
+    if set(handoff) != ({'planId', 'state', 'returnScope'} if held else {'planId', 'state'}):
+        raise ValueError('Handoff status is unavailable')
+    public = dict(handoff)
+    if held:
+        scope = handoff['returnScope']
+        if (type(scope) is not dict or set(scope) != {'planId', 'installationId', 'handoffSha256'}
+                or scope['planId'] != handoff['planId']
+                or any(type(scope[key]) is not str or not _HASH.fullmatch(scope[key])
+                       for key in ('installationId', 'handoffSha256'))):
+            raise ValueError('Handoff status is unavailable')
+        public['returnScope'] = dict(scope)
+    return {'version': 1, 'handoff': public}
+
+
+def _startup(value):
+    seconds, _, fraction = value[:-1].partition('.')
+    return seconds, fraction.ljust(9, '0')
+
+
+class HandoffObservation:
+    """Observe only the selector and, briefly, the exact plan it just selected."""
+
+    def __init__(self, manager):
+        self.load_manager = manager
+        self.manager = None
+        self.lock = threading.Lock()
+        self.selected = None
+        self.terminal_until = None
+
+    @staticmethod
+    @contextmanager
+    def _installation(manager, record, current):
+        # Use the protected floor reader directly. Action qualification also
+        # opens the writer journal and can contact the public recovery edge.
+        provider, service = manager.provider, manager.service
+        if service.state_dir != provider.supervisor.layout.STATE_ROOT:
+            raise ValueError('Handoff installation is unavailable')
+        with provider.supervisor._held_runtime(storage_floor=True) as (runtime, modules, _):
+            floor = modules['credential_floor']
+            reader = floor.CredentialFloorReader(service.root, service.context, current['daemon'],
+                                                 host_state_directory=service.state_dir)
+            with reader.snapshot() as snapshot:
+                history = snapshot._value
+                entry = history['current']
+                if (snapshot.report.classification != 'record-consistent' or history['schema'] != floor.SCHEMA
+                        or history['mode'] != 'managed' or snapshot.report.history_sha256 != record['proof']['floor']
+                        or history['installationId'] != record['proof']['installationId']
+                        or entry['main'] != current['main'] or entry['recoveryOrigin'] != current['origin']
+                        or any(entry['sentinel'][key] != runtime[key] for key in ('version', 'inventorySha256'))
+                        or entry['sentinel']['runtimeSha256'] != provider.product.digest(runtime['runtimeFiles'])):
+                    raise ValueError('Handoff installation is unavailable')
+                yield
+
+    def __call__(self, deadline):
+        # Abandoned clients cannot accumulate concurrent Host inspections.
+        if not self.lock.acquire(blocking=False):
+            raise ValueError('Handoff observation is busy')
+        try:
+            if self.manager is None:
+                self.manager = self.load_manager()
+            manager = self.manager
+            token = manager.host.CAPTURE_READ_DEADLINE.set(deadline)
+            try:
+                return self._observe(manager, deadline)
+            finally:
+                manager.host.CAPTURE_READ_DEADLINE.reset(token)
+        finally:
+            self.lock.release()
+
+    def _observe(self, manager, deadline):
+        idle = {'version': 1, 'handoff': None}
+        selected = manager._selected()
+        if selected is not None and (self.selected is None or selected != self.selected[0]):
+            self.selected, self.terminal_until = None, None
+        if selected is None and (self.selected is None
+                                 or self.terminal_until is not None and time.monotonic() >= self.terminal_until):
+            self.selected, self.terminal_until = None, None
+            return idle
+        identifier = selected if selected is not None else self.selected[0]
+        record = manager._record(identifier)
+        binding = (identifier, record['source'], record['proof'])
+        if self.selected is not None and binding != self.selected:
+            raise ValueError('Handoff binding changed')
+        phase = record['phase']
+        if selected is None and phase == 'cancelled':
+            self.selected, self.terminal_until = None, None
+            return idle
+        # Retain only an in-memory cursor, never the previous public result;
+        # after selector retirement the same record and current identity are read again.
+        if selected is not None:
+            self.selected = binding
+        elif phase == 'complete' and self.terminal_until is None:
+            self.terminal_until = time.monotonic() + 300
+        # The provider's unwrapped read uses this observer's tighter deadline.
+        current = manager.provider._current()
+        source = manager._same_core(record, current, returning=phase in ('returning', 'complete'))
+        with self._installation(manager, record, current):
+            state = 'attention'
+            if phase == 'complete':
+                if (selected is None and current['startedAt'] == record['returnedStartedAt']
+                        and manager._returned(record, current)):
+                    state = 'complete'
+            elif selected is not None:
+                with manager.worker_lock:
+                    active = identifier in manager.workers
+                original = (current['startedAt'] == source['startedAt']
+                            and (current['state'] == 'stopped' or current['pid'] == source['pid']))
+                if phase in ('held', 'return-accepted') and manager._stopped(record, current):
+                    state = 'held'
+                elif phase == 'accepted' and active and original and current['state'] == 'healthy':
+                    state = 'accepted'
+                elif phase == 'stopping' and active and original:
+                    state = 'stopping'
+                elif phase == 'returning' and active and (
+                        manager._stopped(record, current) if current['state'] == 'stopped'
+                        else _startup(current['startedAt']) > _startup(record['stoppedAt'])):
+                    state = 'returning'
+            handoff = {'planId': identifier, 'state': state}
+            if state == 'held':
+                return_scope = getattr(manager, 'return_scope', None)
+                if not callable(return_scope):
+                    raise ValueError('Handoff scope is unavailable')
+                scope = return_scope(record)
+                if scope['installationId'] != record['proof']['installationId']:
+                    raise ValueError('Handoff installation changed')
+                handoff['returnScope'] = scope
+        if (manager.provider._current() != current
+                or manager._record(identifier) != record or manager._selected() != selected
+                or time.monotonic() >= deadline):
+            raise ValueError('Handoff changed during observation')
+        return validate_handoff({'version': 1, 'handoff': handoff})
+
+
+def _inspect(root, context, arguments, deadline):
+    """Cap stdout while reading and discard stderr; own and reap the fixed CLI child."""
+    process = subprocess.Popen(['docker', '--context', context, *arguments], cwd=root,
+                               stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    try:
+        output = bytearray()
+        os.set_blocking(process.stdout.fileno(), False)
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not select.select([process.stdout], [], [], remaining)[0]:
+                raise TimeoutError('Component inspection expired')
+            try:
+                block = os.read(process.stdout.fileno(), min(4096, _MAX_JSON + 1 - len(output)))
+            except BlockingIOError:
+                continue
+            if not block:
+                break
+            output.extend(block)
+            if len(output) > _MAX_JSON:
+                raise ValueError('Component inspection exceeds limit')
+        if process.wait(timeout=max(0.001, deadline - time.monotonic())) != 0:
+            raise ValueError('Component inspection is unavailable')
+        return json.loads(output)
+    finally:
+        if process.poll() is None:
+            process.kill()
+        try:
+            process.wait(timeout=0.25)
+        finally:
+            process.stdout.close()
+
+
+def observe_component(root, context):
+    """Observe a fixed container and its immutable image, without reconciling state."""
+    if type(context) is not str or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*', context):
+        raise ValueError('Component status is unavailable')
+    deadline = time.monotonic() + 1.5
+    labels = {'project': 'com.docker.compose.project', 'root': 'com.docker.compose.project.working_dir',
+              'service': 'com.docker.compose.service'}
+    fields = {'id': '.Id', 'image': '.Image', 'reference': '.Config.Image', 'state': '.State.Status'}
+    template = '{' + ','.join('"' + key + '":{{json ' + value + '}}' for key, value in fields.items())
+    template += ',' + ','.join('"' + key + '":{{json (index .Config.Labels "' + value + '")}}'
+                                for key, value in labels.items())
+    template += ',"health":{{if .State.Health}}{{json .State.Health.Status}}{{else}}null{{end}}}'
+    value = _inspect(root, context, ['inspect', '--type', 'container', '--format', template, 'runtipi'], deadline)
+    if (type(value) is not dict or set(value) != {*fields, *labels, 'health'}
+            or value['project'] != 'runtipi' or value['service'] != 'runtipi' or value['root'] != str(root)
+            or type(value['id']) is not str or not re.fullmatch(r'[a-f0-9]{64}', value['id'])
+            or type(value['image']) is not str or not re.fullmatch(r'sha256:[a-f0-9]{64}', value['image'])
+            or type(value['reference']) is not str
+            or not re.fullmatch(r'(?:ghcr\.io/twentylines/orbis@sha256:[a-f0-9]{64}|sha256:[a-f0-9]{64})', value['reference'])
+            or type(value['state']) is not str or value['state'] not in {'created', 'running', 'paused', 'restarting', 'removing', 'exited', 'dead'}
+            or value['health'] not in (None, 'none', 'starting', 'healthy', 'unhealthy')):
+        raise ValueError('Component status is unavailable')
+    if value['reference'].startswith('sha256:') and value['reference'] != value['image']:
+        raise ValueError('Component image differs from its creation reference')
+    # Container labels can override image labels. Read version/source from the
+    # image's immutable ID and bind registry references to its RepoDigests.
+    template = ('{"id":{{json .Id}},"digests":{{json .RepoDigests}},'
+                '"source":{{json (index .Config.Labels "org.opencontainers.image.source")}},'
+                '"version":{{json (index .Config.Labels "org.opencontainers.image.version")}}}')
+    image = _inspect(root, context, ['image', 'inspect', '--format', template, value['image']], deadline)
+    if type(image) is dict and image.get('digests') is None:
+        image = {**image, 'digests': []}
+    if (type(image) is not dict or set(image) != {'id', 'digests', 'source', 'version'}
+            or image['id'] != value['image'] or image['source'] != 'https://github.com/twentylines/orbis'
+            or type(image['version']) is not str or not image['version'].startswith('v')
+            or type(image['digests']) is not list or len(image['digests']) > 64
+            or any(type(item) is not str or len(item) > 256 for item in image['digests'])
+            or value['reference'].startswith('ghcr.io/') and value['reference'] not in image['digests']):
+        raise ValueError('Component image metadata is unavailable')
+    state = ('healthy' if value['state'] == 'running' and value['health'] == 'healthy'
+             else 'recovering' if value['state'] == 'restarting'
+             else 'unavailable' if value['state'] in {'paused', 'removing', 'exited', 'dead'}
+                  or value['health'] == 'unhealthy' else 'unknown')
+    return validate_component({'installedVersion': image['version'][1:], 'availableVersion': None, 'state': state})
 
 
 def validate_capture(value, point):
@@ -107,7 +351,7 @@ def _peer(conn):
 
 
 class ObserverServer:
-    def __init__(self, listener, provider, *, capture_provider=None):
+    def __init__(self, listener, provider, *, capture_provider=None, component_provider=None, handoff_provider=None):
         if listener.family != socket.AF_UNIX or listener.getsockopt(socket.SOL_SOCKET, socket.SO_TYPE) != socket.SOCK_STREAM or not self._is_listening(listener):
             raise ValueError('Unavailable')
         name = listener.getsockname()
@@ -117,6 +361,8 @@ class ObserverServer:
         self.identity = self._identity(self.path)
         self.provider = provider
         self.capture_provider = capture_provider
+        self.component_provider = component_provider
+        self.handoff_provider = handoff_provider
         self.listener = listener.dup()
         self._stop = threading.Event()
         self._done = threading.Event()
@@ -179,7 +425,10 @@ class ObserverServer:
                 raise ValueError('Unavailable')
             capture = _CAPTURE_ROUTE.fullmatch(parts[1]) if self.capture_provider is not None else None
             capture_capability = parts[1] == b'/v2/capture-capability' and self.capture_provider is not None
-            if parts[1] not in (b'/v1/capability', b'/v1/core-operation/progress') and not capture and not capture_capability:
+            component_capability = parts[1] == b'/v3/component-capability' and self.component_provider is not None
+            component = parts[1] == b'/v3/orbis/status' and self.component_provider is not None
+            handoff = parts[1] == _HANDOFF_ROUTE and self.handoff_provider is not None
+            if parts[1] not in (b'/v1/capability', b'/v1/core-operation/progress') and not any((capture, capture_capability, component, component_capability, handoff)):
                 raise ValueError('Unavailable')
             seen_length = False
             for line in lines[1:]:
@@ -201,6 +450,12 @@ class ObserverServer:
                 payload = {'schema': 'orbis.sentinel-observer.v1', 'protocolVersion': 1, 'kind': 'core-update-progress'}
             elif capture_capability:
                 payload = CAPTURE_CAPABILITY
+            elif component_capability:
+                payload = COMPONENT_CAPABILITY
+            elif component:
+                payload = validate_component(self.component_provider())
+            elif handoff:
+                payload = validate_handoff(self.handoff_provider(deadline - 0.1))
             elif capture:
                 point = capture[1].decode('ascii')
                 payload = validate_capture(self.capture_provider(point), point)
@@ -227,7 +482,7 @@ class ObserverServer:
             self._slots.release()
 
 
-def activated_observer(provider, *, capture_provider=None):
+def activated_observer(provider, *, capture_provider=None, component_provider=None, handoff_provider=None):
     """Use only the explicitly enrolled systemd observer descriptor."""
     if os.environ.get('LISTEN_PID') != str(os.getpid()):
         return None
@@ -235,7 +490,8 @@ def activated_observer(provider, *, capture_provider=None):
         raise ValueError('Observer activation is unavailable')
     os.set_inheritable(3, False)
     with socket.socket(fileno=3) as listener:
-        result = ObserverServer(listener, provider, capture_provider=capture_provider)
+        result = ObserverServer(listener, provider, capture_provider=capture_provider,
+                                component_provider=component_provider, handoff_provider=handoff_provider)
     for key in ('LISTEN_PID', 'LISTEN_FDS', 'LISTEN_FDNAMES'):
         os.environ.pop(key, None)
     return result

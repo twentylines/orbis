@@ -2,8 +2,6 @@
 
 import argparse
 import fcntl
-from contextlib import ExitStack, contextmanager
-from contextvars import ContextVar
 import hashlib
 import json
 import os
@@ -17,11 +15,16 @@ import sys
 import time
 import uuid
 import weakref
+from contextlib import ExitStack, contextmanager
+from contextvars import ContextVar
 
 
 OWNER = 0
 PYTHON = Path('/usr/bin/python3')
-TOOLKIT_COMMIT = '32e384d9d492d8b5cb1aea562bd86447e2cc04a0'
+INSTALLED_ROOT = Path('/opt/orbis-sentinel')
+INSTALLED_STATE = Path('/var/lib/orbis-sentinel')
+HOST_SOURCE_PLAN = 'orbis.host-source-publication-plan.v2'
+TOOLKIT_COMMIT = '203bbb7594f59be179c569dbc6959ed5e6038b96'
 TOOLKIT = {
     'activate_release.py': (28644, '0b4645072cb1de6251b27b5e063bdd38163078ea9c6b1ede7161ef89d71c924f'),
     'verify_release.py': (14462, '9461fb041d055bbae13cc3ce48f3daf09ff8835ceedb8a77c4bf15c237137629'),
@@ -29,7 +32,7 @@ TOOLKIT = {
     'bootstrap_verifier.py': (13977, '965002f855e940446951d27a2bd44a37043efa692d3e4ba56473bd5525de6e6c'),
     'LICENSE': (35149, '3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986'),
 }
-RELEASE = {'version': '0.1.0-dev.19', 'sha256': '4a3c29039b768dbae15a562abc64086374f66af9e12b8b490d3aa4466d152f6c', 'sourceCommit': '32e384d9d492d8b5cb1aea562bd86447e2cc04a0'}
+RELEASE = {'version': '0.1.0-dev.20', 'sha256': '06a4f27aa6bb2424f86a5d6df9d857f2d037007059b9ce21258798e1166285d5', 'sourceCommit': '203bbb7594f59be179c569dbc6959ed5e6038b96'}
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 _PREPARATIONS = weakref.WeakKeyDictionary()
 
@@ -372,28 +375,34 @@ def _progress_phase(phase):
     if progress:
         progress.publish(phase)
 
-def _file(path, size, digest, *, mode=0o600, expected=None, maximum=None):
+
+def _file(path, size, digest, *, mode=0o600, expected=None, maximum=None, read_body=False, allow_empty=False):
     with Directory(path.parent) as parent:
         descriptor = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=parent.fd)
         try:
             before = os.fstat(descriptor)
             if (not stat.S_ISREG(before.st_mode) or before.st_uid != OWNER or before.st_nlink != 1
-                    or stat.S_IMODE(before.st_mode) != mode or not 0 < before.st_size <= (maximum or size)
+                    or stat.S_IMODE(before.st_mode) != mode or not (0 if allow_empty else 1) <= before.st_size <= (maximum or size)
                     or (size and before.st_size != size)):
                 raise SentinelInstallError('Sentinel preparation file has an untrusted identity')
             actual = hashlib.sha256()
             count = 0
+            body = bytearray() if read_body else None
             while chunk := os.read(descriptor, 65536):
                 count += len(chunk)
                 if count > before.st_size:
                     raise SentinelInstallError('Sentinel preparation file exceeds its size')
                 actual.update(chunk)
+                if body is not None:
+                    body.extend(chunk)
             identity = _seal(before)
             parent.check()
             if ((digest and actual.hexdigest() != digest) or count != before.st_size or _seal(os.fstat(descriptor)) != identity
                     or _seal(os.stat(path.name, dir_fd=parent.fd, follow_symlinks=False)) != identity
                     or (expected is not None and identity != expected)):
                 raise SentinelInstallError('Sentinel preparation file changed')
+            if body is not None:
+                return bytes(body)
             return {'path': path, 'bytes': count, 'sha256': actual.hexdigest(), 'mode': mode, 'identity': identity}
         finally:
             os.close(descriptor)
@@ -761,6 +770,118 @@ def _activate_files(prepared):
         directory.check()
         _confirmed(result, prepared.release, activated=True)
         return result
+
+
+def _installed_payload(state, root):
+    def metadata(path, mode=0o600, maximum=1024 * 1024):
+        return _json(_file(path, None, None, mode=mode, maximum=maximum, read_body=True))
+
+    installed = metadata(state / 'installed.json')
+    if (type(installed) is not dict or set(installed) != {'schema', 'version', 'sha256', 'sourceCommit', 'files'}
+            or installed['schema'] != 'orbis-sentinel.installation.v1'):
+        raise SentinelInstallError('Invalid Sentinel installation receipt')
+    identity = _release_identity({key: installed[key] for key in RELEASE})
+    version = identity['version']
+    activation = metadata(state / 'activation.json')
+    if (type(activation) is not dict or set(activation) != {'schema', 'id', 'phase', 'candidate', 'previous', 'previousUnits'}
+            or activation['schema'] != 'orbis-sentinel.activation.v1' or activation['phase'] != 'complete'
+            or type(activation['id']) is not str or not re.fullmatch(r'[a-f0-9]{32}', activation['id'])
+            or activation['candidate'] != installed
+            or metadata(state / f"admission-{activation['id']}.json") != {**activation, 'phase': 'prepared'}):
+        raise SentinelInstallError('Sentinel activation and admission receipts do not match the installation')
+
+    with Directory(root) as parent:
+        selector = os.stat('current', dir_fd=parent.fd, follow_symlinks=False)
+        if (not stat.S_ISLNK(selector.st_mode) or selector.st_uid != OWNER
+                or os.readlink('current', dir_fd=parent.fd) != f'releases/{version}'):
+            raise SentinelInstallError('Sentinel current selector does not match the installation')
+        parent.check()
+    base = root / 'releases' / version
+    files = installed['files']
+    required = {'release.json', 'bin/orbis-sentinel', 'src/orbis_sentinel/host_source_publication.py',
+                'src/orbis_sentinel/runtime.py', 'src/orbis_sentinel/__init__.py'}
+    if type(files) is not dict or len(files) > 513 or not required <= files.keys():
+        raise SentinelInstallError('Installed Sentinel lacks the Host source review payload')
+
+    children = {}
+    total = 0
+    for name, receipt in files.items():
+        maximum = 256 * 1024 if name == 'release.json' else 16 * 1024 * 1024
+        if (len(name) > 512 or not re.fullmatch(r'[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*', name)
+                or type(receipt) is not dict or set(receipt) != {'bytes', 'sha256'}
+                or type(receipt['bytes']) is not int or not 0 <= receipt['bytes'] <= maximum
+                or type(receipt['sha256']) is not str or not re.fullmatch(r'[a-f0-9]{64}', receipt['sha256'])):
+            raise SentinelInstallError('Invalid installed Sentinel inventory')
+        total += receipt['bytes']
+        if total > 65 * 1024 * 1024:
+            raise SentinelInstallError('Installed Sentinel inventory exceeds its size limit')
+        path = base / name
+        _file(path, receipt['bytes'], receipt['sha256'], mode=0o755 if name.startswith('bin/') else 0o644, allow_empty=True)
+        while path != base:
+            children.setdefault(path.parent, set()).add(path.name)
+            path = path.parent
+    for path, expected in children.items():
+        with Directory(path) as directory:
+            info = os.fstat(directory.fd)
+            if info.st_uid != OWNER or stat.S_IMODE(info.st_mode) != 0o755 or set(os.listdir(directory.fd)) != expected:
+                raise SentinelInstallError('Installed Sentinel release contains unexpected entries')
+            directory.check()
+    manifest = metadata(base / 'release.json', mode=0o644, maximum=256 * 1024)
+    if manifest != {'format': 1, 'component': 'orbis-sentinel', 'version': version, 'python': '>=3.10',
+                    'files': {name: record for name, record in files.items() if name != 'release.json'}}:
+        raise SentinelInstallError('Sentinel installed manifest differs from its receipt')
+    return base / 'bin/orbis-sentinel'
+
+
+@contextmanager
+def _installed_review_launcher():
+    with Directory(INSTALLED_STATE, private=True) as state:
+        descriptor = os.open('activation.lock', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=state.fd)
+        try:
+            info = os.fstat(descriptor)
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != OWNER or info.st_nlink != 1
+                    or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size != 0):
+                raise SentinelInstallError('Sentinel activation lock is untrusted')
+            fcntl.flock(descriptor, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            if _seal(os.stat('activation.lock', dir_fd=state.fd, follow_symlinks=False)) != _seal(info):
+                raise SentinelInstallError('Sentinel activation lock changed')
+            launcher = _installed_payload(state.path, INSTALLED_ROOT)
+            state.check()
+            yield launcher
+        finally:
+            os.close(descriptor)
+
+
+def review_host_source(operation, selection_directory, copy_sha):
+    if (not all(type(value) is str and re.fullmatch(r'[a-f0-9]{64}', value) for value in (operation, copy_sha))
+            or not Path(selection_directory).is_absolute()):
+        raise SentinelInstallError('Host source review requires an exact operation and custody tuple')
+    try:
+        with _installed_review_launcher() as launcher:
+            interpreter, identity = _python()
+            result = subprocess.run(
+                [str(interpreter), '-I', '-B', str(launcher), '--review-host-source', operation,
+                 '--installer-selection', str(selection_directory), '--host-copy-sha256', copy_sha],
+                cwd='/', env={'PATH': '/usr/bin:/bin', 'LANG': 'C', 'HOME': '/'},
+                stdin=subprocess.DEVNULL, capture_output=True, timeout=60)
+            if _seal(interpreter.lstat()) != identity:
+                raise SentinelInstallError('The system Python interpreter changed during review')
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise SentinelInstallError(
+            f'Host source review {operation} could not finish. Check the installed Sentinel activation and inventory, '
+            f'and retain the selection and any staged plan before retrying. {error}') from error
+    if result.returncode or len(result.stdout) > 4096:
+        raise SentinelInstallError(f'Sentinel did not confirm Host source review {operation}; retain its custody and check for a staged plan before retrying')
+    try:
+        review = _json(result.stdout)
+    except ValueError:
+        review = None
+    if (type(review) is not dict or set(review) != {'schema', 'operationId', 'planSha256', 'phase'}
+            or review['schema'] != HOST_SOURCE_PLAN or review['operationId'] != operation
+            or review['phase'] != 'review-required' or type(review['planSha256']) is not str
+            or not re.fullmatch(r'[a-f0-9]{64}', review['planSha256'])):
+        raise SentinelInstallError(f'Sentinel returned an invalid review for operation {operation}; inspect the retained plan')
+    return review
 
 
 def main():

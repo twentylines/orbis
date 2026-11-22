@@ -1,9 +1,18 @@
+import { type } from 'arktype';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import fs from 'node:fs/promises';
 import { BackupRequirementError } from './backup-files';
 import { BackupDatabaseLines } from './backup-docker-exec';
-import { BackupDatabaseRecords, backupDatabaseLimits, backupDatabaseTables, type BackupDatabaseTable } from './backup-database-records';
+import {
+  BackupDatabaseRecords,
+  backupDatabaseLimits,
+  backupDatabaseTables,
+  backupDatabaseVersion,
+  backupDatabaseCount,
+  backupDatabaseCountsSchema,
+  type BackupDatabaseTable,
+} from './backup-database-records';
 import type { BackupDatabaseReview } from './backup-database.service';
 
 export const invalidRestoreDatabase = () =>
@@ -29,16 +38,15 @@ export async function readNormalizedBackupDatabase(
     !Number.isSafeInteger(expected.bytes) ||
     expected.bytes < 1 ||
     expected.bytes > backupDatabaseLimits.totalBytes ||
-    !expected.counts ||
-    Object.keys(expected.counts).length !== backupDatabaseTables.length ||
-    backupDatabaseTables.some(
-      (table) => !Number.isSafeInteger(expected.counts[table]) || expected.counts[table] < 0 || expected.counts[table] > backupDatabaseLimits.rows,
-    )
+    backupDatabaseCountsSchema(expected.counts) instanceof type.errors
   )
     throw invalidRestoreDatabase();
+  const version = backupDatabaseVersion(expected.counts);
+  if (version === 1 ? expected.migrationSha256 !== undefined : !/^[a-f0-9]{64}$/.test(expected.migrationSha256 ?? '')) throw invalidRestoreDatabase();
+  const tables = backupDatabaseTables(version);
   const file = await fs.open(source.file, constants.O_RDONLY | constants.O_NOFOLLOW);
   const digest = createHash('sha256');
-  const validator = new BackupDatabaseRecords(source.jwtSecret);
+  const validator = new BackupDatabaseRecords(source.jwtSecret, undefined, version);
   let order = -1;
   let bytes = 0;
   try {
@@ -64,9 +72,9 @@ export async function readNormalizedBackupDatabase(
       )
         throw invalidRestoreDatabase();
       const item = value as { table: unknown; row: unknown };
-      if (typeof item.table !== 'string' || !backupDatabaseTables.includes(item.table as BackupDatabaseTable)) throw invalidRestoreDatabase();
+      if (typeof item.table !== 'string' || !tables.includes(item.table as BackupDatabaseTable)) throw invalidRestoreDatabase();
       const table = item.table as BackupDatabaseTable;
-      const index = backupDatabaseTables.indexOf(table);
+      const index = tables.indexOf(table);
       if (index < order) throw invalidRestoreDatabase();
       order = index;
       const row = validator.accept(table, item.row);
@@ -103,7 +111,8 @@ export async function readNormalizedBackupDatabase(
     )
       throw invalidRestoreDatabase();
     const counts = await validator.finish(source.passkeys, signal);
-    if (backupDatabaseTables.some((table) => counts[table] !== expected.counts[table])) throw invalidRestoreDatabase();
+    if (validator.migrationDigest() !== expected.migrationSha256) throw invalidRestoreDatabase();
+    if (tables.some((table) => backupDatabaseCount(counts, table) !== backupDatabaseCount(expected.counts, table))) throw invalidRestoreDatabase();
     return { counts, bytes };
   } finally {
     await file.close();

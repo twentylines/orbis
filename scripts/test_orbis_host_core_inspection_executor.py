@@ -3,6 +3,7 @@ import copy
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -26,6 +27,13 @@ E = load('orbis-host-core-inspection-executor.py', 'core_inspection_executor_tes
 A = load('orbis-host-retained-authority.py', 'core_inspection_executor_authority')
 ID = 'a71c77d2-f420-440e-951b-083209514e72'
 NODE = 'sha256:' + 'c' * 64
+
+
+def actual_migration_ledger():
+    directory = Path(__file__).resolve().parents[1] / 'packages/backend/src/core/database/drizzle'
+    journal = json.loads((directory / 'meta/_journal.json').read_bytes())
+    return [{'id': i + 4, 'hash': hashlib.sha256((directory / (entry['tag'] + '.sql')).read_bytes()).hexdigest(),
+             'created_at': str(entry['when'])} for i, entry in enumerate(journal['entries'])]
 
 
 class Runtime:
@@ -196,6 +204,16 @@ class SupervisorTests(unittest.TestCase):
                             'localeProviderEvidence': 'postgresql14-libc-database-default' if self.profile['major'] == 14 else 'pg_database.datlocprovider'})
             report['structure']['major'] = self.profile['major']
             report['bootstrapSource'].update(schema='orbis.core-source-bootstrap-evidence.v2', catalogUserIdentities=[{'ownerId': 11, 'identitySha256': '7' * 64}])
+        if hasattr(self, 'structure_profile'):
+            schema, ledger, migration_count = self.structure_profile
+            report['structure']['schema'] = schema
+            report['structure']['rows']['__drizzle_migrations'] = len(ledger)
+            if schema == E.STRUCTURE_V3:
+                report['structure']['rows']['app_migration_commit'] = 0
+            if 'bootstrapSource' in report:
+                report['bootstrapSource']['migrationLedger'] = ledger
+            if migration_count is not None:
+                report['structure']['rows']['app_migration'] = migration_count
         self.write(self.directory / 'output/result.json', self.P.canonical(report))
 
     def run_workers(self):
@@ -237,6 +255,44 @@ class SupervisorTests(unittest.TestCase):
         self.assertEqual(self.supervisor.checked_completion(self.directory, self.profile), report)
         self.assertEqual(self.runtime.calls, calls)
         self.assertFalse(report['bootstrapSource']['restoreAuthority'])
+
+    def test_v3_replays_only_a_structure_matching_the_bound_actual_migrations(self):
+        self.bootstrap_source()
+        ledger = actual_migration_ledger()
+        self.structure_profile = (E.STRUCTURE_V3, ledger, 0)
+        report = self.run_workers()
+        self.assertEqual(report['structure']['rows']['app_migration'], 0)
+        self.assertEqual(self.supervisor.checked_completion(self.directory, self.profile), report)
+
+    def test_v3_rejects_wrong_modern_schema_shape_or_partial_marker(self):
+        self.bootstrap_source()
+        ledger = actual_migration_ledger()
+        self.assertEqual(ledger[-1]['hash'], E.APP_COMMIT_SQL_SHA256)
+        for schema, rows, count in (
+            (E.STRUCTURE_V2, ledger, None),
+            (E.STRUCTURE_V1, ledger, None),
+            (E.STRUCTURE_V3, ledger[:-1], 0),
+            (E.STRUCTURE_V2, ledger[:-1] + [ledger[-1] | {'hash': '0' * 64}], 0),
+            (E.STRUCTURE_V2, ledger[:-1] + [ledger[-1] | {'created_at': '1795203554059'}], 0),
+            (E.STRUCTURE_V1, ledger[:-1], 0),
+        ):
+            self.structure_profile = (schema, rows, count)
+            self.output()
+            with self.subTest(schema=schema,count=count), self.assertRaises(E.ExecutorError):
+                self.supervisor.checked_result(self.directory, self.request, self.profile)
+        self.assertEqual(self.runtime.calls, [])
+
+    def test_older_inspection_inputs_use_the_explicit_trusted_worker_catalog_schema(self):
+        for legacy_request in (True, False):
+            if not legacy_request:
+                self.role_bound()
+            self.structure_profile = (E.STRUCTURE_V3, actual_migration_ledger(), 1)
+            self.output()
+            report = self.supervisor.checked_result(self.directory, self.request, self.profile)
+            self.assertEqual(report['structure']['schema'], E.STRUCTURE_V3)
+            self.assertEqual(report['structure']['rows']['app_migration'], 1)
+            self.assertNotIn('bootstrapSource', report)
+        self.assertEqual(self.runtime.calls, [])
 
     def test_v3_requires_fresh_scope_and_never_reinterprets_an_old_request(self):
         self.bootstrap_source()
@@ -682,6 +738,14 @@ class VersionedSupervisorTests(unittest.TestCase):
     def test_v4_14_workers_and_completion_bind_actual_observation_and_closed_profile(self):
         self.check_run(14)
 
+    def test_v4_binds_the_modern_profile_independent_of_pg_major_and_ledger_id(self):
+        f = self.fixture
+        f.structure_profile = (E.STRUCTURE_V3, actual_migration_ledger(), 0)
+        report = f.run_workers()
+        self.assertEqual(report['structure']['major'], 14)
+        self.assertEqual(report['structure']['schema'], E.STRUCTURE_V3)
+        self.assertEqual(f.supervisor.checked_completion(f.directory, f.profile), report)
+
     def test_v4_17_workers_and_completion_keep_new_protocol_separate(self):
         self.configure(17);self.check_run(17)
 
@@ -767,6 +831,22 @@ class VersionedSupervisorTests(unittest.TestCase):
         f.write(path, f.P.canonical(report))
         with self.assertRaises(E.ExecutorError):f.supervisor.checked_completion(f.directory, f.profile)
         self.assertEqual(f.runtime.calls, calls)
+
+
+class StructureCommitProfileTests(unittest.TestCase):
+    def test_keeps_legacy_profiles_and_requires_both_exact_markers_for_commit_profile(self):
+        ledger = actual_migration_ledger()
+        self.assertEqual(E.structure_history_schema(ledger[:-2]), E.STRUCTURE_V1)
+        self.assertEqual(E.structure_history_schema(ledger[:-1]), E.STRUCTURE_V2)
+        self.assertEqual(E.structure_history_schema(ledger), E.STRUCTURE_V3)
+        self.assertEqual(E.structure_row_tables(E.STRUCTURE_V3), E.structure_row_tables(E.STRUCTURE_V2) | {'app_migration_commit'})
+        for changed in (
+                ledger[:-1] + [ledger[-1] | {'hash': '0' * 64}],
+                ledger[:-1] + [ledger[-1] | {'created_at': '1795305600001'}],
+                ledger[:-2] + [ledger[-1]],
+                ledger + [ledger[-1] | {'id': ledger[-1]['id'] + 1}]):
+            with self.subTest(rows=len(changed)):
+                self.assertIsNone(E.structure_history_schema(changed))
 
 
 if __name__ == '__main__':

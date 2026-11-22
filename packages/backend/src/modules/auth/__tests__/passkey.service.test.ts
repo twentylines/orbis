@@ -18,6 +18,9 @@ import { SessionManager } from '../session.manager';
 import { SESSION_COOKIE_NAME } from '@/common/constants';
 import { TotpAuthenticator } from '../utils/totp-authenticator';
 import { passkeyAuthenticator } from './passkey.fixture';
+import { credentialChangeFixture } from './credential-change.fixture';
+import { MainPasskeySynchronization } from '../../sentinel-recovery/main-passkey-synchronization.service';
+import { HostCredentialRecoveryBroker } from '../../sentinel-recovery/host-broker';
 
 describe('audited WebAuthn passkey ceremonies', () => {
   let directory: string;
@@ -94,6 +97,15 @@ describe('audited WebAuthn passkey ceremonies', () => {
       );
     users.getUserById.mockReset().mockImplementation(async (id) => (id === user.id ? { ...user } : undefined));
     users.getUserByUsername.mockReset();
+    users.withCredentialTransaction.mockImplementation(async (work) => work(users));
+    vi.stubEnv('ORBIS_HOST_SOCKET', '/synthetic-passkey-host.sock');
+    vi.spyOn(HostCredentialRecoveryBroker.prototype, 'admission').mockResolvedValue({ mode: 'unmanaged', binding: 'a'.repeat(64) });
+    vi.spyOn(HostCredentialRecoveryBroker.prototype, 'counterChallenge').mockImplementation(async (options) => ({
+      mode: 'unmanaged',
+      admissionBinding: options.admissionBinding,
+      purpose: options.purpose,
+      ceremonyBinding: options.ceremonyBinding,
+    }));
     users.updateUser.mockReset().mockImplementation(async (_id, patch) => {
       Object.assign(user, patch);
       return { ...user };
@@ -111,11 +123,30 @@ describe('audited WebAuthn passkey ceremonies', () => {
     });
     cache.getByPrefix.mockImplementation(async (prefix) => [...values].filter(([key]) => key.startsWith(prefix)).map(([key, val]) => ({ key, val })));
     store = new PasskeyStore(config);
-    auth = new AuthService(users, sessions, config, encryption, cache, mock<FilesystemService>(), password, store);
-    service = new PasskeyService(config, store, auth, users, sessions);
+    auth = new AuthService(
+      users,
+      sessions,
+      config,
+      encryption,
+      cache,
+      mock<FilesystemService>(),
+      password,
+      store,
+      credentialChangeFixture(users, store).sync,
+    );
+    service = new PasskeyService(
+      config,
+      store,
+      auth,
+      users,
+      sessions,
+      credentialChangeFixture(users, store).sync,
+      new MainPasskeySynchronization(users, store, config, encryption),
+    );
   });
   afterEach(async () => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     await fs.rm(directory, { recursive: true, force: true });
   });
 
@@ -224,18 +255,36 @@ describe('audited WebAuthn passkey ceremonies', () => {
     const body = { requireTotpAfterPasskey: true, password: 'fixture-password', totpCode: TotpAuthenticator.generate('JBSWY3DPEHPK3PXP') };
     await service.updatePolicy(request(), body);
     store = new PasskeyStore(config);
-    auth = new AuthService(users, sessions, config, encryption, cache, mock<FilesystemService>(), password, store);
-    service = new PasskeyService(config, store, auth, users, sessions);
+    auth = new AuthService(
+      users,
+      sessions,
+      config,
+      encryption,
+      cache,
+      mock<FilesystemService>(),
+      password,
+      store,
+      credentialChangeFixture(users, store).sync,
+    );
+    service = new PasskeyService(
+      config,
+      store,
+      auth,
+      users,
+      sessions,
+      credentialChangeFixture(users, store).sync,
+      new MainPasskeySynchronization(users, store, config, encryption),
+    );
     expect((await service.readPolicy(request())).requireTotpAfterPasskey).toBe(true);
     user.totpSecret = 'new-encrypted-secret';
     expect((await service.readPolicy(request())).requireTotpAfterPasskey).toBe(false);
     user.totpSecret = 'retained-encrypted';
     users.updateUser.mockImplementationOnce(async (_id, patch) => {
-      expect((await store.snapshot()).users[41]?.totpAfterPasskey).toBeUndefined();
       Object.assign(user, patch);
       return { ...user };
     });
     await auth.disableTotp({ userId: 41, password: 'fixture-password' });
+    expect((await store.snapshot()).users[41]?.totpAfterPasskey).toBeUndefined();
     expect(await service.readPolicy(request())).toEqual({ requireTotpAfterPasskey: false, totpEnabled: false });
     user.totpEnabled = true;
     user.totpSecret = 'retained-encrypted';
@@ -282,7 +331,7 @@ describe('audited WebAuthn passkey ceremonies', () => {
   it('keeps direct passkey session creation serialized so queued key removal revokes the new session', async () => {
     const { authenticator, handle } = await enroll();
     const { req, options } = await login();
-    const changes = vi.spyOn(store, 'change');
+    const changes = vi.spyOn(store, 'withPreparedChange');
     const createSession = sessions.createSession.bind(sessions);
     let releaseSession!: () => void;
     let creating = false;
@@ -300,16 +349,21 @@ describe('audited WebAuthn passkey ceremonies', () => {
     const removing = service.remove(request(), { id: authenticator.id, password: 'fixture-password' }).then(() => {
       removed = true;
     });
-    await vi.waitFor(() => expect(changes).toHaveBeenCalledTimes(2));
-    expect(removed).toBe(false);
-    releaseSession();
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      // Removal waits before proof and queue admission, while sign-in owns the writer.
+      expect(changes).toHaveBeenCalledTimes(1);
+      expect(removed).toBe(false);
+    } finally {
+      releaseSession();
+    }
     const result = await signingIn;
     await removing;
     expect(cache.get(`session:${result.sessionId}`)).toBeUndefined();
     expect((await store.snapshot()).users[41]?.credentials).toEqual([]);
   });
 
-  it.each(['password', 'passkey'])('revokes pending %s TOTP grants and an already-verifying grant when a key is removed', async (method) => {
+  it.each(['password', 'passkey'])('serializes an in-flight %s TOTP grant with key removal and revokes its resulting session', async (method) => {
     user.totpEnabled = true;
     user.totpSecret = 'retained-encrypted';
     user.salt = 'retained-salt';
@@ -327,6 +381,7 @@ describe('audited WebAuthn passkey ceremonies', () => {
       result = await service.verifyLogin(req, { response: authenticator.authenticate(options.challenge, handle) });
     }
     expect(result).toEqual({ totpSessionId: expect.any(String) });
+    const pending = await auth.login({ username: user.username, password: 'fixture-password' });
     let releaseUser!: (value: typeof user) => void;
     users.getUserById.mockImplementationOnce(
       () =>
@@ -336,10 +391,25 @@ describe('audited WebAuthn passkey ceremonies', () => {
     );
     const verification = auth.verifyTotp({ totpSessionId: result.totpSessionId ?? '', totpCode: TotpAuthenticator.generate('JBSWY3DPEHPK3PXP') });
     await vi.waitFor(() => expect(releaseUser).toEqual(expect.any(Function)));
-    await service.remove(request(), { id: authenticator.id, password: 'fixture-password', totpCode: TotpAuthenticator.generate('JBSWY3DPEHPK3PXP') });
-    releaseUser({ ...user });
-    await expect(verification).rejects.toThrow();
+    let removed = false;
+    const removing = service
+      .remove(request(), { id: authenticator.id, password: 'fixture-password', totpCode: TotpAuthenticator.generate('JBSWY3DPEHPK3PXP') })
+      .then(() => {
+        removed = true;
+      });
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(removed).toBe(false);
+    } finally {
+      releaseUser({ ...user });
+    }
+    const granted = await verification;
+    await removing;
+    expect(cache.get(`session:${granted.sessionId}`)).toBeUndefined();
     expect(values.has(result.totpSessionId ?? '')).toBe(false);
+    await expect(
+      auth.verifyTotp({ totpSessionId: pending.totpSessionId ?? '', totpCode: TotpAuthenticator.generate('JBSWY3DPEHPK3PXP') }),
+    ).rejects.toThrow();
     expect([...values.keys()].some((key) => key.startsWith('session:41:'))).toBe(false);
   });
 
@@ -385,7 +455,15 @@ describe('audited WebAuthn passkey ceremonies', () => {
     await fs.rename(`${directoryAuth}-moved`, directoryAuth);
     for (let index = 0; index < 256; index++) await service.loginOptions(request(), {});
     await expect(service.loginOptions(request(), {})).rejects.toThrow('Too many passkey requests');
-    const concurrent = new PasskeyService(config, store, auth, users, sessions);
+    const concurrent = new PasskeyService(
+      config,
+      store,
+      auth,
+      users,
+      sessions,
+      credentialChangeFixture(users, store).sync,
+      new MainPasskeySynchronization(users, store, config, encryption),
+    );
     const issued = await Promise.allSettled(Array.from({ length: 270 }, () => concurrent.loginOptions(request(), {})));
     expect(issued.filter((result) => result.status === 'fulfilled')).toHaveLength(256);
     expect(issued.filter((result) => result.status === 'rejected')).toHaveLength(14);
@@ -405,7 +483,15 @@ describe('audited WebAuthn passkey ceremonies', () => {
     await enroll();
     await fs.chmod(path.join(directory, 'state/auth/passkeys.json'), 0o644);
     store = new PasskeyStore(config);
-    service = new PasskeyService(config, store, auth, users, sessions);
+    service = new PasskeyService(
+      config,
+      store,
+      auth,
+      users,
+      sessions,
+      credentialChangeFixture(users, store).sync,
+      new MainPasskeySynchronization(users, store, config, encryption),
+    );
     await expect(service.loginOptions(request(), {})).rejects.toThrow();
     expect((await service.list(request())).available).toBe(false);
     config.get.mockImplementation(
@@ -531,14 +617,14 @@ describe('audited WebAuthn passkey ceremonies', () => {
         }),
       ).rejects.toThrow();
       const fresh = await service.sensitiveOptions(req, binding);
-      vi.spyOn(Date, 'now').mockReturnValue(fresh.expiresAt + 1);
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(fresh.expiresAt + 1);
       await expect(
         service.verifySensitive(req, binding, {
           challengeId: fresh.challengeId,
           response: authenticator.authenticate(fresh.options.challenge, handle),
         }),
       ).rejects.toThrow();
-      vi.restoreAllMocks();
+      clock.mockRestore();
       const login = await service.loginOptions(req, {});
       await expect(
         service.verifySensitive(req, binding, { challengeId: login.id, response: authenticator.authenticate(login.options.challenge, handle) }),

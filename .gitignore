@@ -118,3 +118,4 @@ VISUAL-QA.md
 /screenshots/**/README.md
 /screenshots/
 /.orbis-tests.*/
+/.internal/

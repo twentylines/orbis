@@ -107,7 +107,6 @@ export function restoreAuxiliaryContainerPlans(
       ...structuredClone(common.HostConfig),
       CapAdd: [...requiredCapabilities],
       Mounts: storage.workerMounts,
-      RestartPolicy: { Name: retainedProvisional ? 'no' : 'unless-stopped', MaximumRetryCount: 0 },
     },
   };
   return { verifier, worker };

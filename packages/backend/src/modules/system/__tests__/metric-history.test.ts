@@ -8,7 +8,7 @@ import { LoggerService } from '@/core/logger/logger.service';
 import { MonitoringActivityService } from '@/core/monitoring/monitoring-activity.service';
 import { SystemService } from '../system.service';
 import { MetricHistoryService } from '../metric-history.service';
-import { decodeBucket, encodeBucket, metricSample } from '../metric-history.model';
+import { decodeBucket, encodeBucket, mergeBuckets, metricSample } from '../metric-history.model';
 
 describe('bounded server metric history', () => {
   const system = mock<SystemService>();
@@ -20,7 +20,7 @@ describe('bounded server metric history', () => {
   const sample = (cpu: number | null = 20, scope = 'host-proc') => ({
     sampledAt: new Date().toISOString(),
     cpu: { scope, totalPercent: cpu, perCorePercent: [], uptimeSeconds: 100 },
-    memory: { scope: 'host-proc', totalBytes: 100, availableBytes: 25, swapTotalBytes: null, swapFreeBytes: null },
+    memory: { scope: 'host-proc' as const, totalBytes: 100, availableBytes: 25, swapTotalBytes: null, swapFreeBytes: null },
     filesystems: [],
     network: [{ interface: 'eth0', scope: 'runtime', rxBytesPerSecond: 100, txBytesPerSecond: 50, receivedBytes: 1000, transmittedBytes: 500 }],
   });
@@ -234,6 +234,38 @@ describe('bounded server metric history', () => {
       const encoded = JSON.parse(encodeBucket(bucket));
       encoded[7] = 100;
       expect(() => decodeBucket(encoded, Date.now())).toThrow();
+    }
+  });
+
+  it('reads historical host-only records and retains explicit source identity in new records', () => {
+    const bucket = metricSample(sample());
+    if (!bucket) throw new Error('Expected an actual sample');
+    const stored = JSON.parse(encodeBucket(bucket));
+    expect(stored).toHaveLength(18);
+    expect(decodeBucket(stored.slice(0, 17), Date.now()).memoryScope).toBe('host-proc');
+    for (const source of ['host-proc', 'cgroup', 'containers', 'runtime', 'unavailable', 'mixed'] as const) {
+      const current = {
+        ...bucket,
+        memoryScope: source,
+        memory: source === 'mixed' || source === 'unavailable' ? ([0, 0, 0] as [number, number, number]) : bucket.memory,
+      };
+      expect(decodeBucket(JSON.parse(encodeBucket(current)), Date.now())).toEqual(current);
+    }
+    for (const invalid of [-1, 6, 0.5, null, 'host-proc']) {
+      stored[17] = invalid;
+      expect(() => decodeBucket(stored, Date.now())).toThrow();
+    }
+  });
+
+  it('does not average host usage together with a cgroup limit or a container estimate', () => {
+    const host = metricSample(sample());
+    if (!host) throw new Error('Expected an actual sample');
+    for (const source of ['cgroup', 'containers', 'runtime'] as const) {
+      const merged = mergeBuckets(host, { ...host, memoryScope: source });
+      expect(merged.memoryScope).toBe('mixed');
+      expect(merged.memory).toEqual([0, 0, 0]);
+      expect(merged.cpu).toEqual([40, 20, 2]);
+      expect(decodeBucket(JSON.parse(encodeBucket(merged)), Date.now())).toEqual(merged);
     }
   });
 });

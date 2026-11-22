@@ -13,10 +13,11 @@ import tarfile
 from pathlib import Path
 
 
-SCHEMA = "orbis.installer-bundle.v3"
-INSTALLER_SCHEMA = "orbis.installer-bundle.v4"
+SCHEMA = "orbis.installer-bundle.v5"
+INSTALLER_SCHEMA = "orbis.installer-bundle.v6"
 FILE_LIMITS = {"orbis.installer-bundle.v1": 66, "orbis.installer-bundle.v2": 66,
-               "orbis.installer-bundle.v3": 128, "orbis.installer-bundle.v4": 128}
+               "orbis.installer-bundle.v3": 128, "orbis.installer-bundle.v4": 128,
+               "orbis.installer-bundle.v5": 160, "orbis.installer-bundle.v6": 160}
 ARCHIVE = "orbis-installer.tar.gz"
 MANIFEST = "orbis-installer-manifest.json"
 LAUNCHER = "install-orbis.py"
@@ -29,6 +30,10 @@ REQUIRED |= {
     "scripts/orbis-controller-bootstrap-profile.mjs",
     "scripts/orbis-reset-authority.py",
     "scripts/orbis-host-layout.py",
+    "scripts/orbis-host-credential-fence.py",
+    "scripts/orbis-host-credential-peer.py",
+    "scripts/orbis-host-credential-service.py",
+    "scripts/orbis-host-recovery-admission.py", "scripts/orbis-host-recovery-source.py",
     "scripts/orbis-proxy-adoption.py",
     "scripts/orbis-host-app-create-intent.py",
     "scripts/orbis-host-app-inet-diag.py",
@@ -46,6 +51,7 @@ REQUIRED |= {
 
 LEGACY_REQUIRED = frozenset(REQUIRED)
 REQUIRED |= {
+    "scripts/orbis-host-controller-handoff.py",
     "scripts/orbis-host-core-restoration-review.py",
     "scripts/orbis-host-core-restoration.py",
     "scripts/orbis-host-core-live-restoration.py",
@@ -70,7 +76,10 @@ REQUIRED |= {
     "scripts/orbis-host-core-capture-abort.py", "scripts/orbis-host-core-capture-empty-abort.py", "scripts/orbis-host-core-capture-unused-abort.py",
 }
 
-REQUIRED |= {"scripts/orbis-sentinel-install.py", "scripts/orbis-host-docker-socket-recovery.py"}
+REQUIRED |= {"scripts/orbis-sentinel-install.py", "scripts/orbis-host-docker-socket-recovery.py",
+             "scripts/orbis-host-ownership-authority.py", "scripts/orbis-host-ownership-bootstrap.py",
+             "scripts/orbis-host-existing-ownership.py",
+             "scripts/orbis-host-legacy-ownership.py", "scripts/orbis-host-fresh-ownership.py"}
 
 BUILD_ONLY = {"scripts/orbis-installer-bundle.py", "scripts/orbis-migration-fingerprint.py",
               "scripts/orbis-release-metadata.py", "scripts/orbis-release-watermark.py"}
@@ -123,7 +132,8 @@ def source_contract(files):
             raise ValueError('Ambiguous installer source contract')
     pair = values.get('SCHEMA'), values.get('INSTALLER_SCHEMA')
     if any(value is not None and type(value) is not str for value in pair) or pair not in {('orbis.installer-bundle.v1', None), ('orbis.installer-bundle.v1', 'orbis.installer-bundle.v2'),
-                    ('orbis.installer-bundle.v3', 'orbis.installer-bundle.v4')}:
+                    ('orbis.installer-bundle.v3', 'orbis.installer-bundle.v4'),
+                    ('orbis.installer-bundle.v5', 'orbis.installer-bundle.v6')}:
         raise ValueError('Unsupported installer source contract')
     return pair
 

@@ -1,5 +1,6 @@
 import { TranslatableError } from '@/common/error/translatable-error';
 import { LoggerService } from '@/core/logger/logger.service';
+import { AsyncMutex } from '@/utils/mutex/async-mutex';
 import { Inject, Injectable } from '@nestjs/common';
 import type { AppUrn } from '@runtipi/common/types';
 import Dockerode from 'dockerode';
@@ -11,6 +12,8 @@ const MAX_RETRIES = 3;
 const STARTING_OCTET_2 = 128;
 const MAX_OCTET_VALUE = 254;
 const RESERVED_SUBNET_MAX_OCTET_3 = 9;
+const allocations = new AsyncMutex();
+const allocationKey = 'app-subnets';
 
 @Injectable()
 export class SubnetManagerService {
@@ -26,11 +29,22 @@ export class SubnetManagerService {
    * @returns The allocated subnet with mask (e.g., 10.128.10.0/24)
    */
   public async allocateSubnet(appUrn: AppUrn, retryCount = 0): Promise<string> {
+    const release = await allocations.acquire(allocationKey);
+    try {
+      return await this.allocateAvailableSubnet(appUrn, retryCount);
+    } finally {
+      release();
+    }
+  }
+
+  private async allocateAvailableSubnet(appUrn: AppUrn, retryCount: number): Promise<string> {
     const existingApp = await this.appsRepository.getAppByUrn(appUrn);
 
     if (!existingApp) {
       throw new TranslatableError('APP_ERROR_APP_NOT_FOUND');
     }
+
+    if (existingApp.subnet) return existingApp.subnet;
 
     const allocatedSubnets = await this.getAllocatedSubnets();
     const nextSubnet = this.findNextAvailableSubnet(allocatedSubnets);
@@ -44,13 +58,38 @@ export class SubnetManagerService {
     } catch (error) {
       if (error instanceof Error && retryCount < MAX_RETRIES) {
         this.logger.error(`Subnet ${nextSubnet} failed to be allocated, retrying...`);
-        return this.allocateSubnet(appUrn, retryCount + 1);
+        return this.allocateAvailableSubnet(appUrn, retryCount + 1);
       }
       throw error;
     }
 
     this.logger.info(`Allocated subnet ${nextSubnet} for app ${appUrn}`);
     return nextSubnet;
+  }
+
+  public async planUpdateSubnet(appUrn: AppUrn, existing: string | null) {
+    const app = await this.appsRepository.getAppByUrn(appUrn);
+    if (!app || app.subnet !== existing) throw new Error('The app subnet changed while preparing the update.');
+    const candidate = existing ?? this.findNextAvailableSubnet(await this.getAllocatedSubnets());
+    if (!candidate) throw new TranslatableError('NETWORK_ERROR_NO_AVAILABLE_SUBNETS');
+    return candidate;
+  }
+
+  public async reserveUpdateSubnet(appUrn: AppUrn, existing: string | null, candidate: string) {
+    const release = await allocations.acquire(allocationKey);
+    try {
+      const app = await this.appsRepository.getAppByUrn(appUrn);
+      if (!app || app.subnet !== existing || (existing !== null && candidate !== existing))
+        throw new Error('The app subnet changed while preparing the update.');
+      if (existing !== null) return;
+
+      const allocated = await this.getAllocatedSubnets();
+      if (allocated.includes(candidate) || candidate !== this.findNextAvailableSubnet(allocated))
+        throw new Error('The planned app subnet is no longer available. Try the update again.');
+      if (!(await this.appsRepository.updateAppById(app.id, { subnet: candidate }))) throw new Error('The planned app subnet was not reserved.');
+    } finally {
+      release();
+    }
   }
 
   /**

@@ -205,27 +205,41 @@ class Runtime:
         bound.update(requestSha256=M.sha(Publication.canonical(request)), authorizationSha256=M.sha(Publication.canonical(authorization)))
         intent = {'schema': 'orbis.core-clean-target-migration-intent.' + version, **bound, 'serverBeforeSeconds': 100}
         common = {**bound, 'migrationIntentSha256': M.sha(Publication.canonical(intent))}
-        generated = [{'id': 1, 'hash': M.sha(self.files['0000_initial.sql']), 'created_at': '1'}]
+        _, _, graph = M.migration_bundle(archive(self.files))
+        generated = [{'id': index + 1, **row} for index, row in enumerate(graph)]
+        row_counts = {'user': 0, 'link': 0, 'app_store': 0, 'app': 0, 'orbis_reset_receipt': 0, '__drizzle_migrations': len(graph)}
+        schema = M.SUPERVISOR.structure_history_schema(graph)
+        if schema in (M.SUPERVISOR.STRUCTURE_V2, M.SUPERVISOR.STRUCTURE_V3):
+            row_counts['app_migration'] = 0
+        if schema == M.SUPERVISOR.STRUCTURE_V3:
+            row_counts['app_migration_commit'] = 0
         output = {
             'worker-start.json': {'schema': 'orbis.core-clean-target-bootstrap-start.' + version, **bound},
             'migration-intent.json': intent,
             'ledger-intent.json': {'schema': 'orbis.core-clean-target-ledger-intent.' + version, **common,
-                                   'generatedLedgerSha256': M.sha(Publication.canonical(generated)), 'ledgerRows': 1},
+                                   'generatedLedgerSha256': M.sha(Publication.canonical(sorted(generated, key=Publication.canonical))), 'ledgerRows': len(graph)},
             'migration-completion.json': {'schema': 'orbis.core-clean-target-migration-completion.' + version, **common,
                 'serverBeforeSeconds': 100, 'serverAfterSeconds': 101, 'migrationCommitAcknowledged': True,
                 'ledgerCommitAcknowledged': True, 'sanitationPending': True},
             'sanitation-intent.json': {'schema': 'orbis.core-clean-target-sanitation-intent.' + version, **common,
                 'seedSha256': 'e' * 64, 'serverBeforeSeconds': 100, 'serverAfterSeconds': 101},
             'result.json': {'schema': 'orbis.core-clean-target-bootstrap-result.' + version, **common, 'seedSha256': 'e' * 64,
-                'structure': {'schema': 'orbis.core-database-structure.v1', 'sha256': 'f' * 64, 'major': major,
+                'structure': {'schema': schema, 'sha256': 'f' * 64, 'major': major,
                               'catalogSha256': request['expectedCatalogSha256'], 'authenticationVerified': False, 'restoreAuthority': False,
-                              'rows': {'user': 0, 'link': 0, 'app_store': 0, 'app': 0, 'orbis_reset_receipt': 0, '__drizzle_migrations': 1}},
+                              'rows': row_counts},
                 'ledgerCommitAcknowledged': True, 'sanitationCommitAcknowledged': True, 'applicationTablesEmpty': True,
                 'serverQuiescenceProved': False}}
         if self.mode == 'target-output':
             output['result.json']['target'] = self.target() | {'systemIdentifier': '300'}
         if self.mode == 'catalog-output':
             output['result.json']['structure']['catalogSha256'] = '0' * 64
+        if self.mode == 'legacy-structure-output':
+            output['result.json']['structure']['schema'] = M.SUPERVISOR.STRUCTURE_V1
+            row_counts.pop('app_migration', None)
+        if self.mode == 'missing-ledger-count-output':
+            row_counts.pop('app_migration', None)
+        if self.mode == 'nonzero-ledger-count-output':
+            row_counts['app_migration'] = 1
         for name, value in output.items():
             self.enrollment.publisher(mounts['/clean-target-bootstrap-output'] / name, Publication.canonical(value))
 
@@ -273,6 +287,22 @@ class BootstrapTests(unittest.TestCase):
         for patch in patches:
             patch.start()
             self.addCleanup(patch.stop)
+    def use_actual_migrations(self):
+        directory = Path(__file__).resolve().parents[1] / 'packages/backend/src/core/database/drizzle'
+        journal = (directory / 'meta/_journal.json').read_bytes()
+        self.runtime.files = {'meta/_journal.json': journal}
+        self.runtime.files.update({entry['tag'] + '.sql': (directory / (entry['tag'] + '.sql')).read_bytes()
+                                   for entry in json.loads(journal)['entries']})
+        files, _, graph = M.migration_bundle(archive(self.runtime.files))
+        self.catalog['ledger'] = [{'id': i + 4, **row} for i, row in enumerate(graph)]
+        inventory = {'schema': 'orbis.core-executable-migration-inventory.v1',
+                     'files': {name: {'bytes': len(body), 'sha256': M.sha(body)} for name, body in files.items()}}
+        self.approval = M.RootBootstrapApproval(self.broker.binding(), self.profile, copy.deepcopy(self.catalog),
+            inventory, graph, lambda: copy.deepcopy(self.catalog), self.guard)
+        self.manager = M.CoreCleanTargetBootstrap(self.broker, self.approval)
+        self.enrollment.publisher = self.manager.publish
+        self.enterContext(mock.patch.object(self.manager, 'capacity'))
+
     def binding(self):
         inventory = {p.name: {'bytes': p.stat().st_size, 'sha256': M.sha(p.read_bytes())} for p in self.code.iterdir()}
         return {'imageId': self.trust.image_id, 'architecture': 'arm64', 'inventory': inventory,
@@ -365,6 +395,35 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(self.manager.record(ID)['phase'], 'recovery-required')
         self.assertFalse((self.manager.directory(ID) / 'receipt.json').exists())
         self.assertEqual(Authority.seal(self.original.stat()), self.original_seal)
+    def test_actual_0034_graph_requires_modern_empty_ledger_and_accepts_replay(self):
+        self.use_actual_migrations()
+        prepared = self.prepare()
+        self.assertEqual(self.manager.checked(prepared, self.actor), prepared)
+        structure = json.loads((self.manager.directory(ID) / 'output/result.json').read_bytes())['structure']
+        self.assertEqual(structure['schema'], M.SUPERVISOR.STRUCTURE_V3)
+        self.assertEqual(structure['rows']['app_migration'], 0)
+
+    def test_actual_0034_graph_rejects_a_legacy_report_even_without_extra_rows(self):
+        self.use_actual_migrations()
+        self.runtime.mode = 'legacy-structure-output'
+        with self.assertRaises(M.BootstrapError):
+            self.prepare()
+        self.assert_recovery()
+
+    def test_actual_0034_graph_rejects_missing_ledger_count(self):
+        self.use_actual_migrations()
+        self.runtime.mode = 'missing-ledger-count-output'
+        with self.assertRaises(M.BootstrapError):
+            self.prepare()
+        self.assert_recovery()
+
+    def test_actual_0034_graph_rejects_nonempty_ledger(self):
+        self.use_actual_migrations()
+        self.runtime.mode = 'nonzero-ledger-count-output'
+        with self.assertRaises(M.BootstrapError):
+            self.prepare()
+        self.assert_recovery()
+
     def test_success_real_allocator_and_supervisor_checked_handle(self):
         prepared = self.prepare()
         self.assertEqual(self.manager.checked(prepared, self.actor), prepared)
@@ -985,6 +1044,12 @@ class VersionedBootstrapTests(unittest.TestCase):
             M.TARGET.SOURCE.mount(workspace.directory / 'socket', '/var/run/postgresql', False)])
 
     def test_versioned14_runs_real_private_file_supervisor_path_and_checked_receipt(self):self.check_success(14)
+
+    def test_versioned14_bootstrap_uses_actual_0034_history_for_its_structure(self):
+        self.fixture.use_actual_migrations()
+        self.configure(14)
+        prepared = self.fixture.prepare()
+        self.assertEqual(self.fixture.manager.checked(prepared, self.fixture.actor), prepared)
 
     def test_versioned17_is_explicit_and_preserves_legacy_binaries(self):
         self.configure(17);self.check_success(17)

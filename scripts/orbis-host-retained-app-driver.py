@@ -57,11 +57,20 @@ class Engine:
                 or re.fullmatch(r'[a-f0-9]{64}', result['Id']) is None or result.get('Warnings') not in (None, [])): raise fail()
         return result['Id']
 
-    def start(self, identifier):
+    def start(self, identifier, plan):
+        if plan not in self.driver.plan['plans'] or plan['wasRunning'] is not True:
+            raise fail()
         self.driver.verify_inventory()
         self.driver.verify_network_definitions()
         self.driver.verify_ports(self.driver.plan['plans'], self.driver.plan['destinations'], include_created=True)
-        self.runtime.engine('POST', '/containers/' + identifier + '/start')
+
+        def verify_start():
+            permit = self.driver.effects._guard('before-start', {'COMMIT'})
+            self.driver.verify_install_holds([plan], starting=True)
+            if time.time() >= permit['deadline']:
+                raise fail()
+
+        self.runtime.engine('POST', '/containers/' + identifier + '/start', before_request=verify_start)
 
     def remove(self, identifier):
         self.driver.verify_inventory()
@@ -292,6 +301,17 @@ class HistoricalAppDriver:
         observer._check()
         return result
 
+    def verify_install_holds(self, plans, *, starting=False):
+        urns = {plan['appUrn'] for plan in plans if plan['wasRunning']}
+        if not urns:
+            return
+        for urn in urns:
+            self.app.app_parts(urn)
+        with self.runtime.live_install_state(self.record, starting=starting) as stores:
+            for state in stores:
+                EFFECTS.require_clear_install_holds(state, urns, owner=self.runtime.a.OWNER,
+                                                    mount_id=self.runtime.mount_id)
+
     def authorize(self, scope, action):
         current = self.manager.read(self.record['id'])
         if (sha(self.manager.origin(current).authority_bytes) != self.plan['originSha256']
@@ -337,7 +357,7 @@ class HistoricalAppDriver:
             operation_sha256=self.plan['operationSha256'], authority_sha256=self.plan['originSha256'],
             plans=self.plan['plans'], destinations=self.plan['destinations'], probe_plans=self.plan['probePlans'], engine=Engine(self),
             comparator=self.runtime.check_intent, verify_destination=self.verify_destination, verify_ports=self.verify_ports,
-            authorize=self.authorize, storage=SimpleNamespace(protected_directory=self.runtime.a.protected_directory,
+            verify_install_holds=self.verify_install_holds, authorize=self.authorize, storage=SimpleNamespace(protected_directory=self.runtime.a.protected_directory,
                 protected_file=self.runtime.a.protected_file, atomic=self.runtime.a.atomic, immutable=self.capture.immutable, owner=self.runtime.a.OWNER))
         self.expected_scope = self.effects.scope
         if predecessor is not None: self.effects.recover_lease(lease['id'], predecessor_deadline=predecessor)
@@ -348,7 +368,9 @@ class HistoricalAppDriver:
 
     def precommit(self):
         self.verify_network_definitions()
-        return self.open_effects().preflight()
+        result = self.open_effects().preflight()
+        self.verify_install_holds(self.plan['plans'], starting=True)
+        return result
 
     def rollback(self):
         if not (self.path / 'historical-app-effects' / 'progress.json').exists(): return

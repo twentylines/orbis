@@ -20,7 +20,7 @@ import { AppCatalogueDetails } from '../../components/store-discover/app-catalog
 type Props = { info: AppInfo; app?: AppDetails | null; metadata: AppMetadata; logo?: ReactNode };
 
 export function AppWorkspace({ info, app, metadata, logo }: Props) {
-  const { userSettings } = useAppContext();
+  const { userSettings, user } = useAppContext();
   const { t } = useTranslation();
   const location = useLocation();
   const preview = useStorePreview();
@@ -75,6 +75,9 @@ export function AppWorkspace({ info, app, metadata, logo }: Props) {
           <AppActions app={app} metadata={metadata} info={info} localDomain={userSettings.localDomain} sslPort={userSettings.sslPort} />
         </div>
       </header>
+      {app && (app.status === 'updating' || app.status === 'backing_up') ? (
+        <AppJobProgress key={`${user.id}:${info.urn}`} owner={String(user.id)} appUrn={info.urn} />
+      ) : null}
       <dl className="app-workspace-facts">
         <div>
           <dt>{t('APP_DETAILS_VERSION')}</dt>
@@ -130,3 +133,4 @@ export function AppWorkspace({ info, app, metadata, logo }: Props) {
     </div>
   );
 }
+import { AppJobProgress } from '../../components/app-job-progress/app-job-progress';

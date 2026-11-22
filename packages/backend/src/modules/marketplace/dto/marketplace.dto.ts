@@ -29,6 +29,10 @@ const simpleAppInfoSchema = appInfoSchema.pick(
   'created_at',
   'supported_architectures',
   'available',
+  'catalog_format',
+  'gallery',
+  'release_notes',
+  'compatibility',
 );
 
 const searchAppsResponseSchema = type({

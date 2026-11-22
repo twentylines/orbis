@@ -1,4 +1,5 @@
 import contextlib
+import fcntl
 import copy
 import hashlib
 import importlib.util
@@ -436,6 +437,121 @@ class UpgradeFlowTests(unittest.TestCase):
     def test_resume_failure_keeps_durable_no_storage_rollback_barrier(self):
         calls,journal=self.exercise('restore_workloads')
         self.assertTrue(journal['appsResumed']);self.assertEqual(journal['failedPhase'],'apps-resumed');self.assertEqual(journal['phase'],'recovery-required')
+
+
+class HostBarrierFenceTests(unittest.TestCase):
+    """Real authority/marker/lock behavior; fixed host paths and owner are fixtures."""
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory(prefix='prerequisite-fence-');self.addCleanup(self.tmp.cleanup)
+        self.base=Path(self.tmp.name).resolve();self.base.chmod(0o700)
+        self.installation=self.base/'installation';self.installation.mkdir(mode=0o700)
+        self.state=self.base/'state';self.state.mkdir(mode=0o700)
+        self.setup=self.base/'docker-setup';self.setup.mkdir(mode=0o700)
+        self.configuration=self.base/'host-service.env'
+        self.configuration.write_text('ORBIS_ROOT='+str(self.installation)+'\n');self.configuration.chmod(0o600)
+        self.maintenance=self.state/'helper-maintenance.json'
+        spec=importlib.util.spec_from_file_location('prerequisite_fence_host',Path(P.__file__).with_name('orbis-host.py'))
+        self.authority=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.authority)
+        self.layout=self.authority.AUTHORITY.LAYOUT
+        patch=mock.patch.object(self.layout,'_operator');patch.start();self.addCleanup(patch.stop)
+        self.mount=self.base/'mountinfo';self.mount.write_text('1 0 8:1 / / rw - ext4 /dev/test rw\n')
+        for target,name,value in [(self.authority.CREDENTIAL_FENCE,'OWNER',os.geteuid()),(self.authority.AUTHORITY,'OWNER',os.geteuid()),(self.layout,'STATE_ROOT',self.state)]:
+            patch=mock.patch.object(target,name,value);patch.start();self.addCleanup(patch.stop)
+        patch=mock.patch.object(P,'host_authority',return_value=self.authority,create=True);patch.start();self.addCleanup(patch.stop)
+        def routed(value,*parts):
+            value={'/etc/orbis/host-service.env':self.configuration,'/var/lib/orbis/state':self.state}.get(str(value),value)
+            return Path(value,*parts)
+        patch=mock.patch.object(P,'Path',side_effect=routed);patch.start();self.addCleanup(patch.stop)
+        def private(path):
+            self.assertEqual(path,self.state);self.assertEqual(path.stat().st_uid,os.geteuid());self.assertEqual(path.stat().st_mode&0o777,0o700)
+            return path
+        patch=mock.patch.object(P,'private_directory',side_effect=private);patch.start();self.addCleanup(patch.stop)
+        self.path=self.layout.legacy_path(self.installation,'credential-fence')
+
+    def begin(self):
+        with self.authority.credential_fence_lock(self.installation,'default') as guard:guard.begin('a'*64,'b'*64)
+
+    def blocked(self):
+        entered=[]
+        with self.assertRaises((ValueError,OSError)):
+            with P.host_barrier(self.setup):entered.append(True)
+        self.assertEqual(entered,[]);self.assertFalse(self.maintenance.exists())
+
+    @contextlib.contextmanager
+    def reviewed_layout(self):
+        read,plan=self.layout.read,self.layout._plan
+        with mock.patch.object(self.layout,'_operator'), \
+             mock.patch.object(self.layout,'read',side_effect=lambda root,daemon=None,context=None,mountinfo=None:read(root,daemon,context,mountinfo or self.mount)), \
+             mock.patch.object(self.layout,'_plan',side_effect=lambda root,daemon,context,ancestry,mountinfo:plan(root,daemon,context,ancestry,mountinfo or self.mount)):
+            proposed=self.layout.review(self.installation,'daemon','default',self.mount)
+            self.layout.prepare(self.installation,'daemon','default',self.layout.plan_sha256(proposed),self.mount)
+            yield
+
+    def test_pending_credential_marker_blocks_after_its_broker_releases_flock(self):
+        self.begin();before=self.path.read_bytes();identity=self.path.stat();self.blocked()
+        self.assertEqual(self.path.read_bytes(),before);self.assertEqual(self.path.stat(),identity)
+        self.assertFalse((self.state/'installations').exists())
+
+    def test_reviewed_layout_marker_is_not_reinterpreted_as_legacy_absence(self):
+        with self.reviewed_layout():
+            self.path=self.layout.namespace(self.installation)/self.layout.PURPOSES['credential-fence']
+            self.begin();before=self.path.read_bytes();receipt=self.path.parent/'layout.json';review=receipt.read_bytes()
+            self.blocked();self.assertEqual(self.path.read_bytes(),before);self.assertEqual(receipt.read_bytes(),review)
+            self.assertFalse(self.layout.legacy_path(self.installation,'credential-fence').exists())
+
+    def test_clear_legacy_and_reviewed_paths_hold_actual_shared_locks(self):
+        def allowed():
+            with P.host_barrier(self.setup):
+                self.assertTrue(self.maintenance.exists());self.assertIsInstance(self.authority.LOCK_DESCRIPTOR.get(),int)
+                for path in self.layout.lock_paths(self.installation):
+                    fd=os.open(path,os.O_RDWR)
+                    try:
+                        with self.assertRaises(BlockingIOError):fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                    finally:os.close(fd)
+            self.assertFalse(self.maintenance.exists());self.assertIsNone(self.authority.LOCK_DESCRIPTOR.get())
+        allowed()
+        with self.reviewed_layout():allowed()
+
+    def test_malformed_and_dangling_credential_entries_are_retained_holds(self):
+        self.path.write_bytes(b'{');self.path.chmod(0o600);self.blocked();self.assertEqual(self.path.read_bytes(),b'{');self.path.unlink()
+        self.path.symlink_to(self.base/'missing-credential-marker');self.blocked();self.assertTrue(self.path.is_symlink())
+
+    def test_capture_and_restore_authority_holds_cannot_be_crossed(self):
+        identifier='11111111-1111-4111-8111-111111111111'
+        values=[('capture-fence',{'schema':'orbis.core-capture-lease.v1','id':identifier,'root':str(self.installation),'context':'default','nonce':'a'*64,'sourceSha256':'b'*64}),
+                ('restore-selector',{'schema':'orbis.retained-restore-transaction.v1','id':identifier,'root':str(self.installation),'context':'default'})]
+        for purpose,value in values:
+            with self.subTest(purpose=purpose):
+                path=self.layout.selected_path(self.installation,purpose);body=self.authority.IDENTITY.PUBLICATION.canonical(value)
+                path.write_bytes(body);path.chmod(0o600);self.blocked();self.assertEqual(path.read_bytes(),body);path.unlink()
+
+    def test_post_acquire_credential_marker_is_checked_before_maintenance(self):
+        original=self.layout.open_locks
+        def changed(root):
+            descriptors=original(root)
+            body={'schema':self.authority.CREDENTIAL_FENCE.SCHEMA,'root':str(root),'context':'default','operationId':'a'*64,'admissionBinding':'b'*64}
+            self.path.write_bytes(self.authority.IDENTITY.PUBLICATION.canonical(body)+b'\n');self.path.chmod(0o600)
+            return descriptors
+        with mock.patch.object(self.layout,'open_locks',side_effect=changed):self.blocked()
+        self.assertTrue(self.path.exists());descriptors=original(self.installation)
+        for descriptor in reversed(descriptors):os.close(descriptor)
+
+    def test_dangling_host_configuration_never_becomes_an_uninstalled_host(self):
+        self.configuration.unlink();self.configuration.symlink_to(self.base/'missing-host-configuration')
+        self.blocked();self.assertTrue(self.configuration.is_symlink())
+
+    def test_uninstalled_host_does_not_load_or_publish_authority(self):
+        self.configuration.unlink()
+        with mock.patch.object(P,'host_authority') as load:
+            with P.host_barrier(self.setup):pass
+        load.assert_not_called();self.assertFalse(self.maintenance.exists());self.assertFalse(self.path.exists())
+
+    def test_foreign_helper_maintenance_and_clear_lock_cleanup_are_preserved(self):
+        previous={'schema':'other-maintenance','purpose':'preserve'};P.save(self.maintenance,previous)
+        with self.assertRaises(P.PrerequisiteError):
+            with P.host_barrier(self.setup):self.fail('crossed foreign maintenance')
+        self.assertEqual(P.read(self.maintenance),previous)
+        with self.authority.host_lock(self.installation):pass
 
 if __name__=='__main__':unittest.main(verbosity=2)
 

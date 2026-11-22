@@ -3,7 +3,7 @@ import { expect, it, vi } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { PassThrough } from 'node:stream';
+import { PassThrough, Readable } from 'node:stream';
 import {
   BackupRestoreDockerRuntime,
   snapshotRestoreContainer,
@@ -20,11 +20,19 @@ import { RestoreRolledBackError } from './backup-restore-coordinator';
 import { readRestoreProgress } from './backup-restore-progress';
 import { captureRestoreHostIdentity } from './backup-restore-host-identity';
 import { restoreTreeNames, type RestoreTreeName } from './backup-restore-materialize';
+import { resetSafetyTarHeader } from './reset-safety-tar';
+import { executeRestoreWorker } from './backup-restore-worker';
+import * as bootstrap from './backup-restore-bootstrap';
 vi.unmock('node:fs');
 vi.mock('./backup-restore-files', () => ({ verifyRestoreFiles: vi.fn(async () => undefined) }));
 vi.mock('./backup-restore-database', () => ({ verifyRestoreDatabase: vi.fn(async () => undefined) }));
 
-function provisionalRuntimeFixture() {
+const markerName = 'restore-install-hold-capability.json';
+const declaration = Buffer.from('{"schema":"orbis.restore-install-hold-effect.v1","version":1,"policy":"verified-live-store-before-app-resume.v1"}');
+function markerTar(body = declaration, name = markerName) {
+  return Buffer.concat([resetSafetyTarHeader(name, body.length), body, Buffer.alloc((512 - (body.length % 512)) % 512), Buffer.alloc(1024)]);
+}
+function provisionalRuntimeFixture(retainedProvisional = true) {
   const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
   const nonce = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
   const original = {
@@ -50,7 +58,7 @@ function provisionalRuntimeFixture() {
       },
     ],
   } as unknown as Dockerode.ContainerInspectInfo;
-  const plans = restoreAuxiliaryContainerPlans(original, id, nonce, false, true);
+  const plans = restoreAuxiliaryContainerPlans(original, id, nonce, false, retainedProvisional);
   const raw = (plan: Dockerode.ContainerCreateOptions, index: string) =>
     ({
       Id: index.repeat(64),
@@ -61,12 +69,19 @@ function provisionalRuntimeFixture() {
       State: { Running: false, Restarting: false, Paused: false, StartedAt: '0001-01-01T00:00:00Z' },
       RestartCount: 0,
       NetworkSettings: { Networks: { fixture: {} } },
-      Mounts: plan.HostConfig?.Mounts?.map((mount) => ({ Type: mount.Type, Source: mount.Source, Destination: mount.Target, RW: !mount.ReadOnly })),
+      Mounts: plan.HostConfig?.Mounts?.map((mount) => ({
+        Type: mount.Type,
+        Source: mount.Source,
+        Destination: mount.Target,
+        RW: !mount.ReadOnly,
+        Propagation: mount.BindOptions?.Propagation,
+      })),
     }) as unknown as Dockerode.ContainerInspectInfo;
   const worker = raw(plans.worker, '2');
   const verifier = raw(plans.verifier, '3');
   const state = { id, nonce, worker: worker.Id, phase: 'staging', decision: null, roots: [...restoreTreeNames] };
-  const journal = { state, refresh: async () => state } as unknown as BackupRestoreJournal;
+  const advance = vi.fn();
+  const journal = { state, refresh: async () => state, advance } as unknown as BackupRestoreJournal;
   const operation = {
     id,
     nonce,
@@ -80,14 +95,122 @@ function provisionalRuntimeFixture() {
     queue: { host: 'queue', username: 'fixture', password: 'fixture-password' },
   } as RestoreRuntimeIdentity;
   const containers = new Map([original, worker, verifier].map((value) => [value.Id, value]));
-  const docker = { getContainer: (id: string) => ({ inspect: async () => structuredClone(containers.get(id)) }) } as unknown as Dockerode;
-  return { worker, verifier, state, operation, runtime: new BackupRestoreDockerRuntime(docker, journal, operation) };
+  const archive = vi.fn(async () => {
+    const tar = markerTar();
+    return Readable.from([tar.subarray(0, 41), tar.subarray(41)]);
+  });
+  const image = vi.fn(async () => ({ Id: original.Image }));
+  const getImage = vi.fn(() => ({ inspect: image }));
+  const exec = vi.fn();
+  const stop = vi.fn();
+  const docker = {
+    getContainer: (id: string) => ({ inspect: async () => structuredClone(containers.get(id)), getArchive: archive, exec, stop }),
+    getImage,
+  } as unknown as Dockerode;
+  const runtime = new BackupRestoreDockerRuntime(docker, journal, operation);
+  return { worker, verifier, state, operation, runtime, archive, image, getImage, exec, stop, docker, journal, advance };
 }
 
 it('verifies retained provisional workers only during inert staging', async () => {
   const fixture = provisionalRuntimeFixture();
   await expect(fixture.runtime.verifyWorker(fixture.worker.Id, { preparing: true, retainedProvisional: true })).resolves.toBe(fixture.worker.Id);
   await expect(fixture.runtime.verifyWorker(fixture.worker.Id, { preparing: true })).rejects.toMatchObject({ runtimeCheck: 'worker-mounts' });
+  expect(fixture.archive).not.toHaveBeenCalled();
+});
+
+it('checks the exact immutable image and reads the worker declaration without running the worker', async () => {
+  const fixture = provisionalRuntimeFixture(false);
+  const { runtime, worker } = fixture;
+  await expect(runtime.inspectVerifiedWorker(worker.Id, { preparing: true })).resolves.toMatchObject({ Id: worker.Id, Image: worker.Image });
+  expect(fixture.getImage).toHaveBeenCalledExactlyOnceWith(worker.Image);
+  expect(fixture.archive).toHaveBeenCalledExactlyOnceWith({
+    path: '/app/restore-install-hold-capability.json',
+    abortSignal: expect.any(AbortSignal),
+  });
+  expect(fixture.exec).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['missing', undefined],
+  ['wrong member', markerTar(declaration, 'unrelated.json')],
+  ['duplicate member', Buffer.concat([markerTar().subarray(0, 1024), markerTar()])],
+  ['oversized tar', Buffer.concat([markerTar(), Buffer.alloc(16_384)])],
+  ['oversized declaration', markerTar(Buffer.alloc(4097))],
+  ['truncated tar', markerTar().subarray(0, 1536)],
+  ['duplicate field', markerTar(Buffer.from(declaration.toString().replace('"version":1', '"version":0,"version":1')))],
+  ['unsupported declaration', markerTar(Buffer.from(declaration.toString().replace('"version":1', '"version":2')))],
+] as const)('holds an otherwise verified worker with a %s capability', async (_label, tar) => {
+  const fixture = provisionalRuntimeFixture(false);
+  if (tar) fixture.archive.mockResolvedValueOnce(Readable.from([tar]));
+  else fixture.archive.mockRejectedValueOnce(Object.assign(new Error('missing'), { statusCode: 404 }));
+  await expect(fixture.runtime.verifyWorker(fixture.worker.Id, { preparing: true })).rejects.toMatchObject({
+    runtimeCheck: 'worker-install-hold-capability',
+  });
+  expect(fixture.exec).not.toHaveBeenCalled();
+});
+
+it.each(['image', 'auto-restart', 'mounted-app', 'tmpfs-shadow', 'policy-changes-during-copy', 'restarting'] as const)(
+  'holds a worker with %s even if it can supply the correct capability bytes',
+  async (change) => {
+    const fixture = provisionalRuntimeFixture(false);
+    const { runtime, worker, operation } = fixture;
+    if (change === 'image') fixture.image.mockResolvedValueOnce({ Id: `sha256:${'b'.repeat(64)}` });
+    if (change === 'auto-restart') worker.HostConfig.RestartPolicy = { Name: 'unless-stopped', MaximumRetryCount: 0 };
+    if (change === 'mounted-app') worker.Mounts.push({ Type: 'bind', Destination: '/app', Source: '/fixture', RW: false, Mode: '', Propagation: '' });
+    if (change === 'tmpfs-shadow') worker.HostConfig.Tmpfs = { '/app/restore-worker.mjs': 'rw' };
+    if (change === 'restarting') worker.State.Restarting = true;
+    if (change === 'policy-changes-during-copy')
+      fixture.archive.mockImplementationOnce(async () => {
+        worker.HostConfig.RestartPolicy = { Name: 'always', MaximumRetryCount: 0 };
+        return Readable.from([markerTar()]);
+      });
+    operation.worker = snapshotRestoreContainer(worker);
+    await expect(runtime.verifyWorker(worker.Id, { preparing: true })).rejects.toMatchObject({
+      runtimeCheck: change === 'mounted-app' ? 'worker-mounts' : 'worker-install-hold-capability',
+    });
+    if (change !== 'policy-changes-during-copy') expect(fixture.archive).not.toHaveBeenCalled();
+    expect(fixture.exec).not.toHaveBeenCalled();
+  },
+);
+
+it('aborts a stalled capability copy and closes its stream', async () => {
+  const { runtime, worker, archive } = provisionalRuntimeFixture(false);
+  const controller = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValueOnce(controller.signal);
+  const stream = new PassThrough();
+  archive.mockImplementationOnce(async () => {
+    setImmediate(() => controller.abort());
+    return stream;
+  });
+  try {
+    await expect(runtime.verifyWorker(worker.Id, { preparing: true })).rejects.toMatchObject({ runtimeCheck: 'worker-install-hold-capability' });
+    expect(stream.destroyed).toBe(true);
+  } finally {
+    timeout.mockRestore();
+  }
+});
+
+it('refuses at the standalone phase entry before advancing the journal or stopping writers', async () => {
+  const fixture = provisionalRuntimeFixture(false);
+  const read = vi.spyOn(bootstrap, 'readRestoreBootstrap').mockResolvedValueOnce({ identity: fixture.operation } as bootstrap.RestoreBootstrap);
+  fixture.archive.mockRejectedValueOnce(Object.assign(new Error('capability absent'), { statusCode: 404 }));
+  const progress = vi.fn();
+  try {
+    await expect(
+      executeRestoreWorker({
+        docker: fixture.docker,
+        journal: fixture.journal,
+        hostname: fixture.worker.Id,
+        signal: new AbortController().signal,
+        progress,
+      }),
+    ).rejects.toMatchObject({ runtimeCheck: 'worker-install-hold-capability' });
+    expect(fixture.advance).not.toHaveBeenCalled();
+    expect(fixture.stop).not.toHaveBeenCalled();
+    expect(progress).not.toHaveBeenCalled();
+  } finally {
+    read.mockRestore();
+  }
 });
 
 it.each(['running', 'started', 'restart', 'control', 'parent', 'verifier-control', 'without-preparing', 'phase'])(
@@ -179,6 +302,7 @@ it.each([false, true])('rechecks destination identity after writers stop before 
       candidate: {},
       verifier: {},
       apps: [],
+      resumeApps: [],
     } as unknown as RestoreOperation;
     const docker = { getContainer: () => ({ update: vi.fn(async () => undefined), start: vi.fn(async () => undefined) }) };
     const runtime = new BackupRestoreDockerRuntime(docker as unknown as Dockerode, journal, operation, {
@@ -191,6 +315,7 @@ it.each([false, true])('rechecks destination identity after writers stop before 
       noOtherWriters: () => Promise<void>;
       idleQueues: () => Promise<void>;
       role: () => Promise<{ Id: string; State: { Running: boolean } }>;
+      workerResumeEffect: (...args: unknown[]) => Promise<void>;
       health: () => Promise<void>;
     };
     const stopped = vi.spyOn(hooks, 'stop').mockResolvedValue(undefined);
@@ -204,6 +329,7 @@ it.each([false, true])('rechecks destination identity after writers stop before 
     else {
       await runtime.stopWriters(new AbortController().signal);
       vi.spyOn(hooks, 'role').mockResolvedValue({ Id: 'candidate', State: { Running: true } });
+      vi.spyOn(hooks, 'workerResumeEffect').mockResolvedValue(undefined);
       const health = vi.spyOn(hooks, 'health').mockImplementation(async () => {
         await fs.writeFile(path.join(roots.state, 'cluster.json'), 'legitimate promoted protected state');
       });

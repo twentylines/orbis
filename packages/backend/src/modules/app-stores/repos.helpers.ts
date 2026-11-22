@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,11 +8,10 @@ import { Injectable } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import git from 'isomorphic-git';
 import { withGitHttp } from './git-http';
+import { withAppRepositoryCustody } from './app-store-lock';
 
 @Injectable()
 export class ReposHelpers {
-  private readonly repoOperations = new Map<string, Promise<unknown>>();
-
   constructor(
     private readonly logger: LoggerService,
     private readonly configuration: ConfigurationService,
@@ -21,14 +19,8 @@ export class ReposHelpers {
   ) {}
 
   private async withRepoLock<T>(id: string, operation: () => Promise<T>): Promise<T> {
-    const previous = this.repoOperations.get(id) ?? Promise.resolve();
-    const pending = previous.catch(() => undefined).then(operation);
-    this.repoOperations.set(id, pending);
-    try {
-      return await pending;
-    } finally {
-      if (this.repoOperations.get(id) === pending) this.repoOperations.delete(id);
-    }
+    const { dataDir } = this.configuration.get('directories');
+    return withAppRepositoryCustody(path.resolve(dataDir, 'repos', id), operation);
   }
 
   /**
@@ -84,9 +76,6 @@ export class ReposHelpers {
     }
 
     await fs.promises.chmod(dirPath, 0o755);
-    execFileSync('git', ['config', '--global', '--add', 'safe.directory', dirPath], {
-      stdio: 'ignore',
-    });
   }
 
   /**

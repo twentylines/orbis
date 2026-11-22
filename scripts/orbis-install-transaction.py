@@ -228,9 +228,11 @@ def read_record(path: Path, root: Path, reader) -> dict:
     return record
 
 
-def recover(root: Path, reader, path: Path, *, host_writers_stopped: bool, before_controller_start=None) -> dict:
+def recover(root: Path, reader, path: Path, *, host_writers_stopped: bool, before_controller_start=None, before_originals_start=None) -> dict:
     if not host_writers_stopped:
         raise TransactionError("Confirm native host and remote storage writers are stopped before recovery")
+    if before_originals_start is not None and not callable(before_originals_start):
+        raise TransactionError('The enclosing Root recovery verifier is invalid')
     RESTORE.runtime()
     record = read_record(path, root, reader)
     if record["stage"] == "recovered":
@@ -267,6 +269,21 @@ def recover(root: Path, reader, path: Path, *, host_writers_stopped: bool, befor
             RESTORE.restore(root, reader, restore_review, restore_path, host_writers_stopped=True)
     record["stage"] = "starting"
     save(record)
+    if before_originals_start is not None:
+        before_originals_start()
+    return finish_recovery(root, reader, path, before_controller_start=before_controller_start)
+
+
+def finish_recovery(root: Path, reader, path: Path, *, before_controller_start=None) -> dict:
+    """Finish an already restored transaction without replaying its data copy.
+
+    The enclosing Root issuer must independently establish that starting has
+    been committed before choosing this internal recovery step.
+    """
+    record = read_record(path, root, reader)
+    if record['stage'] != 'starting':
+        raise TransactionError('Only a restored transaction can finish original startup')
+    value = record['review']
     for original in ordered(value, starting=True):
         current = identities(root, reader, value)[original["id"]]
         if original["state"] == "running" and current["state"] != "running":
@@ -283,9 +300,9 @@ def recover(root: Path, reader, path: Path, *, host_writers_stopped: bool, befor
     current = identities(root, reader, value)
     if current != {item["id"]: item for item in value["storage"]["containerStates"]}:
         raise TransactionError("The recovered containers do not match their original states and policies")
-    record.update(stage="recovered", storageRestored=manifest is not None)
+    record.update(stage="recovered", storageRestored=bool(record.get('restoreReview')))
     save(record)
-    return {"schema": SCHEMA, "result": "original-installation-recovered", "journal": str(path), "storageRestored": manifest is not None, "containers": len(current)}
+    return {"schema": SCHEMA, "result": "original-installation-recovered", "journal": str(path), "storageRestored": record['storageRestored'], "containers": len(current)}
 
 
 def main() -> int:

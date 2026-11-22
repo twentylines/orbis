@@ -12,13 +12,14 @@ Group=root
 UMask=0077
 EnvironmentFile=/etc/orbis/host-service.env
 Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=ORBIS_CREDENTIAL_FLAGS=
 RuntimeDirectory=orbis
 RuntimeDirectoryMode=0700
 RuntimeDirectoryPreserve=yes
 StateDirectory=orbis
 StateDirectoryMode=0700
 ExecStartPre=/usr/bin/install -d -m 0700 /var/lib/orbis/state /var/lib/orbis/snapshots
-ExecStart=/usr/bin/python3 ${ORBIS_SERVICE_SOURCE} --root ${ORBIS_ROOT} --docker-context ${ORBIS_DOCKER_CONTEXT} --socket /run/orbis/host.sock --snapshots /var/lib/orbis/snapshots --state-dir /var/lib/orbis/state
+ExecStart=/usr/bin/python3 ${ORBIS_SERVICE_SOURCE} --root ${ORBIS_ROOT} --docker-context ${ORBIS_DOCKER_CONTEXT} --socket /run/orbis/host.sock --snapshots /var/lib/orbis/snapshots --state-dir /var/lib/orbis/state $ORBIS_CREDENTIAL_FLAGS
 Restart=on-failure
 RestartSec=5s
 KillSignal=SIGINT

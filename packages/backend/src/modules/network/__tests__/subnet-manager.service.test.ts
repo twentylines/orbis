@@ -35,7 +35,59 @@ describe('SubnetManagerService', () => {
     appsRepository.getApps.mockResolvedValue([]);
   });
 
+  describe('staged update subnet reservation', () => {
+    const updateUrn = 'update:store' as AppUrn;
+    const otherUrn = 'other:store' as AppUrn;
+    const selected = '10.128.10.0/24';
+
+    it('plans without writing and refuses a concurrently claimed subnet', async () => {
+      const app = { id: 1, subnet: null as string | null };
+      const other = { id: 2, subnet: null as string | null };
+      appsRepository.getAppByUrn.mockImplementation(async (urn) => fromPartial(urn === updateUrn ? app : other));
+      appsRepository.getApps.mockImplementation(async () => fromPartial([app, other]));
+      appsRepository.updateAppById.mockImplementation(async (id, { subnet }) => {
+        const current = id === app.id ? app : other;
+        current.subnet = subnet ?? null;
+        return fromPartial(current);
+      });
+
+      expect(await service.planUpdateSubnet(updateUrn, null)).toBe(selected);
+      expect(appsRepository.updateAppById).not.toHaveBeenCalled();
+      expect(await service.allocateSubnet(otherUrn)).toBe(selected);
+      await expect(service.reserveUpdateSubnet(updateUrn, null, selected)).rejects.toThrow('no longer available');
+      expect(appsRepository.updateAppById).toHaveBeenCalledExactlyOnceWith(other.id, { subnet: selected });
+      expect(app.subnet).toBeNull();
+    });
+
+    it('uses its exact reservation for subsequent updates without rewriting the record', async () => {
+      const app = { id: 1, subnet: null as string | null };
+      appsRepository.getAppByUrn.mockImplementation(async () => fromPartial(app));
+      appsRepository.getApps.mockImplementation(async () => fromPartial([app]));
+      appsRepository.updateAppById.mockImplementation(async (_id, { subnet }) => {
+        app.subnet = subnet ?? null;
+        return fromPartial(app);
+      });
+
+      await expect(service.reserveUpdateSubnet(updateUrn, null, selected)).resolves.toBeUndefined();
+      expect(await service.planUpdateSubnet(updateUrn, selected)).toBe(selected);
+      await expect(service.reserveUpdateSubnet(updateUrn, selected, selected)).resolves.toBeUndefined();
+      await expect(service.reserveUpdateSubnet(updateUrn, null, selected)).rejects.toThrow('subnet changed');
+      expect(appsRepository.updateAppById).toHaveBeenCalledExactlyOnceWith(app.id, { subnet: selected });
+    });
+  });
+
   describe('allocateSubnet', () => {
+    it('keeps an existing subnet during repeated Compose generation without rewriting or querying Docker', async () => {
+      const appUrn = 'app:store' as AppUrn;
+      appsRepository.getAppByUrn.mockResolvedValue(fromPartial({ id: 1, subnet: '10.128.12.0/24' }));
+      dockerMock.listNetworks.mockRejectedValue(new Error('The engine is temporarily unavailable'));
+      expect(await service.allocateSubnet(appUrn)).toBe('10.128.12.0/24');
+      expect(await service.allocateSubnet(appUrn)).toBe('10.128.12.0/24');
+      expect(appsRepository.updateAppById).not.toHaveBeenCalled();
+      expect(appsRepository.getApps).not.toHaveBeenCalled();
+      expect(dockerMock.listNetworks).not.toHaveBeenCalled();
+    });
+
     it('should throw an error if app is not found', async () => {
       // arrange
       const appUrn = 'app:test/app' as AppUrn;

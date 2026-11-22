@@ -21,10 +21,19 @@ const queueAppFormSchema = type({
 });
 
 const commonAppCommandSchema = type({
-  command: type("'start' | 'stop' | 'install' | 'uninstall' | 'reset' | 'restart' | 'generate_env' | 'backup'"),
+  command: type("'start' | 'stop' | 'install' | 'reset' | 'restart' | 'generate_env' | 'backup'"),
   appUrn: arkAppUrn,
   form: queueAppFormSchema,
   requestId: 'string.uuid',
+  jobVersion: type.unit(1).optional(),
+});
+
+const uninstallAppCommandSchema = type({
+  command: type.unit('uninstall'),
+  appUrn: arkAppUrn,
+  form: queueAppFormSchema,
+  requestId: 'string.uuid',
+  removeBackups: 'boolean?',
 });
 
 const restoreAppCommandSchema = type({
@@ -41,15 +50,19 @@ const updateAppCommandSchema = type({
   form: queueAppFormSchema,
   performBackup: type('boolean').default(true),
   requestId: 'string.uuid',
+  jobVersion: type.unit(1).optional(),
 });
 
-export const appEventSchema = type.or(commonAppCommandSchema, restoreAppCommandSchema, updateAppCommandSchema);
+export const appEventSchema = type.or(commonAppCommandSchema, uninstallAppCommandSchema, restoreAppCommandSchema, updateAppCommandSchema);
 export type AppEvent = typeof appEventSchema.infer;
 
 export const appEventResultSchema = type({
   success: 'boolean',
   message: 'string',
   statePreserved: 'boolean?',
+  alreadyCompleted: 'boolean?',
+  cancelled: 'boolean?',
+  updateStatus: type("'running' | 'stopped'").optional(),
 });
 
 export type AppEventFormInput = typeof queueAppFormSchema.inferIn;

@@ -76,7 +76,11 @@ export function taskCentreRecords({
     const setup = isSetupFailureTask(task) ? task : null;
     const source = names.get(task.appUrn) ?? task.displayName ?? task.appUrn.split(':')[0] ?? 'Application';
     const [appId, storeId] = task.appUrn.split(':');
-    const bucket = taskIsActive(task) ? 'active' : task.status === 'succeeded' || setup?.setupFailureDismissed ? 'recent' : 'review';
+    const bucket = taskIsActive(task)
+      ? 'active'
+      : task.status === 'succeeded' || task.status === 'cancelled' || setup?.setupFailureDismissed
+        ? 'recent'
+        : 'review';
     return {
       key: `app:${task.id}`,
       title: `${setup ? (setup.setupFailureOutcome === 'preferences-save-failed' ? 'Save' : 'Capture') : taskLabels[task.action]} ${source}`,
@@ -84,7 +88,7 @@ export function taskCentreRecords({
       sourceKey: task.appUrn,
       status: `${taskProgressLabel(task) ?? taskStates[task.status]}${setup?.setupFailureDismissed ? ' · dismissed' : ''}`,
       bucket,
-      outcome: task.status === 'running' || task.status === 'queued' ? 'active' : task.status,
+      outcome: task.status === 'queued' || task.status === 'running' || task.status === 'cancelling' ? 'active' : task.status,
       time: timestamp(task.finishedAt) ?? timestamp(task.updatedAt),
       startedAt: timestamp(task.startedAt),
       finishedAt: timestamp(task.finishedAt),

@@ -1,5 +1,7 @@
 import { LoggerService } from '@/core/logger/logger.service';
 import { SSEService } from '@/core/sse/sse.service';
+import type { AsyncMutex } from '@/utils/mutex/async-mutex';
+import { APP_ASYNC_MUTEX } from '@/utils/mutex/mutex.module';
 import { Inject, Injectable } from '@nestjs/common';
 import type { AppUrn } from '@runtipi/common/types';
 import * as Sentry from '@sentry/nestjs';
@@ -31,6 +33,7 @@ export class AppStatusSyncService {
     private readonly systemEventsQueue: SystemEventsQueue,
     private readonly configuration: ConfigurationService,
     @Inject(DOCKERODE) private readonly docker: Dockerode,
+    @Inject(APP_ASYNC_MUTEX) private readonly mutex: AsyncMutex,
   ) {
     if (this.configuration.get('userSettings').eventsTimeout > 5) {
       this.logger.warn(
@@ -78,6 +81,10 @@ export class AppStatusSyncService {
 
       for (const app of apps) {
         const appUrn: AppUrn = `${app.appName}:${app.appStoreSlug}` as AppUrn;
+        if (app.status === 'installing' && this.mutex.resourceLocks.has(appUrn)) {
+          skippedCount++;
+          continue;
+        }
 
         const isTransitional = TRANSITIONAL_STATES.includes(app.status);
         if (isTransitional) {
@@ -106,7 +113,19 @@ export class AppStatusSyncService {
         }
 
         if (app.status !== newStatus) {
-          await this.appRepository.updateAppById(app.id, { status: newStatus });
+          if (app.status === 'installing') {
+            const release = await this.mutex.acquire(appUrn);
+            try {
+              if (!(await this.appRepository.finishInstallReservation(app, newStatus))) {
+                skippedCount++;
+                continue;
+              }
+            } finally {
+              release();
+            }
+          } else {
+            await this.appRepository.updateAppById(app.id, { status: newStatus });
+          }
           this.sseService.emit('app', { event: 'status_change', appUrn, appStatus: newStatus });
           this.logger.info(`Synced ${appUrn}: '${app.status}' -> '${newStatus}'`);
           syncedCount++;

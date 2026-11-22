@@ -100,6 +100,9 @@ export async function runRetainedPhaseDriver(options: { id: string; phase: Retai
         target: rootBinding.target,
         signal: options.signal,
       });
+      // Historical direct-start images are immutable. Existing rollback
+      // grants still recover the original runtime through the verified worker.
+      if (options.phase !== 'rollback' && expected.expectedManifest.schema !== 'orbis.time-machine-runtime.v6') throw fail();
       const preserveLiveProxy =
         expected.expectedManifest.schema === 'orbis.time-machine-runtime.v4' || expected.expectedManifest.schema === 'orbis.time-machine-runtime.v6';
       const context = await readRetainedRestoreContext({

@@ -146,14 +146,17 @@ describe('read-only host device socket', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it('coalesces concurrent readers and retains one shared result before the next history tick', async () => {
+  it('coalesces readers within a live tick and permits a fresh one-second counter sample', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     const service = new HostTelemetryService();
     const [first, second] = await Promise.all([service.read(), service.read()]);
     expect(first).toBe(second);
     expect(await service.read()).toBe(first);
     expect(calls).toEqual(['GET /v1/telemetry']);
-    vi.setSystemTime(Date.now() + 10_001);
+    vi.setSystemTime(Date.now() + 799);
+    expect(await service.read()).toBe(first);
+    expect(calls).toHaveLength(1);
+    vi.setSystemTime(Date.now() + 202);
     expect(await service.read()).not.toBe(first);
     expect(calls).toEqual(['GET /v1/telemetry', 'GET /v1/telemetry']);
   });

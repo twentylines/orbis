@@ -37,12 +37,82 @@ const fixture = (states = [{ Running: true }, { Running: false }]) => {
       return { success: true, stdout: '', stderr: '' };
     }),
   };
-  const backup = vi.fn(async () => {});
-  const run = (resumeAfterSuccess = false) => backupAppWithRuntime({ appUrn, docker, dockerService, backup, resumeAfterSuccess });
-  return { docker, containers, first, second, dockerService, backup, run };
+  const backup = vi.fn<(snapshotReady?: () => Promise<void>) => Promise<void>>(async () => {});
+  const reportProgress = vi.fn(async () => {});
+  const run = (resumeAfterSuccess = false) => backupAppWithRuntime({ appUrn, docker, dockerService, backup, resumeAfterSuccess, reportProgress });
+  return { docker, containers, first, second, dockerService, backup, reportProgress, run };
 };
 
 describe('Backup runtime preservation', () => {
+  it('resumes a manual backup after its consistent copy and before compression finishes', async () => {
+    const f = fixture();
+    f.backup.mockImplementation(async (snapshotReady) => {
+      expect(f.containers.map(({ state }) => state.Running)).toEqual([false, false]);
+      expect(snapshotReady).toBeTypeOf('function');
+      await snapshotReady?.();
+      expect(f.containers.map(({ state }) => state.Running)).toEqual([true, false]);
+    });
+    expect(await f.run(true)).toEqual({ success: true, statePreserved: true });
+    expect(f.first.container.start).toHaveBeenCalledOnce();
+    expect(f.second.container.start).not.toHaveBeenCalled();
+    expect(f.reportProgress.mock.calls).toEqual([['stopping'], ['backing_up'], ['starting'], ['backing_up']]);
+  });
+
+  it('keeps a pre-update backup stopped through compression without exposing an early-resume callback', async () => {
+    const f = fixture();
+    f.backup.mockImplementation(async (snapshotReady) => {
+      expect(snapshotReady).toBeUndefined();
+      expect(f.containers.every(({ state }) => !state.Running)).toBe(true);
+    });
+    expect(await f.run()).toEqual({ success: true, statePreserved: false });
+    expect(f.first.container.start).not.toHaveBeenCalled();
+  });
+
+  it('does not restart or stop the app again after compression fails following early resume', async () => {
+    const f = fixture();
+    f.backup.mockImplementation(async (snapshotReady) => {
+      await snapshotReady?.();
+      throw new Error('Compression failed');
+    });
+    expect(await f.run(true)).toEqual({ success: false, statePreserved: true, message: 'Compression failed' });
+    expect(f.first.state.Running).toBe(true);
+    expect(f.first.container.start).toHaveBeenCalledOnce();
+    expect(f.dockerService.composeApp).toHaveBeenCalledOnce();
+  });
+
+  it('preserves a later runtime change after early resume and reports it unconfirmed', async () => {
+    const f = fixture();
+    f.backup.mockImplementation(async (snapshotReady) => {
+      await snapshotReady?.();
+      f.first.state.Running = false;
+    });
+    expect(await f.run(true)).toMatchObject({ success: false, statePreserved: false, message: expect.stringContaining('Container state changed') });
+    expect(f.first.state.Running).toBe(false);
+    expect(f.first.container.start).toHaveBeenCalledOnce();
+  });
+
+  it('returns a paused app to its paused state before compression', async () => {
+    const f = fixture();
+    f.first.state.Paused = true;
+    f.backup.mockImplementation(async (snapshotReady) => {
+      await snapshotReady?.();
+      expect(f.first.state).toMatchObject({ Running: true, Paused: true });
+    });
+    expect(await f.run(true)).toEqual({ success: true, statePreserved: true });
+    expect(f.first.container.start).toHaveBeenCalledOnce();
+    expect(f.first.container.pause).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a duplicate snapshot-ready notification without repeating resume', async () => {
+    const f = fixture();
+    f.backup.mockImplementation(async (snapshotReady) => {
+      await snapshotReady?.();
+      await snapshotReady?.();
+    });
+    expect(await f.run(true)).toMatchObject({ success: false, statePreserved: true, message: 'The backup snapshot was already acknowledged.' });
+    expect(f.first.container.start).toHaveBeenCalledOnce();
+  });
+
   it.each([false, true])('resumes only original running containers when backup fails (manual=%s)', async (manual) => {
     const f = fixture();
     f.backup.mockRejectedValue(new Error('No space left on device'));
@@ -51,6 +121,7 @@ describe('Backup runtime preservation', () => {
     expect(f.first.container.start).toHaveBeenCalledOnce();
     expect(f.second.container.start).not.toHaveBeenCalled();
     expect(f.docker.listContainers).toHaveBeenCalledExactlyOnceWith({ all: true, filters: { label: ['com.docker.compose.project=demo_store'] } });
+    expect(f.reportProgress.mock.calls).toEqual([['stopping'], ['backing_up'], ['recovering']]);
     expect(f.dockerService.composeApp).toHaveBeenCalledExactlyOnceWith(appUrn, 'stop');
   });
 
@@ -67,6 +138,7 @@ describe('Backup runtime preservation', () => {
       expect(f.containers.every(({ state }) => !state.Running)).toBe(true);
     });
     expect(await f.run(true)).toEqual({ success: true, statePreserved: true });
+    expect(f.reportProgress.mock.calls).toEqual([['stopping'], ['backing_up'], ['starting']]);
     expect(f.containers.map(({ state }) => state.Running)).toEqual([true, false]);
     expect(f.second.container.start).not.toHaveBeenCalled();
   });

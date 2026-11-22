@@ -1,5 +1,5 @@
 import { relations, sql } from 'drizzle-orm';
-import { boolean, customType, integer, pgEnum, pgTable, serial, text, varchar } from 'drizzle-orm/pg-core';
+import { boolean, customType, integer, pgEnum, pgTable, primaryKey, serial, text, varchar } from 'drizzle-orm/pg-core';
 
 export const appStatusEnum = pgEnum('app_status_enum', [
   'running',
@@ -65,7 +65,19 @@ export const app = pgTable('app', {
   templateUrn: varchar('template_urn'),
   lastTemplateSyncAt: integer('last_template_sync_at'),
   templateVersion: integer('template_version'),
+  migrationsBaselined: boolean('migrations_baselined').default(false).notNull(),
 });
+
+export const appMigration = pgTable(
+  'app_migration',
+  {
+    appId: integer('app_id')
+      .notNull()
+      .references(() => app.id, { onDelete: 'cascade' }),
+    migrationId: varchar('migration_id', { length: 128 }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.appId, table.migrationId] })],
+);
 
 export const appRelations = relations(app, ({ one }) => ({
   appStore: one(appStore, {
@@ -73,6 +85,17 @@ export const appRelations = relations(app, ({ one }) => ({
     references: [appStore.slug],
   }),
 }));
+
+// Operational receipts survive app removal so an old request cannot be accepted as new work.
+export const appMigrationCommit = pgTable('app_migration_commit', {
+  requestId: varchar('request_id', { length: 36 }).primaryKey().notNull(),
+  appId: integer('app_id').notNull(),
+  stageId: varchar('stage_id', { length: 36 }).unique().notNull(),
+  operationSha256: varchar('operation_sha256', { length: 64 }).notNull(),
+  ledgerSha256: varchar('ledger_sha256', { length: 64 }).notNull(),
+  version: integer().notNull(),
+  committedAt: integer('committed_at').notNull(),
+});
 
 export const user = pgTable('user', {
   id: serial().primaryKey().notNull(),

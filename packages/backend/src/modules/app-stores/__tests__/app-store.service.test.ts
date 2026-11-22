@@ -19,6 +19,9 @@ import { type MockProxy, mock } from 'vitest-mock-extended';
 import { fromAny } from '@total-typescript/shoehorn';
 import { AsyncMutex } from '@/utils/mutex/async-mutex';
 import { APP_ASYNC_MUTEX } from '@/utils/mutex/mutex.module';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import type { Pool } from 'pg';
+import { UpdateAppStoreBodyDto } from '@/modules/marketplace/dto/marketplace.dto';
 
 describe('AppStoreService', () => {
   let appStoreService: AppStoreService;
@@ -241,6 +244,30 @@ describe('AppStoreService', () => {
 
     expect(appStoreRepository.updateAppStore).toHaveBeenCalledExactlyOnceWith(current.slug, { name: current.name, enabled: false });
     expect(repoHelpers.pullRepo).not.toHaveBeenCalled();
+  });
+
+  it('only writes fields present in a partial app store update', async () => {
+    const current = stores[0] as AppStore;
+    const query = vi
+      .fn<({ text }: { text: string }, values: unknown[]) => Promise<{ rows: unknown[][] }>>()
+      .mockResolvedValueOnce({ rows: [[current.slug, current.hash, current.name, false, current.url, 'main', 1, 1]] })
+      .mockResolvedValueOnce({ rows: [[current.slug, current.hash, 'Renamed', false, current.url, 'main', 1, 1]] });
+    const db = drizzle({ query } as unknown as Pool);
+    const repository = new AppStoreRepository(fromAny({ db }), fromAny({}));
+    const enabledOnly = UpdateAppStoreBodyDto.parse({ enabled: false });
+    const renameOnly = UpdateAppStoreBodyDto.parse({ name: 'Renamed' });
+
+    expect(enabledOnly).toEqual({ enabled: false });
+    expect(renameOnly).toEqual({ name: 'Renamed' });
+    expect(UpdateAppStoreBodyDto.parse({ name: 'Renamed', enabled: true })).toEqual({ name: 'Renamed', enabled: true });
+    expect(() => UpdateAppStoreBodyDto.parse({ enabled: fromAny('false') })).toThrow();
+    expect(await repository.updateAppStore(current.slug, enabledOnly)).toMatchObject({ name: current.name, enabled: false });
+    expect(await repository.updateAppStore(current.slug, renameOnly)).toMatchObject({ name: 'Renamed', enabled: false });
+    expect(query.mock.calls[0]?.[0].text).toContain('set "enabled" = $1 where');
+    expect(query.mock.calls[0]?.[1]).toEqual([false, current.slug]);
+    expect(query.mock.calls[1]?.[0].text).toContain('set "name" = $1 where');
+    expect(query.mock.calls[1]?.[1]).toEqual(['Renamed', current.slug]);
+    await expect(appStoreService.updateAppStore(current.slug, {})).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('rejects editing an unknown slug before refreshing or changing any store', async () => {

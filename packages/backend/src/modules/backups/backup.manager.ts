@@ -13,9 +13,14 @@ import { appInfoSchema } from '@runtipi/common/schemas';
 import type { AppUrn } from '@runtipi/common/types';
 import { type } from 'arktype';
 import { AppFilesManager } from '../apps/app-files-manager';
+import { appMigrationLedgerSchema } from '../apps/app-migration-ledger';
 import { AppsRepository } from '../apps/apps.repository';
 import { RestoreTransaction, preserveTreeMetadata } from './restore-transaction';
 import { validateArchiveLinks, validateBackupTree } from './backup-links';
+
+const ledgerFile = 'orbis-app-migrations.json';
+const maxLedgerBytes = 48 * 1024;
+const backupLedgerSchema = type({ version: '1', appUrn: 'string', ledger: appMigrationLedgerSchema }).onUndeclaredKey('reject');
 
 @Injectable()
 export class BackupManager {
@@ -27,7 +32,7 @@ export class BackupManager {
     private readonly config: ConfigurationService,
     private readonly filesystem: FilesystemService,
     private readonly appFilesManager: AppFilesManager,
-    appsRepository: AppsRepository,
+    private readonly appsRepository: AppsRepository,
   ) {
     this.restoreTransaction = new RestoreTransaction(
       filesystem,
@@ -37,14 +42,17 @@ export class BackupManager {
         const { appDataDir, appInstalledDir } = appFilesManager.getAppPaths(appUrn);
         return { 'app-data': appDataDir, app: appInstalledDir, 'user-config': this.getBackupPaths(appUrn).userConfigDir };
       },
-      async (appUrn) => {
+      async (appUrn, migration) => {
         const app = await appsRepository.getAppByUrn(appUrn);
+        if (migration && app?.id !== migration.appId) throw new Error('Restore application identity changed');
         if (!app) return;
         const installed = await appFilesManager.getInstalledAppInfo(appUrn);
-        await appsRepository.updateAppById(app.id, {
-          status: 'stopped',
+        const data = {
+          status: 'stopped' as const,
           ...(typeof installed?.tipi_version === 'number' ? { version: installed.tipi_version } : {}),
-        });
+        };
+        if (migration) await appsRepository.replaceMigrationLedger(app.id, migration.ledger, data);
+        else await appsRepository.updateAppById(app.id, data);
       },
     );
   }
@@ -86,7 +94,8 @@ export class BackupManager {
     };
   }
 
-  public backupApp = async (appUrn: AppUrn) => {
+  public backupApp = async (appUrn: AppUrn, snapshotReady?: () => Promise<void>, job?: AppJobContext) => {
+    job?.check();
     if (await this.hasPendingRestore(appUrn)) throw new Error('Recover the interrupted restore before creating another backup');
     const { appName, appStoreId, backupDir, userConfigDir } = this.getBackupPaths(appUrn);
     const backupName = `${appName}-${appStoreId}-${Date.now()}-${randomUUID()}`;
@@ -104,6 +113,7 @@ export class BackupManager {
     try {
       await fs.promises.chmod(tempDir, 0o700);
       this.logger.info('Copying files to backup location...');
+      await job?.progress('copying');
 
       if (!(await this.filesystem.createDirectory(contentDir))) {
         throw new Error('The backup staging directory could not be created');
@@ -111,11 +121,23 @@ export class BackupManager {
 
       const { appDataDir, appInstalledDir } = this.appFilesManager.getAppPaths(appUrn);
 
-      if (!(await this.filesystem.copyDirectory(appDataDir, path.join(contentDir, 'app-data'), { verbatimSymlinks: true, dereference: false }))) {
+      const copyOptions = {
+        verbatimSymlinks: true,
+        dereference: false,
+        ...(job
+          ? {
+              filter: () => {
+                job.check();
+                return true;
+              },
+            }
+          : {}),
+      };
+      if (!(await this.filesystem.copyDirectory(appDataDir, path.join(contentDir, 'app-data'), copyOptions))) {
         throw new Error('App data could not be copied into the backup');
       }
 
-      if (!(await this.filesystem.copyDirectory(appInstalledDir, path.join(contentDir, 'app'), { verbatimSymlinks: true, dereference: false }))) {
+      if (!(await this.filesystem.copyDirectory(appInstalledDir, path.join(contentDir, 'app'), copyOptions))) {
         throw new Error('App files could not be copied into the backup');
       }
       await preserveTreeMetadata(appDataDir, path.join(contentDir, 'app-data'));
@@ -127,9 +149,7 @@ export class BackupManager {
       });
       if (userConfig?.isDirectory()) {
         this.logger.info('Including user configuration in backup...');
-        if (
-          !(await this.filesystem.copyDirectory(userConfigDir, path.join(contentDir, 'user-config'), { verbatimSymlinks: true, dereference: false }))
-        ) {
+        if (!(await this.filesystem.copyDirectory(userConfigDir, path.join(contentDir, 'user-config'), copyOptions))) {
           throw new Error('User configuration could not be copied into the backup');
         }
         await preserveTreeMetadata(userConfigDir, path.join(contentDir, 'user-config'), false);
@@ -137,9 +157,24 @@ export class BackupManager {
         throw new Error('User configuration is not a readable directory');
       }
 
-      this.logger.info('Creating archive...');
+      const app = await this.appsRepository.getAppByUrn(appUrn);
+      if (app) {
+        const ledger = appMigrationLedgerSchema.assert(await this.appsRepository.getMigrationLedger(app.id));
+        await fs.promises.writeFile(path.join(contentDir, ledgerFile), JSON.stringify({ version: 1, appUrn, ledger }), { flag: 'wx', mode: 0o600 });
+      }
 
-      const { stdout, stderr } = await this.archiveManager.createTarGz(contentDir, archivePath);
+      // Every mutable input is now captured. Compression only reads this private copy.
+      job?.check();
+      await snapshotReady?.();
+      job?.check();
+
+      this.logger.info('Creating archive...');
+      await job?.progress('archiving');
+
+      const { stdout, stderr } = job
+        ? await this.archiveManager.createTarGz(contentDir, archivePath, job.signal)
+        : await this.archiveManager.createTarGz(contentDir, archivePath);
+      job?.check();
       this.logger.debug('--- archiveManager.createTarGz ---');
       this.logger.debug('stderr:', stderr);
       this.logger.debug('stdout:', stdout);
@@ -149,6 +184,7 @@ export class BackupManager {
       await fs.promises.chmod(archivePath, 0o600);
 
       this.logger.info('Moving archive to backup directory...', backupDir);
+      await job?.progress('saving');
 
       if (!(await this.filesystem.createDirectory(backupDir))) {
         throw new Error('The backup directory could not be created');
@@ -157,8 +193,10 @@ export class BackupManager {
       if (!(await this.filesystem.copyFile(archivePath, pendingPath))) {
         throw new Error('The backup archive could not be saved');
       }
-      this.validateRestoreArchiveEntries(await this.archiveManager.listTarGz(pendingPath));
+      job?.check();
+      this.validateRestoreArchiveEntries(await this.archiveManager.listTarGz(pendingPath, job?.signal));
       const { backupPath } = this.getBackupFilePath(appUrn, `${backupName}.tar.gz`);
+      await job?.seal();
       await fs.promises.rename(pendingPath, backupPath);
 
       this.logger.info('Backup completed!');
@@ -216,7 +254,27 @@ export class BackupManager {
         runValidationFsOperation,
       );
 
+      const ledgerPath = path.join(restoreDir, ledgerFile);
+      const metadata = await fs.promises.lstat(ledgerPath).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      });
+      const app = await this.appsRepository.getAppByUrn(appUrn);
+      let migration: { appId: number; ledger: typeof appMigrationLedgerSchema.infer } | undefined;
+      if (metadata) {
+        if (!metadata.isFile() || metadata.nlink !== 1 || metadata.size > maxLedgerBytes || !app) {
+          throw new Error('Invalid application migration ledger in backup');
+        }
+        const saved = backupLedgerSchema.assert(JSON.parse(await fs.promises.readFile(ledgerPath, 'utf8')));
+        if (saved.appUrn !== appUrn) throw new Error('Application migration ledger belongs to another application');
+        migration = { appId: app.id, ledger: saved.ledger };
+      } else if (app) {
+        const ledger = await this.appsRepository.getMigrationLedger(app.id);
+        if (ledger.migrationIds.length) throw new Error('This backup predates the application migration history');
+        migration = { appId: app.id, ledger: { baselined: false, migrationIds: [] } };
+      }
       return {
+        migration,
         'app-data': path.join(restoreDir, 'app-data'),
         app: path.join(restoreDir, 'app'),
         'user-config': (await this.filesystem.isDirectory(path.join(restoreDir, 'user-config'))) ? path.join(restoreDir, 'user-config') : null,
@@ -559,3 +617,4 @@ export class BackupManager {
     }
   }
 }
+import type { AppJobContext } from '../app-lifecycle/services/app-job.service';

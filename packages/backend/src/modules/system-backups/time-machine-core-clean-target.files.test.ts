@@ -1,7 +1,7 @@
 import { createCipheriv, createHash, pbkdf2Sync, randomUUID } from 'node:crypto';
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import { expect, it, vi } from 'vitest';
-import { app, appStore, link, user } from '@/core/database/drizzle/schema';
+import { app, appStore, link, user, appMigrationCommit } from '@/core/database/drizzle/schema';
 import { backupDatabaseColumns, backupDatabaseLimits, type BackupDatabaseTable } from './backup-database-records';
 import {
   type CoreCleanTargetReconciliation,
@@ -9,6 +9,7 @@ import {
   coreSourceBootstrapEvidence,
   coreSourceCatalogBootstrapEvidence,
   inspectCoreDatabase,
+  inspectCoreDatabaseStructure,
   prepareCoreCleanTarget,
   verifyCoreCleanTarget,
   verifyCoreImportedDatabase,
@@ -26,8 +27,8 @@ import {
 } from './time-machine-core-live-database-fence';
 
 type Row = Record<string, unknown>;
-type Table = BackupDatabaseTable | 'orbis_reset_receipt' | '__drizzle_migrations';
-type Rows = Record<Table, Row[]>;
+type Table = BackupDatabaseTable | 'orbis_reset_receipt' | '__drizzle_migrations' | 'app_migration_commit';
+type Rows = Record<Exclude<Table, 'app_migration' | 'app_migration_commit'>, Row[]> & { app_migration?: Row[]; app_migration_commit?: Row[] };
 const clone = <T>(value: T): T => structuredClone(value);
 function present<T>(value: T | undefined): T {
   if (value === undefined) throw new Error('fixture missing value');
@@ -117,7 +118,9 @@ function catalog() {
   const columns: Row[] = [];
   for (const [name, table] of Object.entries({ user, app_store: appStore, app, link })) {
     tables.push({ schema: 'public', name, kind: 'r', persistence: 'p', rls: false, force_rls: false });
-    for (const [position, column] of getTableConfig(table).columns.entries()) {
+    for (const [position, column] of getTableConfig(table)
+      .columns.filter((column) => column.name !== 'migrations_baselined')
+      .entries()) {
       const sql = column.getSQLType();
       const type = sql.startsWith('varchar') ? 'varchar' : sql === 'integer' || sql === 'serial' ? 'int4' : sql === 'boolean' ? 'bool' : sql;
       columns.push({
@@ -177,7 +180,7 @@ function catalog() {
     extensions: [{ name: 'plpgsql', version: '1.0' }],
   };
 }
-const sequenceTables: Record<string, Table> = {
+const sequenceTables: Record<string, Exclude<Table, 'app_migration' | 'app_migration_commit'>> = {
   user_id_seq: 'user',
   link_id_seq: 'link',
   app_id_seq: 'app',
@@ -259,9 +262,16 @@ class Database {
     if (sql.startsWith('SELECT 1 FROM pg_catalog.pg_depend')) return { rows: this.appOwnedElsewhere ? [{ owner: 1 }] : [] };
     if (sql.startsWith('INSERT INTO')) {
       const table = /^INSERT INTO public\."([^"]+)"/.exec(sql)?.[1] as Exclude<Table, '__drizzle_migrations'>;
-      const columns = table === 'orbis_reset_receipt' ? ['id', 'completed_at'] : backupDatabaseColumns(table);
+      const columns =
+        table === 'orbis_reset_receipt'
+          ? ['id', 'completed_at']
+          : table === 'app_migration_commit'
+            ? getTableConfig(appMigrationCommit).columns.map(({ name }) => name)
+            : backupDatabaseColumns(table, this.rows.app_migration ? 2 : 1);
       if (!this.transaction || columns.length !== values.length) throw new Error('fixture unsupported insert');
-      this.rows[table].push(Object.fromEntries(columns.map((column, index) => [column, clone(values[index])])));
+      const destination = this.rows[table];
+      if (!destination) throw new Error('Migration table absent');
+      destination.push(Object.fromEntries(columns.map((column, index) => [column, clone(values[index])])));
       return { rows: [] };
     }
     if (sql.startsWith('SELECT pg_catalog.setval')) {
@@ -332,6 +342,151 @@ async function fixture(setup?: (source: Database, destination: Database, target:
   };
   return { source, destination, target, options, sourceSummary: inspectedSource.summary };
 }
+function upgradeLedgerFixture(database: Database, migrationId?: string) {
+  const { tables, columns, constraints } = database.catalog;
+  const appPosition = columns.filter((row) => row.schema === 'public' && row.table === 'app').length + 1;
+  tables.push({ schema: 'public', name: 'app_migration', kind: 'r', persistence: 'p', rls: false, force_rls: false });
+  const base = { schema: 'public', type_schema: 'pg_catalog', not_null: true, identity: '', generated: '', default: null };
+  columns.push(
+    { ...base, table: 'app', name: 'migrations_baselined', position: appPosition, type: 'bool', format: 'boolean', default: 'false' },
+    { ...base, table: 'app_migration', name: 'app_id', position: 1, type: 'int4', format: 'integer' },
+    { ...base, table: 'app_migration', name: 'migration_id', position: 2, type: 'varchar', format: 'character varying(128)' },
+  );
+  constraints.push(
+    { schema: 'public', table: 'app_migration', type: 'p', validated: true, definition: 'PRIMARY KEY (app_id, migration_id)' },
+    {
+      schema: 'public',
+      table: 'app_migration',
+      type: 'f',
+      validated: true,
+      definition: 'FOREIGN KEY (app_id) REFERENCES public.app(id) ON DELETE CASCADE',
+    },
+  );
+  for (const row of database.rows.app) row.migrations_baselined = true;
+  database.rows.app_migration = migrationId ? [{ app_id: present(database.rows.app[0]).id, migration_id: migrationId }] : [];
+}
+
+function upgradeCommitFixture(database: Database, receipt?: Row) {
+  upgradeLedgerFixture(database);
+  database.catalog.tables.push({ schema: 'public', name: 'app_migration_commit', kind: 'r', persistence: 'p', rls: false, force_rls: false });
+  for (const [index, column] of getTableConfig(appMigrationCommit).columns.entries()) {
+    const sql = column.getSQLType();
+    database.catalog.columns.push({
+      schema: 'public',
+      table: 'app_migration_commit',
+      name: column.name,
+      position: index + 1,
+      type: sql.startsWith('varchar') ? 'varchar' : 'int4',
+      type_schema: 'pg_catalog',
+      format: sql.replace(/^varchar/, 'character varying'),
+      not_null: true,
+      identity: '',
+      generated: '',
+      default: null,
+    });
+  }
+  database.catalog.constraints.push(
+    { schema: 'public', table: 'app_migration_commit', type: 'p', validated: true, definition: 'PRIMARY KEY (request_id)' },
+    { schema: 'public', table: 'app_migration_commit', type: 'u', validated: true, definition: 'UNIQUE (stage_id)' },
+  );
+  database.rows.app_migration_commit = receipt ? [receipt] : [];
+  database.rows.__drizzle_migrations.push(
+    { id: 82, hash: '931cd10ce91be3582efccc9c17d34d9042db48db925b90b2e88b75496060602a', created_at: '1795203554058' },
+    { id: 83, hash: '838b363174dd85025ce1eff4d4a0c29aaa5cf68a9276b722ff8e8ca39153f3b8', created_at: '1795305600000' },
+  );
+}
+const appCommitReceipt = () => ({
+  request_id: randomUUID(),
+  app_id: 47,
+  stage_id: randomUUID(),
+  operation_sha256: 'a'.repeat(64),
+  ledger_sha256: 'b'.repeat(64),
+  version: 3,
+  committed_at: 1700000001,
+});
+
+it('preserves only destination app commit receipts in an exact matching Core target and verifies them on replay', async () => {
+  const f = await fixture((source, destination, target) => {
+    upgradeCommitFixture(source, appCommitReceipt());
+    upgradeCommitFixture(destination, appCommitReceipt());
+    upgradeCommitFixture(target);
+  });
+  const report = await inspectCoreDatabaseStructure(f.target as never, signal());
+  expect(report.schema).toBe('orbis.core-database-structure.v3');
+  expect(report.rows.app_migration_commit).toBe(0);
+  const receipt = await prepareCoreCleanTarget(f.options);
+  expect(f.target.rows.app_migration_commit).toEqual(f.destination.rows.app_migration_commit);
+  expect(f.target.rows.app_migration_commit).not.toEqual(f.source.rows.app_migration_commit);
+  expect(writes(f.target).some(([sql]) => sql.startsWith('LOCK TABLE') && sql.includes('public.app_migration_commit'))).toBe(true);
+  present(f.target.rows.app_migration_commit?.[0]).operation_sha256 = 'c'.repeat(64);
+  await expect(verifyCoreCleanTarget(f.target as never, receipt, signal())).rejects.toThrow('(receipt)');
+});
+
+it.each(['missing-ledger', 'bad-history', 'wrong-columns', 'nonempty-target', 'bad-receipt'])(
+  'refuses an unqualified app-commit catalog or record: %s',
+  async (kind) => {
+    const setup = (source: Database, destination: Database, target: Database) => {
+      for (const database of [source, destination, target]) upgradeCommitFixture(database);
+      if (kind === 'missing-ledger') source.catalog.tables = source.catalog.tables.filter((row) => row.name !== 'app_migration');
+      if (kind === 'bad-history') present(source.rows.__drizzle_migrations.at(-1)).hash = 'c'.repeat(64);
+      if (kind === 'wrong-columns') present(source.catalog.columns.find((row) => row.table === 'app_migration_commit')).format = 'text';
+      if (kind === 'nonempty-target') target.rows.app_migration_commit = [appCommitReceipt()];
+      if (kind === 'bad-receipt') source.rows.app_migration_commit = [{ ...appCommitReceipt(), ledger_sha256: 'invalid' }];
+    };
+    if (kind === 'nonempty-target') {
+      const f = await fixture(setup);
+      await expect(prepareCoreCleanTarget(f.options)).rejects.toThrow('(records)');
+      expect(inserts(f.target)).toEqual([]);
+    } else await expect(fixture(setup)).rejects.toThrow();
+  },
+);
+
+it('reports seven structure counts only when catalog and canonical 0033 history match', async () => {
+  const database = new Database('captured', '7000000000000000001');
+  const legacy = await inspectCoreDatabaseStructure(database as never, signal());
+  expect(legacy.schema).toBe('orbis.core-database-structure.v1');
+  expect(Object.keys(legacy.rows)).toHaveLength(6);
+
+  const marker = {
+    id: 81,
+    hash: '931cd10ce91be3582efccc9c17d34d9042db48db925b90b2e88b75496060602a',
+    created_at: '1795203554058',
+  };
+  database.rows.__drizzle_migrations.push(marker);
+  await expect(inspectCoreDatabaseStructure(database as never, signal())).rejects.toThrow('(catalog)');
+  upgradeLedgerFixture(database);
+  const modern = await inspectCoreDatabaseStructure(database as never, signal());
+  expect(modern.schema).toBe('orbis.core-database-structure.v2');
+  expect(modern.rows.app_migration).toBe(0);
+  expect(Object.keys(modern.rows)).toHaveLength(7);
+
+  present(database.rows.__drizzle_migrations.at(-1)).hash = '0'.repeat(64);
+  await expect(inspectCoreDatabaseStructure(database as never, signal())).rejects.toThrow('(catalog)');
+  database.rows.__drizzle_migrations.pop();
+  await expect(inspectCoreDatabaseStructure(database as never, signal())).rejects.toThrow('(catalog)');
+});
+
+it('copies only destination migration IDs into a matching ledger-aware Core target and binds replay to them', async () => {
+  const f = await fixture((source, destination, target) => {
+    upgradeLedgerFixture(source, '001-captured');
+    upgradeLedgerFixture(destination, '002-destination');
+    upgradeLedgerFixture(target);
+  });
+  const receipt = await prepareCoreCleanTarget(f.options);
+  expect(f.target.rows.app_migration).toEqual(f.destination.rows.app_migration);
+  expect(f.target.rows.app[0]?.migrations_baselined).toBe(true);
+  expect(writes(f.target).some(([sql]) => sql.startsWith('LOCK TABLE') && sql.includes('public.app_migration'))).toBe(true);
+  const row = present(f.target.rows.app_migration?.[0]);
+  row.migration_id = '003-tamper';
+  await expect(verifyCoreCleanTarget(f.target as never, receipt, signal())).rejects.toThrow('(receipt)');
+});
+
+it('rejects a mixed old and ledger-aware Core catalog before inserting anything', async () => {
+  const f = await fixture((source) => upgradeLedgerFixture(source, '001-captured'));
+  await expect(prepareCoreCleanTarget(f.options)).rejects.toThrow('(catalog)');
+  expect(inserts(f.target)).toEqual([]);
+});
+
 const writes = (database: Database) =>
   database.query.mock.calls.filter(([sql]) => /^(INSERT|UPDATE|DELETE|TRUNCATE|CREATE|ALTER|DROP|COMMENT|LOCK)|^SELECT pg_catalog.setval/.test(sql));
 const inserts = (database: Database) => database.query.mock.calls.filter(([sql]) => sql.startsWith('INSERT'));

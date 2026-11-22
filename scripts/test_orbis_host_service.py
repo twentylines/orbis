@@ -422,7 +422,9 @@ class HostServiceTests(unittest.TestCase):
 
     def restart_host(self):
         stack = ExitStack()
-        stack.enter_context(mock.patch.object(SERVICE.Path, "is_dir", return_value=True))
+        actual_is_dir = SERVICE.Path.is_dir
+        stack.enter_context(mock.patch.object(SERVICE.Path, "is_dir", autospec=True,
+            side_effect=lambda path: path == Path('/run/systemd/system') or actual_is_dir(path)))
         stack.enter_context(mock.patch.object(SERVICE.os, "access", return_value=True))
         stack.enter_context(mock.patch.object(SERVICE, "boot_id", return_value="00000000-0000-4000-8000-000000000001"))
         stack.enter_context(mock.patch.object(SERVICE, "package_locks", side_effect=nullcontext))

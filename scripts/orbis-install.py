@@ -2,6 +2,8 @@
 """Install Orbis or replace a discovered Runtipi installation on this host."""
 
 import argparse
+import ast
+from contextlib import ExitStack, contextmanager, nullcontext
 import hashlib
 import ipaddress
 import json
@@ -34,6 +36,7 @@ CHANNELS = load("orbis-host-service.py", "orbis_guided_channels")
 BOOT = load("install-orbis.py", "orbis_guided_platform")
 PREREQUISITES = load("orbis-install-prerequisites.py", "orbis_guided_prerequisites")
 SENTINEL = load("orbis-sentinel-install.py", "orbis_guided_sentinel")
+OWNERSHIP = load("orbis-host-ownership-bootstrap.py", "orbis_guided_ownership_storage")
 
 
 DOCKER_INSTALL_HELP = "Install Docker Engine and the Docker Compose plugin first, then rerun this installer. For 64-bit Raspberry Pi OS or Debian: https://docs.docker.com/engine/install/debian/ ; for Ubuntu: https://docs.docker.com/engine/install/ubuntu/ . Automatic setup supports the local default Docker context on 64-bit Debian 12/13 and Ubuntu 22.04/24.04; other layouts need a separate review."
@@ -230,12 +233,15 @@ def command(arguments, out, err):
 
 
 def recover_pending(root, reader, state, ask, *, writers_stopped=False):
-    path = root / ".orbis-installation.json"
+    path = OWNERSHIP.installer_pointer_path(HOST, root, reader.context)
     if not path.exists() and not path.is_symlink():
         return None
     marker = REPLACE.TX.RESTORE.private_json(path)
-    if marker.get("schema") != "orbis.installer-pointer.v1" or marker.get("root") != str(root) or marker.get("dockerContext") != reader.context or marker.get("kind") not in {"new", "replacement"}:
+    if marker.get("schema") not in {"orbis.installer-pointer.v1", "orbis.installer-pointer.v2"} or marker.get("root") != str(root) or marker.get("dockerContext") != reader.context or marker.get("kind") not in {"new", "replacement"}:
         raise ValueError("The installation recovery marker needs local review")
+    storage = OWNERSHIP.verify_installer_storage(HOST, root, marker.get('installerStorage'), reader.context)
+    if (storage is not None) != (marker.get('schema') == 'orbis.installer-pointer.v2'):
+        raise ValueError('The installation marker does not match its protected storage')
     journal = Path(marker["journal"])
     if not journal.exists():
         return None
@@ -243,8 +249,28 @@ def recover_pending(root, reader, state, ask, *, writers_stopped=False):
     scope = record.get("review") if marker["kind"] == "replacement" else record
     if not isinstance(scope, dict) or scope.get("root") != str(root) or scope.get("dockerContext") != reader.context:
         raise ValueError("The recovery journal belongs to another installation")
+    if marker['kind'] == 'new':
+        OWNERSHIP.verify_installer_storage(HOST, root, scope.get('installerStorage'), reader.context)
+    fresh = marker['kind'] == 'replacement' and scope.get('mode') == 'fresh'
     if record.get("stage") in {"complete", "rolled-back"}:
-        return None
+        if not fresh:
+            return None
+        if scope.get('ownershipProtocol') != REPLACE.OWNERSHIP_PROTOCOL or record.get('ownershipProtocol') != REPLACE.OWNERSHIP_PROTOCOL:
+            REPLACE.require_ownership_authority('fresh')
+        try:
+            HOST.CREDENTIAL_FENCE.require_clear(HOST, root)
+        except (OSError, ValueError):
+            pass
+        else:
+            # This only skips an old installer; it grants no ownership or
+            # enrollment. Subsequent installation paths verify their own state.
+            return None
+    # The saved executor remains hash-pinned and can predate today's boundary.
+    # Do not dispatch any Fresh recovery (including automatic rollback) on its
+    # stage/JWT receipt alone. Keep/new recovery retains its existing checks.
+    if marker['kind'] == 'replacement':
+        if not fresh or scope.get('ownershipProtocol') != REPLACE.OWNERSHIP_PROTOCOL or record.get('ownershipProtocol') != REPLACE.OWNERSHIP_PROTOCOL:
+            REPLACE.require_ownership_authority(scope.get('mode'))
     if marker["kind"] == "replacement" and not writers_stopped:
         if ask is None or ask("Stop native and remote storage writers before recovery. Ready? [y/N]: ").strip().lower() != "y":
             raise ValueError("Interrupted replacement recovery requires stopped native and remote writers")
@@ -262,13 +288,83 @@ def recover_pending(root, reader, state, ask, *, writers_stopped=False):
     arguments = [str(executor), "recover", str(root), "--docker-context", reader.context, "--journal", str(journal), "--confirm-root", str(root)]
     if marker["kind"] == "replacement":
         arguments.append("--host-writers-stopped")
-    code = command(arguments, state / (name + ".stdout.json"), state / (name + ".stderr.json"))
+    with verified_storage_executor(executor, marker), verified_fresh_executor(executor, marker, scope) if fresh else nullcontext():
+        OWNERSHIP.verify_installer_storage(HOST, root, storage, reader.context)
+        code = command(arguments, state / (name + ".stdout.json"), state / (name + ".stderr.json"))
+        OWNERSHIP.verify_installer_storage(HOST, root, storage, reader.context)
     if code:
         raise ValueError(f"Recovery did not finish. Preserve {journal} and the private logs in {state}")
     return json.loads((state / (name + ".stdout.json")).read_text())
 
 
-def replacement(root, reader, manifest, state, mode, confirm, display=None, *, backup_scope="controller"):
+@contextmanager
+def verified_storage_executor(executor, marker):
+    if marker.get('schema') != 'orbis.installer-pointer.v2':
+        yield
+        return
+    if marker.get('executorStorageProtocol') != OWNERSHIP.INSTALLER_STORAGE_PROTOCOL:
+        raise ValueError('The original executor lacks the protected installer storage protocol')
+    pin = OWNERSHIP.C.PinnedFile(executor, limit=1024 * 1024)
+    try:
+        if hashlib.sha256(pin.body).hexdigest() != marker.get('executorSha256'):
+            raise ValueError('The original protected installer executor changed')
+        try:
+            tree = ast.parse(pin.body)
+        except (SyntaxError, ValueError):
+            raise ValueError('The original protected installer executor is invalid') from None
+        declarations = [node.value.value for node in tree.body if isinstance(node, ast.Assign)
+                        and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                        and node.targets[0].id == 'INSTALLER_STORAGE_PROTOCOL' and isinstance(node.value, ast.Constant)]
+        if declarations != [OWNERSHIP.INSTALLER_STORAGE_PROTOCOL]:
+            raise ValueError('The original executor cannot use protected installer storage')
+        pin.verify()
+        yield
+        pin.verify()
+    finally:
+        pin.close()
+
+
+@contextmanager
+def verified_fresh_executor(executor, marker, scope):
+    """Hold every verified original package member before Fresh dispatch."""
+    expected = marker.get('sourceCustodySha256')
+    if (scope.get('ownershipProtocol') != REPLACE.OWNERSHIP_PROTOCOL or type(expected) is not str
+            or not re.fullmatch(r'[a-f0-9]{64}', expected)):
+        raise ValueError('Fresh recovery requires its verified original installer source custody')
+    setup = load('orbis-host-service-setup.py', 'orbis_fresh_executor_custody')
+    with setup.hold_source_selection(executor.parent, expected) as selection, ExitStack() as opened:
+        if selection is None or selection['directory'] != str(executor.parent.parent):
+            raise ValueError('Fresh executor belongs to a different verified extraction')
+        core = REPLACE.OWNERSHIP.L.C.PinnedFile(executor.parent.parent / 'release-manifest.json', limit=16384)
+        opened.callback(core.close)
+        if hashlib.sha256(core.body).hexdigest() != selection['coreSha256'] or json.loads(core.body) != scope.get('target'):
+            raise ValueError('Fresh target differs from the original installer selection')
+        pins = []
+        executor_body = None
+        for name, identity in selection['inventory'].items():
+            pin = REPLACE.OWNERSHIP.L.C.PinnedFile(executor.parent.parent / name, limit=1024 * 1024)
+            opened.callback(pin.close); pins.append(pin)
+            if {'size': len(pin.body), 'sha256': hashlib.sha256(pin.body).hexdigest()} != identity:
+                raise ValueError('Fresh executor dependency differs from its verified package')
+            if pin.path == executor:
+                executor_body = pin.body
+        if executor_body is None or hashlib.sha256(executor_body).hexdigest() != marker.get('executorSha256'):
+            raise ValueError('The original Fresh executor changed')
+        tree = ast.parse(executor_body)
+        declarations = [node.value.value for node in tree.body if isinstance(node, ast.Assign)
+                        and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                        and node.targets[0].id == 'OWNERSHIP_PROTOCOL' and isinstance(node.value, ast.Constant)]
+        if declarations != [REPLACE.OWNERSHIP_PROTOCOL]:
+            raise ValueError('The original executor lacks the protected Fresh protocol')
+        for pin in pins: pin.verify()
+        yield
+        core.verify()
+        for pin in pins: pin.verify()
+
+
+def replacement(root, reader, manifest, state, mode, confirm, display=None, *, backup_scope="controller", source_custody=None):
+    if mode == 'fresh' and source_custody is None:
+        raise ValueError('Fresh requires the original verified installer source custody')
     REPLACE.TX.RESTORE.runtime()
     run = state / ("replacement-" + str(uuid.uuid4()))
     run.mkdir(mode=0o700)
@@ -276,10 +372,17 @@ def replacement(root, reader, manifest, state, mode, confirm, display=None, *, b
     review_path = run / "review.json"
     display = display or UI.Presentation(interactive=False)
     with display.step("Reviewing app ownership and backup storage"):
-        with HOST.host_lock(root) as descriptor:
-            reader.lock_fd = descriptor
-            review = REPLACE.review(root, reader, manifest, backup, journal, mode=mode, backup_scope=backup_scope)
-    reader.lock_fd = None
+        try:
+            if mode == 'fresh':
+                with HOST.credential_fence_lock(root, reader.context) as guard:
+                    reader.lock_fd = HOST.LOCK_DESCRIPTOR.get()
+                    review = REPLACE.review(root, reader, manifest, backup, journal, mode=mode, backup_scope=backup_scope, ownership=guard)
+            else:
+                with HOST.host_lock(root) as descriptor:
+                    reader.lock_fd = descriptor
+                    review = REPLACE.review(root, reader, manifest, backup, journal, mode=mode, backup_scope=backup_scope)
+        finally:
+            reader.lock_fd = None
     APPS.write_journal(review_path, review)
     storage = review["checkpoint"]["storage"]
     count = len(storage["preservedAppContainers"]) if backup_scope == "controller" else list(review["checkpoint"]["roles"].values()).count("app")
@@ -294,12 +397,19 @@ def replacement(root, reader, manifest, state, mode, confirm, display=None, *, b
         print("The full backup pauses managed apps and control services, including their persistent data.")
     confirm(root)
     script = str(Path(__file__).with_name("orbis-install-replace.py"))
-    APPS.write_journal(root / ".orbis-installation.json", {"schema": "orbis.installer-pointer.v1", "root": str(root), "dockerContext": reader.context, "kind": "replacement", "journal": str(journal), "executor": script, "executorSha256": hashlib.sha256(Path(script).read_bytes()).hexdigest()})
+    marker = {"schema": "orbis.installer-pointer.v1", "root": str(root), "dockerContext": reader.context, "kind": "replacement", "journal": str(journal), "executor": script, "executorSha256": hashlib.sha256(Path(script).read_bytes()).hexdigest()}
+    if source_custody is not None: marker['sourceCustodySha256'] = source_custody
+    storage = OWNERSHIP.installer_storage(HOST, root, reader.context)
+    if storage is not None:
+        marker.update(schema='orbis.installer-pointer.v2', installerStorage=storage,
+                      executorStorageProtocol=OWNERSHIP.INSTALLER_STORAGE_PROTOCOL)
+    APPS.write_journal(OWNERSHIP.installer_pointer_path(HOST, root, reader.context), marker)
     arguments = [script, "apply", str(root), "--docker-context", reader.context, "--mode", mode, "--review", str(review_path), "--journal", str(journal), "--confirm-root", str(root), "--host-writers-stopped"]
     code = None
     output, errors = run / "apply-0.stdout.json", run / "apply-0.stderr.json"
     with display.step("Backing up storage and replacing the controller", completed=lambda: code == 0):
-        code = command(arguments, output, errors)
+        with verified_storage_executor(Path(script), marker), verified_fresh_executor(Path(script), marker, review) if mode == 'fresh' else nullcontext():
+            code = command(arguments, output, errors)
         if code:
             reason = executor_failure(errors)
             if not journal.exists():
@@ -366,7 +476,7 @@ def activate_sentinel(display, prepared):
         return SENTINEL.activate(prepared)
 
 
-def update_existing(root, reader, target, display, *, without_host_service=False, selected_channel=None, state_dir=None):
+def update_existing(root, reader, target, display, *, without_host_service=False, selected_channel=None, state_dir=None, source_custody=None):
     upgrade = load("orbis-host-service-upgrade.py", "orbis_guided_helper_upgrade")
     current = upgrade.SERVICE.installed_manifest(root, reader.context)
     channel = upgrade.SERVICE.read_channel(root)
@@ -379,19 +489,31 @@ def update_existing(root, reader, target, display, *, without_host_service=False
         raise ValueError("The same release tag has a different digest; inspect its published identity before updating")
     requires_backup_tools = target.get("installationProtocol") != HOST.PLAN.INSTALLATION_PROTOCOL
     missing_backup_tools = requires_backup_tools and not shutil.which("rsync")
-    display.set_remaining_steps((4 if without_host_service else 6) + int(missing_backup_tools))
+    display.set_remaining_steps(6 + int(missing_backup_tools))
     with display.step("Verifying the Orbis release"):
         REPLACE.UPDATE.verify_release(target)
     if requires_backup_tools:
         prepare_backup_tools(display)
     prepared_sentinel = prepare_sentinel(display, state_dir)
     activate_sentinel(display, prepared_sentinel)
-    if not without_host_service:
-        with display.step("Updating the host service"):
-            enable = load("orbis-host-service-enable.py", "orbis_guided_update_enable")
-            enable.enable(root, reader.context, Path(__file__).parent)
-            upgrade.upgrade(root, reader.context, Path(__file__).parent, str(root))
+    with display.step("Updating account security" if without_host_service else "Updating the host service"):
+        enable = load("orbis-host-service-enable.py", "orbis_guided_update_enable")
+        custody = {"source_custody": source_custody} if source_custody is not None else {}
+        role = {'credentials_only': True} if without_host_service else {}
+        enable.enable(root, reader.context, Path(__file__).parent, **custody, **role)
+        upgrade.upgrade(root, reader.context, Path(__file__).parent, str(root), **custody)
     socket_path = upgrade.SETUP.SOCKET_FILE
+    credentials_only = upgrade.SETUP.installed_credentials_only(root, reader.context)
+    # A later installer run retains a previously selected narrow role even
+    # when the flag is omitted; it must not attempt administrative RPCs.
+    without_host_service = without_host_service or credentials_only
+    if without_host_service and (channel['channel'] == 'nightly' or target_nightly):
+        raise ValueError('Nightly updates and returning to Stable require system administration; no core update was started')
+    if without_host_service:
+        role = {'credentials_only': True} if credentials_only else {}
+        status = upgrade.SETUP.authenticated_socket_status(root, reader.context, **role)
+        if type(status.get('credentialProtocol')) is not int or status['credentialProtocol'] != 1:
+            raise HostServiceCompatibilityError('The account security service could not be verified; no core update was started')
     if not without_host_service:
         require_helper_capabilities(host_request(socket_path, "/v1/status"))
     if target_nightly and channel["channel"] != "nightly":
@@ -448,6 +570,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--state-dir", type=Path, required=True)
+    parser.add_argument("--installer-custody-sha256", help=argparse.SUPPRESS)
     parser.add_argument("--docker-context", default="default")
     parser.add_argument("--root", type=Path)
     parser.add_argument("--mode", choices=("keep", "fresh"))
@@ -457,13 +580,23 @@ def main():
     parser.add_argument("--accept-nightly", action="store_true", help="acknowledge Nightly risks and follow Nightly updates")
     parser.add_argument("--channel", choices=("stable", "nightly"), help="keep following the selected release channel")
     parser.add_argument("--host-writers-stopped", action="store_true")
-    parser.add_argument("--without-host-service", action="store_true", help="skip optional host administration; Sentinel remains installed")
+    parser.add_argument("--without-host-service", action="store_true", help="skip optional host administration; account security and Sentinel remain enabled")
     parser.add_argument("--no-animation", action="store_true", help="show static installation progress")
     parser.add_argument("--no-color", action="store_true", help="disable terminal colours")
     parser.add_argument("--http-port", type=int, default=80)
     parser.add_argument("--https-port", type=int, default=443)
     parser.add_argument("--server-ip")
+    parser.add_argument('--approved-reset-plan-sha256', help='separately reviewed reset storage digest for a new installation in protected layout storage')
     args = parser.parse_args()
+    custody = args.installer_custody_sha256
+    if custody is not None:
+        extraction = Path(__file__).resolve().parent.parent
+        if (not re.fullmatch(r"[a-f0-9]{64}", custody)
+                or args.manifest != extraction / "release-manifest.json"
+                or args.state_dir != extraction / "transactions"):
+            raise ValueError("Installer source custody does not match this extraction")
+    custody_options = {"source_custody": custody} if custody is not None else {}
+
     BOOT.require_supported_host()
     manifest = HOST.PLAN.require_installation_protocol(json.loads(args.manifest.read_text()))
     channel = args.channel or ("stable" if HOST.PLAN.POLICY.is_stable_release_tag(manifest["tag"]) else "nightly")
@@ -511,13 +644,15 @@ def main():
                 print("Recovery completed. Run the installer again to continue setup.")
                 return 0
         selected = select_installation(report, supplied_root, None if args.yes else ask)
+        if selected is not None and args.approved_reset_plan_sha256 is not None:
+            raise ValueError('A reset storage approval applies only to a new installation')
         root = safe_root(Path(selected["installRoot"])) if selected and selected.get("installRoot") else supplied_root
         if selected and (not root or selected["reviewRequired"]):
             raise ValueError("The detected controller version, ownership or layout needs compatibility review before replacement")
         if selected and selected["product"] == "orbis":
             if args.mode:
                 raise ValueError("Orbis is already installed. Use Settings for resets or Updates for a core update")
-            result = update_existing(root, reader, manifest, display, without_host_service=args.without_host_service, selected_channel=channel, state_dir=args.state_dir.expanduser())
+            result = update_existing(root, reader, manifest, display, without_host_service=args.without_host_service, selected_channel=channel, state_dir=args.state_dir.expanduser(), **custody_options)
             print(json.dumps(result, indent=2))
             show_browser_address(root)
             return 0
@@ -546,10 +681,9 @@ def main():
         if new:
             args.http_port, args.https_port = new.choose_ports(root, reader, args.http_port, args.https_port, None if args.yes else ask)
         remaining = 4 if selected else 3 + len(new.IMAGES)
-        display.set_remaining_steps(remaining + 2 + (0 if args.without_host_service else 1) + (0 if shutil.which("rsync") else 1))
+        display.set_remaining_steps(remaining + 3 + (0 if shutil.which("rsync") else 1))
         enable = load("orbis-host-service-enable.py", "orbis_guided_enable")
-        if not args.without_host_service:
-            enable.available(root, reader.context)
+        enable.available(root, reader.context)
         with display.step("Verifying the Orbis release"):
             REPLACE.UPDATE.verify_release(manifest)
         private = load("install-orbis.py", "orbis_guided_private")
@@ -578,15 +712,15 @@ def main():
 
         if selected:
             prepare_backup_tools(display)
-            result = replacement(root, reader, manifest, state, mode, confirm, display, backup_scope=args.backup_scope)
+            result = replacement(root, reader, manifest, state, mode, confirm, display, backup_scope=args.backup_scope, **custody_options)
         else:
             result = new.install(root, reader, manifest, state, args, confirm, display=display, ask=None if args.yes else ask)
         saved_channel = CHANNELS.read_channel(root)
         if saved_channel["channel"] != channel or saved_channel["revision"] == "initial":
             CHANNELS.save_channel(root, channel, str(uuid.uuid4()))
-        if not args.without_host_service:
-            with display.step("Enabling system administration"):
-                enable.enable(root, reader.context, Path(__file__).parent)
+        with display.step("Enabling account security" if args.without_host_service else "Enabling system administration"):
+            role = {'credentials_only': True} if args.without_host_service else {}
+            enable.enable(root, reader.context, Path(__file__).parent, **custody_options, **role)
         print(f"\nOrbis {UI.display_release(manifest['tag'])} is installed at {root}.")
         print(json.dumps(result, indent=2))
         show_browser_address(root)

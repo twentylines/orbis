@@ -166,7 +166,7 @@ describe('Restore transaction real filesystem and process interruptions', () => 
     const reconcile = vi.fn().mockResolvedValue(undefined);
     transaction = makeTransaction(reconcile);
     await transaction.recover(urn);
-    expect(reconcile).toHaveBeenCalledExactlyOnceWith(urn);
+    expect(reconcile).toHaveBeenCalledExactlyOnceWith(urn, undefined);
     await expectFiles('new');
     await expectClean();
   });

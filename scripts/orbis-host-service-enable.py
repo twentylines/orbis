@@ -51,9 +51,8 @@ def journal_path(root, context):
 def source_hashes(source):
     files, unit = SETUP.source_files(source)
     files = [*files, source / "orbis-host-service-setup.py", source / "orbis-host-service-enable.py"]
-    if any(file.is_symlink() or not file.is_file() for file in files):
-        raise ValueError("Host setup sources must be regular files")
-    return {str(file.relative_to(source.parent)): hashlib.sha256(file.read_bytes()).hexdigest() for file in [*files, unit]}
+    with SETUP._SetupSources(files, unit) as inputs:
+        return {str(file.relative_to(source.parent)): hashlib.sha256(inputs.body(file)).hexdigest() for file in [*files, unit]}
 
 
 def existing_owner(root, context):
@@ -82,10 +81,11 @@ def available(root, context="default"):
     return all(path.exists() for path in targets) and existing_owner(root, context)
 
 
-def healthy_existing(root, context, source):
+def healthy_existing(root, context, source, *, credentials_only=False):
     try:
         SETUP.preflight(root, context, source, allow_existing=True)
-        status = SETUP.read_socket_status()
+        role = {'credentials_only': True} if credentials_only else {}
+        status = SETUP.authenticated_socket_status(root, context, **role) if credentials_only else SETUP.read_socket_status()
         return bool(status.get("enrolled") and status.get("coreHealth") == "healthy" and status.get("imageMatches"))
     except (OSError, ValueError, RuntimeError):
         return False
@@ -135,12 +135,13 @@ def _require_host(root, context, source):
             raise ValueError(f"required host command is unavailable: {executable}")
 
 
-def _require_listener(root, context, manifest, *, recovering=False):
+def _require_listener(root, context, manifest, *, recovering=False, credentials_only=False):
     deadline = time.monotonic() + 12
     while True:
         try:
             _require_no_operation(root)
-            status = SETUP.authenticated_socket_status(root, context)
+            role = {'credentials_only': True} if credentials_only else {}
+            status = SETUP.authenticated_socket_status(root, context, **role)
             if (status.get("enrolled") is True and (recovering or status.get("coreHealth") == "healthy")
                     and status.get("imageMatches") is True and status.get("currentDigest") == manifest["digest"]
                     and status.get("job") is None):
@@ -171,26 +172,38 @@ def _write_override(root, override):
         os.close(descriptor)
 
 
-def enable(root, context, source):
+def enable(root, context, source, *, source_custody=None, credentials_only=False):
+    if type(credentials_only) is not bool:
+        raise ValueError('Host service role must be explicit')
     _require_host(root, context, source)
-    available(root, context)
+    existing = available(root, context)
     with HOST.host_lock(root):
+        # An installer update preserves an existing Root-selected role. Changing
+        # administration policy is separate from copying compatible helpers.
+        if existing:
+            credentials_only = SETUP.installed_credentials_only(root, context)
+        role = {'credentials_only': True} if credentials_only else {}
         path = journal_path(root, context)
         override = root / "orbis-host-compose.yml"
         # Reusing an already healthy older helper does not replay a bootstrap or
         # impose the new installer's sources/unit contract on that installation.
-        if existing_owner(root, context) and healthy_existing(root, context, source):
+        if existing_owner(root, context) and healthy_existing(root, context, source, **role):
             existing = read_record(path) if path.exists() or path.is_symlink() else None
             if existing is not None and (existing.get("root") != str(root) or existing.get("dockerContext") != context):
                 raise ValueError("The host setup journal belongs to another installation")
             if existing is None or existing.get("schema") != SCHEMA or existing.get("stage") == "complete":
-                return {"result": "host-service-active", "socket": str(SETUP.SOCKET_FILE)}
+                return {"result": "account-security-active" if credentials_only else "host-service-active", "socket": str(SETUP.SOCKET_FILE)}
         hashes = source_hashes(source)
         record = None
         if path.exists() or path.is_symlink():
             record = read_record(path)
+            custody_directory = str(source.parent) if source_custody is not None else None
             if (record.get("schema") != SCHEMA or record.get("root") != str(root) or record.get("dockerContext") != context
-                    or record.get("sources") != hashes or record.get("stage") not in STAGES):
+                    or record.get("sources") != hashes or record.get("sourceCustodySha256") != source_custody
+                    or record.get("sourceCustodyDirectory") != custody_directory
+                    or type(record.get('credentialsOnly', False)) is not bool
+                    or record.get('credentialsOnly', False) != credentials_only
+                    or record.get("stage") not in STAGES):
                 raise ValueError("Resume host setup using its original verified installer sources; incompatible journals require independent review")
         _require_no_operation(root)
         if record is None:
@@ -206,6 +219,12 @@ def enable(root, context, source):
             after = {**before, "files": {**before["files"], "orbis-host-compose.yml": hashlib.sha256(content().encode()).hexdigest()}}
             record = {"schema": SCHEMA, "root": str(root), "dockerContext": context, "manifest": manifest,
                       "before": before, "after": after, "sources": hashes, "stage": "prepared"}
+            if credentials_only:
+                record['credentialsOnly'] = True
+            if source_custody is not None:
+                with SETUP.hold_source_selection(source, source_custody):
+                    record["sourceCustodySha256"] = source_custody
+                    record["sourceCustodyDirectory"] = str(source.parent)
             SETUP.ENV_FILE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             details = SETUP.ENV_FILE.parent.lstat()
             if not stat.S_ISDIR(details.st_mode) or details.st_uid != 0 or stat.S_IMODE(details.st_mode) & 0o077:
@@ -249,12 +268,21 @@ def enable(root, context, source):
         if original:
             record["stage"] = "service-starting"
             APPS.write_journal(path, record)
-        SETUP._stage_service_files(root, context, source, resume=True)
+        custody = {"source_custody": source_custody} if source_custody is not None else {}
+        copy_receipt = SETUP._stage_service_files(root, context, source, resume=True,
+                                                  expected_sources=record["sources"], **custody, **role)
+        if copy_receipt is not None:
+            previous_copy = record.get("hostCopyCustodySha256")
+            if previous_copy not in (None, copy_receipt):
+                raise ValueError("The exact installed Host copy changed during setup")
+            if previous_copy is None:
+                record["hostCopyCustodySha256"] = copy_receipt
+                APPS.write_journal(path, record)
         _require_no_operation(root)
         SETUP._start_service()
-        _require_listener(root, context, manifest, recovering=recovering)
+        _require_listener(root, context, manifest, recovering=recovering, **role)
         if verify_only:
-            return _finish_enable(root, context, source, manifest, path, record)
+            return _finish_enable(root, context, source, manifest, path, record, **role)
         if original:
             record["stage"] = "attaching"
             APPS.write_journal(path, record)
@@ -267,7 +295,7 @@ def enable(root, context, source):
             record["stage"] = "mount-prepared"
             APPS.write_journal(path, record)
         # Reauthenticate against the transitioned enrollment before any recreation.
-        _require_listener(root, context, manifest, recovering=recovering)
+        _require_listener(root, context, manifest, recovering=recovering, **role)
         _require_controller(root, context, manifest, recovering=recovering)
         HOST.require_current_state(root, after)
         if HOST.installation_fingerprint(root, manifest, context) != after or source_hashes(source) != hashes:
@@ -280,14 +308,18 @@ def enable(root, context, source):
             raise RuntimeError(f"The controller could not restart with its host socket. Preserve {path} and rerun the same installer to continue")
         record["stage"] = "verifying"
         APPS.write_journal(path, record)
-        return _finish_enable(root, context, source, manifest, path, record)
+        return _finish_enable(root, context, source, manifest, path, record, **role)
 
 
-def _finish_enable(root, context, source, manifest, path, record):
+def _finish_enable(root, context, source, manifest, path, record, *, credentials_only=False):
     _require_controller(root, context, manifest)
     ready = SETUP.preflight(root, context, source, allow_existing=True)
-    _require_listener(root, context, manifest)
-    ready = SETUP._verify_service(root, context, ready)
+    role = {'credentials_only': True} if credentials_only else {}
+    _require_listener(root, context, manifest, **role)
+    ready = SETUP._verify_service(root, context, ready, **role)
     record["stage"] = "complete"
     APPS.write_journal(path, record)
-    return {"result": "host-service-active", "socket": ready["socket"]}
+    result = {"result": "account-security-active" if credentials_only else "host-service-active", "socket": ready["socket"]}
+    if "hostCopyCustodySha256" in record:
+        result["hostCopyCustodySha256"] = record["hostCopyCustodySha256"]
+    return result

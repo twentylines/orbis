@@ -40,7 +40,7 @@ export function parseSentinelStatus(value: unknown): SentinelStatus {
 }
 
 export async function readSentinelJson(
-  endpoint: '/api/system/sentinel' | '/api/system/sentinel/update-progress',
+  endpoint: '/api/system/sentinel' | '/api/system/sentinel/recovery-access' | '/api/system/sentinel/update-progress',
   signal: AbortSignal,
   maxBytes = 4096,
 ): Promise<unknown> {
@@ -77,6 +77,68 @@ export async function readSentinelJson(
 export async function readSentinelStatus(signal: AbortSignal): Promise<SentinelStatus> {
   return parseSentinelStatus(await readSentinelJson('/api/system/sentinel', signal));
 }
+
+const enrollmentStages = [
+  'not-started',
+  'staging',
+  'operator-staged',
+  'key-prepared',
+  'key-expired',
+  'key-acknowledged',
+  'activation-pending',
+  'activated',
+] as const;
+export type SentinelEnrollmentStage = (typeof enrollmentStages)[number];
+
+export type SentinelRecoveryAccess =
+  | { state: 'missing' | 'unavailable'; portalUrl: null; unitState: null }
+  | { state: 'configured'; portalUrl: string; unitState: 'active' | 'inactive' | 'unknown'; enrollment?: SentinelEnrollmentStage };
+
+export async function readSentinelRecoveryAccess(signal: AbortSignal): Promise<SentinelRecoveryAccess> {
+  const value = await readSentinelJson('/api/system/sentinel/recovery-access', signal);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new SentinelStatusError();
+  const { state, portalUrl, unitState, enrollment } = value as Record<string, unknown>;
+  const keys = Object.keys(value);
+  if (keys.some((key) => !['state', 'portalUrl', 'unitState', 'enrollment'].includes(key))) throw new SentinelStatusError();
+  if ((state === 'missing' || state === 'unavailable') && portalUrl === null && unitState === null && !keys.includes('enrollment')) {
+    return { state, portalUrl, unitState };
+  }
+  if (
+    state === 'configured' &&
+    (unitState === 'active' || unitState === 'inactive' || unitState === 'unknown') &&
+    typeof portalUrl === 'string' &&
+    portalUrl.length <= 531 &&
+    /^https:\/\/(?:[a-z0-9.-]+|\[[a-f0-9:.]+\])(?::[0-9]{1,5})?\/sentinel\/recovery\/(?![\s\S])/i.test(portalUrl)
+  ) {
+    const url = URL.canParse(portalUrl) ? new URL(portalUrl) : null;
+    if (url && url.port !== '0' && url.pathname === '/sentinel/recovery/') {
+      const stage = enrollmentStages.find((candidate) => candidate === enrollment);
+      if (keys.includes('enrollment') && (!stage || unitState !== 'active')) throw new SentinelStatusError();
+      return stage ? { state, portalUrl, unitState, enrollment: stage } : { state, portalUrl, unitState };
+    }
+  }
+  throw new SentinelStatusError();
+}
+
+export function recoveryAccessNeedsSignIn(error: unknown) {
+  return error instanceof SentinelStatusError && (error.status === 401 || error.status === 403);
+}
+
+export const sentinelRecoveryAccessOptions = (active: boolean) =>
+  queryOptions({
+    queryKey: ['orbis-sentinel-recovery-access'],
+    queryFn: ({ signal }) => readSentinelRecoveryAccess(signal),
+    enabled: (query) => active && !recoveryAccessNeedsSignIn(query.state.error),
+    refetchInterval: (query) =>
+      active &&
+      !recoveryAccessNeedsSignIn(query.state.error) &&
+      !(query.state.error instanceof SentinelStatusError && query.state.error.status === 404)
+        ? 15_000
+        : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
 
 export const sentinelStatusOptions = (active: boolean) =>
   queryOptions({

@@ -47,7 +47,7 @@ vi.mock('pg', async (original) => ({
   },
 }));
 type Row = Record<string, unknown>;
-type Table = BackupDatabaseTable | 'orbis_reset_receipt' | '__drizzle_migrations';
+type Table = Exclude<BackupDatabaseTable, 'app_migration'> | 'orbis_reset_receipt' | '__drizzle_migrations';
 type Rows = Record<Table, Row[]>;
 const clone = <T>(value: T): T => structuredClone(value);
 function present<T>(value: T | undefined): T {
@@ -138,7 +138,9 @@ function catalog() {
   const columns: Row[] = [];
   for (const [name, table] of Object.entries({ user, app_store: appStore, app, link })) {
     tables.push({ schema: 'public', name, kind: 'r', persistence: 'p', rls: false, force_rls: false });
-    for (const [position, column] of getTableConfig(table).columns.entries()) {
+    for (const [position, column] of getTableConfig(table)
+      .columns.filter((column) => column.name !== 'migrations_baselined')
+      .entries()) {
       const sql = column.getSQLType();
       const type = sql.startsWith('varchar') ? 'varchar' : sql === 'integer' || sql === 'serial' ? 'int4' : sql === 'boolean' ? 'bool' : sql;
       columns.push({

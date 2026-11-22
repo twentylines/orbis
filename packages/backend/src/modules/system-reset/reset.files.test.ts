@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Request } from 'express';
 import { app, appStore, link, orbisResetReceipt, user } from '@/core/database/drizzle/schema';
@@ -12,11 +12,15 @@ import {
   backupMaintenanceActive,
   resetOperationActive,
   setResetOperationActive,
+  backupMaintenanceLeaseHeld,
+  resetRecoveryHeld,
 } from '@/common/backup-maintenance';
 import { ResetState, type ResetJournal } from './reset-state';
 import { ResetService, resetBinding } from './reset.service';
 import { archiveBackedResetJournal } from './reset-contract';
 import { DEFAULT_DESKTOP_PREFERENCES, DesktopPreferencesService } from '../desktop-preferences/desktop-preferences.service';
+import { OwnershipWriteLease } from '../sentinel-recovery/ownership-authority';
+import type { HostCredentialRecoveryBroker } from '../sentinel-recovery/host-broker';
 
 const status = vi.hoisted(() => vi.fn());
 vi.mock('@/common/restoration-status', () => ({ readOperationStatus: status, notifyClientStatusChanged: vi.fn(), notifyResetStarted: vi.fn() }));
@@ -38,6 +42,12 @@ let bundles: {
 let captures: typeof bundles & { preferences: ReturnType<typeof vi.fn>; updatePreferences: ReturnType<typeof vi.fn> };
 let service: ResetService;
 let passkeys: { verifySensitive: ReturnType<typeof vi.fn>; sensitiveOptions: ReturnType<typeof vi.fn> };
+let ownership: { beginOwnership: ReturnType<typeof vi.fn> };
+let ownershipBroker: {
+  ownershipPrepare: ReturnType<typeof vi.fn<HostCredentialRecoveryBroker['ownershipPrepare']>>;
+  ownershipCheck: ReturnType<typeof vi.fn<HostCredentialRecoveryBroker['ownershipCheck']>>;
+  ownershipComplete: ReturnType<typeof vi.fn<HostCredentialRecoveryBroker['ownershipComplete']>>;
+};
 const request = {} as Request;
 const body = (accounts = 'keep') => ({ accounts, confirmation: 'RESET ORBIS', method: 'password', password: 'fixture-only-password' });
 const journal = (): ResetJournal => ({
@@ -125,6 +135,24 @@ beforeEach(async () => {
   };
   const sync = { transaction: vi.fn(async (_id, change) => change({ revision: 1, receiving: { revision: 1 }, plans: [], receipts: {} })) };
   const config = { get: () => ({ dataDir: root }), setUserSettings: vi.fn().mockResolvedValue(undefined) };
+  ownershipBroker = {
+    ownershipPrepare: vi.fn(async ({ requestId, purpose }) => ({
+      requestId,
+      purpose,
+      operationId: 'b'.repeat(64),
+      admissionBinding: 'a'.repeat(64),
+      state: 'pending' as const,
+    })),
+    ownershipCheck: vi.fn(async (grant) => grant),
+    ownershipComplete: vi.fn(async (grant) => ({ ...grant, state: 'completed' as const })),
+  };
+  ownership = {
+    beginOwnership: vi.fn(async (purpose, request) =>
+      request.replay
+        ? OwnershipWriteLease.resume(ownershipBroker, purpose, request.requestId)
+        : OwnershipWriteLease.prepare(ownershipBroker, purpose, request.requestId),
+    ),
+  };
   service = new ResetService(
     config as never,
     db as never,
@@ -138,6 +166,8 @@ beforeEach(async () => {
     captures as never,
     backups as never,
     bundles as never,
+    undefined,
+    ownership as never,
   );
 });
 afterEach(async () => {
@@ -198,6 +228,7 @@ it('keeps account security, installed app data, app configs and host trust while
     appearance: { dockPins: [] },
   });
   expect(backups.updateSettings).not.toHaveBeenCalled();
+  expect(ownership.beginOwnership).not.toHaveBeenCalled();
   await expect(fs.stat(path.join(root, '.orbis-onboarding-origin.json'))).rejects.toMatchObject({ code: 'ENOENT' });
   expect(backupMaintenanceActive()).toBe(false);
 });
@@ -244,7 +275,9 @@ it('keeps preferences and accounts when capture retention cannot be reserved', a
   expect(await new ResetState(root).read()).toBeNull();
   expect(mutations).toEqual([]);
   expect(records).toHaveLength(1);
-  expect(backupMaintenanceActive()).toBe(false);
+  expect(backupMaintenanceLeaseHeld()).toBe(false);
+  expect(resetRecoveryHeld()).toBe(true);
+  expect(ownershipBroker.ownershipComplete).not.toHaveBeenCalled();
 });
 it('keeps every preference and account when saved-backup custody cannot be reserved', async () => {
   const preference = await file('state/desktop/7.json', 'preserve this preference');
@@ -255,7 +288,108 @@ it('keeps every preference and account when saved-backup custody cannot be reser
   expect(mutations).toEqual([]);
   expect(records).toHaveLength(1);
   expect(sessions.destroyAllSessionsByUserId).not.toHaveBeenCalled();
-  expect(backupMaintenanceActive()).toBe(false);
+  expect(backupMaintenanceLeaseHeld()).toBe(false);
+  expect(resetRecoveryHeld()).toBe(true);
+  expect(ownershipBroker.ownershipComplete).not.toHaveBeenCalled();
+});
+
+it('holds Root authority before reconciliation, throughout delayed start and until receipt-backed ownership completion', async () => {
+  bundles.reconcileResetOwnership.mockImplementation(async () => {
+    expect(backupMaintenanceLeaseHeld()).toBe(false);
+    expect(ownershipBroker.ownershipCheck).toHaveBeenCalledTimes(1);
+  });
+  const accepted = await service.accept(request, body('remove'));
+  expect(ownership.beginOwnership).toHaveBeenCalledExactlyOnceWith('account-removal', {
+    requestId: createHash('sha256').update(`orbis-main-account-removal-v1:${accepted.job.id}`).digest('hex'),
+    replay: false,
+  });
+  expect(ownershipBroker.ownershipCheck).toHaveBeenCalledTimes(2);
+  expect(ownershipBroker.ownershipComplete).not.toHaveBeenCalled();
+  expect(automatic.resetOrbisPreferences).not.toHaveBeenCalled();
+  accepted.start();
+  await complete();
+  expect(ownershipBroker.ownershipCheck).toHaveBeenCalledTimes(3);
+  const preferenceCall = automatic.resetOrbisPreferences.mock.invocationCallOrder[0];
+  const captureCall = captures.completeResetOwnership.mock.invocationCallOrder[0];
+  if (preferenceCall === undefined || captureCall === undefined) throw new Error('Expected reset preference and capture custody calls');
+  expect(ownershipBroker.ownershipCheck.mock.invocationCallOrder[2]).toBeLessThan(preferenceCall);
+  expect(ownershipBroker.ownershipComplete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ purpose: 'account-removal' }), 'committed');
+  expect(ownershipBroker.ownershipComplete.mock.invocationCallOrder[0]).toBeGreaterThan(captureCall);
+});
+
+it('Root refusal precedes reconciliation, reservation, journal creation and all reset writes', async () => {
+  ownership.beginOwnership.mockRejectedValue(new Error('Root ownership unavailable'));
+  await expect(service.accept(request, body('remove'))).rejects.toThrow('Root ownership unavailable');
+  expect(bundles.reconcileResetOwnership).not.toHaveBeenCalled();
+  expect(captures.reconcileResetOwnership).not.toHaveBeenCalled();
+  expect(bundles.prepareResetOwnership).not.toHaveBeenCalled();
+  expect(automatic.resetOrbisPreferences).not.toHaveBeenCalled();
+  expect(await new ResetState(root).read()).toBeNull();
+  expect(mutations).toEqual([]);
+});
+
+it('missing ownership issuer cannot silently bypass an account-removal guard', async () => {
+  Object.defineProperty(service, 'ownership', { value: undefined });
+  await expect(service.accept(request, body('remove'))).rejects.toMatchObject({ status: 503 });
+  expect(bundles.reconcileResetOwnership).not.toHaveBeenCalled();
+  expect(captures.reconcileResetOwnership).not.toHaveBeenCalled();
+  expect(mutations).toEqual([]);
+});
+
+it('a failed initial Root check permits only unwritten retirement before any reconciliation', async () => {
+  ownershipBroker.ownershipCheck.mockRejectedValue(new Error('Root authority changed'));
+  await expect(service.accept(request, body('remove'))).rejects.toThrow();
+  expect(bundles.reconcileResetOwnership).not.toHaveBeenCalled();
+  expect(captures.reconcileResetOwnership).not.toHaveBeenCalled();
+  expect(ownershipBroker.ownershipComplete).toHaveBeenCalledExactlyOnceWith(expect.anything(), 'not-written');
+  expect(await new ResetState(root).read()).toBeNull();
+});
+
+it('the worker rechecks Root inside its writer gate before changing any preference or account', async () => {
+  ownershipBroker.ownershipCheck
+    .mockImplementationOnce(async (grant) => grant)
+    .mockImplementationOnce(async (grant) => grant)
+    .mockRejectedValueOnce(new Error('Root authority changed before worker'));
+  const accepted = await service.accept(request, body('remove'));
+  accepted.start();
+  await vi.waitFor(() => expect(resetOperationActive()).toBe(false));
+  expect((await new ResetState(root).read())?.phase).toBe('recovery');
+  expect(automatic.resetOrbisPreferences).not.toHaveBeenCalled();
+  expect(sessions.destroyAllSessionsByUserId).not.toHaveBeenCalled();
+  expect(keys.change).not.toHaveBeenCalled();
+  expect(mutations).toEqual([]);
+  expect(ownershipBroker.ownershipComplete).not.toHaveBeenCalled();
+  expect(resetRecoveryHeld()).toBe(true);
+});
+
+it('lost Root completion retains committed SQL effects and recovery evidence without rolling accounts back', async () => {
+  ownershipBroker.ownershipComplete.mockRejectedValue(new Error('Root completion reply lost'));
+  const accepted = await service.accept(request, body('remove'));
+  accepted.start();
+  await vi.waitFor(() => expect(resetOperationActive()).toBe(false));
+  expect(records).toEqual([]);
+  expect(receipts[0]?.id).toBe(accepted.job.id);
+  expect((await new ResetState(root).read())?.phase).toBe('recovery');
+  expect(resetRecoveryHeld()).toBe(true);
+  expect(ownershipBroker.ownershipComplete).toHaveBeenCalledExactlyOnceWith(expect.anything(), 'committed');
+});
+
+it('a retry preserves its original Root request and never retires earlier possible writes as not-written', async () => {
+  ownershipBroker.ownershipCheck
+    .mockImplementationOnce(async (grant) => grant)
+    .mockImplementationOnce(async (grant) => grant)
+    .mockRejectedValueOnce(new Error('Root unavailable before worker'));
+  const accepted = await service.accept(request, body('remove'));
+  accepted.start();
+  await vi.waitFor(() => expect(resetOperationActive()).toBe(false));
+  status.mockResolvedValue({ state: 'resetting' });
+  ownershipBroker.ownershipCheck.mockRejectedValue(new Error('Root still unavailable'));
+  await expect(service.accept(request, body('remove'), true)).rejects.toThrow();
+  const expected = createHash('sha256').update(`orbis-main-account-removal-v1:${accepted.job.id}`).digest('hex');
+  expect(ownership.beginOwnership).toHaveBeenLastCalledWith('account-removal', { requestId: expected, replay: true });
+  expect(ownershipBroker.ownershipComplete).not.toHaveBeenCalled();
+  expect(records).toHaveLength(1);
+  expect(resetRecoveryHeld()).toBe(true);
 });
 it('keeps reset active until backup custody and the held drain have both finished', async () => {
   let finish!: () => void;
@@ -268,11 +402,15 @@ it('keeps reset active until backup custody and the held drain have both finishe
   const accepted = await service.accept(request, body('remove'));
   expect(resetOperationActive()).toBe(true);
   accepted.start();
-  await vi.waitFor(async () => expect((await new ResetState(root).read())?.phase).toBe('complete'));
-  expect(resetOperationActive()).toBe(true);
-  expect(backupMaintenanceActive()).toBe(true);
-  finish();
-  await complete();
+  await vi.waitFor(() => expect(bundles.completeResetOwnership).toHaveBeenCalledOnce());
+  try {
+    expect((await new ResetState(root).read())?.phase).toBe('complete');
+    expect(resetOperationActive()).toBe(true);
+    expect(backupMaintenanceActive()).toBe(true);
+  } finally {
+    finish();
+    await complete();
+  }
   expect(resetOperationActive()).toBe(false);
 });
 it('recovers backup custody from a proven reset commit without deleting accounts a second time', async () => {
@@ -441,6 +579,22 @@ it('finishes only a proven database commit after a journal-write interruption', 
   expect((await new ResetState(root).read())?.phase).toBe('complete');
   expect(mutations).toEqual([]);
   expect(automatic.resetOrbisPreferences).not.toHaveBeenCalled();
+});
+
+it('SQL-receipt startup finalization neither replays account removal nor retires Root authority', async () => {
+  status.mockResolvedValue({ state: 'resetting' });
+  const pending = { ...journal(), accounts: 'remove' as const };
+  records = [];
+  receipts.push({ id: pending.id, completedAt: 1 });
+  await new ResetState(root).save(pending);
+  await service.resumePending();
+  expect((await new ResetState(root).read())?.phase).toBe('complete');
+  expect(ownership.beginOwnership).not.toHaveBeenCalled();
+  expect(ownershipBroker.ownershipCheck).not.toHaveBeenCalled();
+  expect(ownershipBroker.ownershipComplete).not.toHaveBeenCalled();
+  expect(automatic.resetOrbisPreferences).not.toHaveBeenCalled();
+  expect(keys.change).not.toHaveBeenCalled();
+  expect(mutations).toEqual([]);
 });
 it('binds passkey authorization to the exact keep/remove choice', () => {
   expect(resetBinding('keep')).not.toBe(resetBinding('remove'));

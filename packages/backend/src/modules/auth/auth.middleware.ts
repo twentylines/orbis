@@ -78,20 +78,23 @@ export class AuthMiddleware implements NestMiddleware {
     }
 
     if (bearerToken) {
-      const token = bearerToken.split(' ')[1];
+      const token = /^Bearer ([A-Za-z0-9_.-]+)$/i.exec(bearerToken)?.[1];
 
       if (!token) {
         return next();
       }
 
-      const jwtSecret = this.config.get('jwtSecret');
+      const cliSecret = this.config.get('cliSecret');
+      if (!cliSecret) return next();
 
       try {
-        const { sub } = jsonwebtoken.verify(token, jwtSecret) as { sub: string };
-        if (sub === 'cli') {
+        const payload = jsonwebtoken.verify(token, cliSecret, { algorithms: ['HS256'] });
+        if (typeof payload === 'object' && payload.sub === 'cli') {
           const user = await this.userRepository.getFirstOperator();
-          req.user = user;
-          req.authMethod = 'cli';
+          if (user?.operator) {
+            req.user = user;
+            req.authMethod = 'cli';
+          }
         }
 
         return next();

@@ -1,6 +1,7 @@
 import { spawnAsync } from '@/common/helpers/exec-helpers';
 import { LoggerService } from '@/core/logger/logger.service';
 import { Injectable } from '@nestjs/common';
+import { availableParallelism } from 'node:os';
 import { readTarMetadata } from './tar-metadata';
 
 export type { ArchiveEntry } from './tar-metadata';
@@ -8,12 +9,21 @@ import type { ArchiveEntry } from './tar-metadata';
 
 @Injectable()
 export class ArchiveService {
+  private pigzAvailable?: Promise<boolean>;
+
   constructor(private readonly logger: LoggerService) {}
 
-  createTarGz = async (sourceDir: string, destinationFile: string) => {
-    const args = ['--format=pax', '-czpf', destinationFile, '-C', sourceDir, '.'];
+  createTarGz = async (sourceDir: string, destinationFile: string, signal?: AbortSignal) => {
+    signal?.throwIfAborted();
+    this.pigzAvailable ??= spawnAsync('pigz', ['--version'])
+      .then((result) => !result.stderr.trim() && /\bpigz\b/i.test(result.stdout))
+      .catch(() => false);
+    const parallel = await this.pigzAvailable;
+    signal?.throwIfAborted();
+    const compression = parallel ? ['--use-compress-program', `pigz -p ${Math.min(4, availableParallelism())}`] : ['-z'];
+    const args = ['--format=pax', ...compression, '-cpf', destinationFile, '-C', sourceDir, '.'];
     this.logger.debug(`Creating archive with args: tar ${args.join(' ')}`);
-    return spawnAsync('tar', args);
+    return spawnAsync('tar', args, signal ? { signal } : undefined);
   };
 
   extractTarGz = async (sourceFile: string, destinationDir: string) => {

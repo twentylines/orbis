@@ -9,6 +9,8 @@ import type { ConfigurationService } from '@/core/config/configuration.service';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { BackupRuntimeService } from './backup-runtime.service';
 import { BackupDockerVolumes, type BackupVolumeInventory } from './backup-docker-volumes';
+import { installRequestDirectory } from '../app-lifecycle/install-request-receipt';
+import { createAppUrn } from '@/common/helpers/app-helpers';
 
 let directory: string;
 const config = {
@@ -55,6 +57,34 @@ it('streams fragmented Docker frames into an exact PostgreSQL archive with backp
   expect((await fs.stat(file)).mode & 0o777).toBe(0o600);
   expect(JSON.stringify(exec.mock.calls[0]?.[0].Cmd)).not.toContain('disposable fixture password');
   expect(exec.mock.calls[0]?.[0].Tty).toBe(false);
+});
+
+it('keeps an old resume receipt from starting a held app whose Compose project has an ambiguous underscore', async () => {
+  const receipt = installRequestDirectory(directory, createAppUrn('fixture', 'with_store'));
+  await fs.mkdir(receipt, { recursive: true, mode: 0o700 });
+  await fs.mkdir(path.join(receipt, 'spent-fixture'), { mode: 0o700 });
+  const records = [
+    { id: 'held', project: 'fixture_with_store', running: true },
+    { id: 'healthy', project: 'healthy_store', running: true },
+  ];
+  const makeHandle = (project: string) => {
+    let running = false;
+    return {
+      inspect: vi.fn(async () => ({ Config: { Labels: { 'com.docker.compose.project': project } }, State: { Running: running } })),
+      start: vi.fn(async () => {
+        running = true;
+      }),
+    };
+  };
+  const held = makeHandle('fixture_with_store');
+  const healthy = makeHandle('healthy_store');
+  const docker = { getContainer: (id: string) => (id === 'held' ? held : healthy) } as unknown as Dockerode;
+  const runtime = new BackupRuntimeService({ get: () => ({ dataDir: directory }) } as unknown as ConfigurationService, docker);
+  await expect(runtime.resume(records)).rejects.toThrow('could not be restarted');
+  expect(held.inspect).toHaveBeenCalledOnce();
+  expect(held.start).not.toHaveBeenCalled();
+  expect(healthy.start).toHaveBeenCalledOnce();
+  await expect(fs.readdir(receipt)).resolves.toEqual(['spent-fixture']);
 });
 
 it.each(['stderr', 'exit', 'truncated', 'wrong-format'] as const)('refuses an incomplete database result: %s', async (failure) => {

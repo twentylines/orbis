@@ -41,6 +41,7 @@ import { TasksService } from '../tasks/tasks.service';
 import { HostUpdatesService } from '../host-updates/host-updates.service';
 import { BackupRuntimeService, type BackupRuntimePlan } from './backup-runtime.service';
 import { BackupRequirementError, copyBackupFiles, inventoryBackup, packageBackup, privateBackupDirectory } from './backup-files';
+import { requireBackupInstallHoldsClear } from './backup-install-admission';
 import { BackupArchiveError } from './backup-crypto';
 import { fullBackupLimits } from './backup-limits';
 import { restoreStartupRole } from './backup-restore-startup';
@@ -516,6 +517,12 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       const plan = volumeCapture
         ? await this.runtime.plan(projects, includeMedia, 'capture-local-volumes.v1')
         : await this.runtime.plan(projects, includeMedia);
+      const resume = plan.containers.filter((container) => container.running);
+      await requireBackupInstallHoldsClear(
+        this.config.get('directories').dataDir,
+        resume.map((container) => container.project),
+        'live',
+      );
       if ((volumeCapture && (!snapshot || !plan.volumePlan)) || (plan.volumePlan && !volumeCapture))
         throw new BackupRequirementError('Protected app volume capture is not prepared.');
       // Until volumes have an explicit media classification, only an opted-in
@@ -555,7 +562,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       if (storage.bavail * storage.bsize < 3 * (estimate.totalBytes + databaseBytes) + 256 * 1024 * 1024)
         throw new BackupRequirementError('There is not enough free storage for the full backup and its encrypted output.');
       stage('quiescing', 'Stopping running apps while their data is copied.');
-      job.resumePending = plan.containers.filter((container) => container.running);
+      job.resumePending = resume;
       await this.save(job);
       for (const container of job.resumePending) {
         signal.throwIfAborted();

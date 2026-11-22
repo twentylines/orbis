@@ -7,10 +7,11 @@ import { Test } from '@nestjs/testing';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import request from 'supertest';
-import { beforeEach, afterEach, describe, expect, it } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { CacheService } from '@/core/cache/cache.service';
+import { EncryptionService } from '@/core/encryption/encryption.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { UserRepository } from '@/modules/user/user.repository';
 import { AuthController } from '../auth.controller';
@@ -20,6 +21,10 @@ import { PasskeyService } from '../passkey.service';
 import { PasskeyStore } from '../passkey.store';
 import { SessionManager } from '../session.manager';
 import { passkeyAuthenticator } from './passkey.fixture';
+import { credentialChangeFixture } from './credential-change.fixture';
+import { CredentialSynchronization } from '../../sentinel-recovery/credential-synchronization.service';
+import { MainPasskeySynchronization } from '../../sentinel-recovery/main-passkey-synchronization.service';
+import { HostCredentialRecoveryBroker } from '../../sentinel-recovery/host-broker';
 
 describe('passkey HTTP boundaries and cookies', () => {
   let app: INestApplication;
@@ -65,6 +70,17 @@ describe('passkey HTTP boundaries and cookies', () => {
     sessions.createSession.mockReset().mockResolvedValue('550e8400-e29b-41d4-a716-446655440012');
     auth.beginVerifiedLogin.mockReset().mockResolvedValue({ totpSessionId: '550e8400-e29b-41d4-a716-446655440013' });
     users.getUserById.mockReset().mockResolvedValue(operator);
+    users.withCredentialTransaction.mockImplementation(async (work) => work(users));
+    vi.stubEnv('ORBIS_HOST_SOCKET', '/synthetic-passkey-http.sock');
+    // HTTP cookie/origin policy fixture; actual Host/Root/SQL ordering is
+    // verified separately through real UDS and native integration suites.
+    vi.spyOn(HostCredentialRecoveryBroker.prototype, 'admission').mockResolvedValue({ mode: 'unmanaged', binding: 'a'.repeat(64) });
+    vi.spyOn(HostCredentialRecoveryBroker.prototype, 'counterChallenge').mockImplementation(async (options) => ({
+      mode: 'unmanaged',
+      admissionBinding: options.admissionBinding,
+      purpose: options.purpose,
+      ceremonyBinding: options.ceremonyBinding,
+    }));
     sessions.destroyAllSessionsByUserId.mockReset().mockResolvedValue(undefined);
     sessions.isSessionForUser.mockReturnValue(true);
     const mod = await Test.createTestingModule({
@@ -73,6 +89,16 @@ describe('passkey HTTP boundaries and cookies', () => {
       providers: [
         PasskeyService,
         PasskeyStore,
+        {
+          provide: CredentialSynchronization,
+          useFactory: (store: PasskeyStore) => credentialChangeFixture(users, store).sync,
+          inject: [PasskeyStore],
+        },
+        {
+          provide: MainPasskeySynchronization,
+          useFactory: (store: PasskeyStore) => new MainPasskeySynchronization(users, store, config, mock<EncryptionService>()),
+          inject: [PasskeyStore],
+        },
         AuthGuard,
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: AuthService, useValue: auth },
@@ -100,6 +126,8 @@ describe('passkey HTTP boundaries and cookies', () => {
   });
   afterEach(async () => {
     await app.close();
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     await fs.rm(directory, { recursive: true, force: true });
   });
 
@@ -213,6 +241,15 @@ describe('passkey HTTP boundaries and cookies', () => {
     expect(sessions.destroyAllSessionsByUserId).not.toHaveBeenCalled();
     const listed = await request(app.getHttpServer()).get('/api/auth/passkeys').set('Host', 'orbis.example.test').set('Cookie', session);
     expect(listed.body.policy).toEqual({ requireTotpAfterPasskey: true, totpEnabled: true });
+  });
+  it('returns a redacted unavailable response without issuing a ceremony cookie when host admission fails', async () => {
+    vi.mocked(HostCredentialRecoveryBroker.prototype.admission).mockRejectedValue(new Error('synthetic-private-host-error'));
+    const reply = await post('/login/options').send({});
+    expect(reply.status).toBe(503);
+    expect(reply.headers['set-cookie']).toBeUndefined();
+    expect(JSON.stringify(reply.body)).not.toContain('synthetic-private-host-error');
+    expect(sessions.createSession).not.toHaveBeenCalled();
+    expect(auth.beginVerifiedLogin).not.toHaveBeenCalled();
   });
   it('rejects forged origin/proxy options and throttles anonymous ceremony issuance before creating more challenges', async () => {
     expect((await post('/login/options').set('Origin', 'https://evil.test').set('X-Forwarded-Host', 'orbis.example.test').send({})).status).toBe(403);

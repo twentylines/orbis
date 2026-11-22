@@ -78,8 +78,8 @@ class ReservedCaptureTests(unittest.TestCase):
     def use_real_idle_guard(self):
         cls = S.W.SERVICE.HostService
         for name in ('require_idle_core', 'require_restart_clear', 'require_capture_fence_clear',
-                     'require_package_clear', 'require_core_overlay_clear', 'refresh_retryable',
-                     'smart_tools_retryable', 'package_worker_inactive'):
+                     '_require_restart_job_clear', '_require_idle_core_jobs',
+                     'require_package_clear', 'require_core_overlay_clear', 'refresh_retryable', 'smart_tools_retryable'):
             setattr(self.service, name, MethodType(getattr(cls, name), self.service))
         for name in ('restart_job_file', 'package_job_file', 'maintenance_file', 'job_file'):
             setattr(self.service, name, self.fixture.state / ('guard-test-' + name))

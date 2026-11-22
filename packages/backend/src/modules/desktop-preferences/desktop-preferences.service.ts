@@ -10,7 +10,7 @@ import { defaultAppLaunch, defaultDesktopAppearance, normaliseDesktopAppearance 
 import { ResetState } from '../system-reset/reset-state';
 import { patchSelectedPreferences, selectedPreferences, UnsupportedDesktopPreferencesError } from './desktop-preferences-sync';
 import { notifyClientStatusChanged } from '@/common/restoration-status';
-import { record, unsplashLibrarySchema } from './desktop-unsplash-state';
+import { emptyUnsplashLibrary, record, type UnsplashAccount, unsplashLibrarySchema } from './desktop-unsplash-state';
 
 export type DesktopPreferences = typeof desktopPreferencesSchema.infer;
 export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences & { workspace: NonNullable<DesktopPreferences['workspace']> } = {
@@ -168,6 +168,52 @@ export class DesktopPreferencesService {
     return this.clientPreferences(await this.readStored(userId));
   }
 
+  private unsplashAccount(stored: Record<string, unknown>): UnsplashAccount {
+    const library = stored.unsplashLibrary === undefined ? emptyUnsplashLibrary : unsplashLibrarySchema(stored.unsplashLibrary);
+    if (library instanceof type.errors) throw new ConflictException('Saved Unsplash wallpapers need a review.');
+    const selectedId = record(stored.appearance)?.wallpaperUnsplash;
+    return { library, selectedId: typeof selectedId === 'string' && library.photos.some(({ id }) => id === selectedId) ? selectedId : null };
+  }
+
+  private async readUnsplashStored(userId: number) {
+    const stored = record(JSON.parse(await this.readSelectedRaw(userId)));
+    if (!stored || (stored.appearance !== undefined && !record(stored.appearance))) {
+      throw new ConflictException('Saved wallpaper preferences need a review.');
+    }
+    return stored;
+  }
+
+  async unsplashSnapshot(userId: number) {
+    return this.serialize(userId, async () => {
+      const reset = await new ResetState(this.config.get('directories').dataDir).active();
+      if (reset && reset.phase !== 'complete') throw new ConflictException('Wait for Orbis to finish resetting before loading preferences.');
+      return { account: this.unsplashAccount(await this.readUnsplashStored(userId)), generation: reset?.id ?? null };
+    });
+  }
+
+  async updateUnsplashWallpaper(
+    userId: number,
+    generation: string | null,
+    update: (account: UnsplashAccount) => Promise<UnsplashAccount> | UnsplashAccount,
+  ) {
+    return this.serialize(userId, async () => {
+      await this.assertClientGeneration(generation);
+      const stored = await this.readUnsplashStored(userId);
+      const current = this.unsplashAccount(stored);
+      const next = await update(current);
+      if (next !== current) {
+        await this.assertClientGeneration(generation);
+        await this.writeState(this.fileFor(userId), {
+          ...stored,
+          appearance: { ...record(stored.appearance), wallpaperUnsplash: next.selectedId },
+          unsplashLibrary: next.library,
+        });
+        this.changes.next(userId);
+      }
+      return next;
+    });
+  }
+
   async clientSnapshot(userId: number) {
     return this.serialize(userId, async () => {
       const reset = await new ResetState(this.config.get('directories').dataDir).active();
@@ -259,7 +305,7 @@ export class DesktopPreferencesService {
     const previousSelection = previous.appearance?.wallpaperUnsplash ?? null;
     const requestedSelection = preferences.appearance?.wallpaperUnsplash;
     if (requestedSelection && requestedSelection !== previousSelection) {
-      throw new BadRequestException('Online wallpaper selection is no longer available.');
+      throw new BadRequestException('Choose an Unsplash wallpaper using the wallpaper picker.');
     }
     if (
       clientWrite &&

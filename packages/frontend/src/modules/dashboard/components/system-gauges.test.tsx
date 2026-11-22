@@ -3,11 +3,29 @@ import type { ComponentProps } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
 import { SystemGauges } from './system-gauges';
+import { createInstance } from 'i18next';
+import { I18nextProvider, initReactI18next } from 'react-i18next';
+import english from '../../../../../backend/src/modules/i18n/translations/en.json';
+import german from '../../../../../backend/src/modules/i18n/translations/de-DE.json';
 
-const render = (clockGHz?: number | null, gpus?: ComponentProps<typeof SystemGauges>['gpus']) =>
+const render = (
+  clockGHz?: number | null,
+  gpus?: ComponentProps<typeof SystemGauges>['gpus'],
+  memoryScope?: ComponentProps<typeof SystemGauges>['memoryScope'],
+) =>
   renderToStaticMarkup(
     <MemoryRouter>
-      <SystemGauges cpu={10} clockGHz={clockGHz} gpus={gpus} memoryUsed={50} memoryTotal={100} diskUsed={10} diskTotal={100} diskLabel="Storage" />
+      <SystemGauges
+        cpu={10}
+        clockGHz={clockGHz}
+        gpus={gpus}
+        memoryUsed={50}
+        memoryTotal={100}
+        memoryScope={memoryScope}
+        diskUsed={10}
+        diskTotal={100}
+        diskLabel="Storage"
+      />
     </MemoryRouter>,
   );
 
@@ -49,4 +67,42 @@ test('multiple reporting GPUs have separate, correctly valued system dials', () 
 test('a simulated preview reading is identified in the accessible GPU label', () => {
   const html = render(undefined, [{ id: 'preview', label: 'Preview GPU (simulated)', utilizationPercent: 24, simulated: true }]);
   expect(html).toContain('GPU, 24.0 percent, simulated preview');
+});
+
+test('estimated container memory is identified visibly and in the accessible reading', () => {
+  const html = render(undefined, undefined, 'containers');
+  expect(html).toContain('Memory, 50.0 percent, estimated');
+  expect(html).toContain('<small>estimated</small>');
+  expect(html).toContain('<dt>Memory · estimated</dt>');
+  expect(html).toContain('Estimated Docker container memory');
+  expect(html.match(/class="system-gauge"/g)?.length).toBe(3);
+});
+
+test('LXC and Core capacity retain their source while host memory remains unqualified', () => {
+  expect(render(undefined, undefined, 'cgroup')).toContain('LXC memory, 50.0 percent');
+  expect(render(undefined, undefined, 'runtime')).toContain('Core memory, 50.0 percent');
+  const host = render(undefined, undefined, 'host-proc');
+  expect(host).toContain('Memory, 50.0 percent');
+  expect(host).not.toContain('<small>estimated</small>');
+});
+
+test('the estimate caption uses its supported translation and falls back without a raw key', async () => {
+  for (const [language, caption] of [
+    ['de-DE', 'geschätzt'],
+    ['ar-SA', 'estimated'],
+  ]) {
+    const instance = createInstance();
+    await instance
+      .use(initReactI18next)
+      .init({ lng: language, fallbackLng: 'en', resources: { en: { translation: english }, 'de-DE': { translation: german } } });
+    const html = renderToStaticMarkup(
+      <I18nextProvider i18n={instance}>
+        <MemoryRouter>
+          <SystemGauges cpu={0} memoryUsed={50} memoryTotal={100} memoryScope="containers" diskUsed={0} diskTotal={100} diskLabel="Storage" />
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+    expect(html).toContain(`<small>${caption}</small>`);
+    expect(html).not.toContain('DASHBOARD_MEMORY_ESTIMATED');
+  }
 });

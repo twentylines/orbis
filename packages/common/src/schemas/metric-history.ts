@@ -13,6 +13,7 @@ export type MetricHistoryPoint = {
   intervalSeconds: number;
   samples: number;
   cpuScope: 'host-proc' | 'runtime' | 'mixed';
+  memoryScope?: 'host-proc' | 'cgroup' | 'containers' | 'runtime' | 'unavailable' | 'mixed';
   cpu: MetricSummary;
   memory: MetricSummary;
   download: MetricSummary;

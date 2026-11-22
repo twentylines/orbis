@@ -8,6 +8,7 @@ export type MetricBucket = {
   lastAt: number;
   samples: number;
   cpuScope: MetricHistoryPoint['cpuScope'];
+  memoryScope: NonNullable<MetricHistoryPoint['memoryScope']>;
   cpu: Accumulator;
   memory: Accumulator;
   download: Accumulator;
@@ -23,7 +24,7 @@ export function metricSample(sample: Awaited<ReturnType<SystemService['getTeleme
   if (!Number.isFinite(at)) return null;
   const total = safe(sample.memory.totalBytes);
   const available = safe(sample.memory.availableBytes);
-  const memory = total && available !== null ? percentage(((total - available) / total) * 100) : null;
+  const memory = sample.memory.scope !== 'unavailable' && total && available !== null ? percentage(((total - available) / total) * 100) : null;
   const network = sample.network.filter((item) => item.interface !== 'lo');
   const networkRate = (field: 'rxBytesPerSecond' | 'txBytesPerSecond') =>
     network.length && network.every((item) => safe(item[field]) !== null) ? network.reduce((sum, item) => sum + (item[field] ?? 0), 0) : null;
@@ -33,6 +34,7 @@ export function metricSample(sample: Awaited<ReturnType<SystemService['getTeleme
     lastAt: at,
     samples: 1,
     cpuScope: sample.cpu.scope === 'host-proc' ? 'host-proc' : 'runtime',
+    memoryScope: sample.memory.scope,
     cpu: accumulator(percentage(safe(sample.cpu.totalPercent))),
     memory: accumulator(memory),
     download: accumulator(networkRate('rxBytesPerSecond')),
@@ -42,16 +44,18 @@ export function metricSample(sample: Awaited<ReturnType<SystemService['getTeleme
 
 export function mergeBuckets(left: MetricBucket, right: MetricBucket): MetricBucket {
   const cpuScope = left.cpuScope === right.cpuScope ? left.cpuScope : 'mixed';
+  const memoryScope = left.memoryScope === right.memoryScope ? left.memoryScope : 'mixed';
   const merged = {
     bucketAt: left.bucketAt,
     firstAt: Math.min(left.firstAt, right.firstAt),
     lastAt: Math.max(left.lastAt, right.lastAt),
     samples: left.samples + right.samples,
     cpuScope,
+    memoryScope,
   } as MetricBucket;
   for (const field of metricFields) {
     merged[field] =
-      field === 'cpu' && cpuScope === 'mixed'
+      (field === 'cpu' && cpuScope === 'mixed') || (field === 'memory' && memoryScope === 'mixed')
         ? [0, 0, 0]
         : [left[field][0] + right[field][0], Math.max(left[field][1], right[field][1]), left[field][2] + right[field][2]];
   }
@@ -70,6 +74,7 @@ export function historyPoint(bucket: MetricBucket, intervalSeconds: number): Met
     intervalSeconds,
     samples: bucket.samples,
     cpuScope: bucket.cpuScope,
+    memoryScope: bucket.memoryScope,
     cpu: summary(bucket.cpu),
     memory: summary(bucket.memory),
     download: summary(bucket.download),
@@ -88,11 +93,18 @@ export function encodeBucket(bucket: MetricBucket): string {
     ...bucket.memory,
     ...bucket.download,
     ...bucket.upload,
+    memoryScopes.indexOf(bucket.memoryScope),
   ]);
 }
 
+const memoryScopes = ['host-proc', 'cgroup', 'containers', 'runtime', 'unavailable', 'mixed'] as const;
+
 export function decodeBucket(value: unknown, now: number): MetricBucket {
-  if (!Array.isArray(value) || value.length !== 17 || value.some((item) => typeof item !== 'number' || !Number.isFinite(item) || item < 0))
+  if (
+    !Array.isArray(value) ||
+    ![17, 18].includes(value.length) ||
+    value.some((item) => typeof item !== 'number' || !Number.isFinite(item) || item < 0)
+  )
     throw new Error('Invalid metric history record');
   const [bucketAt, firstAt, lastAt, samples, scope] = value as number[];
   if (
@@ -113,7 +125,9 @@ export function decodeBucket(value: unknown, now: number): MetricBucket {
     ![0, 1, 2].includes(scope)
   )
     throw new Error('Invalid metric history bounds');
-  const bucket = { bucketAt, firstAt, lastAt, samples, cpuScope: (['host-proc', 'runtime', 'mixed'] as const)[scope] } as MetricBucket;
+  const memoryScope = value.length === 17 ? 'host-proc' : memoryScopes[value[17]];
+  if (!memoryScope || !Number.isInteger(value[17] ?? 0)) throw new Error('Invalid metric memory scope');
+  const bucket = { bucketAt, firstAt, lastAt, samples, cpuScope: (['host-proc', 'runtime', 'mixed'] as const)[scope], memoryScope } as MetricBucket;
   for (const [index, field] of metricFields.entries()) {
     const [sum = 0, peak = 0, count = 0] = value.slice(5 + index * 3, 8 + index * 3) as number[];
     if (
@@ -123,7 +137,8 @@ export function decodeBucket(value: unknown, now: number): MetricBucket {
       peak > sum ||
       sum > peak * count + 0.00001 ||
       ((field === 'cpu' || field === 'memory') && peak > 100) ||
-      (field === 'cpu' && scope === 2 && count !== 0)
+      (field === 'cpu' && scope === 2 && count !== 0) ||
+      (field === 'memory' && (memoryScope === 'mixed' || memoryScope === 'unavailable') && count !== 0)
     )
       throw new Error('Invalid metric aggregate');
     bucket[field] = [sum, peak, count];

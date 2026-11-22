@@ -2,8 +2,15 @@ import { constants } from 'node:fs';
 import fs from 'node:fs/promises';
 import type { BigIntStats } from 'node:fs';
 import type { FileHandle } from 'node:fs/promises';
-import { verifyRecoveryCredentials } from './authentication';
-import { RecoveryIdentityError, recoveryBase64, describeRecoveryIdentity } from './identity';
+import { verifyRecoveryCredentials, verifyRecoveryPasskeyCounter } from './authentication';
+import {
+  RecoveryIdentityError,
+  recoveryBase64,
+  describeRecoveryIdentity,
+  describeRecoveryIdentityContent,
+  describeRecoveryEffectiveIdentityContent,
+  exactRecoveryObject,
+} from './identity';
 
 const profilePath = '/run/orbis-recovery/identity.json';
 const parents = ['/', '/run', '/run/orbis-recovery'];
@@ -18,22 +25,29 @@ export const recoveryAuthenticationCapability = Object.freeze({
   databaseRequired: false,
   mutations: 'none',
   grantsAuthority: false,
+  identityContentProof: 'orbis.sentinel-identity-content.v1',
+  effectiveIdentityContentProof: 'orbis.sentinel-effective-identity-content.v1',
+  passkeyCounterProof: 'orbis.sentinel-passkey-counter.v1',
 });
 
 export function recoveryAuthenticationArguments(args: readonly string[]) {
   if (args.length === 1 && args[0] === '--capability') return { mode: 'capability' as const };
   if (args.length === 2 && args[0] === '--describe-identity' && typeof args[1] === 'string' && /^[a-f0-9]{64}$/.test(args[1]))
     return { mode: 'describe-identity' as const, identitySha256: args[1] };
+  if (args.length === 2 && args[0] === '--describe-content' && typeof args[1] === 'string' && /^[a-f0-9]{64}$/.test(args[1]))
+    return { mode: 'describe-content' as const, identitySha256: args[1] };
+  if (args.length === 2 && args[0] === '--describe-effective-content' && typeof args[1] === 'string' && /^[a-f0-9]{64}$/.test(args[1]))
+    return { mode: 'describe-effective-content' as const, identitySha256: args[1] };
   if (
     args.length !== 3 ||
-    args[0] !== '--verify' ||
+    !['--verify', '--verify-counter'].includes(args[0] ?? '') ||
     typeof args[1] !== 'string' ||
     !/^[a-f0-9]{64}$/.test(args[1]) ||
     !recoveryBase64(args[2], 43) ||
     Buffer.from(args[2], 'base64url').length !== 32
   )
     throw new RecoveryIdentityError();
-  return { mode: 'verify' as const, identitySha256: args[1], challenge: args[2] };
+  return { mode: args[0] === '--verify-counter' ? ('verify-counter' as const) : ('verify' as const), identitySha256: args[1], challenge: args[2] };
 }
 
 const same = (left: BigIntStats, right: BigIntStats) =>
@@ -114,7 +128,19 @@ export async function runRecoveryAuthenticationWorker(args: readonly string[]) {
   if (process.platform !== 'linux' || process.getuid?.() !== 0) throw new RecoveryIdentityError();
   if (operation.mode === 'describe-identity')
     return withProtectedIdentity(async (identityBytes) => describeRecoveryIdentity(identityBytes, operation.identitySha256));
+  if (operation.mode === 'describe-content')
+    return withProtectedIdentity(async (identityBytes) => describeRecoveryIdentityContent(identityBytes, operation.identitySha256));
   const request: unknown = await readRequest();
+  if (operation.mode === 'describe-effective-content') {
+    if (!exactRecoveryObject(request, ['counters'])) throw new RecoveryIdentityError();
+    return withProtectedIdentity(async (identityBytes) =>
+      describeRecoveryEffectiveIdentityContent(identityBytes, operation.identitySha256, request.counters),
+    );
+  }
+  if (operation.mode === 'verify-counter')
+    return withProtectedIdentity((identityBytes) =>
+      verifyRecoveryPasskeyCounter({ identityBytes, expectedIdentitySha256: operation.identitySha256, challenge: operation.challenge, request }),
+    );
   return withProtectedIdentity((identityBytes) =>
     verifyRecoveryCredentials({
       identityBytes,

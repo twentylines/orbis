@@ -307,8 +307,15 @@ class Runtime:
         return {'controllerId': '1' * 64, 'imageId': 'sha256:' + 'a' * 64}
 
     def review_stage(self, request, origin, source):
-        return {'sourceBinding': {key: 'b' * 64 for key in ('originalJournalSha256', 'bootstrapSha256', 'admissionSha256',
+        return {'metadata': {'schema': 'orbis.time-machine-runtime.v6'},
+                'sourceBinding': {key: 'b' * 64 for key in ('originalJournalSha256', 'bootstrapSha256', 'admissionSha256',
                 'sourceSealSha256', 'legacyManifestSha256', 'runtimeManifestSha256')}}
+
+    def historical_apps(self, record, action, *, recovery=False):
+        self.event('apps:' + action)
+
+    def validate_forward_activation(self, record):
+        self.event('effect-contract')
 
     def allocate(self, record, origin):
         record.update(workerId='2' * 64, candidateId='3' * 64, verifierId='4' * 64, nonce='c' * 64,
@@ -914,6 +921,89 @@ class RetainedRestoreTests(unittest.TestCase):
         self.assertEqual(self.runtime.events.count('commit:authorize'), 1)
         self.assertTrue(self.manager.read(identifier)['commitAuthorized'])
 
+    def test_old_allocated_activation_refuses_before_preparation_and_retains_rollback(self):
+        self.begin()
+        identifier = self.request['restoreId']
+        record = self.manager.read(identifier)
+        record['stage']['metadata']['schema'] = 'orbis.time-machine-runtime.v4'
+        self.manager.save(record)
+        events = list(self.runtime.events)
+        with self.assertRaisesRegex(ValueError, 'historical app effect contract'):
+            self.manager.prepare(identifier, self.key, for_activation=True)
+        self.assertEqual(self.runtime.events, events)
+        self.assertEqual(self.manager.read(identifier)['phase'], 'allocated')
+        self.assertEqual(self.manager.recover(identifier, self.key)['state'], 'rolled-back')
+        self.assertNotIn('activation', self.runtime.events)
+
+    def test_host_activate_uses_protected_forward_preparation_for_allocated_record(self):
+        self.begin()
+        identifier = self.request['restoreId']
+        record = self.manager.read(identifier)
+        record['stage']['metadata']['schema'] = 'orbis.time-machine-runtime.v4'
+        self.manager.save(record)
+        service = SimpleNamespace(retained_restores=lambda: self.manager, lock=threading.Lock(), busy=False)
+        public, start = S.HostService.launch_retained_restore(service, 'activate', identifier, self.key)
+        self.assertEqual(public['state'], 'allocated')
+        with mock.patch.object(S.threading, 'Thread', side_effect=lambda target, daemon: SimpleNamespace(start=target)):
+            start()
+        self.assertFalse(service.busy)
+        self.assertTrue(self.manager.read(identifier)['recoveryRequired'])
+        self.assertNotIn('prepare', self.runtime.events)
+        self.assertNotIn('activation', self.runtime.events)
+
+    def test_protected_forward_reentry_checks_schema_and_capability_even_with_commit_acknowledgement(self):
+        identifier, original = self.staged_candidate_activation()
+        node = self.root / 'restore.json'
+        transport = D.DockerRestoreRuntime(self.manager)
+        transport.json = lambda path, limit: json.loads(path.read_bytes())
+        self.runtime.node_commit_authorized = transport.node_commit_authorized
+        self.runtime.node_complete = transport.node_complete
+        for node_phase in ('committing', 'completed'):
+            record = copy.deepcopy(original)
+            record['stage']['journalPath'] = str(node.parent)
+            node.write_text(json.dumps({'id': identifier, 'nonce': record['nonce'], 'decision': 'commit', 'phase': node_phase,
+                'originalController': record['source']['controllerId'], 'candidateController': record['candidateId'],
+                'verifierController': record['verifierId'], 'worker': record['workerId']}))
+            self.assertTrue(transport.node_commit_authorized(record))
+            self.assertEqual(transport.node_complete(record), node_phase == 'completed')
+            for schema in ('orbis.time-machine-runtime.v4', 'orbis.time-machine-runtime.v5', None):
+                record['stage']['metadata']['schema'] = schema
+                self.manager.save(record)
+                events = list(self.runtime.events)
+                for action in (self.manager.activate, self.manager.recover):
+                    with self.subTest(phase=node_phase, schema=schema, action=action.__name__), self.assertRaisesRegex(ValueError, 'historical app effect contract'):
+                        action(identifier, self.key)
+                self.assertEqual(self.runtime.events, events)
+                self.assertEqual(self.manager.read(identifier)['decision'], 'commit')
+                self.assertEqual(self.manager.read(identifier)['phase'], 'activating')
+            record['stage']['metadata']['schema'] = 'orbis.time-machine-runtime.v6'
+            self.manager.save(record)
+            self.runtime.fail_at = 'effect-contract'
+            events = len(self.runtime.events)
+            with self.assertRaisesRegex(RuntimeError, 'fixture interruption'):
+                self.manager.activate(identifier, self.key)
+            self.assertEqual(self.runtime.events[events:], ['effect-contract'])
+        self.runtime.fail_at = None
+        events = len(self.runtime.events)
+        self.assertEqual(self.manager.activate(identifier, self.key)['state'], 'complete')
+        self.assertIn('activation', self.runtime.events[events:])
+        self.assertNotIn('commit:finish', self.runtime.events[events:])
+
+    def test_completed_old_transaction_can_still_settle_without_forward_effects(self):
+        self.begin()
+        identifier = self.request['restoreId']
+        self.manager.prepare(identifier, self.key)
+        self.manager.activate(identifier, self.key)
+        record = self.manager.read(identifier)
+        record['stage']['metadata']['schema'] = 'orbis.time-machine-runtime.v4'
+        self.manager.save(record)
+        events = len(self.runtime.events)
+        self.assertEqual(self.manager.activate(identifier, self.key)['state'], 'complete')
+        self.settle()
+        self.assertEqual(self.manager.maintenance(), {'state': 'idle'})
+        self.assertNotIn('effect-contract', self.runtime.events[events:])
+        self.assertNotIn('activation', self.runtime.events[events:])
+
     def test_phase_tokens_are_single_use_and_orphaned_grants_cannot_complete(self):
         self.begin()
         identifier = self.request['restoreId']
@@ -996,6 +1086,131 @@ class RetainedRestoreTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 runtime.execute_phase({'workerId': '1' * 64}, 'prepare', {'version': 1})
         execute.assert_not_called()
+
+    def test_old_pinned_coordinator_refuses_restart_and_phase_before_execution(self):
+        runtime = D.DockerRestoreRuntime(self.manager)
+        identifier = '1' * 64
+        raw = {'Id': identifier, 'Image': 'sha256:' + 'a' * 64, 'Mounts': [], 'State': {'Running': False},
+               'HostConfig': {'ReadonlyRootfs': True, 'RestartPolicy': {'Name': 'no', 'MaximumRetryCount': 0}}}
+        record = {'id': self.request['restoreId'], 'workerId': identifier, 'source': {'imageId': raw['Image'], 'coordinatorCapabilitySha256': 'old'},
+                  'intents': {'coordinator': {'body': {}}}, 'definitions': {'coordinator': 'pinned'}, 'migrationFiles': {}}
+        runtime.check_source = mock.Mock()
+        runtime.inspect = mock.Mock(return_value=raw)
+        runtime.verify_networks = mock.Mock()
+        runtime.definition = mock.Mock(return_value='pinned')
+        runtime.check_intent = mock.Mock()
+        runtime.manager.directory = mock.Mock(return_value=self.base)
+        runtime.bounded_output = mock.Mock(side_effect=ValueError('file absent in the pinned image'))
+        runtime.require_capability = mock.Mock(return_value='old')
+        runtime.change = mock.Mock()
+        with mock.patch.object(D.subprocess, 'run') as execute:
+            with self.assertRaisesRegex(ValueError, 'Pinned retained worker lacks verified'):
+                runtime.restart_coordinator(record)
+            with self.assertRaisesRegex(ValueError, 'Pinned retained worker lacks verified'):
+                runtime.execute_phase(record, 'rollback', {})
+            execute.assert_not_called()
+        runtime.change.assert_not_called()
+        runtime.require_capability.assert_not_called()
+        static_check = mock.call(['docker', '--context', 'fixture', 'container', 'cp', identifier + ':' + D.INSTALL_HOLD_CAPABILITY_PATH, '-'], 16384, 20)
+        self.assertEqual(runtime.bounded_output.call_args_list, [static_check, static_check])
+
+        # Compare against the former policy, with the old phase capability alone.
+        with mock.patch.object(runtime, 'require_install_hold_worker'), mock.patch.object(D.subprocess, 'run', return_value=SimpleNamespace(returncode=0)) as execute:
+            runtime.restart_coordinator(record)
+            runtime.execute_phase(record, 'rollback', {})
+            runtime.change.assert_called_once_with(['start', identifier])
+            self.assertEqual(execute.call_args.args[0][-2:], ['--retained-phase', 'rollback'])
+
+    def test_worker_capability_must_be_static_exact_and_unshadowed(self):
+        runtime = D.DockerRestoreRuntime(self.manager)
+        identifier = '1' * 64
+        raw = {'Id': identifier, 'Mounts': [], 'HostConfig': {'ReadonlyRootfs': True, 'RestartPolicy': {'Name': 'no', 'MaximumRetryCount': 0}}}
+
+        def archive(value, kind=tarfile.REGTYPE):
+            body = M.P.canonical(value)
+            wire = io.BytesIO()
+            with tarfile.open(fileobj=wire, mode='w') as output:
+                item = tarfile.TarInfo(Path(D.INSTALL_HOLD_CAPABILITY_PATH).name)
+                item.type, item.size = kind, len(body)
+                output.addfile(item, io.BytesIO(body))
+            return wire.getvalue()
+
+        runtime.bounded_output = mock.Mock(return_value=archive(D.INSTALL_HOLD_CAPABILITY))
+        runtime.require_install_hold_worker(raw)
+        for wire in (archive({**D.INSTALL_HOLD_CAPABILITY, 'version': 0}), archive(D.INSTALL_HOLD_CAPABILITY, tarfile.SYMTYPE)):
+            runtime.bounded_output.return_value = wire
+            with self.assertRaisesRegex(ValueError, 'Pinned retained worker lacks verified'):
+                runtime.require_install_hold_worker(raw)
+        runtime.bounded_output.reset_mock()
+        raw['Mounts'] = [{'Destination': '/app/restore-worker.mjs'}]
+        with self.assertRaisesRegex(ValueError, 'Pinned retained worker lacks verified'):
+            runtime.require_install_hold_worker(raw)
+        runtime.bounded_output.assert_not_called()
+
+    def test_failed_effect_check_closes_engine_connection_without_sending_post(self):
+        runtime = D.DockerRestoreRuntime(self.manager)
+        runtime.endpoint = '/fixture.sock'
+        runtime.reader = mock.Mock()
+        runtime.reader._read.return_value = '1.44'
+        route = '/containers/' + '1' * 64 + '/start'
+        connection = mock.Mock()
+        verify = mock.Mock(side_effect=ValueError('held'))
+        with mock.patch.object(D, 'Connection', return_value=connection):
+            with self.assertRaisesRegex(ValueError, 'held'):
+                runtime.engine('POST', route, before_request=verify)
+        verify.assert_called_once_with()
+        self.assertEqual(connection.method_calls, [mock.call.connect(), mock.call.close()])
+
+    def test_install_state_uses_actual_worker_and_host_identity_and_requires_store(self):
+        runtime = D.DockerRestoreRuntime(self.manager)
+        process = self.base / 'fixture-proc' / '123'
+        data = process / 'root' / 'data'
+        state = data / 'state'
+        state.mkdir(parents=True, mode=0o700)
+        worker_id, original_id, candidate_id = '1' * 64, '2' * 64, '3' * 64
+        (process / 'cgroup').write_text('0::/docker-' + worker_id + '.scope\n')
+        (process / 'status').write_text('Uid:\t0\t0\t0\t0\n')
+        mounts = [{'Destination': '/data/state', 'Source': str(state), 'Type': 'bind', 'RW': True}]
+
+        def container(identifier, running):
+            return {'Id': identifier, 'Config': {}, 'Image': 'sha256:' + 'a' * 64, 'Mounts': copy.deepcopy(mounts),
+                    'HostConfig': {'ReadonlyRootfs': True, 'RestartPolicy': {'Name': 'no', 'MaximumRetryCount': 0}},
+                    'NetworkSettings': {'Networks': {}},
+                    'State': {'Running': running, 'Paused': False, 'Restarting': False, 'Pid': 123 if running else 0}}
+
+        worker, original, candidate = container(worker_id, True), container(original_id, False), container(candidate_id, False)
+        by_id = {raw['Id']: raw for raw in (worker, original, candidate)}
+        record = {'id': self.request['restoreId'], 'workerId': worker_id, 'candidateId': candidate_id,
+                  'source': {'controllerId': original_id, 'container': copy.deepcopy(original), 'imageId': worker['Image'],
+                             'definition': runtime.definition(original), 'daemonSocket': '/fixture.sock', 'daemonId': 'fixture'},
+                  'definitions': {'candidate': runtime.definition(candidate), 'coordinator': runtime.definition(worker)},
+                  'stage': {'journalPath': str(self.base)}}
+        swap = self.base / 'roots' / 'state' / 'swap.json'
+        swap.parent.mkdir(parents=True, mode=0o700)
+        identity = state.stat()
+        swap.write_bytes(M.P.canonical({'id': record['id'], 'root': '/data/state', 'version': 1, 'phase': 'promoting',
+                                        'device': str(identity.st_dev), 'inode': str(identity.st_ino)}))
+        swap.chmod(0o600)
+        runtime.reader = mock.Mock()
+        runtime.reader.socket.return_value = '/fixture.sock'
+        runtime.engine = mock.Mock(side_effect=lambda _, route: M.P.canonical({'ID': 'fixture'} if route == '/info' else by_id[route.split('/')[2]]))
+        with mock.patch.object(D, 'Path', side_effect=lambda *parts: self.base / 'fixture-proc' if parts == ('/proc',) else Path(*parts)):
+            with runtime.live_install_state(record, starting=True) as stores:
+                self.assertEqual([os.fstat(item).st_ino for item in stores], [identity.st_ino] * 2)
+            state.rename(data / 'detached')
+            with self.assertRaisesRegex(ValueError, 'storage could not be verified'):
+                with runtime.live_install_state(record, starting=True):
+                    self.fail('missing required state accepted')
+            state.mkdir(mode=0o700)
+            with self.assertRaises(ValueError):
+                with runtime.live_install_state(record, starting=True):
+                    self.fail('replacement state accepted')
+            state.rmdir()
+            (data / 'detached').rename(state)
+            candidate['State']['Running'] = True
+            with self.assertRaises(ValueError):
+                with runtime.live_install_state(record, starting=True):
+                    self.fail('running candidate could still write to the receipt store')
 
     def test_command_output_is_bounded_while_reading_not_after_allocation(self):
         runtime = D.DockerRestoreRuntime(self.manager)
@@ -2034,15 +2249,88 @@ class RetainedRestoreTests(unittest.TestCase):
 
     def test_candidate_lease_is_root_persisted_before_start_without_releasing_maintenance(self):
         runtime = D.DockerRestoreRuntime(self.manager); saved, actions = [], []
-        record = {'decision': 'commit', 'candidateId': '3' * 64, 'target': {'creationReference': 'sha256:' + 'a' * 64}}
-        raw = {'Id': '3' * 64, 'Image': record['target']['creationReference'], 'State': {'Running': False}}
+        intended = {'Name': 'unless-stopped', 'MaximumRetryCount': 0}
+        disabled = {'Name': 'no', 'MaximumRetryCount': 0}
+        record = {'decision': 'commit', 'candidateId': '3' * 64, 'target': {'creationReference': 'sha256:' + 'a' * 64},
+                  'source': {'container': {'HostConfig': {'RestartPolicy': intended}}}, 'definitions': {'candidate': 'exact'}}
+        raw = {'Id': '3' * 64, 'Name': '/runtipi', 'Image': record['target']['creationReference'], 'State': {'Running': False},
+               'HostConfig': {'RestartPolicy': intended}}
         runtime.inspect = mock.Mock(return_value=raw); runtime.verify_networks = mock.Mock()
+        runtime.definition = mock.Mock(return_value='exact')
         runtime.manager = SimpleNamespace(save=lambda value: saved.append(copy.deepcopy(value)))
-        runtime.change = lambda value: actions.append((value, copy.deepcopy(saved[-1])))
+        def change(value):
+            actions.append((value, copy.deepcopy(saved[-1])))
+            if value[:3] == ['update', '--restart', 'no']:
+                raw['HostConfig']['RestartPolicy'] = disabled
+            if value[0] == 'start':
+                self.assertEqual(raw['HostConfig']['RestartPolicy'], disabled)
+                raw['State']['Running'] = True
+        runtime.change = change
         runtime.health = mock.Mock(); runtime.enroll_committed = mock.Mock()
         with mock.patch.object(D.time, 'time', return_value=1000): runtime.activate_candidate(record)
         self.assertEqual(record['candidateActivationLease'], {'startedAt': 1000000, 'expiresAt': 1900000})
-        self.assertEqual(actions, [(['start', '3' * 64], saved[0])]); runtime.health.assert_called_once()
+        self.assertEqual(actions, [(['update', '--restart', 'no', '3' * 64], saved[0]), (['start', '3' * 64], saved[0])])
+        runtime.health.assert_called_once()
+
+        # A lost terminal-policy reply may leave the intended policy applied.
+        # Refuse another start until a fresh inspect confirms the disable.
+        raw['HostConfig']['RestartPolicy'] = intended
+        raw['State']['Running'] = False
+        runtime.change = mock.Mock()
+        with self.assertRaises(ValueError): runtime.activate_candidate(record)
+        runtime.change.assert_called_once_with(['update', '--restart', 'no', '3' * 64])
+        runtime.change.reset_mock()
+        runtime.node_complete = mock.Mock(return_value=True)
+        with self.assertRaises(ValueError): runtime.set_terminal_policy(record)
+        runtime.change.assert_not_called()
+
+    def test_legacy_original_controller_rollback_reconciles_a_lost_policy_reply(self):
+        runtime = D.DockerRestoreRuntime(self.manager)
+        intended = {'Name': 'unless-stopped', 'MaximumRetryCount': 0}
+        disabled = {'Name': 'no', 'MaximumRetryCount': 0}
+        identifier, image = '1' * 64, 'sha256:' + 'a' * 64
+        record = {'decision': 'rollback', 'source': {'controllerId': identifier, 'imageId': image, 'definition': 'exact',
+                  'files': {}, 'container': {'HostConfig': {'RestartPolicy': intended}}}}
+        raw = {'Id': identifier, 'Name': '/runtipi', 'Image': image, 'State': {'Running': False, 'Health': {'Status': 'healthy'}},
+               'HostConfig': {'RestartPolicy': intended}}
+        runtime.inspect = mock.Mock(side_effect=lambda candidate: copy.deepcopy(raw))
+        runtime.verify_networks = mock.Mock()
+        runtime.definition = mock.Mock(return_value='exact')
+        actions = []
+        def change(value):
+            actions.append(value)
+            if value[0] == 'start':
+                self.assertEqual(raw['HostConfig']['RestartPolicy'], disabled)
+                raw['State']['Running'] = True
+            else:
+                raw['HostConfig']['RestartPolicy'] = disabled if value[2] == 'no' else intended
+        runtime.change = change
+        runtime.restore_original_controller(record)
+        self.assertEqual(actions, [['update', '--restart', 'no', identifier], ['start', identifier],
+                                   ['update', '--restart', 'unless-stopped', identifier]])
+        self.assertTrue(raw['State']['Running'])
+        self.assertEqual(raw['HostConfig']['RestartPolicy'], intended)
+
+    def test_forward_activation_requires_pinned_worker_and_exact_historical_target_effect_capability(self):
+        runtime = D.DockerRestoreRuntime(self.manager)
+        identifier, digest = '3' * 64, 'b' * 64
+        image = 'sha256:' + 'a' * 64
+        record = {'verifierId': identifier, 'target': {'creationReference': image}, 'definitions': {'verifier': 'exact'},
+                  'intents': {'verifier': {'body': {}}}, 'targetSettlementCapabilitySha256': digest}
+        runtime.inspect = mock.Mock(return_value={'Id': identifier, 'Image': image})
+        runtime.definition = mock.Mock(return_value='exact')
+        runtime.validate_worker = mock.Mock()
+        runtime.verify_networks = mock.Mock()
+        runtime.check_intent = mock.Mock()
+        runtime.require_target_settlement = mock.Mock(return_value=digest)
+        runtime.validate_forward_activation(record)
+        runtime.require_target_settlement.assert_called_once_with(identifier, historical_apps=True)
+        runtime.require_target_settlement.return_value = 'f' * 64
+        with self.assertRaises(ValueError): runtime.validate_forward_activation(record)
+        runtime.require_target_settlement.reset_mock()
+        runtime.validate_worker.side_effect = ValueError('unknown worker capability')
+        with self.assertRaisesRegex(ValueError, 'unknown worker capability'): runtime.validate_forward_activation(record)
+        runtime.require_target_settlement.assert_not_called()
 
     def test_postcommit_recovery_quiesces_exact_candidate_child_processes_without_reverting_data(self):
         runtime, body, raw = self.mixed_mount_intent(); identifier = self.request['restoreId']; candidate = '3' * 64

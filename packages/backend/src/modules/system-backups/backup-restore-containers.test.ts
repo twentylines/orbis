@@ -51,7 +51,7 @@ it('keeps retained provisional containers inert and outside reset-control storag
     expect(plan.HostConfig?.Mounts?.some((entry) => entry.Target === '/data/backups')).toBe(true);
   }
   const ordinary = restoreAuxiliaryContainerPlans(original, id, nonce);
-  expect(ordinary.worker.HostConfig?.RestartPolicy?.Name).toBe('unless-stopped');
+  expect(ordinary.worker.HostConfig?.RestartPolicy).toEqual({ Name: 'no', MaximumRetryCount: 0 });
   expect(ordinary.worker.HostConfig?.Mounts?.some((entry) => entry.Target === '/data/orbis-reset')).toBe(true);
 });
 

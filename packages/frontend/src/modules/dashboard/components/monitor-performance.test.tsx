@@ -80,3 +80,27 @@ test('the Home CPU deep link has a destination when total CPU readings are unava
   expect(html).toContain('CPU readings are unavailable.');
   expect(html).not.toContain('id="telemetry-memory-title"');
 });
+
+test.each([
+  ['host-proc', 'total system memory', 'Installed capacity', 'Host memory utilisation'],
+  ['cgroup', 'LXC memory limit', 'Reported capacity', 'LXC memory utilisation'],
+  ['containers', 'estimated from Docker containers', 'Reported capacity', 'Estimated container memory utilisation'],
+  ['runtime', 'runtime memory', 'Reported capacity', 'Core memory utilisation'],
+] as const)('labels %s memory without claiming a different provider', (scope, capacity, fact, chart) => {
+  const sample: Telemetry = {
+    sampledAt: '2026-11-22T00:00:00.000Z',
+    cpu: { scope: 'host-proc', totalPercent: 10, perCorePercent: [], uptimeSeconds: 100 },
+    memory: { scope, totalBytes: 1024, availableBytes: 768, swapTotalBytes: null, swapFreeBytes: null },
+    network: [],
+    filesystems: [],
+  };
+  const html = renderToStaticMarkup(
+    <MemoryRouter initialEntries={['/monitor?metric=memory']}>
+      <MonitorPerformance sample={sample} delayed={false} sensorsDelayed={false} loading={false} historyControls={null} />
+    </MemoryRouter>,
+  );
+  expect(html).toContain(capacity);
+  expect(html).toContain(`<dt>${fact}</dt>`);
+  expect(html).toContain(chart);
+  if (scope !== 'host-proc') expect(html).not.toContain('Host memory utilisation');
+});

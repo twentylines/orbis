@@ -1,3 +1,4 @@
+import { backupDatabaseCountsSchema, backupDatabaseVersion } from './backup-database-records';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -6,6 +7,7 @@ import { type } from 'arktype';
 import { appInfoSchema } from '@runtipi/common/schemas';
 import { createAppUrn, validateAppUrn } from '@/common/helpers/app-helpers';
 import { BackupRequirementError } from './backup-files';
+import { requireArchivedBackupInstallHoldsClear } from './backup-install-admission';
 import { fullBackupLimits } from './backup-limits';
 import { type BackupContentIntegrity, parseFullBackupManifest } from './backup-import';
 import { readNormalizedBackupDatabase } from './backup-normalized-database';
@@ -14,18 +16,14 @@ import { backupVolumeContentBudget, verifyBackupVolumeContents } from './backup-
 
 const sha256 = type('string').narrow((value) => /^[a-f0-9]{64}$/.test(value));
 const digest = type({ bytes: 'number.integer > 0 & number <= 9007199254740991', sha256 }).onUndeclaredKey('reject');
-const counts = type({
-  user: 'number.integer >= 0',
-  app_store: 'number.integer >= 0',
-  app: 'number.integer >= 0',
-  link: 'number.integer >= 0',
-}).onUndeclaredKey('reject');
 export const backupSourceSealSchema = type({
   version: '1',
   manifest: digest,
   recovery: digest,
   database: digest,
-  normalized: type({ bytes: 'number.integer > 0 & number <= 268435456', sha256, counts }).onUndeclaredKey('reject'),
+  normalized: type({ bytes: 'number.integer > 0 & number <= 268435456', sha256, counts: backupDatabaseCountsSchema, 'migrationSha256?': sha256 })
+    .onUndeclaredKey('reject')
+    .narrow((review) => (backupDatabaseVersion(review.counts) === 2) === Boolean(review.migrationSha256)),
 }).onUndeclaredKey('reject');
 export type BackupSourceSeal = typeof backupSourceSealSchema.infer;
 const failed = () => new BackupRequirementError('The reviewed backup changed or is incomplete. Review its encrypted file again before restoring.');
@@ -148,11 +146,13 @@ export async function validateBackupSource(options: { directory: string; expecte
     // records.json adds only its format version to the already reviewed record digest.
     const { version, ...recordReview } = normalizedFields;
     if (
-      version !== 1 ||
-      Object.keys(recordReview).length !== 3 ||
+      version !== backupDatabaseVersion(seal.normalized.counts) ||
+      Object.keys(recordReview).length !== (version === 2 ? 4 : 3) ||
       normalizedFields.bytes !== seal.normalized.bytes ||
       normalizedFields.sha256 !== seal.normalized.sha256 ||
-      counts(normalizedFields.counts) instanceof type.errors ||
+      normalizedFields.migrationSha256 !== seal.normalized.migrationSha256 ||
+      backupDatabaseCountsSchema(normalizedFields.counts) instanceof type.errors ||
+      Object.keys(normalizedFields.counts as object).length !== Object.keys(seal.normalized.counts).length ||
       Object.entries(seal.normalized.counts).some(([name, count]) => (normalizedFields.counts as Record<string, unknown>)[name] !== count)
     )
       throw failed();
@@ -215,6 +215,7 @@ export async function validateBackupSource(options: { directory: string; expecte
       ids.add(container.id);
       if (container.running) running.add(container.project);
     }
+    await requireArchivedBackupInstallHoldsClear(path.join(content, 'data'), running, manifest);
     for (const image of manifest.images) if (!apps.has(image.project)) throw failed();
     const volumeProjects = new Set(manifest.volumes?.flatMap((volume) => volume.mounts.map((mount) => mount.project)) ?? []);
     const resumeApps: { id: number; appUrn: string }[] = [];

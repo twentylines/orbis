@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createAppUrn } from '@/common/helpers/app-helpers';
 import { ArchiveService } from '@/core/archive/archive.service';
@@ -7,8 +8,16 @@ import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import type { LoggerService } from '@/core/logger/logger.service';
 import type { AppFilesManager } from '@/modules/apps/app-files-manager';
 import type { AppsRepository } from '@/modules/apps/apps.repository';
+import { createMockApp } from '@/tests/helpers/app-mocks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackupManager } from '../backup.manager';
+import type { ModuleRef } from '@nestjs/core';
+import type Dockerode from 'dockerode';
+import { BackupAppCommand } from '@/modules/app-lifecycle/commands/backup-app-command';
+import { DockerService } from '@/modules/docker/docker.service';
+import { ConfigurationService as ConfigurationToken } from '@/core/config/configuration.service';
+import { LoggerService as LoggerToken } from '@/core/logger/logger.service';
+import { AppsRepository as RepositoryToken } from '@/modules/apps/apps.repository';
 
 describe('BackupManager real files and archives', () => {
   const appUrn = createAppUrn('demo', 'store');
@@ -29,20 +38,36 @@ describe('BackupManager real files and archives', () => {
   };
 
   beforeEach(async () => {
-    root = await fs.promises.mkdtemp('/tmp/orbis-backups-recovery-');
+    root = await fs.promises.mkdtemp(path.join(tmpdir(), 'orbis-backups-recovery-'));
     appDataDir = path.join(root, 'app-data', 'store', 'demo');
     appInstalledDir = path.join(root, 'apps', 'store', 'demo');
     userConfigDir = path.join(root, 'data', 'user-config', 'store', 'demo');
     backupDir = path.join(root, 'data', 'backups', 'store', 'demo');
     const logger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as LoggerService;
     filesystem = new FilesystemService(logger);
+    const originalSafePath = filesystem.getSafeFilePath.bind(filesystem);
+    vi.spyOn(filesystem, 'getSafeFilePath').mockImplementation((file) => {
+      const resolved = path.resolve(file);
+      return resolved.startsWith(root + path.sep) ? resolved : originalSafePath(file);
+    });
     archive = new ArchiveService(logger);
     const config = { get: () => ({ dataDir: path.join(root, 'data') }) } as unknown as ConfigurationService;
     apps = {
       getAppPaths: () => ({ appDataDir, appInstalledDir }),
-      getInstalledAppInfo: vi.fn(async () => ({ tipi_version: Number(await fs.promises.readFile(path.join(appInstalledDir, 'version'), 'utf8')) })),
+      getInstalledAppInfo: vi.fn(async () => {
+        const version = await fs.promises.readFile(path.join(appInstalledDir, 'version'), 'utf8').catch((error: NodeJS.ErrnoException) => {
+          if (error.code === 'ENOENT') return null;
+          throw error;
+        });
+        return version === null ? null : { tipi_version: Number(version) };
+      }),
     } as unknown as AppFilesManager;
-    repository = { getAppByUrn: vi.fn().mockResolvedValue(null), updateAppById: vi.fn() } as unknown as AppsRepository;
+    repository = {
+      getAppByUrn: vi.fn().mockResolvedValue(null),
+      updateAppById: vi.fn(),
+      getMigrationLedger: vi.fn().mockResolvedValue({ baselined: false, migrationIds: [] }),
+      replaceMigrationLedger: vi.fn(),
+    } as unknown as AppsRepository;
     manager = new BackupManager(archive, logger, config, filesystem, apps, repository);
     vi.spyOn(filesystem, 'createTempDirectory').mockImplementation((prefix) => fs.promises.mkdtemp(path.join(root, path.basename(prefix))));
     await write(path.join(appDataDir, 'data', 'record'), 'original data\n');
@@ -53,6 +78,116 @@ describe('BackupManager real files and archives', () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await fs.promises.rm(root, { recursive: true, force: true });
+  });
+
+  it('the actual manual backup command resumes before compression and archives only its consistent snapshot', async () => {
+    const ledger = { baselined: true, migrationIds: ['001-schema'] };
+    vi.mocked(repository.getAppByUrn).mockResolvedValue(createMockApp({ id: 42 }));
+    vi.mocked(repository.getMigrationLedger).mockResolvedValue(ledger);
+    const state = { Running: true, Paused: false, Restarting: false };
+    const start = vi.fn(async () => {
+      state.Running = true;
+      await write(path.join(appDataDir, 'data/record'), 'new live writes');
+      await write(path.join(userConfigDir, 'app.env'), 'SETTING=new');
+    });
+    const container = { id: 'original', inspect: async () => ({ State: { ...state } }), start };
+    const docker = { listContainers: async () => [{ Id: 'original' }], getContainer: () => container } as unknown as Dockerode;
+    const composeApp = vi.fn(async () => {
+      state.Running = false;
+    });
+    const providers = new Map<unknown, unknown>([
+      [DockerService, { composeApp }],
+      [BackupManager, manager],
+      [RepositoryToken, repository],
+      [ConfigurationToken, { get: () => ({ maxBackups: 20 }) }],
+      [LoggerToken, { info: vi.fn() }],
+    ]);
+    const ref = { get: (token: unknown) => providers.get(token) } as unknown as ModuleRef;
+    const compress = archive.createTarGz;
+    vi.spyOn(archive, 'createTarGz').mockImplementation(async (source, destination) => {
+      expect(state.Running).toBe(true);
+      expect(await fs.promises.readFile(path.join(source, 'app-data/data/record'), 'utf8')).toBe('original data\n');
+      expect(await fs.promises.readFile(path.join(source, 'user-config/app.env'), 'utf8')).toBe('SETTING=original\n');
+      const savedLedger = JSON.parse(await fs.promises.readFile(path.join(source, 'orbis-app-migrations.json'), 'utf8'));
+      expect(savedLedger).toMatchObject({ ledger });
+      return compress(source, destination);
+    });
+    expect(await new BackupAppCommand(ref, docker).execute(appUrn)).toMatchObject({ success: true, statePreserved: true });
+    expect(composeApp).toHaveBeenCalledExactlyOnceWith(appUrn, 'stop');
+    expect(start).toHaveBeenCalledOnce();
+    expect(await fs.promises.readFile(path.join(appDataDir, 'data/record'), 'utf8')).toBe('new live writes');
+    const [backup] = await manager.listBackupsByAppId(appUrn);
+    expect(backup).toBeDefined();
+    if (!backup) throw new Error('The completed backup was not listed.');
+    await manager.restoreApp(appUrn, backup.id);
+    expect(await fs.promises.readFile(path.join(appDataDir, 'data/record'), 'utf8')).toBe('original data\n');
+    expect(await fs.promises.readFile(path.join(userConfigDir, 'app.env'), 'utf8')).toBe('SETTING=original\n');
+  });
+
+  it('does not acknowledge an incomplete snapshot or compress after a failed resume callback', async () => {
+    const ready = vi.fn(async () => {
+      throw new Error('Original app could not resume');
+    });
+    const compress = vi.spyOn(archive, 'createTarGz');
+    await expect(manager.backupApp(appUrn, ready)).rejects.toThrow('Original app could not resume');
+    expect(compress).not.toHaveBeenCalled();
+    expect(await manager.listBackupsByAppId(appUrn)).toHaveLength(0);
+    expect(await fs.promises.readFile(path.join(appDataDir, 'data/record'), 'utf8')).toBe('original data\n');
+    vi.spyOn(filesystem, 'copyDirectory').mockResolvedValue(false);
+    ready.mockClear();
+    await expect(manager.backupApp(appUrn, ready)).rejects.toThrow('App data could not be copied');
+    expect(ready).not.toHaveBeenCalled();
+  });
+
+  it('replays a committed restore with its exact ledger if the first database write fails', async () => {
+    const ledger = { baselined: true, migrationIds: ['001-schema'] };
+    vi.mocked(repository.getAppByUrn).mockResolvedValue(createMockApp({ id: 42 }));
+    vi.mocked(repository.getMigrationLedger).mockResolvedValue(ledger);
+    await manager.backupApp(appUrn);
+    const [backup] = await manager.listBackupsByAppId(appUrn);
+    if (!backup) throw new Error('Expected a saved backup');
+    await write(path.join(appDataDir, 'data', 'record'), 'changed data');
+    vi.mocked(repository.replaceMigrationLedger).mockRejectedValueOnce(new Error('Database unavailable'));
+
+    await expect(manager.restoreApp(appUrn, backup.id)).rejects.toThrow('Database unavailable');
+    expect(await manager.hasPendingRestore(appUrn)).toBe(true);
+    expect(await fs.promises.readFile(path.join(appDataDir, 'data', 'record'), 'utf8')).toBe('original data\n');
+
+    vi.mocked(repository.getMigrationLedger).mockResolvedValue({ baselined: true, migrationIds: ['001-schema', '002-fields'] });
+    await manager.recoverRestore(appUrn);
+    expect(repository.replaceMigrationLedger).toHaveBeenNthCalledWith(2, 42, ledger, { status: 'stopped' });
+    expect(await manager.hasPendingRestore(appUrn)).toBe(false);
+  });
+
+  it('replays an unverified baseline with restored legacy data after a database failure', async () => {
+    await write(path.join(appInstalledDir, 'migrations', '001-schema.yml'), 'services: {}\n');
+    await manager.backupApp(appUrn);
+    const [backup] = await manager.listBackupsByAppId(appUrn);
+    if (!backup) throw new Error('Expected a saved backup');
+    vi.mocked(repository.getAppByUrn).mockResolvedValue(createMockApp({ id: 42 }));
+    vi.mocked(repository.getMigrationLedger).mockResolvedValue({ baselined: true, migrationIds: [] });
+    vi.mocked(repository.replaceMigrationLedger).mockRejectedValueOnce(new Error('Database unavailable'));
+    await write(path.join(appDataDir, 'data', 'record'), 'new data');
+
+    await expect(manager.restoreApp(appUrn, backup.id)).rejects.toThrow('Database unavailable');
+    expect(await manager.hasPendingRestore(appUrn)).toBe(true);
+    expect(await fs.promises.readFile(path.join(appInstalledDir, 'migrations', '001-schema.yml'), 'utf8')).toBe('services: {}\n');
+    await manager.recoverRestore(appUrn);
+    expect(repository.replaceMigrationLedger).toHaveBeenNthCalledWith(2, 42, { baselined: false, migrationIds: [] }, { status: 'stopped' });
+    expect(await manager.hasPendingRestore(appUrn)).toBe(false);
+  });
+
+  it('preserves live files if a legacy backup cannot establish the destination migration history', async () => {
+    await manager.backupApp(appUrn);
+    const [backup] = await manager.listBackupsByAppId(appUrn);
+    if (!backup) throw new Error('Expected a saved backup');
+
+    vi.mocked(repository.getAppByUrn).mockResolvedValue(createMockApp({ id: 42 }));
+    vi.mocked(repository.getMigrationLedger).mockResolvedValue({ baselined: true, migrationIds: ['001-schema'] });
+    await write(path.join(appDataDir, 'data', 'record'), 'live data');
+    await expect(manager.restoreApp(appUrn, backup.id)).rejects.toThrow('predates the application migration history');
+    expect(await fs.promises.readFile(path.join(appDataDir, 'data', 'record'), 'utf8')).toBe('live data');
+    expect(repository.replaceMigrationLedger).not.toHaveBeenCalled();
   });
 
   it('round-trips all app data, including backup-named paths, binary files and user overrides', async () => {
@@ -223,13 +358,22 @@ describe('BackupManager real files and archives', () => {
     const saved = await savedBackupWithNewerLiveFiles();
     await write(path.join(appInstalledDir, 'version'), '8');
     vi.mocked(repository.getAppByUrn).mockResolvedValue({ id: 42 } as never);
-    vi.mocked(repository.updateAppById).mockRejectedValueOnce(new Error('Database unavailable'));
+    vi.mocked(repository.replaceMigrationLedger).mockRejectedValueOnce(new Error('Database unavailable'));
     await expect(manager.restoreApp(appUrn, saved.id)).rejects.toThrow('Database unavailable');
     expect(await manager.getPendingRestores()).toEqual([appUrn]);
     expect(await fs.promises.readFile(path.join(appInstalledDir, 'version'), 'utf8')).toBe('7');
-    expect(repository.updateAppById).toHaveBeenCalledExactlyOnceWith(42, { status: 'stopped', version: 7 });
+    expect(repository.replaceMigrationLedger).toHaveBeenCalledExactlyOnceWith(
+      42,
+      { baselined: false, migrationIds: [] },
+      { status: 'stopped', version: 7 },
+    );
     await manager.recoverRestore(appUrn);
-    expect(repository.updateAppById).toHaveBeenNthCalledWith(2, 42, { status: 'stopped', version: 7 });
+    expect(repository.replaceMigrationLedger).toHaveBeenNthCalledWith(
+      2,
+      42,
+      { baselined: false, migrationIds: [] },
+      { status: 'stopped', version: 7 },
+    );
     expect(await manager.getPendingRestores()).toEqual([]);
     expect(await fs.promises.readFile(path.join(appDataDir, 'data', 'record'), 'utf8')).toBe('original data\n');
   });

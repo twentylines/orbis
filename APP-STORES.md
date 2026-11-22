@@ -2,6 +2,16 @@
 
 Orbis keeps the Runtipi repository format and installed-app identities. Store operations must preserve the working catalogue and installed application state when Git or storage fails.
 
+## Catalog formats
+
+Orbis supports its existing Runtipi-format catalogs and a supported subset of Umbrel catalogs. Existing stores and installed application identities stay separate.
+
+To browse the official Umbrel catalog, open **Settings → Store**, choose **Add Store**, and enter a name such as `umbrel` with `https://github.com/getumbrel/umbrel-apps` as the repository URL. Refresh the catalog after adding it. Adding a catalog does not install its apps.
+
+Each Umbrel app is checked before installation. Apps with supported Compose services and app-local storage use the normal Orbis install flow. Apps that need Umbrel-specific dependencies, hooks, shared storage, devices or other platform services show the missing support in their details and cannot be installed. Compatibility is checked again when packages change.
+
+Apps that rely on Umbrel's authentication require Orbis authentication and an Orbis proxy route; direct-port access is disabled for those apps. Apps that also require authentication exceptions for individual paths remain unavailable until that routing is supported. Existing Orbis app stores continue to use their current configuration and routing.
+
 ## Behavior
 
 - A new store clones into a private staging directory. Its catalogue is published only after Git finishes successfully. Failed staging is removed before another operation may use that repository.

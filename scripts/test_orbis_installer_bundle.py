@@ -3,6 +3,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 import tarfile
 import tempfile
 import unittest
@@ -19,6 +20,7 @@ def load(name):
 
 BUILD = load("orbis-installer-bundle")
 BOOT = load("install-orbis")
+FIXTURE_OWNER = os.geteuid()
 
 
 class BundleTests(unittest.TestCase):
@@ -105,7 +107,6 @@ class BundleTests(unittest.TestCase):
                  if file.is_file() and BUILD.ALLOWED.fullmatch(str(file.relative_to(repository)))}
         unit = 'packaging/systemd/orbis-host.service'; files[unit] = (repository / unit).read_bytes()
         values = BUILD.sources(files)
-        self.assertLessEqual(len(values), 128)
         self.assertFalse(BUILD.BUILD_ONLY & set(values))
         self.assertTrue(expected <= set(values))
         for name in expected:
@@ -116,14 +117,12 @@ class BundleTests(unittest.TestCase):
         self.assertIn(name, BUILD.REQUIRED & BOOT.REQUIRED)
         missing = {key: data for key, data in self.files.items() if key != name}
         with self.assertRaises(ValueError): BUILD.sources(missing)
-        files = dict(self.files)
-        index = 0
-        while len(files) < 128:
-            files['scripts/orbis-fixture-' + 'a' * (index + 1) + '.py'] = b'# fixture\n'
-            index += 1
-        self.assertEqual(128, len(BUILD.sources(files)))
-        files['scripts/orbis-one-too-many.py'] = b'# fixture\n'
-        with self.assertRaises(ValueError): BUILD.sources(files)
+        for build in (lambda: BUILD.build(self.files, self.release_bytes),
+                      lambda: BUILD.build_installer(self.files, 'c' * 40)):
+            assets = build()
+            manifest = json.loads(assets[BUILD.MANIFEST])
+            verified = BOOT.verify_files(assets[BUILD.ARCHIVE], manifest)
+            self.assertEqual(verified[name], self.files[name])
 
     def validate_manifest_value(self, value):
         data = json.dumps(value).encode()
@@ -336,6 +335,31 @@ class ChannelLauncherTests(unittest.TestCase):
         self.record = {"tag": "v0.1.0-beta.127", "commit": "a" * 40, "launcherSha256": "b" * 64}
         self.catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": None, "nightly": self.record}}
 
+    def continue_held(self, arguments):
+        self.assertEqual(arguments[1:3], ["-I", "-B"])
+        self.assertTrue(arguments[3].startswith("/proc/self/fd/"))
+        self.assertEqual(arguments[4], "--continue-verified-installer")
+        directory = Path(arguments[5])
+        launcher = directory / BOOT.SOURCE_LAUNCHER
+        with launcher.open("rb") as held:
+            with (mock.patch.object(BOOT, "__file__", f"/proc/self/fd/{held.fileno()}"),
+                  mock.patch.object(BOOT, "private_directory", return_value=directory),
+                  mock.patch.object(BOOT, "fetch", side_effect=AssertionError("reselected installer")),
+                  mock.patch.object(BOOT, "_exec_guided") as guided):
+                BOOT._continue_verified_installer(arguments[5:])
+                guided.assert_called_once_with(directory, arguments[7], arguments[8:], arguments[6])
+                self.assertEqual(held.tell(), 0)
+                self.assertFalse(os.get_inheritable(held.fileno()))
+                self.assertEqual(json.loads((directory / BOOT.SOURCE_EXECUTION).read_bytes()), {
+                    "schema": "orbis.installer-source-execution.v1",
+                    "selectionSha256": arguments[6], "channel": arguments[7],
+                    "launcherSha256": BUILD.sha(launcher.read_bytes()),
+                })
+                with self.assertRaises(FileExistsError):
+                    BOOT._continue_verified_installer(arguments[5:])
+                self.assertEqual(guided.call_count, 1)
+        return directory
+
     def test_explicit_unavailable_stable_never_selects_nightly_and_unattended_needs_channel(self):
         with self.assertRaisesRegex(ValueError, "Stable is not available"):
             BOOT.select_channel(self.catalog, "stable")
@@ -380,17 +404,17 @@ class ChannelLauncherTests(unittest.TestCase):
         files["scripts/install-orbis.py"] = Path(BOOT.__file__).read_bytes()
         assets = BUILD.build_installer(files, installer_commit)
         identity = {"commit": installer_commit, "manifestSha256": BUILD.sha(assets[BUILD.MANIFEST])}
-        with tempfile.TemporaryDirectory() as folder, mock.patch.object(BOOT, "EXPECTED_RELEASE", None), mock.patch.object(BOOT, "INSTALLER", identity), mock.patch.object(BOOT.sys, "platform", "linux"), mock.patch.object(BOOT.os, "geteuid", return_value=0), mock.patch.object(BOOT.sys, "argv", ["install", "--channel", "nightly", "--yes", "--accept-nightly"]), mock.patch.object(BOOT, "fetch", side_effect=[json.dumps(self.catalog).encode(), release_bytes, assets[BUILD.MANIFEST], assets[BUILD.ARCHIVE]]) as fetch, mock.patch.object(BOOT, "private_directory", return_value=Path(folder)), mock.patch.object(BOOT.os, "execv") as execute:
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(BOOT, "OWNER", FIXTURE_OWNER), mock.patch.object(BOOT, "EXPECTED_RELEASE", None), mock.patch.object(BOOT, "INSTALLER", identity), mock.patch.object(BOOT.sys, "platform", "linux"), mock.patch.object(BOOT.os, "geteuid", return_value=0), mock.patch.object(BOOT.sys, "argv", ["install", "--channel", "nightly", "--yes", "--accept-nightly"]), mock.patch.object(BOOT, "fetch", side_effect=[json.dumps(self.catalog).encode(), release_bytes, assets[BUILD.MANIFEST], assets[BUILD.ARCHIVE]]) as fetch, mock.patch.object(BOOT, "private_directory", return_value=Path(folder)), mock.patch.object(BOOT.os, "execv") as execute:
             with contextlib.redirect_stdout(io.StringIO()): BOOT.main()
             args = execute.call_args.args[1]
             self.assertEqual(fetch.call_count, 4)
             self.assertEqual(fetch.call_args_list[2].args[0], BOOT.INSTALLER_BASE_URL + installer_commit + "/" + BUILD.MANIFEST)
             self.assertEqual(fetch.call_args_list[3].args[0], BOOT.INSTALLER_BASE_URL + installer_commit + "/" + BUILD.ARCHIVE)
-            self.assertTrue(args[1].endswith("scripts/orbis-install.py"))
-            self.assertEqual(Path(args[1]).read_bytes(), files["scripts/orbis-install.py"])
-            self.assertEqual(args[args.index("--channel") + 1], "nightly")
+            directory = self.continue_held(args)
+            self.assertEqual((directory / "scripts/orbis-install.py").read_bytes(), files["scripts/orbis-install.py"])
+            self.assertEqual(args[7], "nightly")
             self.assertIn("--accept-nightly", args)
-            self.assertEqual(Path(args[args.index("--manifest") + 1]).read_bytes(), release_bytes)
+            self.assertEqual((directory / "release-manifest.json").read_bytes(), release_bytes)
 
     def test_exact_release_launcher_hands_selected_nightly_to_guided_stable_artifact(self):
         release = {"schema": "orbis.release.v1", "image": "ghcr.io/twentylines/orbis", "tag": "v1.0.0", "commit": "a" * 40, "digest": "sha256:" + "b" * 64, "installationProtocol": "orbis.installation-state.v1", "runtipiCompatibility": "4.10.1"}
@@ -399,14 +423,54 @@ class ChannelLauncherTests(unittest.TestCase):
         files["scripts/install-orbis.py"] = Path(BOOT.__file__).read_bytes()
         assets = BUILD.build(files, release_bytes)
         identity = {"tag": release["tag"], "commit": release["commit"], "manifestSha256": BUILD.sha(assets[BUILD.MANIFEST])}
-        with tempfile.TemporaryDirectory() as folder, mock.patch.object(BOOT, "EXPECTED_RELEASE", identity), mock.patch.object(BOOT.sys, "platform", "linux"), mock.patch.object(BOOT.os, "geteuid", return_value=0), mock.patch.object(BOOT.sys, "argv", ["install", "--channel", "nightly", "--yes", "--accept-nightly"]), mock.patch.object(BOOT, "fetch", side_effect=[assets[BUILD.MANIFEST], release_bytes, assets[BUILD.ARCHIVE]]) as fetch, mock.patch.object(BOOT, "private_directory", return_value=Path(folder)), mock.patch.object(BOOT.os, "execv") as execute:
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(BOOT, "OWNER", FIXTURE_OWNER), mock.patch.object(BOOT, "EXPECTED_RELEASE", identity), mock.patch.object(BOOT.sys, "platform", "linux"), mock.patch.object(BOOT.os, "geteuid", return_value=0), mock.patch.object(BOOT.sys, "argv", ["install", "--channel", "nightly", "--yes", "--accept-nightly"]), mock.patch.object(BOOT, "fetch", side_effect=[assets[BUILD.MANIFEST], release_bytes, assets[BUILD.ARCHIVE]]) as fetch, mock.patch.object(BOOT, "private_directory", return_value=Path(folder)), mock.patch.object(BOOT.os, "execv") as execute:
             with contextlib.redirect_stdout(io.StringIO()): BOOT.main()
             args = execute.call_args.args[1]
             self.assertEqual(fetch.call_count, 3)
-            self.assertTrue(args[1].endswith("scripts/orbis-install.py"))
-            self.assertEqual(args[args.index("--channel") + 1], "nightly")
+            directory = self.continue_held(args)
+            self.assertEqual(args[7], "nightly")
             self.assertIn("--accept-nightly", args)
-            self.assertEqual(json.loads(Path(args[args.index("--manifest") + 1]).read_bytes()), release)
+            self.assertEqual(json.loads((directory / "release-manifest.json").read_bytes()), release)
+
+    def test_continuation_refuses_same_bytes_foreign_inode_and_changed_selection(self):
+        release = {"schema": "orbis.release.v1", "image": "ghcr.io/twentylines/orbis",
+                   "tag": "v1.0.0", "commit": "a" * 40, "digest": "sha256:" + "b" * 64,
+                   "installationProtocol": "orbis.installation-state.v1", "runtipiCompatibility": "4.10.1"}
+        core = json.dumps(release).encode()
+        files = {name: b"# bounded test source\n" for name in BUILD.REQUIRED}
+        files["scripts/install-orbis.py"] = Path(BOOT.__file__).read_bytes()
+        assets = BUILD.build(files, core)
+        identity = {"tag": release["tag"], "commit": release["commit"],
+                    "manifestSha256": BUILD.sha(assets[BUILD.MANIFEST])}
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder).resolve()
+            selection = BOOT.stage_verified_installer(
+                directory, mode="release", identity=identity, channel="stable", release=core,
+                manifest=assets[BUILD.MANIFEST], archive=assets[BUILD.ARCHIVE], files=files)
+            launcher = directory / BOOT.SOURCE_LAUNCHER
+            foreign = directory / "foreign.py"
+            foreign.write_bytes(launcher.read_bytes())
+            with (mock.patch.object(BOOT, "OWNER", FIXTURE_OWNER),
+                  mock.patch.object(BOOT, "EXPECTED_RELEASE", identity),
+                  mock.patch.object(BOOT, "private_directory", return_value=directory),
+                  mock.patch.object(BOOT, "_exec_guided") as guided):
+                with foreign.open("rb") as held, mock.patch.object(BOOT, "__file__", f"/proc/self/fd/{held.fileno()}"):
+                    with self.assertRaisesRegex(ValueError, "not executed from the held selected launcher"):
+                        BOOT._continue_verified_installer([str(directory), selection, "stable"])
+                with launcher.open("rb") as held, mock.patch.object(BOOT, "__file__", f"/proc/self/fd/{held.fileno()}"):
+                    with self.assertRaisesRegex(ValueError, "selection identity changed"):
+                        BOOT._continue_verified_installer([str(directory), selection, "nightly"])
+                    (directory / "scripts/orbis-install.py").write_bytes(b"# changed guided source\n")
+                    with self.assertRaisesRegex(ValueError, "differs from the verified bundle"):
+                        BOOT._continue_verified_installer([str(directory), selection, "stable"])
+                guided.assert_not_called()
+                self.assertFalse((directory / BOOT.SOURCE_EXECUTION).exists())
+
+    def test_legacy_template_uses_guided_flow_without_new_execution_receipt(self):
+        with mock.patch.object(BOOT, "_exec_guided") as guided:
+            BOOT._exec_verified_installer(Path("/installer"), "stable", ["--yes"], "a" * 64,
+                {"scripts/install-orbis.py": b"INSTALLER = None\n"})
+        guided.assert_called_once_with(Path("/installer"), "stable", ["--yes"])
 
     def test_unconfirmed_unattended_nightly_and_changed_launcher_never_create_or_exec_files(self):
         for extra, payload in [([], b"unused"), (["--accept-nightly"], b"changed")]:

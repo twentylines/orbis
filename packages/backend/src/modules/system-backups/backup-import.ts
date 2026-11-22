@@ -21,6 +21,10 @@ const controls = (value: string) => Array.from(value).some((character) => charac
 
 function rejectResetRecoveryMember(name: string) {
   const parts = name.split('/');
+  if (parts[0] === 'data' && parts[1] === 'state' && parts[2] === 'orbis-app-migrations')
+    throw new BackupRequirementError('App migration recovery files cannot be restored. No server data has been changed.');
+  if (name === 'data/state/time-machine/image-pins/ordinary-results' || name.startsWith('data/state/time-machine/image-pins/ordinary-results/'))
+    throw new BackupRequirementError('App update recovery files cannot be restored. No server data has been changed.');
   const journal = parts[0] === 'data' && (parts[1] === 'orbis-reset' || (parts[1] === 'state' && parts[2] === 'orbis-reset'));
   const stageIndex = parts[0] === 'data' && parts[1] === 'state' ? (resetScopes.some((scope) => scope === parts[2]) ? 3 : 2) : 1;
   const stage = parts[0] === 'data' && parts[stageIndex]?.startsWith('.orbis-reset-stage-');

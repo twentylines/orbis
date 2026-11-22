@@ -69,9 +69,8 @@ export class StatusManagerService {
     await this.appRepository.updateAppById(appId, { status });
   }
 
-  emitEvent(params: { appUrn: AppUrn; event: AppEventType; error?: string }) {
-    const { appUrn, event, error } = params;
-    this.sseService.emit('app', { event, appUrn, error } as SSEAppEvent);
+  emitEvent(params: SSEAppEvent) {
+    this.sseService.emit('app', params);
   }
 
   async deleteApp(appId: number) {

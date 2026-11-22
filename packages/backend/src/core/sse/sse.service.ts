@@ -3,7 +3,7 @@ import { colorizeLogs } from '@/modules/docker/helpers/colorize-logs';
 import { Injectable, type MessageEvent, type OnModuleDestroy } from '@nestjs/common';
 import type { SSE, Topic } from '@runtipi/common/schemas';
 import type { AppUrn } from '@runtipi/common/types';
-import { EMPTY, Observable, Subject, interval } from 'rxjs';
+import { EMPTY, Observable, ReplaySubject, Subject, interval } from 'rxjs';
 import { LoggerService } from '../logger/logger.service';
 
 @Injectable()
@@ -28,10 +28,17 @@ export class SSEService implements OnModuleDestroy {
   private readonly cleanupTimer;
   private readonly logStreams = new Set<() => void>();
   private closing = false;
+  private readonly stopped = new ReplaySubject<void>(1);
+
+  shutdownEvents() {
+    return this.stopped.asObservable();
+  }
 
   onModuleDestroy() {
     if (this.closing) return;
     this.closing = true;
+    this.stopped.next();
+    this.stopped.complete();
     this.cleanupTimer.unsubscribe();
     for (const stop of this.logStreams) stop();
     for (const topic of this.topics.values()) topic.complete();
@@ -88,64 +95,76 @@ export class SSEService implements OnModuleDestroy {
    * It listens to the logs stream and emits the logs to the specified topic.
    */
   async getLogStreamObservable(topic: Topic, maxLines: number, appUrn?: AppUrn): Promise<Observable<MessageEvent>> {
-    if (this.closing) return EMPTY;
-    const { on, kill } = await this.dockerService.getLogsStream(maxLines, appUrn);
-
-    let active = true;
-    const stop = () => {
-      if (!active) return;
-      active = false;
-      this.logStreams.delete(stop);
-      try {
-        kill();
-      } catch (error) {
-        this.logger.error('Unable to stop a log reader:', error);
-      }
-    };
-    if (this.closing) {
-      stop();
-      return EMPTY;
-    }
-    this.logStreams.add(stop);
+    if (this.closing || (topic !== 'app-logs' && topic !== 'runtipi-logs')) return EMPTY;
 
     return new Observable((subscriber) => {
-      if (!active || this.closing) {
+      if (this.closing) {
         subscriber.complete();
         return;
       }
-      const observable = this.getTopicObservable(topic, appUrn);
-
-      const subscription = observable.subscribe({
-        next: (event) => subscriber.next(event),
-        error: (err) => subscriber.error(err),
-        complete: () => subscriber.complete(),
-      });
-
-      on('data', async (data) => {
-        if (!active || this.closing) return;
-        let lines: string[] = [];
-
+      let active = true;
+      let formatting = 0;
+      let inputEnded = false;
+      let killReader: (() => void) | undefined;
+      const releaseReader = () => {
+        const kill = killReader;
+        killReader = undefined;
+        if (!kill) return;
         try {
-          lines = await colorizeLogs(
-            data
-              .toString()
-              .split(/(?:\r\n|\r|\n)/g)
-              .filter(Boolean),
-          );
-
-          if (!active || this.closing) return;
-
-          const payload = appUrn ? { appUrn, lines, event: 'newLogs' as const } : { lines, event: 'newLogs' as const };
-          this.emit(topic, payload, appUrn);
+          kill();
         } catch (error) {
-          if (active && !this.closing) this.logger.error('Error colorizing logs:', error);
+          this.logger.error('Unable to stop a log reader:', error);
         }
-      });
-
-      return () => {
-        stop();
-        subscription.unsubscribe();
       };
+      const stop = () => {
+        if (!active) return;
+        active = false;
+        this.logStreams.delete(stop);
+        releaseReader();
+        subscriber.complete();
+      };
+      this.logStreams.add(stop);
+
+      // Acquire only for a live subscription. A late result still belongs to
+      // this subscription and must be released after revocation or shutdown.
+      void (async () => {
+        const { on, kill } = await this.dockerService.getLogsStream(maxLines, appUrn);
+        killReader = kill;
+        if (!active || this.closing) {
+          releaseReader();
+          return;
+        }
+        const finish = () => {
+          inputEnded = true;
+          if (formatting === 0) subscriber.complete();
+        };
+        on('end', finish);
+        on('close', finish);
+        on('error', (error) => subscriber.error(error));
+        on('data', async (data) => {
+          if (!active || this.closing || inputEnded) return;
+          formatting++;
+          try {
+            const lines = await colorizeLogs(
+              data
+                .toString()
+                .split(/(?:\r\n|\r|\n)/g)
+                .filter(Boolean),
+            );
+            if (!active || this.closing) return;
+            const payload = appUrn ? { appUrn, lines, event: 'newLogs' as const } : { lines, event: 'newLogs' as const };
+            subscriber.next(new MessageEvent('message', { data: JSON.stringify(payload) }));
+          } catch (error) {
+            if (active && !this.closing) this.logger.error('Error colorizing logs:', error);
+          } finally {
+            formatting--;
+            if (active && inputEnded && formatting === 0) subscriber.complete();
+          }
+        });
+      })().catch((error) => {
+        if (active && !this.closing) subscriber.error(error);
+      });
+      return stop;
     });
   }
 }

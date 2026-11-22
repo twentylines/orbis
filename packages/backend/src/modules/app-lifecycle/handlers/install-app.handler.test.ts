@@ -1,5 +1,7 @@
+import { verifyInstallRequestOwnership } from '../install-request-receipt';
 import { TranslatableError } from '@/common/error/translatable-error';
 import { AppStoreRepository } from '@/modules/app-stores/app-store.repository';
+import { appStoreLockKey } from '@/modules/app-stores/app-store-lock';
 import { AsyncMutex } from '@/utils/mutex/async-mutex';
 import { fromAny } from '@total-typescript/shoehorn';
 import type { AppStore } from '@/core/database/drizzle/types';
@@ -13,7 +15,7 @@ import { MarketplaceService } from '@/modules/marketplace/marketplace.service';
 import { AppEventsQueue } from '@/modules/queue/entities/app-events';
 import { createMockApp, createMockAppInfo } from '@/tests/helpers/app-mocks';
 import type { AppUrn } from '@runtipi/common/types';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import { AppValidationService } from '../services/app-validation.service';
 import { StatusManagerService } from '../services/status-manager.service';
@@ -21,6 +23,15 @@ import { InstallAppHandler } from './install-app.handler';
 import { StartAppHandler } from './start-app.handler';
 
 const appUrn = 'rehearsal-app:orbis-qa' as AppUrn;
+let directory: string;
+
+beforeEach(async () => {
+  directory = await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-install-handler-'));
+});
+
+afterEach(async () => {
+  await fs.rm(directory, { recursive: true, force: true });
+});
 
 const createFixture = () => {
   const appRepository = mock<AppsRepository>();
@@ -37,6 +48,8 @@ const createFixture = () => {
   const appStoreRepository = mock<AppStoreRepository>();
   appStoreRepository.getAppStoreBySlug.mockResolvedValue(fromAny({ slug: 'orbis-qa', enabled: true }));
   const mutex = new AsyncMutex();
+  const config = mock<ConfigurationService>();
+  config.get.calledWith('directories').mockReturnValue(fromAny({ dataDir: directory }));
   const handler = new InstallAppHandler(
     appRepository,
     appEventsQueue,
@@ -46,6 +59,8 @@ const createFixture = () => {
     startAppHandler,
     appStoreRepository,
     mutex,
+    config,
+    mock<LoggerService>(),
   );
   return { handler, appRepository, appStoreRepository, appEventsQueue, statusManager, validationService, appInfo, mutex, startAppHandler };
 };
@@ -96,8 +111,6 @@ describe('InstallAppHandler backup retention', () => {
     const form = { SERVICE_LABEL: 'preserved label', custom: { nested: ['keep', 7] }, ...input };
 
     const result = await fixture.handler.execute(appUrn, { form, skipRun: true });
-    await vi.waitFor(() => expect(fixture.statusManager.emitSuccess).toHaveBeenCalledOnce());
-
     expect(fixture.appRepository.createApp).toHaveBeenCalledOnce();
     const row = fixture.appRepository.createApp.mock.calls[0]?.[0];
     expect(row).toMatchObject({
@@ -117,12 +130,7 @@ describe('InstallAppHandler backup retention', () => {
       requestId: result.requestId,
       form: { ...row?.config, skipRun: true },
     });
-    expect(fixture.statusManager.emitSuccess).toHaveBeenCalledExactlyOnceWith({
-      appId: 12,
-      appUrn,
-      event: 'install_success',
-      status: 'stopped',
-    });
+    expect(fixture.statusManager.emitSuccess).not.toHaveBeenCalled();
   });
 
   it.each([null, -1, 101])('rejects invalid retention %s before creating or queuing an app', async (maxBackups) => {
@@ -226,11 +234,69 @@ describe('InstallAppHandler backup retention', () => {
     const fixture = createFixture();
     fixture.appRepository.getAppByUrn.mockResolvedValue(createMockApp());
     fixture.startAppHandler.execute.mockImplementation(async () => {
-      expect(fixture.mutex.resourceLocks.size).toBe(0);
+      expect(fixture.mutex.resourceLocks.has(appStoreLockKey('orbis-qa'))).toBe(false);
       return { requestId: 'existing-app' };
     });
 
     expect(await fixture.handler.execute(appUrn, { form: {} })).toEqual({ requestId: 'existing-app' });
     expect(fixture.appRepository.createApp).not.toHaveBeenCalled();
   });
+
+  it('does not apply custom form values to the installed app identity, status, or migration history', async () => {
+    const fixture = createFixture();
+    fixture.appRepository.getAppByUrn.mockResolvedValue(createMockApp({ id: 19 }));
+    const form = { id: 12, status: 'installing', migrationsBaselined: true, port: 18992 };
+
+    await fixture.handler.execute(appUrn, { form });
+
+    const change = fixture.appRepository.updateAppById.mock.calls[0]?.[1];
+    expect(change).toMatchObject({ config: form, port: 18992 });
+    expect(change).not.toHaveProperty('id');
+    expect(change).not.toHaveProperty('status');
+    expect(change).not.toHaveProperty('migrationsBaselined');
+  });
+
+  it('does not change or start an in-progress reservation as an existing app', async () => {
+    const fixture = createFixture();
+    fixture.appRepository.getAppByUrn.mockResolvedValue(createMockApp({ id: 19, status: 'installing' }));
+
+    await expect(fixture.handler.execute(appUrn, { form: {} })).rejects.toThrow('current app install');
+
+    expect(fixture.appRepository.updateAppById).not.toHaveBeenCalled();
+    expect(fixture.startAppHandler.execute).not.toHaveBeenCalled();
+  });
+});
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+
+it('carries the exact row/version claim through worker ownership and expires it after settlement', async () => {
+  const fixture = createFixture();
+  fixture.appRepository.finishInstallReservation.mockResolvedValue(true);
+  const accepted = await fixture.handler.execute(appUrn, { form: { port: 18993 } });
+  if (!accepted.requestId) throw new Error('Missing request');
+  const app = await fixture.appRepository.createApp.mock.results[0]?.value;
+  if (!app) throw new Error('Missing reservation');
+  fixture.appRepository.getAppByUrn.mockResolvedValue(app);
+  const claimed = await fixture.handler.claim(appUrn, accepted.requestId, false);
+  if (!claimed) throw new Error('Missing owned install');
+  expect(await verifyInstallRequestOwnership(claimed.ownership, appUrn, accepted.requestId)).toEqual({
+    id: app.id,
+    createdAt: app.createdAt,
+    appName: app.appName,
+    appStoreSlug: app.appStoreSlug,
+    version: app.version,
+  });
+  await claimed.settle({ success: true, message: 'Installed' });
+  await expect(verifyInstallRequestOwnership(claimed.ownership, appUrn, accepted.requestId)).rejects.toThrow();
+});
+it('refuses to claim a reserved install if its version changed before worker admission', async () => {
+  const fixture = createFixture();
+  const accepted = await fixture.handler.execute(appUrn, { form: { port: 18993 } });
+  if (!accepted.requestId) throw new Error('Missing request');
+  const app = await fixture.appRepository.createApp.mock.results[0]?.value;
+  if (!app) throw new Error('Missing reservation');
+  fixture.appRepository.getAppByUrn.mockResolvedValue({ ...app, version: app.version + 1 });
+  expect(await fixture.handler.claim(appUrn, accepted.requestId, false)).toBeUndefined();
+  expect(fixture.appRepository.finishInstallReservation).not.toHaveBeenCalled();
 });

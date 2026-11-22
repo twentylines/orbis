@@ -116,3 +116,18 @@ const recoveryAuthentication = await Bun.build({
 });
 if (!recoveryAuthentication.success) throw new AggregateError(recoveryAuthentication.logs, 'Recovery authentication worker build failed');
 await assertNoPrivateBuildPaths(recoveryAuthentication.outputs);
+
+const recoverySource = await Bun.build({
+  entrypoints: ['./src/sentinel-recovery-source.ts'],
+  outdir: './dist',
+  naming: { entry: '[name].mjs' },
+  format: 'esm',
+  target: 'node',
+  env: 'disable',
+  define: { 'process.env.NODE_ENV': JSON.stringify('production') },
+  sourcemap: true,
+  minify: true,
+  external: productionExternals,
+});
+if (!recoverySource.success) throw new AggregateError(recoverySource.logs, 'Recovery source exporter build failed');
+await assertNoPrivateBuildPaths(recoverySource.outputs);

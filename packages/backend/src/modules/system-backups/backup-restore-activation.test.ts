@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises';
 import os from 'node:os';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { BackupRestoreJournal } from './backup-restore-journal';
@@ -13,7 +14,13 @@ import { verifyRetainedCandidateApps } from './time-machine-retained-app-result'
 
 vi.mock('./backup-restores.service', () => ({ BackupRestoresService: class {} }));
 vi.mock('./backup-restore-journal', () => ({ BackupRestoreJournal: { active: vi.fn(), latest: vi.fn() } }));
-vi.mock('./backup-restore-runtime', () => ({ readRestoreOperation: vi.fn() }));
+const candidateAppEffect = vi.fn();
+vi.mock('./backup-restore-runtime', () => ({
+  readRestoreOperation: vi.fn(),
+  BackupRestoreDockerRuntime: class {
+    candidateAppEffect = candidateAppEffect;
+  },
+}));
 vi.mock('./backup-restore-startup', () => ({
   restoreStartupRole: vi.fn(),
   captureRestoreStartupRole: vi.fn(),
@@ -40,7 +47,7 @@ const appUrn = 'photos:fixture-store';
 const selected = { id: 17, appUrn };
 
 function journal(phase = 'committing', decision: string | null = 'commit', controller = candidateId) {
-  return { state: { id: transactionId, phase, decision, candidateController: controller } };
+  return { directory: '/private/transaction', state: { id: transactionId, phase, decision, candidateController: controller } };
 }
 
 function app(status: string, appName = 'photos', appStoreSlug = 'fixture-store') {
@@ -52,43 +59,43 @@ function createService(
     status?: string;
     appRow?: unknown;
     appRows?: readonly unknown[];
-    statusSequence?: readonly string[];
     containers?: readonly { Id: string }[];
     inspect?: (id: string) => Promise<{ State: { Running: boolean; Restarting?: boolean; Paused?: boolean; Health?: { Status: string } } }>;
   } = {},
 ) {
   const appRows = options.appRows ?? [options.appRow ?? app(options.status ?? 'running')];
-  let reads = 0;
   const getAppById = vi.fn(async (id: number) => {
     const row = appRows.find((item) => (item as { id: number }).id === id) as { status?: string } | undefined;
     if (!row) return null;
-    const status = options.statusSequence?.[Math.min(reads, options.statusSequence.length - 1)];
-    reads++;
-    return status ? { ...row, status } : row;
+    return row;
   });
-  const startApp = vi.fn().mockResolvedValue(undefined);
+  const startEffect = vi.fn();
+  const startApp = vi.fn(async (_urn, _id, _appId, start) => start(startEffect));
+  const updateAppById = vi.fn();
   const containers = [...(options.containers ?? [{ Id: 'app-container' }])];
   const listContainers = vi.fn().mockResolvedValue(containers);
   const inspect = options.inspect ?? (async () => ({ State: { Running: true, Health: { Status: 'healthy' } } }));
   const getContainer = vi.fn((id: string) => ({ inspect: () => inspect(id) }));
   const startRetainedSettlement = vi.fn().mockResolvedValue(undefined);
   const service = new BackupRestoreActivationService(
-    { getAppById } as never,
-    { startApp } as never,
+    { getAppById, updateAppById } as never,
+    { resumeRestoredApp: startApp } as never,
     { startRetainedSettlement } as never,
     { listContainers, getContainer } as never,
     { resumeRetainedAfterSettlement: vi.fn() } as never,
   );
-  return { service, getAppById, startApp, listContainers, getContainer, startRetainedSettlement };
+  return { service, getAppById, startApp, startEffect, updateAppById, listContainers, getContainer, startRetainedSettlement };
 }
 
 beforeEach(() => {
+  candidateAppEffect.mockImplementation(async (_host, _urn, effect) => effect());
+  vi.spyOn(fs, 'lstat').mockRejectedValue(Object.assign(new Error('absent'), { code: 'ENOENT' }));
   vi.mocked(coreCaptureRecoveryRequired).mockReturnValue(false);
   vi.mocked(restoreStartupRole).mockReturnValue('candidate');
   vi.mocked(BackupRestoreJournal.active).mockResolvedValue(journal() as never);
   vi.mocked(BackupRestoreJournal.latest).mockResolvedValue(undefined);
   vi.mocked(readRootRestorationState).mockResolvedValue('idle');
-  vi.mocked(readRestoreOperation).mockResolvedValue({ resumeApps: [selected] } as never);
+  vi.mocked(readRestoreOperation).mockResolvedValue({ id: transactionId, resumeApps: [selected] } as never);
   vi.mocked(releaseRestoreInstallationMode).mockReturnValue(true);
   vi.spyOn(os, 'hostname').mockReturnValue(candidateId.slice(0, 12));
 });
@@ -131,6 +138,23 @@ it('does not start user-stopped apps after a committed restore has already compl
   expect(readRestoreOperation).not.toHaveBeenCalled();
   expect(getAppById).not.toHaveBeenCalled();
   expect(startApp).not.toHaveBeenCalled();
+});
+
+it('refuses a hold discovered after command preparation at the actual start callback', async () => {
+  candidateAppEffect.mockImplementationOnce(async (_host, _urn, effect) => effect()).mockRejectedValueOnce(new Error('Late hold'));
+  const { service, startApp, startEffect, updateAppById } = createService({ status: 'stopped' });
+  await expect(service.resumeApps()).rejects.toThrow('Late hold');
+  expect(startApp).toHaveBeenCalledOnce();
+  expect(startEffect).not.toHaveBeenCalled();
+  expect(updateAppById).not.toHaveBeenCalled();
+});
+
+it('refuses a retained request before using the direct app start path', async () => {
+  vi.mocked(fs.lstat).mockResolvedValue({} as never);
+  const { service, startApp } = createService({ status: 'stopped' });
+  await expect(service.resumeApps()).rejects.toThrow('protected app activation');
+  expect(startApp).not.toHaveBeenCalled();
+  expect(readRestoreOperation).not.toHaveBeenCalled();
 });
 
 it('releases installer mode only after the matching candidate journal completes, then stops polling', async () => {
@@ -303,9 +327,8 @@ it('starts only selected stopped apps and waits until their containers are runni
   const selectedStopped = app('stopped');
   const unselected = { id: 18, appName: 'other', appStoreSlug: 'fixture-store', status: 'stopped' };
   let inspections = 0;
-  const { service, getAppById, startApp, getContainer } = createService({
+  const { service, getAppById, startApp, startEffect, updateAppById, getContainer } = createService({
     appRows: [selectedStopped, unselected],
-    statusSequence: ['stopped', 'running'],
     inspect: async () => {
       inspections++;
       return inspections === 1
@@ -320,7 +343,9 @@ it('starts only selected stopped apps and waits until their containers are runni
   expect(getAppById).toHaveBeenNthCalledWith(1, selected.id);
   expect(getAppById).toHaveBeenNthCalledWith(2, selected.id);
   expect(getAppById).toHaveBeenNthCalledWith(3, selected.id);
-  expect(startApp).toHaveBeenCalledExactlyOnceWith({ appUrn });
+  expect(startApp).toHaveBeenCalledExactlyOnceWith(appUrn, transactionId, selected.id, expect.any(Function));
+  expect(startEffect).toHaveBeenCalledOnce();
+  expect(updateAppById).toHaveBeenCalledExactlyOnceWith(selected.id, { status: 'running', pendingRestart: false });
   expect(getContainer).toHaveBeenCalledTimes(2);
   expect(inspections).toBe(2);
 });
@@ -337,34 +362,26 @@ it('does not duplicate a start for an already-running selected app', async () =>
   });
 });
 
-it.each([
-  ['missing app row', { appRow: undefined, appRows: [] }],
-  ['app still stopped', { appRow: app('stopped') }],
-  ['app container missing', { statusSequence: ['running', 'stopped'], containers: [] }],
-] as const)('does not report success when recovery is incomplete: %s', async (_name, options) => {
-  const { service } = createService(options);
-
+it('refuses a missing selected row before dispatch', async () => {
+  const { service, startEffect } = createService({ appRows: [] });
   await expect(service.resumeApps()).rejects.toThrow();
+  expect(startEffect).not.toHaveBeenCalled();
 });
 
-it('does not report success for an unhealthy container', async () => {
-  let appReads = 0;
-  const current = vi.fn(async (_id: number) => {
-    appReads++;
-    return appReads === 1 ? app('running') : app('stopped');
+it.each(['missing', 'unhealthy'])('times out when the app remains %s', async (condition) => {
+  const { service, updateAppById } = createService({
+    containers: condition === 'missing' ? [] : [{ Id: 'app-container' }],
+    inspect: async () => ({ State: { Running: true, Health: { Status: 'unhealthy' } } }),
   });
-  const startApp = vi.fn();
-  const service = new BackupRestoreActivationService(
-    { getAppById: current } as never,
-    { startApp } as never,
-    { startRetainedSettlement: vi.fn() } as never,
-    {
-      listContainers: vi.fn().mockResolvedValue([{ Id: 'app-container' }]),
-      getContainer: vi.fn(() => ({ inspect: async () => ({ State: { Running: true, Health: { Status: 'unhealthy' } } }) })),
-    } as never,
-    { resumeRetainedAfterSettlement: vi.fn() } as never,
-  );
-
-  await expect(service.resumeApps()).rejects.toThrow();
-  expect(appReads).toBe(2);
+  const clock = vi
+    .spyOn(Date, 'now')
+    .mockReturnValueOnce(0)
+    .mockReturnValueOnce(1)
+    .mockReturnValue(15 * 60_000);
+  try {
+    await expect(service.resumeApps()).rejects.toThrow('Some restored apps could not start');
+    expect(updateAppById).not.toHaveBeenCalled();
+  } finally {
+    clock.mockRestore();
+  }
 });

@@ -38,6 +38,7 @@ const rootDestinations: Record<RestoreTreeName, string> = {
 const auxiliaryDestinations = { backups: '/data/backups', logs: '/data/logs', environment: '/data/.env', cache: '/cache' } as const;
 const socketDestination = '/var/run/docker.sock';
 const authorityDestination = '/data/orbis-reset';
+const cliDestination = '/data/.secrets';
 const externalAuthority = /^\/var\/lib\/orbis\/reset-authority\/[a-f0-9]{64}\/data$/;
 const inside = (root: string, target: string) => target === root || target.startsWith(`${root}/`);
 const overlap = (a: string, b: string) => inside(a, b) || inside(b, a);
@@ -132,6 +133,17 @@ export function deriveRestoreStorageLayout(
   >;
   const sources = [...Object.values(roots), ...Object.values(auxiliary)];
   if (sources.some((source, index) => sources.some((other, position) => position !== index && overlap(source, other)))) throw failed();
+  const cli = original.find((mount) => mount.Destination === cliDestination);
+  if (cli) {
+    bind(cli);
+    if (
+      sources.some((source) => overlap(source, cli.Source)) ||
+      (authority && overlap(authority.Source, cli.Source)) ||
+      original.some((mount) => mount.Destination !== cliDestination && inside(cliDestination, mount.Destination))
+    )
+      throw failed();
+    selected.set(cli.Destination, cli);
+  }
   if (authority) {
     if (sources.some((source) => overlap(source, authority.Source))) throw failed();
     selected.set(authority.Destination, authority);
@@ -147,9 +159,15 @@ export function deriveRestoreStorageLayout(
   if (socket) {
     bind(socket);
     if (sources.some((source) => overlap(source, socket.Source))) throw failed();
+    if (cli && overlap(cli.Source, socket.Source)) throw failed();
   }
   // Dedicated paths keep a parent /data bind from exposing reset control during provisional admission.
-  const storage = retainedProvisional ? [...projected.values()] : [...selected.values()].map((mount) => specification(mount));
+  // A retained /data parent must not expose CLI credentials to a restore worker.
+  const storage = cli
+    ? [...projected.values(), ...(!retainedProvisional && authority ? [specification(authority)] : [])]
+    : retainedProvisional
+      ? [...projected.values()]
+      : [...selected.values()].map((mount) => specification(mount));
   const workerMounts = [...storage, ...(socket ? [specification(socket)] : [])].sort(mountOrder);
   const verifierMounts = storage.map((mount) => ({
     ...mount,

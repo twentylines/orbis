@@ -1,7 +1,16 @@
+import { backupDatabaseProfileQuery, readBackupDatabaseProfile } from './backup-database-profile';
 import { Client, type ClientConfig } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
-import { backupDatabaseColumns, backupDatabaseTables } from './backup-database-records';
+import {
+  backupDatabaseColumns,
+  backupDatabaseTables,
+  backupDatabaseVersion,
+  backupDatabaseCount,
+  backupMigrationDigest,
+  backupDatabaseLimits,
+  type BackupDatabaseCounts,
+} from './backup-database-records';
 import { invalidRestoreDatabase, readNormalizedBackupDatabase, type NormalizedBackupDatabase } from './backup-normalized-database';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
@@ -77,12 +86,37 @@ async function ownedDatabase(client: Client, name: string, marker: string, usern
   return { name, oid: row.oid, marker };
 }
 
+async function verifyMigrationProjection(client: Client, migrationSha256?: string) {
+  if (!migrationSha256) {
+    const result = await client.query('SELECT 1 FROM public.app WHERE migrations_baselined LIMIT 1');
+    if (result.rows.length) throw invalidRestoreDatabase();
+    return;
+  }
+  const flags = await client.query<{ id: number; migrations_baselined: boolean }>(
+    `SELECT id,migrations_baselined FROM public.app LIMIT ${backupDatabaseLimits.rows + 1}`,
+  );
+  const entries = await client.query<{ app_id: number; migration_id: string }>(
+    `SELECT app_id,migration_id FROM public.app_migration LIMIT ${backupDatabaseLimits.rows + 1}`,
+  );
+  if (flags.rows.length + entries.rows.length > backupDatabaseLimits.rows) throw invalidRestoreDatabase();
+  const byId = new Map<number, string[]>();
+  for (const row of entries.rows) {
+    const ids = byId.get(row.app_id) ?? [];
+    ids.push(row.migration_id);
+    byId.set(row.app_id, ids);
+  }
+  const flagMap = new Map(flags.rows.map((row) => [row.id, row.migrations_baselined]));
+  if ([...byId.keys()].some((id) => flagMap.get(id) !== true) || backupMigrationDigest(flagMap, byId) !== migrationSha256)
+    throw invalidRestoreDatabase();
+}
+
 export async function verifyRestoreDatabase(options: {
   id: string;
   nonce: string;
   connection: RestoreDatabaseConnection;
   owner: RestoreDatabaseOwner;
-  counts: Record<(typeof backupDatabaseTables)[number], number>;
+  counts: BackupDatabaseCounts;
+  migrationSha256?: string;
   signal: AbortSignal;
 }) {
   const expected = identity(options.id, options.nonce);
@@ -94,12 +128,15 @@ export async function verifyRestoreDatabase(options: {
     if (!(await ownedDatabase(control.client, expected.name, expected.marker, options.connection.user, options.owner.oid)))
       throw invalidRestoreDatabase();
     target = await connect(options.connection, expected.name, options.signal);
-    for (const table of backupDatabaseTables) {
-      const expectedCount = options.counts[table];
+    const version = readBackupDatabaseProfile((await target.client.query(backupDatabaseProfileQuery)).rows[0]);
+    if (version < backupDatabaseVersion(options.counts)) throw invalidRestoreDatabase();
+    for (const table of backupDatabaseTables(version)) {
+      const expectedCount = backupDatabaseCount(options.counts, table);
       if (!Number.isSafeInteger(expectedCount) || expectedCount < 0) throw invalidRestoreDatabase();
       const result = await target.client.query(`SELECT count(*)::integer AS count FROM public.${quote(table)}`);
       if (result.rows[0]?.count !== expectedCount) throw invalidRestoreDatabase();
     }
+    if (version === 2) await verifyMigrationProjection(target.client, options.migrationSha256);
     const active = await target.client.query("SELECT count(*)::integer AS count FROM public.app WHERE status <> 'stopped'");
     if (active.rows[0]?.count !== 0) throw invalidRestoreDatabase();
   } catch {
@@ -165,14 +202,20 @@ export async function prepareRestoreDatabase(options: Preparation) {
     await migrate(drizzle(target.client), { migrationsFolder: options.trustedMigrationsFolder });
     signal.throwIfAborted();
     await target.client.query('BEGIN');
-    await target.client.query(`TRUNCATE ${backupDatabaseTables.map((table) => `public.${quote(table)}`).join(',')} RESTART IDENTITY`);
+    const version = readBackupDatabaseProfile((await target.client.query(backupDatabaseProfileQuery)).rows[0]);
+    const archiveVersion = backupDatabaseVersion(source.expected.counts);
+    if (version < archiveVersion) throw invalidRestoreDatabase();
+    const tables = backupDatabaseTables(version);
+    await target.client.query(`TRUNCATE ${tables.map((table) => `public.${quote(table)}`).join(',')} RESTART IDENTITY`);
     let records = 0;
     const total = Object.values(source.expected.counts).reduce((sum, count) => sum + count, 0);
     const client = target.client;
     await readNormalizedBackupDatabase(source, signal, async (table, row) => {
       signal.throwIfAborted();
-      const columns = backupDatabaseColumns(table);
-      const values = columns.map((column) => (table === 'app' && column === 'status' ? 'stopped' : row[column]));
+      const columns = backupDatabaseColumns(table, version);
+      const values = columns.map((column) =>
+        table === 'app' && column === 'status' ? 'stopped' : column === 'migrations_baselined' ? (row[column] ?? false) : row[column],
+      );
       await client.query(
         `INSERT INTO public.${quote(table)} (${columns.map(quote).join(',')}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(',')})`,
         values,
@@ -186,10 +229,11 @@ export async function prepareRestoreDatabase(options: Preparation) {
         `public.${quote(`${table}_id_seq`)}`,
       ]);
     }
-    for (const table of backupDatabaseTables) {
+    for (const table of tables) {
       const count = await client.query<{ count: string }>(`SELECT count(*) AS count FROM public.${quote(table)}`);
-      if (Number(count.rows[0]?.count) !== source.expected.counts[table]) throw invalidRestoreDatabase();
+      if (Number(count.rows[0]?.count) !== backupDatabaseCount(source.expected.counts, table)) throw invalidRestoreDatabase();
     }
+    if (version === 2) await verifyMigrationProjection(client, source.expected.migrationSha256);
     signal.throwIfAborted();
     await client.query('COMMIT');
     complete = true;

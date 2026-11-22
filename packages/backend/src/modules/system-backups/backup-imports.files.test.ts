@@ -1,4 +1,4 @@
-import { stabilizeDarwinFixtureCreation } from './darwin-files.fixture';
+import { stabilizeDarwinFixtureCreation, stabilizeExistingDarwinFixtures } from './darwin-files.fixture';
 import fs from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
@@ -17,6 +17,10 @@ import type { AuthService } from '../auth/auth.service';
 import type { PasskeyService } from '../auth/passkey.service';
 import type { Request } from 'express';
 import { ResetState } from '../system-reset/reset-state';
+import { createAppUrn } from '@/common/helpers/app-helpers';
+import { installRequestDirectory } from '../app-lifecycle/install-request-receipt';
+import { directoryMetadata, fileMetadata } from './backup-restore-source.fixture';
+import { encryptBackup } from './backup-crypto';
 
 let root: string;
 let restoreDarwinCreation: () => void = () => undefined;
@@ -296,6 +300,54 @@ it('uploads and authenticates a complete backup for review without replacing liv
   expect(metadata).not.toContain('jwtSecret');
   expect((await service.list(2)).jobs).toEqual([]);
   await expect(service.review(id, 2, credentials, fixturePassphrase)).rejects.toThrow('not found');
+});
+
+it('rejects an encrypted archive that would activate a held app before isolated database review', async () => {
+  const fixture = await fullBackupFixture(root);
+  const receipt = installRequestDirectory(path.join(fixture.content, 'data'), createAppUrn('held', 'catalogue'));
+  await fs.mkdir(receipt, { recursive: true, mode: 0o700 });
+  const file = path.join(receipt, randomUUID());
+  await fs.writeFile(file, '', { mode: 0o600 });
+  stabilizeExistingDarwinFixtures(file);
+  fixture.manifest.files.push(await fileMetadata(fixture.content, path.relative(fixture.content, file)));
+  for (const entry of [path.dirname(receipt), receipt])
+    fixture.manifest.directories.push(await directoryMetadata(fixture.content, path.relative(fixture.content, entry)));
+  fixture.manifest.containers.push({ id: '4'.repeat(64), project: 'held_catalogue', running: true });
+  await fixture.write();
+  const encrypted = path.join(root, 'held-import.orbis');
+  await encryptBackup({ source: fixture.archive, destination: encrypted, passphrase: fixturePassphrase });
+  stabilizeExistingDarwinFixtures(encrypted);
+  const created = await service.create(1, credentials);
+  await service.receive(created.id, 1, createReadStream(encrypted), String((await fs.stat(encrypted)).size));
+  await service.review(created.id, 1, credentials, fixturePassphrase);
+  const job = await finish(created.id);
+  expect(job?.status).toBe('failed');
+  expect(job?.message).toContain('unfinished install recovery');
+  expect(database.review).not.toHaveBeenCalled();
+  expect((await fs.readdir(directory(created.id))).sort()).toEqual(['backup.orbis', 'job.json']);
+  expect(await fs.readFile(path.join(root, 'live', 'preserve'), 'utf8')).toBe('live server fixture');
+});
+
+it('rejects unsafe archived receipt permissions before isolated database review', async () => {
+  const fixture = await fullBackupFixture(root);
+  const receipt = installRequestDirectory(path.join(fixture.content, 'data'), createAppUrn('held', 'catalogue'));
+  await fs.mkdir(receipt, { recursive: true, mode: 0o700 });
+  fixture.manifest.directories.push(await directoryMetadata(fixture.content, path.relative(fixture.content, path.dirname(receipt))));
+  fixture.manifest.directories.push({ ...(await directoryMetadata(fixture.content, path.relative(fixture.content, receipt))), mode: 0o755 });
+  fixture.manifest.containers.push({ id: '4'.repeat(64), project: 'held_catalogue', running: true });
+  await fixture.write();
+  const encrypted = path.join(root, 'unsafe-permissions-import.orbis');
+  await encryptBackup({ source: fixture.archive, destination: encrypted, passphrase: fixturePassphrase });
+  stabilizeExistingDarwinFixtures(encrypted);
+  const created = await service.create(1, credentials);
+  await service.receive(created.id, 1, createReadStream(encrypted), String((await fs.stat(encrypted)).size));
+  await service.review(created.id, 1, credentials, fixturePassphrase);
+  const job = await finish(created.id);
+  expect(job?.status).toBe('failed');
+  expect(job?.message).toContain('recovery storage could not be verified');
+  expect(database.review).not.toHaveBeenCalled();
+  expect((await fs.readdir(directory(created.id))).sort()).toEqual(['backup.orbis', 'job.json']);
+  expect(await fs.readFile(path.join(root, 'live', 'preserve'), 'utf8')).toBe('live server fixture');
 });
 
 it('keeps only the encrypted file after a wrong passphrase and supports an authenticated retry', async () => {

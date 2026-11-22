@@ -2,20 +2,38 @@ import { createDecipheriv, createHash, pbkdf2 } from 'node:crypto';
 import { promisify } from 'node:util';
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import { type } from 'arktype';
-import { app, appStore, link, user } from '@/core/database/drizzle/schema';
+import { app, appMigration, appStore, link, user } from '@/core/database/drizzle/schema';
 import { passkeyStateSchema } from '../auth/passkey.store';
 import { BackupRequirementError } from './backup-files';
 import { appRuntimeImageBindings, type decodeAppRuntimeCapture } from './time-machine-app-runtime-capture';
 
 const deriveKey = promisify(pbkdf2);
-const tables = { user, app_store: appStore, app, link } as const;
+const tables = { user, app_store: appStore, app, link, app_migration: appMigration } as const;
 export type BackupDatabaseTable = keyof typeof tables;
-export const backupDatabaseTables = Object.keys(tables) as BackupDatabaseTable[];
-const metadata = Object.fromEntries(backupDatabaseTables.map((name) => [name, getTableConfig(tables[name]).columns])) as Record<
+const legacyTables = ['user', 'app_store', 'app', 'link'] as const;
+const ledgerTables = [...legacyTables, 'app_migration'] as const;
+export const backupDatabaseTables = (version: 1 | 2): readonly BackupDatabaseTable[] => (version === 2 ? ledgerTables : legacyTables);
+
+const count = 'number.integer >= 0 & number <= 250000';
+const legacyCounts = { user: count, app_store: count, app: count, link: count } as const;
+export const backupDatabaseCountsSchema = type(legacyCounts)
+  .onUndeclaredKey('reject')
+  .or(type({ ...legacyCounts, app_migration: count }).onUndeclaredKey('reject'));
+export type BackupDatabaseCounts = typeof backupDatabaseCountsSchema.infer;
+export const backupDatabaseVersion = (counts: BackupDatabaseCounts) => ('app_migration' in counts ? 2 : 1);
+export const backupDatabaseCount = (counts: BackupDatabaseCounts, table: BackupDatabaseTable) =>
+  table === 'app_migration' ? ('app_migration' in counts ? counts.app_migration : 0) : counts[table];
+
+const metadata = Object.fromEntries(ledgerTables.map((table) => [table, getTableConfig(tables[table]).columns])) as Record<
   BackupDatabaseTable,
   ReturnType<typeof getTableConfig>['columns']
 >;
-export const backupDatabaseColumns = (name: BackupDatabaseTable) => metadata[name].map((column) => column.name);
+const legacyAppColumns = metadata.app.filter((column) => column.name !== 'migrations_baselined');
+const columns = (name: BackupDatabaseTable, version: 1 | 2) => (name === 'app' && version === 1 ? legacyAppColumns : metadata[name]);
+export const backupDatabaseColumns = (name: BackupDatabaseTable, version: 1 | 2 = 1) => columns(name, version).map((column) => column.name);
+export const backupDatabaseOrder = (table: BackupDatabaseTable) =>
+  table === 'app_migration' ? ['app_id', 'migration_id'] : [table === 'app_store' ? 'slug' : 'id'];
+
 export const backupDatabaseLimits = { rows: 250_000, rowBytes: 8 * 1024 * 1024, totalBytes: 256 * 1024 * 1024, depth: 32, nodes: 250_000 };
 type RecordValue = Record<string, unknown>;
 type Account = { id: number; operator: boolean; totp_enabled: boolean; totp_secret: string | null; salt: string | null };
@@ -32,6 +50,14 @@ const object = (value: unknown): value is RecordValue =>
   Boolean(value && typeof value === 'object' && !Array.isArray(value) && [null, Object.prototype].includes(Object.getPrototypeOf(value)));
 const integer = (value: unknown): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= -2147483648 && value <= 2147483647;
+export function backupMigrationDigest(flags: ReadonlyMap<number, boolean>, migrations: ReadonlyMap<number, string[]>) {
+  const digest = createHash('sha256');
+  for (const [id, baselined] of [...flags].sort(([a], [b]) => a - b)) {
+    digest.update(JSON.stringify([id, baselined, [...(migrations.get(id) ?? [])].sort()]));
+    digest.update('\n');
+  }
+  return digest.digest('hex');
+}
 const safeText = (value: string) => !/[\0\uD800-\uDFFF]/u.test(value);
 
 export function boundedPasswordHash(value: unknown): boolean {
@@ -77,13 +103,15 @@ export class BackupDatabaseRecords {
   private bytes = 0;
   private accounts = new Map<number, Account>();
   private linkUsers = new Set<number>();
-  private identities = Object.fromEntries(backupDatabaseTables.map((name) => [name, new Set<number | string>()])) as Record<
+  private identities = Object.fromEntries(backupDatabaseTables(2).map((name) => [name, new Set<number | string>()])) as Record<
     BackupDatabaseTable,
     Set<number | string>
   >;
   private storeHashes = new Set<string>();
   private subnets = new Set<string>();
-  readonly counts = { user: 0, app_store: 0, app: 0, link: 0 };
+  readonly counts: BackupDatabaseCounts;
+  private readonly migrationFlags = new Map<number, boolean>();
+  private readonly migrationIds = new Map<number, string[]>();
 
   private readonly expectedApps: Map<number, ReturnType<typeof decodeAppRuntimeCapture>['metadata']['apps'][number]> | undefined;
   private readonly seenApps = new Set<number>();
@@ -91,7 +119,9 @@ export class BackupDatabaseRecords {
   constructor(
     private readonly jwtSecret: string,
     appRuntime?: ReturnType<typeof decodeAppRuntimeCapture>,
+    private readonly version: 1 | 2 = 1,
   ) {
+    this.counts = { user: 0, app_store: 0, app: 0, link: 0, ...(version === 2 ? { app_migration: 0 } : {}) };
     if (!jwtSecret || jwtSecret.length > 4096) invalid('account');
     if (appRuntime) {
       appRuntimeImageBindings(appRuntime);
@@ -100,11 +130,11 @@ export class BackupDatabaseRecords {
   }
 
   accept(name: BackupDatabaseTable, value: unknown): RecordValue {
-    if (!Object.hasOwn(tables, name) || !object(value)) invalid('schema');
-    const columns = metadata[name];
-    if (Object.keys(value).length !== columns.length || columns.some((column) => !Object.hasOwn(value, column.name))) invalid('schema');
+    if (!backupDatabaseTables(this.version).includes(name) || !object(value)) invalid('schema');
+    const fields = columns(name, this.version);
+    if (Object.keys(value).length !== fields.length || fields.some((column) => !Object.hasOwn(value, column.name))) invalid('schema');
     const row: RecordValue = {};
-    for (const column of columns) {
+    for (const column of fields) {
       const entry = value[column.name];
       if (entry === null) {
         if (column.notNull && !(name === 'app' && column.name === 'user_config_enabled' && this.expectedApps)) invalid('schema');
@@ -129,8 +159,26 @@ export class BackupDatabaseRecords {
     if (this.count + 1 > backupDatabaseLimits.rows || size > backupDatabaseLimits.rowBytes || this.bytes + size > backupDatabaseLimits.totalBytes)
       invalid('limit');
     const id = name === 'app_store' ? row.slug : row.id;
-    if (name === 'app_store' ? typeof id !== 'string' || !id : !integer(id) || id <= 0) invalid('identity');
-    if (this.identities[name].has(id as number | string)) invalid('identity');
+    let key: number | string;
+    if (name === 'app_migration') {
+      const { app_id: appId, migration_id: migrationId } = row;
+      if (
+        !integer(appId) ||
+        this.migrationFlags.get(appId) !== true ||
+        typeof migrationId !== 'string' ||
+        !/^[a-z0-9][a-z0-9_.-]{0,63}$/.test(migrationId)
+      )
+        invalid('identity');
+      const ids = this.migrationIds.get(appId) ?? [];
+      if (ids.length >= 300) invalid('limit');
+      key = `${appId}:${migrationId}`;
+      if (this.identities[name].has(key)) invalid('identity');
+      ids.push(migrationId);
+      this.migrationIds.set(appId, ids);
+    } else if (name === 'app_store' && typeof id === 'string' && id) key = id;
+    else if (name !== 'app_store' && integer(id) && id > 0) key = id;
+    else invalid('identity');
+    if (this.identities[name].has(key)) invalid('identity');
     if (name === 'app' && this.expectedApps) {
       const expected = this.expectedApps.get(row.id as number);
       if (
@@ -154,15 +202,23 @@ export class BackupDatabaseRecords {
     };
     const storeHash = name === 'app_store' ? unique(this.storeHashes, 'hash') : null;
     const subnet = name === 'app' ? unique(this.subnets, 'subnet') : null;
-    this.identities[name].add(id as number | string);
+    this.identities[name].add(key);
+    if (name === 'app' && this.version === 2) this.migrationFlags.set(row.id as number, row.migrations_baselined as boolean);
     if (name === 'user') this.accounts.set(row.id as number, row as Account);
     if (name === 'link') this.linkUsers.add(row.user_id as number);
     if (storeHash !== null) this.storeHashes.add(storeHash);
     if (subnet !== null) this.subnets.add(subnet);
     this.count++;
     this.bytes += size;
-    this.counts[name]++;
+    if (name === 'app_migration') {
+      if (!('app_migration' in this.counts)) invalid('schema');
+      this.counts.app_migration++;
+    } else this.counts[name]++;
     return JSON.parse(encoded) as RecordValue;
+  }
+
+  migrationDigest() {
+    return this.version === 2 ? backupMigrationDigest(this.migrationFlags, this.migrationIds) : undefined;
   }
 
   async finish(passkeys: unknown | undefined, signal: AbortSignal) {

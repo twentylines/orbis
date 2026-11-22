@@ -251,3 +251,25 @@ it('does not publish a completed encrypted file when cancelled before packaging'
   ).rejects.toThrow();
   await expect(fs.stat(path.join(root, 'backup.orbis'))).rejects.toMatchObject({ code: 'ENOENT' });
 });
+
+it('keeps migration operation records and checkpoints local while retaining ordinary app files', async () => {
+  const state = path.join(root, 'state');
+  const journal = path.join(state, 'orbis-app-migrations', 'request');
+  await fs.mkdir(journal, { recursive: true, mode: 0o700 });
+  await fs.writeFile(path.join(journal, 'before.tar.gz'), 'protected checkpoint');
+  await fs.writeFile(path.join(state, 'settings.json'), 'ordinary settings');
+  const inventory = await inventoryBackup([{ name: 'data/state', source: state }], signal());
+  expect(inventory.files.map(({ name }) => name)).toEqual(['data/state/settings.json']);
+  expect(await fs.readFile(path.join(journal, 'before.tar.gz'), 'utf8')).toBe('protected checkpoint');
+});
+
+it('keeps ordinary update completion intents local instead of copying them into a portable backup', async () => {
+  const state = path.join(root, 'state');
+  const results = path.join(state, 'time-machine/image-pins/ordinary-results');
+  await fs.mkdir(results, { recursive: true, mode: 0o700 });
+  await fs.writeFile(path.join(results, 'request.json'), 'private completion intent', { mode: 0o600 });
+  await fs.writeFile(path.join(state, 'settings.json'), 'ordinary settings');
+  const inventory = await inventoryBackup([{ name: 'data/state', source: state }], signal());
+  expect(inventory.files.map(({ name }) => name)).toEqual(['data/state/settings.json']);
+  expect(await fs.readFile(path.join(results, 'request.json'), 'utf8')).toBe('private completion intent');
+});

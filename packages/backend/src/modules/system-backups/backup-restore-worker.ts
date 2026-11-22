@@ -77,8 +77,10 @@ export async function executeRestoreWorker(options: {
         const recover = async () => {
           progress({ stage: 'recovering', message: 'Recovering your original server.' });
           // Recovery remains active after the requested restore has been cancelled.
-          await runtime.stopWriters(new AbortController().signal);
-          await discardRestorePayload({ journal, connection: bootstrap.connection, signal: new AbortController().signal });
+          if ((await journal.refresh()).phase !== 'discarded') {
+            await runtime.stopWriters(new AbortController().signal);
+            await discardRestorePayload({ journal, connection: bootstrap.connection, signal: new AbortController().signal });
+          }
           await runtime.resumeOriginal();
         };
         if (['preparing', 'discarded'].includes(current.phase)) {

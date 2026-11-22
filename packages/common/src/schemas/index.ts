@@ -1,3 +1,4 @@
+import { appJobSchema, appJobResponseSchema, type AppJob } from './app-job.js';
 import { appLaunchSchema, defaultAppLaunch, type AppLaunchPreferences, type AppOpeningMode } from './app-launch.js';
 import { isNewBareUsername, reservedUsernames } from './account-identifier.js';
 export { isNewBareUsername, reservedUsernames };
@@ -60,6 +61,9 @@ import {
 import { desktopAppearanceSchema, defaultDesktopAppearance, normaliseDesktopAppearance, type DesktopAppearance } from './desktop-appearance.js';
 
 export {
+  appJobSchema,
+  appJobResponseSchema,
+  type AppJob,
   appLaunchSchema,
   defaultAppLaunch,
   type AppLaunchPreferences,

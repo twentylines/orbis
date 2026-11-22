@@ -1,4 +1,5 @@
 import copy
+from email.message import Message
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,12 @@ UNKNOWN = {'installedVersion': None, 'availableVersion': None, 'state': 'unknown
 STATUS = {'schema': 'orbis-sentinel.status.v1', 'protocolVersion': 1,
           'components': {'orbis': UNKNOWN, 'sentinel': {
               'installedVersion': '0.1.0-dev.10', 'availableVersion': None, 'state': 'healthy'}}}
+READINGS_UNAVAILABLE = {'schema': 'orbis-sentinel.system-readings.v1', 'state': 'unavailable', 'ageMs': None, 'sample': None}
+READINGS = {**READINGS_UNAVAILABLE, 'state': 'ready', 'ageMs': 200, 'sample': {
+    'sampledAt': 1760000000000,
+    'cpu': {'model': 'Actual CPU', 'reportedClockGHz': 2.4, 'totalPercent': 60, 'perCorePercent': [0, 50], 'uptimeSeconds': 11.5},
+    'memory': {'totalBytes': 4096, 'availableBytes': 1024, 'swapTotalBytes': 0, 'swapFreeBytes': 0},
+}}
 
 
 class SentinelStatusTests(unittest.TestCase):
@@ -50,7 +57,8 @@ class SentinelStatusTests(unittest.TestCase):
         self.listeners.append(listener)
         if wire is None:
             body = json.dumps(STATUS).encode() if body is None else body
-            wire = b'HTTP/1.1 200 OK\r\nContent-Length: ' + str(len(body)).encode() + b'\r\nConnection: close\r\n\r\n' + body
+            wire = (b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ' + str(len(body)).encode()
+                    + b'\r\nConnection: close\r\n\r\n' + body)
 
         def serve():
             while not self.stop.is_set():
@@ -191,6 +199,60 @@ class SentinelStatusTests(unittest.TestCase):
                 else:
                     reader.assert_not_called()
                     self.assertEqual(handler.send_json.call_args.args[0], 403)
+            self.assertEqual(handler.server.mock_calls, [])
+
+    def test_rich_readings_relay_the_complete_fixed_snapshot_after_peer_check(self):
+        self.start(json.dumps(READINGS).encode())
+        with mock.patch.object(SERVICE, 'trusted_capture_peer', return_value=True) as peer:
+            self.assertEqual(SERVICE.sentinel_system_readings(self.path), READINGS)
+        peer.assert_called_once()
+        self.assertEqual(self.requests, [b'GET /sentinel/api/v1/system-readings HTTP/1.1\r\n'
+                                         b'Host: localhost\r\nConnection: close\r\n\r\n'])
+        with mock.patch.object(SERVICE, 'trusted_capture_peer', return_value=False):
+            self.assertEqual(SERVICE.sentinel_system_readings(self.path), READINGS_UNAVAILABLE)
+        self.assertEqual(len([request for request in self.requests if request]), 1)
+
+    def test_rich_readings_reject_framing_and_partial_reply_and_report_old_component_unavailable(self):
+        body = json.dumps(READINGS).encode()
+        invalid = [
+            {'wire': b'HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n'},
+            {'wire': b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n' + body},
+            {'body': json.dumps({**READINGS, 'sample': {**READINGS['sample'], 'cpu': {
+                **READINGS['sample']['cpu'], 'reportedClockGHz': None,
+            }}}).encode()},
+            {'body': json.dumps({**READINGS, 'state': 'stale'}).encode()},
+            {'body': b'{"state":"ready","state":"unavailable"}'},
+            {'body': b'x' * (16 * 1024 + 1)},
+            {'body': body, 'swap': True},
+        ]
+        with mock.patch.object(SERVICE, 'trusted_capture_peer', return_value=True):
+            for index, options in enumerate(invalid):
+                with self.subTest(index=index):
+                    self.path = self.root / ('r' + str(index))
+                    self.start(**options)
+                    self.assertEqual(SERVICE.sentinel_system_readings(self.path), READINGS_UNAVAILABLE)
+            self.path = self.root / 'stall'
+            self.start(body, stall=True)
+            started = time.monotonic()
+            self.assertEqual(SERVICE.sentinel_system_readings(self.path), READINGS_UNAVAILABLE)
+            self.assertLess(time.monotonic() - started, 1)
+
+    def test_rich_readings_host_route_is_exact_bodyless_and_peer_gated(self):
+        for suffix, length, allowed, expected in [('', None, True, 200), ('', None, False, 403),
+                                                    ('', '1', True, 400), ('?source=other', None, True, 404)]:
+            handler = object.__new__(SERVICE.Handler)
+            handler.path = '/v1/sentinel/system-readings' + suffix
+            handler.connection = mock.Mock()
+            handler.server = mock.Mock()
+            handler.headers = Message()
+            if length is not None:
+                handler.headers.add_header('Content-Length', length)
+            handler.send_json = mock.Mock()
+            with mock.patch.object(SERVICE, 'trusted_capture_peer', return_value=allowed), \
+                    mock.patch.object(SERVICE, 'sentinel_system_readings', return_value=READINGS) as reader:
+                handler.do_GET()
+            self.assertEqual(handler.send_json.call_args.args[0], expected)
+            self.assertEqual(reader.call_count, int(expected == 200))
             self.assertEqual(handler.server.mock_calls, [])
 
 

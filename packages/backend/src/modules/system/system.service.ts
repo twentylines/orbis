@@ -1,17 +1,21 @@
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
-import { LoggerService } from '@/core/logger/logger.service';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { HostMemoryService, type HostMemory, type MemoryScope } from './host-memory.service';
 import { X509Certificate } from 'node:crypto';
 import si from 'systeminformation';
 import fs from 'node:fs/promises';
 import { cpuUsage, parseHostCpuStat, reportedCpuClockGHz, reportedCpuModel, type CpuSnapshot } from './host-cpu';
 import { parseRuntimeNetwork, runtimeNetworkRates, type RuntimeNetworkSnapshot } from './runtime-network';
+import { freshSentinelSample, readSentinelSystemReadings } from './sentinel-system-readings';
+
+const safe = (value: number | undefined | null) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null);
 
 @Injectable()
 export class SystemService {
   private previousHostCpu: CpuSnapshot | null = null;
   private previousHostCpuAt: number | null = null;
+  private lastHostReadingsAt: number | null = null;
   private previousRuntimeNetwork: RuntimeNetworkSnapshot | null = null;
   private networkInterface: { expiresAt: number; name: string } | null = null;
   private telemetryCache: { expiresAt: number; result: Awaited<ReturnType<SystemService['readTelemetry']>> } | null = null;
@@ -20,45 +24,35 @@ export class SystemService {
   private disksInFlight: Promise<Awaited<ReturnType<typeof si.fsSize>>> | null = null;
 
   constructor(
-    private readonly logger: LoggerService,
     private readonly config: ConfigurationService,
     private readonly filesystem: FilesystemService,
+    private readonly hostMemory: HostMemoryService,
   ) {}
 
   public async getSystemLoad() {
-    const { currentLoad } = await si.currentLoad();
+    const sample = await this.getTelemetry();
+    const { totalBytes: total, availableBytes: available, scope } = sample.memory;
+    if (total === null || total <= 0 || available === null || scope === 'unavailable')
+      throw new ServiceUnavailableException('Memory usage is temporarily unavailable');
+    const memResult = { total, used: total - available, source: scope === 'host-proc' ? ('host' as const) : scope };
+    const [disk0] = sample.filesystems;
 
-    const memResult = { total: 0, used: 0, available: 0 };
-
-    try {
-      const memInfo = await this.filesystem.readTextFile('/host/proc/meminfo');
-
-      memResult.total = Number(memInfo?.toString().match(/MemTotal:\s+(\d+)/)?.[1] ?? 0) * 1024;
-      memResult.available = Number(memInfo?.toString().match(/MemAvailable:\s+(\d+)/)?.[1] ?? 0) * 1024;
-      memResult.used = memResult.total - memResult.available;
-    } catch (e) {
-      this.logger.error(`Unable to read /host/proc/meminfo: ${e}`);
-    }
-
-    const [disk0] = await si.fsSize();
-
-    const disk = disk0 ?? { available: 0, size: 0 };
-    const diskFree = Math.round(disk.available / 1024 / 1024 / 1024);
-    const diskSize = Math.round(disk.size / 1024 / 1024 / 1024);
+    const diskFree = Math.round((disk0?.availableBytes ?? 0) / 1024 / 1024 / 1024);
+    const diskSize = Math.round((disk0?.sizeBytes ?? 0) / 1024 / 1024 / 1024);
     const diskUsed = diskSize - diskFree;
     const percentUsed = Math.round((diskUsed / diskSize) * 100);
 
     const memoryTotal = Math.round(Number(memResult.total) / 1024 / 1024 / 1024);
-    const memoryFree = Math.round(Number(memResult.available) / 1024 / 1024 / 1024);
-    const percentUsedMemory = Math.round(((memoryTotal - memoryFree) / memoryTotal) * 100);
+    const percentUsedMemory = memResult.total > 0 ? Math.round((memResult.used / memResult.total) * 1000) / 10 : 0;
 
     return {
       diskUsed: diskUsed || 0,
       diskSize: diskSize || 0,
       percentUsed: percentUsed || 0,
-      cpuLoad: currentLoad || 0,
+      cpuLoad: sample.cpu.totalPercent || 0,
       memoryTotal: memoryTotal || 0,
       percentUsedMemory: percentUsedMemory || 0,
+      memorySource: memResult.source,
     };
   }
 
@@ -119,14 +113,22 @@ export class SystemService {
     }
   }
 
-  private async readTelemetry() {
-    const [cpuStatResult, uptimeResult, diskResult, networkResult, memoryResult, cpuInfoResult] = await Promise.allSettled([
+  private async readCpuInformation() {
+    try {
+      const mounted = await this.filesystem.readTextFile('/host/proc/cpuinfo');
+      if (mounted?.trim()) return mounted;
+    } catch {
+      // Older installations mounted host CPU counters without cpuinfo.
+    }
+    return fs.readFile('/proc/cpuinfo', 'utf8');
+  }
+
+  private async readLegacyHostSystem() {
+    const [cpuStatResult, uptimeResult, memoryResult, cpuInfoResult] = await Promise.allSettled([
       this.filesystem.readTextFile('/host/proc/stat'),
       this.filesystem.readTextFile('/host/proc/uptime'),
-      this.getDisks(),
-      this.readRuntimeNetwork(),
-      this.filesystem.readTextFile('/host/proc/meminfo'),
-      this.filesystem.readTextFile('/host/proc/cpuinfo'),
+      this.hostMemory.getMemory(),
+      this.readCpuInformation(),
     ]);
 
     const hostCounters = cpuStatResult.status === 'fulfilled' && cpuStatResult.value ? parseHostCpuStat(cpuStatResult.value) : null;
@@ -137,23 +139,12 @@ export class SystemService {
     this.previousHostCpuAt = hostCounters?.has('cpu') ? now : null;
     const runtimeCpu = hostCpu ? null : await si.currentLoad().catch(() => null);
     const uptime = uptimeResult.status === 'fulfilled' && uptimeResult.value ? Number(uptimeResult.value.split(/\s+/)[0]) : null;
-    const disks = diskResult.status === 'fulfilled' ? diskResult.value : [];
-    const networks = networkResult.status === 'fulfilled' ? networkResult.value : [];
-    const memoryText = memoryResult.status === 'fulfilled' ? memoryResult.value : null;
-    const memory = (key: string) => {
-      const match = memoryText?.match(new RegExp(`^${key}:\\s+(\\d+)`, 'm'));
-      return match ? Number(match[1]) * 1024 : null;
-    };
-    const memoryTotal = memory('MemTotal');
-    const memoryAvailable = memory('MemAvailable');
-    const swapTotal = memory('SwapTotal');
-    const swapFree = memory('SwapFree');
+    const memory: HostMemory | null = memoryResult.status === 'fulfilled' ? memoryResult.value : null;
+    const memoryScope = memory?.source === 'host' ? 'host-proc' : (memory?.source ?? 'unavailable');
     const clock = reportedCpuClockGHz(cpuInfoResult.status === 'fulfilled' ? cpuInfoResult.value : null);
     const model = reportedCpuModel(cpuInfoResult.status === 'fulfilled' ? cpuInfoResult.value : null);
-    const safe = (value: number | undefined | null) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null);
-
     return {
-      sampledAt: new Date().toISOString(),
+      sampledAt: Date.now(),
       cpu: {
         scope: hostCpu ? 'host-proc' : 'runtime',
         ...(model ? { model } : {}),
@@ -163,13 +154,40 @@ export class SystemService {
         ...(clock === null ? {} : { reportedClockGHz: clock }),
       },
       memory: {
-        scope: 'host-proc',
-        totalBytes: safe(memoryTotal),
-        availableBytes: safe(memoryAvailable),
-        swapTotalBytes: safe(swapTotal),
-        swapFreeBytes: safe(swapFree),
+        scope: memoryScope as MemoryScope,
+        totalBytes: safe(memory?.total),
+        availableBytes: memory ? safe(memory.total - memory.used) : null,
+        swapTotalBytes: safe(memory?.swapTotal),
+        swapFreeBytes: safe(memory?.swapFree),
       },
-      filesystems: disks
+    };
+  }
+
+  private async readHostSystem() {
+    const preferred = await readSentinelSystemReadings();
+    if (preferred && (this.lastHostReadingsAt === null || preferred.sampledAt >= this.lastHostReadingsAt))
+      return { source: 'sentinel' as const, sample: preferred };
+    return { source: 'legacy' as const, sample: await this.readLegacyHostSystem() };
+  }
+
+  private async readTelemetry() {
+    const [host, diskResult, networkResult] = await Promise.all([
+      this.readHostSystem(),
+      this.getDisks().catch(() => []),
+      this.readRuntimeNetwork().catch(() => []),
+    ]);
+    const preferred = host.source === 'sentinel' && freshSentinelSample(host.sample.sampledAt);
+    const system = host.source === 'sentinel' && !preferred ? await this.readLegacyHostSystem() : host.sample;
+    if (preferred) {
+      // A return to the legacy provider needs a new baseline, not an interval across two providers.
+      this.previousHostCpu = this.previousHostCpuAt = null;
+    }
+    this.lastHostReadingsAt = system.sampledAt;
+    return {
+      sampledAt: new Date(system.sampledAt).toISOString(),
+      cpu: system.cpu,
+      memory: system.memory,
+      filesystems: diskResult
         .filter((disk) => safe(disk.size) !== null)
         .map((disk) => ({
           mount: disk.mount,
@@ -179,7 +197,7 @@ export class SystemService {
           availableBytes: safe(disk.available),
           scope: 'runtime',
         })),
-      network: networks.map((interfaceStats) => ({
+      network: networkResult.map((interfaceStats) => ({
         interface: interfaceStats.iface,
         rxBytesPerSecond: safe(interfaceStats.rx_sec),
         txBytesPerSecond: safe(interfaceStats.tx_sec),
@@ -192,15 +210,20 @@ export class SystemService {
 
   public async getLocalCertificate() {
     const { dataDir } = this.config.get('directories');
-    const filePath = `${dataDir}/traefik/tls/cert.pem`;
-
     try {
-      if (await this.filesystem.isFile(filePath)) {
+      for (const name of ['ca.pem', 'cert.pem']) {
+        const filePath = `${dataDir}/traefik/tls/${name}`;
+        if (!(await this.filesystem.isFile(filePath))) continue;
         const file = await this.filesystem.readTextFile(filePath);
         if (file && file.length <= 65536) {
           const blocks = file.match(/-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----/g);
-          if (blocks?.length && blocks.length <= 16) return blocks.map((block) => new X509Certificate(block).toString()).join('\n');
+          if (blocks?.length === 1 && blocks[0]) {
+            const root = new X509Certificate(blocks[0]);
+            if (root.ca && root.subject === root.issuer && root.verify(root.publicKey)) return root.toString();
+          }
         }
+        // An invalid current root must not expose another file as the trust certificate.
+        break;
       }
     } catch {
       // Certificate parse and read failures must not expose file contents or server paths.

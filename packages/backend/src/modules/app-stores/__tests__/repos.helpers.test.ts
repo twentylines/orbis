@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR } from '@/common/constants';
@@ -7,6 +8,7 @@ import { LoggerService } from '@/core/logger/logger.service';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import { ReposHelpers } from '../repos.helpers';
+import { withAppRepositoryCustody } from '../app-store-lock';
 
 const git = vi.hoisted(() => ({
   clone: vi.fn(),
@@ -69,6 +71,36 @@ describe('ReposHelpers staged clones and offline refresh', () => {
     helpers = new ReposHelpers(logger, configuration, filesystem);
   });
 
+  it('creates and reuses the same repository without changing native Git trust', async () => {
+    const modes = vi.spyOn(fs.promises, 'chmod');
+    expect(await helpers.cloneRepo(repoUrl, slug)).toEqual({ success: true, message: '' });
+    expect(await helpers.cloneRepo(repoUrl, slug)).toEqual({ success: true, message: '' });
+    expect(await helpers.pullRepo(repoUrl, slug)).toEqual({ success: true, message: '' });
+
+    expect(git.clone).toHaveBeenCalledOnce();
+    expect(git.fetch).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ dir: repoPath, url: repoUrl }));
+    expect(modes).toHaveBeenCalledWith(reposPath, 0o755);
+    expect(execFileSync).not.toHaveBeenCalled();
+    expect(await fs.promises.readFile(configPath, 'utf8')).toBe(oldConfig);
+  });
+
+  it('holds Git refresh behind a package reader with repository custody', async () => {
+    await writeCheckout(repoPath);
+    const entered = deferred();
+    const release = deferred();
+    const reading = withAppRepositoryCustody(path.resolve(repoPath), async () => {
+      entered.resolve();
+      await release.promise;
+    });
+    await entered.promise;
+    const refresh = helpers.pullRepo(repoUrl, slug);
+    await Promise.resolve();
+    expect(git.fetch).not.toHaveBeenCalled();
+    release.resolve();
+    await reading;
+    expect((await refresh).success).toBe(true);
+    expect(git.fetch).toHaveBeenCalledOnce();
+  });
   it('reports a failed filesystem removal and preserves the repository for retry', async () => {
     await writeCheckout(repoPath);
     vi.spyOn(filesystem, 'removeDirectory').mockResolvedValue(false);

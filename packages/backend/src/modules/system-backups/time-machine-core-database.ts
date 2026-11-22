@@ -23,7 +23,38 @@ const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
 type Query = Pick<Client, 'query'>;
 type Row = Record<string, unknown>;
 type Catalog = Record<'tables' | 'columns' | 'enums' | 'constraints' | 'indexes' | 'sequences' | 'extensions', Row[]>;
-type Rows = Record<BackupDatabaseTable | 'orbis_reset_receipt' | '__drizzle_migrations', Row[]>;
+type Rows = Record<Exclude<BackupDatabaseTable, 'app_migration'> | 'orbis_reset_receipt' | '__drizzle_migrations', Row[]> & {
+  app_migration?: Row[];
+  app_migration_commit?: Row[];
+};
+const hasCommits = (catalog: Catalog) => catalog.tables.some((row) => row.schema === 'public' && row.name === 'app_migration_commit');
+const commitColumns = ['request_id', 'app_id', 'stage_id', 'operation_sha256', 'ledger_sha256', 'version', 'committed_at'] as const;
+const commitSqlSha256 = '838b363174dd85025ce1eff4d4a0c29aaa5cf68a9276b722ff8e8ca39153f3b8';
+const commitJournalTime = '1795305600000';
+const catalogVersion = (catalog: Catalog) => (catalog.tables.some((row) => row.schema === 'public' && row.name === 'app_migration') ? 2 : 1);
+const appMigrationSqlSha256 = '931cd10ce91be3582efccc9c17d34d9042db48db925b90b2e88b75496060602a';
+const appMigrationJournalTime = '1795203554058';
+function structureSchema(rows: Row[], version: 1 | 2, commits = false) {
+  const commitMarkers = rows.filter((row) => row.hash === commitSqlSha256 || row.created_at === commitJournalTime);
+  if (
+    commits &&
+    (version !== 2 || commitMarkers.length !== 1 || commitMarkers[0]?.hash !== commitSqlSha256 || commitMarkers[0].created_at !== commitJournalTime)
+  )
+    fail('catalog');
+  if (!commits && commitMarkers.length) fail('catalog');
+  const markers = rows.filter((row) => row.hash === appMigrationSqlSha256 || row.created_at === appMigrationJournalTime);
+  if (version === 1 && !markers.length) return 'orbis.core-database-structure.v1' as const;
+  const marker = markers[0];
+  if (version === 2 && markers.length === 1 && marker?.hash === appMigrationSqlSha256 && marker.created_at === appMigrationJournalTime)
+    return commits ? ('orbis.core-database-structure.v3' as const) : ('orbis.core-database-structure.v2' as const);
+  fail('catalog');
+}
+const appRows = (rows: Rows) => ({
+  app: rows.app,
+  app_store: rows.app_store,
+  ...(rows.app_migration ? { app_migration: rows.app_migration } : {}),
+  ...(rows.app_migration_commit ? { app_migration_commit: rows.app_migration_commit } : {}),
+});
 type Snapshot = { schema: 'orbis.core-database-snapshot.v1'; major: number; database: string; catalog: Catalog; rows: Rows; sha256: string };
 declare const coreDatabaseSnapshot: unique symbol;
 export type CoreDatabaseSnapshot = { readonly [coreDatabaseSnapshot]: true };
@@ -83,10 +114,22 @@ async function catalog(client: Query, signal: AbortSignal): Promise<Catalog> {
     positions.set(key, { physical: column.position as number, logical });
     return { ...column, position: logical };
   });
+  const version = catalogVersion(result);
+  const commits = hasCommits(result);
+  if (commits && version !== 2) fail('catalog');
   const names = result.tables.map((row) => `${row.schema}.${row.name}`).sort();
   if (
     names.join(',') !==
-      ['drizzle.__drizzle_migrations', 'public.app', 'public.app_store', 'public.link', 'public.orbis_reset_receipt', 'public.user']
+      [
+        'drizzle.__drizzle_migrations',
+        'public.app',
+        'public.app_store',
+        'public.link',
+        'public.orbis_reset_receipt',
+        'public.user',
+        ...(version === 2 ? ['public.app_migration'] : []),
+        ...(commits ? ['public.app_migration_commit'] : []),
+      ]
         .sort()
         .join(',') ||
     result.tables.some((row) => row.kind !== 'r' || row.persistence !== 'p' || row.rls !== false || row.force_rls !== false) ||
@@ -104,12 +147,55 @@ async function catalog(client: Query, signal: AbortSignal): Promise<Catalog> {
     result.extensions[0]?.name !== 'plpgsql'
   )
     fail('catalog');
-  for (const table of backupDatabaseTables) {
+  for (const table of backupDatabaseTables(version)) {
     const actual = result.columns
       .filter((row) => row.schema === 'public' && row.table === table)
       .map((row) => row.name)
       .sort();
-    if (canonicalCoreJson(actual) !== canonicalCoreJson(backupDatabaseColumns(table).sort())) fail('catalog');
+    if (canonicalCoreJson(actual) !== canonicalCoreJson(backupDatabaseColumns(table, version).sort())) fail('catalog');
+  }
+  if (version === 2) {
+    const migrationColumns = result.columns.filter((row) => row.schema === 'public' && row.table === 'app_migration');
+    const baseline = result.columns.find((row) => row.schema === 'public' && row.table === 'app' && row.name === 'migrations_baselined');
+    const migrationConstraints = result.constraints.filter((row) => row.schema === 'public' && row.table === 'app_migration');
+    if (
+      migrationColumns.map((row) => row.name).join(',') !== 'app_id,migration_id' ||
+      migrationColumns[0]?.format !== 'integer' ||
+      migrationColumns[1]?.format !== 'character varying(128)' ||
+      migrationColumns.some((row) => row.not_null !== true || row.default !== null) ||
+      baseline?.type !== 'bool' ||
+      baseline.not_null !== true ||
+      baseline.default !== 'false' ||
+      migrationConstraints.length !== 2 ||
+      !migrationConstraints.some((row) => row.type === 'p' && row.definition === 'PRIMARY KEY (app_id, migration_id)') ||
+      !migrationConstraints.some(
+        (row) => row.type === 'f' && /^FOREIGN KEY \(app_id\) REFERENCES (?:public\.)?app\(id\) ON DELETE CASCADE$/.test(String(row.definition)),
+      )
+    )
+      fail('catalog');
+  }
+  if (commits) {
+    const fields = result.columns.filter((row) => row.schema === 'public' && row.table === 'app_migration_commit');
+    const constraints = result.constraints.filter((row) => row.schema === 'public' && row.table === 'app_migration_commit');
+    const formats = [
+      'character varying(36)',
+      'integer',
+      'character varying(36)',
+      'character varying(64)',
+      'character varying(64)',
+      'integer',
+      'integer',
+    ];
+    if (
+      fields.length !== commitColumns.length ||
+      fields.some(
+        (row, index) => row.name !== commitColumns[index] || row.format !== formats[index] || row.not_null !== true || row.default !== null,
+      ) ||
+      constraints.length !== 2 ||
+      !constraints.some((row) => row.type === 'p' && row.definition === 'PRIMARY KEY (request_id)') ||
+      !constraints.some((row) => row.type === 'u' && row.definition === 'UNIQUE (stage_id)')
+    )
+      fail('catalog');
   }
   for (const [schema, table, columns] of [
     ['public', 'orbis_reset_receipt', ['id', 'completed_at']],
@@ -139,7 +225,12 @@ async function contents(client: Query, signal: AbortSignal) {
   const rows = {} as Rows;
   let bytes = 0;
   let count = 0;
-  for (const table of [...backupDatabaseTables, 'orbis_reset_receipt', '__drizzle_migrations'] as const) {
+  for (const table of [
+    ...backupDatabaseTables(catalogVersion(structure)),
+    'orbis_reset_receipt',
+    '__drizzle_migrations',
+    ...(hasCommits(structure) ? ['app_migration_commit' as const] : []),
+  ] as const) {
     signal.throwIfAborted();
     const schema = table === '__drizzle_migrations' ? 'drizzle' : 'public';
     const selected = await client.query(`SELECT * FROM ${quote(schema)}.${quote(table)} LIMIT ${backupDatabaseLimits.rows + 1}`);
@@ -148,13 +239,15 @@ async function contents(client: Query, signal: AbortSignal) {
     if (count > backupDatabaseLimits.rows || bytes > backupDatabaseLimits.totalBytes) fail('records');
     rows[table] = selected.rows.sort((a, b) => canonicalCoreJson(a).localeCompare(canonicalCoreJson(b), 'en'));
   }
+  if (hasCommits(structure)) structureSchema(rows.__drizzle_migrations, catalogVersion(structure), true);
   const body = { schema: 'orbis.core-database-snapshot.v1' as const, major: Math.floor(version / 10000), database, catalog: structure, rows };
   return { ...body, sha256: hash(body) };
 }
 async function records(snapshot: Snapshot, authentication: { jwtSecret: string; passkeys?: unknown }, signal: AbortSignal) {
-  const validator = new BackupDatabaseRecords(authentication.jwtSecret);
+  const version = catalogVersion(snapshot.catalog);
+  const validator = new BackupDatabaseRecords(authentication.jwtSecret, undefined, version);
   try {
-    for (const table of backupDatabaseTables) for (const row of snapshot.rows[table]) validator.accept(table, row);
+    for (const table of backupDatabaseTables(version)) for (const row of snapshot.rows[table] ?? []) validator.accept(table, row);
     await validator.finish(authentication.passkeys, signal);
   } catch {
     fail('authentication');
@@ -170,6 +263,26 @@ async function records(snapshot: Snapshot, authentication: { jwtSecret: string; 
       (row.completed_at as number) < 1
     )
       fail('records');
+  }
+  const requests = new Set<string>();
+  const stages = new Set<string>();
+  for (const row of snapshot.rows.app_migration_commit ?? []) {
+    if (
+      Object.keys(row).sort().join(',') !== [...commitColumns].sort().join(',') ||
+      typeof row.request_id !== 'string' ||
+      !uuid.test(row.request_id) ||
+      typeof row.stage_id !== 'string' ||
+      !uuid.test(row.stage_id) ||
+      requests.has(row.request_id) ||
+      stages.has(row.stage_id) ||
+      ['operation_sha256', 'ledger_sha256'].some((key) => typeof row[key] !== 'string' || !/^[a-f0-9]{64}$/.test(row[key] as string)) ||
+      ['app_id', 'version', 'committed_at'].some(
+        (key) => !Number.isInteger(row[key]) || Number(row[key]) < (key === 'version' ? 0 : 1) || Number(row[key]) > 2147483647,
+      )
+    )
+      fail('records');
+    requests.add(row.request_id);
+    stages.add(row.stage_id);
   }
 }
 
@@ -237,9 +350,10 @@ export async function inspectCoreDatabaseStructure(client: Query, signal: AbortS
   await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
   try {
     const snapshot = await contents(client, signal);
+    const schema = structureSchema(snapshot.rows.__drizzle_migrations, catalogVersion(snapshot.catalog), hasCommits(snapshot.catalog));
     await client.query('COMMIT');
     return Object.freeze({
-      schema: 'orbis.core-database-structure.v1' as const,
+      schema,
       sha256: snapshot.sha256,
       major: snapshot.major,
       catalogSha256: hash(snapshot.catalog),
@@ -449,7 +563,7 @@ export async function reconcileCoreDatabase(options: {
     link: source.snapshot.rows.link,
     migrations: source.snapshot.rows.__drizzle_migrations,
   });
-  const destinationAppsSha256 = hash({ app: destination.snapshot.rows.app, app_store: destination.snapshot.rows.app_store });
+  const destinationAppsSha256 = hash(appRows(destination.snapshot.rows));
   const descriptor = {
     schema: 'orbis.core-database-reconciliation.v1' as const,
     id: options.id,
@@ -471,16 +585,32 @@ export async function reconcileCoreDatabase(options: {
   let committed = false;
   await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
   try {
-    await client.query('LOCK TABLE public.app,public.app_store,public.orbis_reset_receipt IN ACCESS EXCLUSIVE MODE');
+    const version = catalogVersion(source.snapshot.catalog);
+    const commits = hasCommits(source.snapshot.catalog);
+    const migrationLock = (version === 2 ? ',public.app_migration' : '') + (commits ? ',public.app_migration_commit' : '');
+    await client.query(`LOCK TABLE public.app,public.app_store,public.orbis_reset_receipt${migrationLock} IN ACCESS EXCLUSIVE MODE`);
     await source.recheck(true);
     const comment = await client.query(
       "SELECT pg_catalog.shobj_description(oid,'pg_database') AS marker FROM pg_catalog.pg_database WHERE datname=current_database()",
     );
     if (typeof comment.rows[0]?.marker === 'string' && comment.rows[0].marker.startsWith('orbis.core-restore.v1/')) fail('receipt');
-    for (const table of ['app', 'app_store', 'orbis_reset_receipt'] as const) await client.query(`DELETE FROM public.${quote(table)}`);
-    for (const table of ['app_store', 'app', 'orbis_reset_receipt'] as const) {
-      const columns = table === 'orbis_reset_receipt' ? ['id', 'completed_at'] : backupDatabaseColumns(table);
-      for (const row of destination.snapshot.rows[table]) {
+    for (const table of [...(commits ? ['app_migration_commit' as const] : []), 'app', 'app_store', 'orbis_reset_receipt'] as const)
+      await client.query(`DELETE FROM public.${quote(table)}`);
+    const destinationTables = [
+      'app_store',
+      'app',
+      'orbis_reset_receipt',
+      ...(version === 2 ? ['app_migration' as const] : []),
+      ...(commits ? ['app_migration_commit' as const] : []),
+    ] as const;
+    for (const table of destinationTables) {
+      const columns =
+        table === 'orbis_reset_receipt'
+          ? ['id', 'completed_at']
+          : table === 'app_migration_commit'
+            ? commitColumns
+            : backupDatabaseColumns(table, version);
+      for (const row of destination.snapshot.rows[table] ?? []) {
         options.signal.throwIfAborted();
         await client.query(
           `INSERT INTO public.${quote(table)} (${columns.map(quote).join(',')}) VALUES (${columns.map((_, i) => `$${i + 1}`).join(',')})`,
@@ -516,7 +646,7 @@ export async function verifyCoreDatabaseReconciliation(client: Query, prepared: 
     actual.major !== prepared.major ||
     hash(actual.catalog) !== prepared.catalogSha256 ||
     hash({ user: actual.rows.user, link: actual.rows.link, migrations: actual.rows.__drizzle_migrations }) !== prepared.sourceAccountsSha256 ||
-    hash({ app: actual.rows.app, app_store: actual.rows.app_store }) !== prepared.destinationAppsSha256 ||
+    hash(appRows(actual.rows)) !== prepared.destinationAppsSha256 ||
     hash(actual.rows.orbis_reset_receipt) !== prepared.destinationRecoverySha256 ||
     result.rows[0]?.marker !== prepared.marker
   )
@@ -584,9 +714,18 @@ async function requireCleanCatalogContext(...clients: Query[]) {
     if (result.rows.length !== 1 || result.rows[0]?.search_path !== cleanCatalogContext) fail('catalog');
   }
 }
-const cleanTables = ['user', 'link', 'app_store', 'app', 'orbis_reset_receipt'] as const;
-const cleanLocks =
-  'LOCK TABLE public."user",public.link,public.app_store,public.app,public.orbis_reset_receipt,drizzle.__drizzle_migrations IN ACCESS EXCLUSIVE MODE';
+const cleanTables = (version: 1 | 2, commits = false) =>
+  [
+    'user',
+    'link',
+    'app_store',
+    'app',
+    'orbis_reset_receipt',
+    ...(version === 2 ? ['app_migration' as const] : []),
+    ...(commits ? ['app_migration_commit' as const] : []),
+  ] as const;
+const cleanLocks = (version: 1 | 2, commits = false) =>
+  `LOCK TABLE public."user",public.link,public.app_store,public.app,public.orbis_reset_receipt,drizzle.__drizzle_migrations${version === 2 ? ',public.app_migration' : ''}${commits ? ',public.app_migration_commit' : ''} IN ACCESS EXCLUSIVE MODE`;
 const databaseMarkerQuery =
   "SELECT pg_catalog.shobj_description(oid,'pg_database') AS marker FROM pg_catalog.pg_database WHERE datname=current_database()";
 const sameIdentity = (left: CoreCleanTargetIdentity, right: CoreCleanTargetIdentity) => canonicalCoreJson(left) === canonicalCoreJson(right);
@@ -768,7 +907,7 @@ async function verifyCleanTargetContents(
     actual.major !== prepared.major ||
     hash(actual.catalog) !== prepared.catalogSha256 ||
     hash({ user: actual.rows.user, link: actual.rows.link, migrations: actual.rows.__drizzle_migrations }) !== prepared.sourceAccountsSha256 ||
-    hash({ app: actual.rows.app, app_store: actual.rows.app_store }) !== prepared.destinationAppsSha256 ||
+    hash(appRows(actual.rows)) !== prepared.destinationAppsSha256 ||
     hash(actual.rows.orbis_reset_receipt) !== prepared.destinationRecoverySha256 ||
     result.rows.length !== 1 ||
     result.rows[0]?.marker !== expectedMarker
@@ -916,10 +1055,10 @@ export async function prepareCoreCleanTarget(options: {
   const targetIdentity = await cleanDatabaseIdentity(client);
   if (targetIdentity.systemIdentifier === sourceIdentity.systemIdentifier || targetIdentity.systemIdentifier === destinationIdentity.systemIdentifier)
     fail('approval');
+  const version = catalogVersion(source.snapshot.catalog);
   const targetRows = {
     ...source.snapshot.rows,
-    app_store: destination.snapshot.rows.app_store,
-    app: destination.snapshot.rows.app,
+    ...appRows(destination.snapshot.rows),
     orbis_reset_receipt: destination.snapshot.rows.orbis_reset_receipt,
   };
   if (
@@ -933,13 +1072,13 @@ export async function prepareCoreCleanTarget(options: {
   await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
   try {
     await requireCleanCatalogContext(client);
-    await client.query(cleanLocks);
+    await client.query(cleanLocks(version, hasCommits(source.snapshot.catalog)));
     if (!sameIdentity(await cleanDatabaseIdentity(client), targetIdentity)) fail('changed');
     const target = await contents(client, options.signal);
     if (target.major !== source.snapshot.major) fail('major');
     if (hash(target.catalog) !== hash(source.snapshot.catalog)) fail('catalog');
     if (hash(target.rows.__drizzle_migrations) !== hash(source.snapshot.rows.__drizzle_migrations)) fail('catalog');
-    if (cleanTables.some((table) => target.rows[table].length)) fail('records');
+    if (cleanTables(version, hasCommits(source.snapshot.catalog)).some((table) => (target.rows[table]?.length ?? 0) > 0)) fail('records');
     const comment = await client.query(databaseMarkerQuery);
     if (comment.rows.length !== 1 || comment.rows[0]?.marker !== null) fail('receipt');
     const sequences = await cleanSequences(client, target.catalog, options.signal, sequencePolicy);
@@ -960,7 +1099,7 @@ export async function prepareCoreCleanTarget(options: {
         link: source.snapshot.rows.link,
         migrations: source.snapshot.rows.__drizzle_migrations,
       }),
-      destinationAppsSha256: hash({ app: destination.snapshot.rows.app, app_store: destination.snapshot.rows.app_store }),
+      destinationAppsSha256: hash(appRows(destination.snapshot.rows)),
       destinationRecoverySha256: hash(destination.snapshot.rows.orbis_reset_receipt),
       sourceOwnerId: options.sourceOwnerId,
       destinationOwnerId: options.destinationOwnerId,
@@ -993,9 +1132,14 @@ export async function prepareCoreCleanTarget(options: {
       (await client.query(databaseMarkerQuery)).rows[0]?.marker !== null
     )
       fail('changed');
-    for (const table of cleanTables) {
-      const columns = table === 'orbis_reset_receipt' ? ['id', 'completed_at'] : backupDatabaseColumns(table);
-      for (const row of targetRows[table]) {
+    for (const table of cleanTables(version, hasCommits(source.snapshot.catalog))) {
+      const columns =
+        table === 'orbis_reset_receipt'
+          ? ['id', 'completed_at']
+          : table === 'app_migration_commit'
+            ? commitColumns
+            : backupDatabaseColumns(table, version);
+      for (const row of targetRows[table] ?? []) {
         options.signal.throwIfAborted();
         await client.query(
           `INSERT INTO public.${quote(table)} (${columns.map(quote).join(',')}) VALUES (${columns.map((_, i) => `$${i + 1}`).join(',')})`,

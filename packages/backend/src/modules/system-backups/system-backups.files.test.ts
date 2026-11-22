@@ -16,6 +16,8 @@ import { promisify } from 'node:util';
 import { BackupRestoreJournal } from './backup-restore-journal';
 import { BackupDirectorySwap } from './backup-directory-swap';
 import { acquireRestoreLease } from './backup-restore-lease';
+import { installRequestDirectory } from '../app-lifecycle/install-request-receipt';
+import { createAppUrn } from '@/common/helpers/app-helpers';
 
 let directory: string;
 let restoreDarwinCreation: () => void = () => undefined;
@@ -407,6 +409,64 @@ it('fails before stopping apps when external data cannot be included', async () 
   expect(job?.message).toContain('external storage');
   expect(runtime.stop).not.toHaveBeenCalled();
   expect(backupMaintenanceActive()).toBe(false);
+});
+
+it('refuses capture before stopping an actually running app whose database row settled to stopped', async () => {
+  apps.getApps.mockResolvedValueOnce([{ appName: 'fixture', appStoreSlug: 'store', status: 'stopped' }]);
+  const receipt = installRequestDirectory(path.join(directory, 'data'), createAppUrn('fixture', 'store'));
+  await fs.mkdir(receipt, { recursive: true, mode: 0o700 });
+  await fs.writeFile(path.join(receipt, randomUUID()), '', { mode: 0o600 });
+  const job = await terminal((await service.start(1, credentials, passphrase)).id);
+  expect(job).toMatchObject({ status: 'failed', needsRecovery: false });
+  expect(job?.message).toContain('unfinished install recovery');
+  expect(runtime.plan).toHaveBeenCalledOnce();
+  expect(runtime.stop).not.toHaveBeenCalled();
+  expect(runtime.dumpDatabase).not.toHaveBeenCalled();
+  expect(runtime.resume).not.toHaveBeenCalled();
+  await expect(fs.readdir(receipt)).resolves.toHaveLength(1);
+});
+
+it('refuses capture before stopping apps when install hold storage is unreadable by the receipt protocol', async () => {
+  const receipt = installRequestDirectory(path.join(directory, 'data'), createAppUrn('fixture', 'store'));
+  const namespace = path.dirname(receipt);
+  const detached = path.join(directory, 'unverified-install-requests');
+  await fs.mkdir(detached, { mode: 0o700 });
+  await fs.symlink(detached, namespace);
+  const job = await terminal((await service.start(1, credentials, passphrase)).id);
+  expect(job).toMatchObject({ status: 'failed', needsRecovery: false });
+  expect(job?.message).toContain('install recovery storage could not be verified');
+  expect(runtime.stop).not.toHaveBeenCalled();
+  expect(runtime.dumpDatabase).not.toHaveBeenCalled();
+  expect(runtime.resume).not.toHaveBeenCalled();
+  await expect(fs.readlink(namespace)).resolves.toBe(detached);
+});
+
+it('exports an already stopped app together with its untouched recovery hold', async () => {
+  apps.getApps.mockResolvedValueOnce([{ appName: 'fixture', appStoreSlug: 'store', status: 'stopped' }]);
+  runtime.plan.mockResolvedValueOnce({ databaseId: 'b'.repeat(64), containers: [{ ...container, running: false }], images: [] });
+  const data = path.join(directory, 'data');
+  const receipt = path.join(installRequestDirectory(data, createAppUrn('fixture', 'store')), 'spent-fixture');
+  await fs.mkdir(receipt, { recursive: true, mode: 0o700 });
+  const file = path.join(receipt, randomUUID());
+  await fs.writeFile(file, 'synthetic interrupted receipt', { mode: 0o600 });
+  stabilizeExistingDarwinFixtures(file);
+  const started = await service.start(1, credentials, passphrase);
+  const job = await terminal(started.id);
+  expect(job?.status, job?.message).toBe('succeeded');
+  expect(runtime.stop).not.toHaveBeenCalled();
+  expect(runtime.resume).toHaveBeenCalledWith([]);
+  const archive = path.join(directory, 'held-app.tar.gz');
+  await decryptBackup({ source: path.join(data, 'backups', 'full', started.id, 'backup.orbis'), destination: archive, passphrase });
+  const result = await inspectFullBackup({
+    archive,
+    destination: path.join(directory, 'verified-held-app'),
+    signal: new AbortController().signal,
+    maxExpandedBytes: 4 * 1024 * 1024,
+    target: { orbisVersion: 'development', runtipiVersion: '4.10.1', architecture: 'arm64' },
+  });
+  expect(result.manifest.containers).toEqual([{ ...container, running: false }]);
+  const restored = path.join(directory, 'verified-held-app', 'data', path.relative(data, file));
+  expect(await fs.readFile(restored)).toEqual(await fs.readFile(file));
 });
 
 function protectedVolumeFixture(empty = false) {

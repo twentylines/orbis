@@ -35,6 +35,40 @@ const production = () => [
   mount('/etc/timezone', '/etc/timezone', false),
 ];
 
+it.each([consolidated, production])('keeps CLI identity outside capture roots and both isolated restore roles (%#)', (fixture) => {
+  const cli = mount('/data/.secrets', '/srv/orbis/.secrets');
+  const authority = mount('/data/orbis-reset', `/var/lib/orbis/reset-authority/${'a'.repeat(64)}/data`);
+  const original = [...fixture(), cli, authority];
+  const before = structuredClone(original);
+  for (const provisional of [false, true]) {
+    const layout = deriveRestoreStorageLayout(original, false, provisional);
+    expect(Object.values(layout.roots)).not.toContain(cli.Source);
+    for (const role of ['worker', 'verifier'] as const) {
+      const bindings = role === 'worker' ? layout.workerMounts : layout.verifierMounts;
+      expect(bindings.some((entry) => entry.Source === cli.Source || entry.Target === '/data/.secrets' || entry.Target === '/data')).toBe(false);
+      const observed = bindings.map((entry) => mount(entry.Target, entry.Source, !entry.ReadOnly));
+      expect(() => verifyRestoreStorageMounts(original, observed, role, false, provisional)).not.toThrow();
+      expect(() => verifyRestoreStorageMounts(original, [...observed, cli], role, false, provisional)).toThrow();
+      expect(bindings.some((entry) => entry.Target === authority.Destination)).toBe(!provisional);
+    }
+  }
+  expect(original).toEqual(before);
+});
+
+it.each(['root-alias', 'reset-alias', 'socket-alias', 'child-shadow', 'named-volume'])(
+  'refuses ambiguous CLI storage without broadening data-volume acceptance: %s',
+  (fault) => {
+    const cli = mount('/data/.secrets', '/srv/orbis/.secrets');
+    const authority = mount('/data/orbis-reset', `/var/lib/orbis/reset-authority/${'a'.repeat(64)}/data`);
+    if (fault === 'root-alias') cli.Source = '/srv/orbis/.internal/state';
+    if (fault === 'reset-alias') cli.Source = authority.Source;
+    if (fault === 'socket-alias') cli.Source = '/var/run/docker.sock';
+    if (fault === 'named-volume') cli.Type = 'volume';
+    const original = [...production(), authority, cli, ...(fault === 'child-shadow' ? [mount('/data/.secrets/cli-secret', '/unverified/key')] : [])];
+    expect(() => deriveRestoreStorageLayout(original)).toThrow();
+  },
+);
+
 it.each([consolidated, production])('projects provisional storage without exposing reset control or a parent data bind (%#)', (fixture) => {
   const control = mount('/data/orbis-reset', `/var/lib/orbis/reset-authority/${'a'.repeat(64)}/data`);
   const original = [...fixture(), control];

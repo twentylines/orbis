@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -13,6 +14,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from test_orbis_installer_bundle import BOOT, BUILD
+
 
 SPEC = importlib.util.spec_from_file_location("orbis_host_service_setup", Path(__file__).with_name("orbis-host-service-setup.py"))
 assert SPEC and SPEC.loader
@@ -21,6 +24,214 @@ SPEC.loader.exec_module(SETUP)
 
 
 class OrbisHostServiceSetupTests(unittest.TestCase):
+    def test_verified_selection_journals_actual_copy_and_refuses_unit_or_environment_drift(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            root = base / "server"
+            root.mkdir()
+            extraction = base / "installer"
+            extraction.mkdir(mode=0o700)
+            install = base / "opt/host-service"
+            environment = base / "etc/host-service.env"
+            unit = base / "systemd/orbis-host.service"
+            release = {"schema": "orbis.release.v1", "tag": "v1.0.0", "commit": "a" * 40,
+                       "image": "ghcr.io/twentylines/orbis", "digest": "sha256:" + "b" * 64,
+                       "installationProtocol": "orbis.installation-state.v1", "runtipiCompatibility": "4.10.1"}
+            core = json.dumps(release).encode()
+            files = {name: b"# verified test source\n" for name in BUILD.REQUIRED}
+            files["scripts/install-orbis.py"] = Path(BOOT.__file__).read_bytes()
+            assets = BUILD.build(files, core)
+            identity = {"tag": release["tag"], "commit": release["commit"],
+                        "manifestSha256": BUILD.sha(assets[BUILD.MANIFEST])}
+            digest = BOOT.stage_verified_installer(extraction, mode="release", identity=identity, channel="stable",
+                release=core, manifest=assets[BUILD.MANIFEST], archive=assets[BUILD.ARCHIVE], files=files)
+            launcher = extraction / BOOT.SOURCE_LAUNCHER
+            with (launcher.open("rb") as held, mock.patch.object(BOOT, "OWNER", os.geteuid()),
+                  mock.patch.object(BOOT, "__file__", f"/proc/self/fd/{held.fileno()}"),
+                  mock.patch.object(BOOT, "private_directory", return_value=extraction),
+                  mock.patch.object(BOOT, "EXPECTED_RELEASE", identity), mock.patch.object(BOOT, "_exec_guided")):
+                BOOT._continue_verified_installer([str(extraction), digest, "stable"])
+
+            stat_method = Path.stat
+
+            def root_owned(path, *args, **kwargs):
+                values = list(stat_method(path, *args, **kwargs))
+                values[4] = 0
+                return os.stat_result(values)
+
+            with (mock.patch.multiple(SETUP, INSTALL_DIR=install, UNIT_FILE=unit, ENV_FILE=environment,
+                                      SCRIPTS=("orbis-host-service.py",)),
+                  mock.patch.object(SETUP.HOST.AUTHORITY, "OWNER", os.geteuid()),
+                  mock.patch.object(SETUP.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as systemd,
+                  mock.patch.object(Path, "stat", autospec=True, side_effect=root_owned)):
+                source = extraction / "scripts"
+                receipt = SETUP._stage_service_files(root, "test", source, source_custody=digest)
+                systemd.assert_called_once_with(["/usr/bin/systemd-analyze", "verify", str(unit)],
+                                               capture_output=True, check=False)
+                copy = extraction / BOOT.SOURCE_COPIES / f"host-copy-{receipt}.json"
+                document = json.loads(copy.read_bytes())
+                self.assertEqual(receipt, BUILD.sha(copy.read_bytes()))
+                self.assertEqual(document["selection"]["selectionSha256"], digest)
+                self.assertEqual(document["installed"], {
+                    "inventory": {"orbis-host-service.py": BUILD.sha((install / "orbis-host-service.py").read_bytes())},
+                    "unitSha256": BUILD.sha(unit.read_bytes()),
+                    "environmentSha256": BUILD.sha(environment.read_bytes()),
+                })
+                self.assertEqual(document["bindings"]["unit"][1], unit.stat().st_ino)
+                self.assertEqual(document["bindings"]["environment"][1], environment.stat().st_ino)
+                with SETUP.hold_source_selection(source, digest) as selected:
+                    expected = SETUP.actual_copy(install, unit)
+                    self.assertEqual(SETUP.record_source_copy(root, "test", selected, expected), receipt)
+                    original = environment.read_bytes()
+                    environment.write_bytes(original + b"# changed\n")
+                    with self.assertRaisesRegex(ValueError, "environment differs"):
+                        SETUP.record_source_copy(root, "test", selected, expected)
+                    environment.write_bytes(original)
+                    unit.write_bytes(unit.read_bytes() + b"# changed unit\n")
+                    with self.assertRaisesRegex(ValueError, "installed Host copy differs"):
+                        SETUP.record_source_copy(root, "test", selected, expected)
+
+    def test_copy_snapshot_keeps_original_descriptors_until_closed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary); code = base / "source.py"; unit = base / "source.service"
+            code.write_bytes(b"original source\n"); unit.write_bytes(b"original unit\n")
+            with SETUP._SetupSources([code], unit) as inputs:
+                descriptors = list(inputs.descriptors)
+                with mock.patch.object(Path, "read_bytes", side_effect=AssertionError("reopened input")):
+                    self.assertEqual(inputs.body(code), b"original source\n")
+                    self.assertEqual(inputs.body(unit), b"original unit\n")
+                    inputs.verify()
+                self.assertTrue(all(os.fstat(descriptor) for descriptor in descriptors))
+            for descriptor in descriptors:
+                with self.assertRaises(OSError):
+                    os.fstat(descriptor)
+
+    def test_copy_snapshot_rejects_identical_bytes_replacing_an_original_file(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary); code = base / "source.py"; unit = base / "source.service"
+            code.write_bytes(b"same source"); unit.write_bytes(b"unit")
+            with SETUP._SetupSources([code], unit) as inputs:
+                replacement = base / "replacement.py"; replacement.write_bytes(code.read_bytes())
+                os.replace(replacement, code)
+                with self.assertRaisesRegex(ValueError, "source changed"):
+                    inputs.verify()
+                self.assertEqual(inputs.body(code), b"same source")
+
+    def test_copy_snapshot_rejects_in_place_changes_with_restored_mtime(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary); code = base / "source.py"; unit = base / "source.service"
+            code.write_bytes(b"original"); unit.write_bytes(b"unit")
+            with SETUP._SetupSources([code], unit) as inputs:
+                details = code.stat()
+                code.write_bytes(b"modified")
+                os.utime(code, ns=(details.st_atime_ns, details.st_mtime_ns))
+                with self.assertRaisesRegex(ValueError, "source changed"):
+                    inputs.verify()
+
+    def test_copy_snapshot_rejects_replaced_parent_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary); source = base / "input"; source.mkdir()
+            code = source / "source.py"; unit = source / "source.service"
+            code.write_bytes(b"source"); unit.write_bytes(b"unit")
+            with SETUP._SetupSources([code], unit) as inputs:
+                source.rename(base / "retained")
+                source.mkdir(); code.write_bytes(b"source"); unit.write_bytes(b"unit")
+                with self.assertRaisesRegex(ValueError, "source directory changed"):
+                    inputs.verify()
+
+    def test_copy_snapshot_refuses_file_and_directory_links(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary); code = base / "source.py"; unit = base / "source.service"
+            code.write_bytes(b"source"); unit.write_bytes(b"unit")
+            symlink = base / "linked.py"; symlink.symlink_to(code)
+            with self.assertRaisesRegex(ValueError, "regular file without links"):
+                SETUP._SetupSources([symlink], unit)
+            hardlink = base / "hard.py"; os.link(code, hardlink)
+            with self.assertRaisesRegex(ValueError, "regular file without links"):
+                SETUP._SetupSources([code], unit)
+            hardlink.unlink()
+            alias = base / "alias"; alias.symlink_to(base, target_is_directory=True)
+            with self.assertRaises(OSError):
+                SETUP._SetupSources([alias / code.name], unit)
+
+    def test_copy_snapshot_bounds_each_file_and_complete_inventory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary); code = base / "source.py"; unit = base / "source.service"
+            code.write_bytes(b"x" * (1024 * 1024 + 1)); unit.write_bytes(b"unit")
+            with self.assertRaisesRegex(ValueError, "bounded regular file"):
+                SETUP._SetupSources([code], unit)
+            code.unlink()
+            files = [base / f"source-{index}.py" for index in range(9)]
+            for file in files:
+                file.write_bytes(b"x" * 1024 * 1024)
+            with self.assertRaisesRegex(ValueError, "inventory exceeds"):
+                SETUP._SetupSources(files, unit)
+
+    def test_failed_snapshot_closes_every_opened_descriptor(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary); code = base / "source.py"; unit = base / "source.service"
+            code.write_bytes(b"source"); unit.write_bytes(b"unit")
+            original = SETUP.os.open; descriptors = []
+            def opened(*args, **kwargs):
+                descriptor = original(*args, **kwargs); descriptors.append(descriptor)
+                return descriptor
+            with mock.patch.object(SETUP.os, "open", side_effect=opened), mock.patch.object(SETUP.os, "pread", side_effect=OSError("read interrupted")):
+                with self.assertRaisesRegex(OSError, "read interrupted"):
+                    SETUP._SetupSources([code], unit)
+            self.assertTrue(descriptors)
+            for descriptor in descriptors:
+                with self.assertRaises(OSError):
+                    os.fstat(descriptor)
+
+    def test_journal_binding_covers_actual_snapshot_and_setup_drivers_before_copy(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary); source = base / "scripts"; source.mkdir()
+            code = source / "source.py"; unit = base / "source.service"
+            driver = source / "orbis-host-service-setup.py"; enable = source / "orbis-host-service-enable.py"
+            paths = [code, driver, enable, unit]
+            for path in paths:
+                path.write_bytes(b"reviewed " + path.name.encode())
+            hashes = {str(path.relative_to(base)): hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+            for changed in (code, driver, enable, unit):
+                before = changed.read_bytes(); changed.write_bytes(b"changed input")
+                with self.subTest(changed=changed.name), mock.patch.object(SETUP, "source_files", return_value=([code], unit)), \
+                        mock.patch.object(SETUP, "_stage_source_snapshot") as stage:
+                    with self.assertRaisesRegex(ValueError, "reviewed setup journal"):
+                        SETUP._stage_service_files(base, "fixture", source, expected_sources=hashes)
+                    stage.assert_not_called()
+                changed.write_bytes(before)
+            with mock.patch.object(SETUP, "source_files", return_value=([code], unit)), mock.patch.object(SETUP, "_stage_source_snapshot") as stage:
+                SETUP._stage_service_files(base, "fixture", source, expected_sources=hashes)
+                stage.assert_called_once()
+
+    def test_source_replacement_during_staging_never_starts_the_service(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary); root = base / "server"; root.mkdir()
+            source = base / "scripts"; source.mkdir(); code = source / "source.py"; code.write_bytes(b"reviewed source")
+            unit = base / "source.service"; unit.write_bytes(b"reviewed unit")
+            install = base / "opt/helper"; environment = base / "etc/helper.env"; target_unit = base / "systemd/orbis-host.service"
+            stat_method, lstat_method, replace = Path.stat, Path.lstat, SETUP.os.replace
+            def owned(method, path, *args, **kwargs):
+                values = list(method(path, *args, **kwargs)); values[4] = 0; values[5] = 0
+                return os.stat_result(values)
+            def replace_then_change(staged, destination):
+                result = replace(staged, destination)
+                if Path(destination) == install:
+                    code.write_bytes(b"unreviewed source")
+                    unit.write_bytes(b"unreviewed unit")
+                return result
+            with mock.patch.object(SETUP, "INSTALL_DIR", install), mock.patch.object(SETUP, "ENV_FILE", environment), \
+                    mock.patch.object(SETUP, "UNIT_FILE", target_unit), mock.patch.object(SETUP, "source_files", return_value=([code], unit)), \
+                    mock.patch.object(SETUP, "preflight", return_value={}), mock.patch.object(SETUP, "_start_service") as start, \
+                    mock.patch.object(SETUP.os, "replace", side_effect=replace_then_change), \
+                    mock.patch.object(Path, "stat", autospec=True, side_effect=lambda path, *a, **kw: owned(stat_method, path, *a, **kw)), \
+                    mock.patch.object(Path, "lstat", autospec=True, side_effect=lambda path, *a, **kw: owned(lstat_method, path, *a, **kw)):
+                with self.assertRaisesRegex(ValueError, "source changed"):
+                    SETUP.install_locked(root, "fixture", source)
+                start.assert_not_called()
+            self.assertEqual((install / code.name).read_bytes(), b"reviewed source")
+            self.assertEqual(target_unit.read_bytes(), b"reviewed unit")
+
     def test_discovery_is_bundled_with_the_host_helper_without_new_unit_or_dependencies(self):
         files, unit = SETUP.source_files(Path(__file__).parent)
         self.assertIn("orbis-host-discovery.py", [item.name for item in files])

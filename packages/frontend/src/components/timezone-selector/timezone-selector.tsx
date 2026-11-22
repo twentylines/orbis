@@ -17,15 +17,16 @@ export const TimeZoneSelector = (props: IProps) => {
     onChange(e);
   };
 
-  const zone = parseTimezone(timeZone || 'Etc/GMT').value || 'Etc/GMT';
+  const selected = parseTimezone(timeZone || 'Etc/GMT') || parseTimezone('Etc/GMT') || { value: 'Etc/GMT', label: 'GMT' };
+  const displayedOptions = options.some((option) => option.value === selected.value) ? options : [selected, ...options];
 
   return (
-    <Select value={zone} onValueChange={onTimezoneChange}>
+    <Select value={selected.value} onValueChange={onTimezoneChange}>
       <SelectTrigger className="mb-3" name="timezone" label={t('TIMEZONE_SELECTOR_LABEL')}>
         <SelectValue placeholder={t('TIMEZONE_SELECTOR_PLACEHOLDER')} />
       </SelectTrigger>
       <SelectContent className="select-content">
-        {options.map((option) => (
+        {displayedOptions.map((option) => (
           <SelectItem key={option.value} value={option.value}>
             {option.label}
           </SelectItem>

@@ -235,7 +235,12 @@ export async function prepareRestorePayload(options: {
       version: 1,
       id: state.id,
       nonce: state.nonce,
-      database: { connection, owner, counts: source.source.expected.counts },
+      database: {
+        connection,
+        owner,
+        counts: source.source.expected.counts,
+        ...(source.source.expected.migrationSha256 ? { migrationSha256: source.source.expected.migrationSha256 } : {}),
+      },
       resumeApps: materialized.resumeApps,
       originalEnvSha256: hash(original),
       incomingEnvSha256: hash(incoming),

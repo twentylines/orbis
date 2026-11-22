@@ -34,11 +34,13 @@ PLAN = load_script("orbis-release-plan.py", "orbis_release_plan")
 STAGE = load_script("orbis-stage-release.py", "orbis_stage_release")
 IDENTITY = load_script("orbis-host-identity.py", "orbis_identity_for_host")
 AUTHORITY = load_script("orbis-host-retained-authority.py", "orbis_authority_for_host")
+CREDENTIAL_FENCE = load_script("orbis-host-credential-fence.py", "orbis_credential_fence_for_host")
 STATE_NAME = ".orbis-host-state.json"
 LOCK_DESCRIPTOR = ContextVar("orbis_host_lock_descriptor", default=None)
 RESTORE_TRANSACTION = ContextVar("orbis_host_retained_restore_transaction", default=None)
 CORE_LIVE_TRANSACTION = ContextVar("orbis_host_core_live_restore_transaction", default=None)
 CAPTURE_READ_DEADLINE = ContextVar("orbis_host_capture_read_deadline", default=None)
+CONTROLLER_HANDOFF_OWNER = ContextVar("orbis_controller_handoff_owner", default=None)
 CORE_CAPTURE_OWNER = ContextVar("orbis_core_capture_owner", default=None)
 
 
@@ -80,7 +82,39 @@ def core_capture_owner(root: Path):
     return value
 
 
-def require_no_capture_fence(root: Path) -> None:
+def controller_handoff_path(root: Path) -> Path:
+    return AUTHORITY.LAYOUT.namespace(root) / "controller-recovery-handoff"
+
+
+@contextmanager
+def controller_handoff_owner(root: Path, identifier: str):
+    if (not isinstance(identifier, str)
+            or not re.fullmatch(r"[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}", identifier)):
+        raise ValueError("Controller recovery handoff identity is invalid")
+    token = CONTROLLER_HANDOFF_OWNER.set((root, identifier))
+    try:
+        yield
+    finally:
+        CONTROLLER_HANDOFF_OWNER.reset(token)
+
+
+def require_controller_handoff_clear(root: Path) -> None:
+    path = controller_handoff_path(root)
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return
+    owner = CONTROLLER_HANDOFF_OWNER.get()
+    if owner is not None and owner[0] == root:
+        with CREDENTIAL_FENCE._directory(path.parent, protected=True) as directory:
+            with AUTHORITY.protected_file(directory.fd, path.name, 64) as body:
+                if body == (owner[1] + "\n").encode("ascii"):
+                    return
+    raise ValueError("A controller recovery handoff requires completion or Host review")
+
+
+def _require_no_capture_restore_fence(root: Path) -> None:
+    require_controller_handoff_clear(root)
     restore = restore_selector_path(root)
     if restore.exists() or restore.is_symlink():
         with AUTHORITY.protected_directory(restore.parent, private=False) as directory:
@@ -99,6 +133,22 @@ def require_no_capture_fence(root: Path) -> None:
             raise ValueError("a protected controller capture requires completion or explicit reconciliation")
     elif CORE_CAPTURE_OWNER.get() is not None:
         raise ValueError('Protected core capture ownership could not be verified')
+
+
+def require_no_capture_fence(root: Path) -> None:
+    _require_no_capture_restore_fence(root)
+    CREDENTIAL_FENCE.require_clear(_host_module(), root)
+
+
+def _host_module():
+    # Script loaders intentionally do not all register modules in sys.modules.
+    from types import SimpleNamespace
+    return SimpleNamespace(**globals())
+
+
+def credential_fence_lock(root: Path, context: str):
+    """Root broker only; ordinary lifecycle code always uses host_lock."""
+    return CREDENTIAL_FENCE.locked(_host_module(), root, context)
 
 
 @contextmanager

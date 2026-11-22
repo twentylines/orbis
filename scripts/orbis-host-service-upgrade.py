@@ -3,6 +3,7 @@
 
 Run this from a reviewed Orbis checkout. It changes only the helper scripts and
 systemd unit; it does not update the Orbis core or touch its data tree.
+Use review-host-source separately to stage a Sentinel plan for Root approval.
 """
 
 import argparse
@@ -10,6 +11,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -17,6 +19,7 @@ import sys
 import tempfile
 import time
 import uuid
+from contextlib import ExitStack
 from pathlib import Path
 
 
@@ -57,12 +60,8 @@ def require_root_owned(path: Path, *, directory: bool, private: bool = False) ->
         raise ValueError(f"helper path has unsafe ownership or permissions: {path}")
 
 
-def exact_environment(root: Path, context: str) -> str:
-    return (
-        f"ORBIS_SERVICE_SOURCE={SETUP.systemd_quote(str(SETUP.INSTALL_DIR / 'orbis-host-service.py'))}\n"
-        f"ORBIS_ROOT={SETUP.systemd_quote(str(root))}\n"
-        f"ORBIS_DOCKER_CONTEXT={SETUP.systemd_quote(context)}\n"
-    )
+def exact_environment(root: Path, context: str, *, credentials_only=False) -> str:
+    return SETUP.service_environment(root, context, credentials_only=credentials_only).decode()
 
 
 def systemctl_output(*arguments: str) -> str:
@@ -72,7 +71,7 @@ def systemctl_output(*arguments: str) -> str:
     return result.stdout.strip()
 
 
-def validate_unit(unit: str) -> None:
+def validate_unit(unit: str, *, credentials_only=False) -> None:
     lines = unit.splitlines()
     required = (
         "EnvironmentFile=/etc/orbis/host-service.env",
@@ -84,6 +83,7 @@ def validate_unit(unit: str) -> None:
         for line in lines
     ):
         raise ValueError("helper unit is missing its fixed environment, runtime directory, or command")
+    SETUP.require_role_unit(unit.encode(), credentials_only=credentials_only)
 
 
 def require_installed(root: Path, context: str) -> dict | None:
@@ -96,9 +96,8 @@ def require_installed(root: Path, context: str) -> dict | None:
             require_root_owned(file, directory=False, private=True)
     require_root_owned(SETUP.ENV_FILE, directory=False, private=True)
     require_root_owned(SETUP.UNIT_FILE, directory=False)
-    if SETUP.ENV_FILE.read_text(encoding="utf-8") != exact_environment(root, context):
-        raise ValueError("installed helper environment does not match the enrolled root and Docker context")
-    validate_unit(SETUP.UNIT_FILE.read_text(encoding="utf-8"))
+    role = SETUP.environment_role(SETUP.ENV_FILE.read_bytes(), root, context)
+    validate_unit(SETUP.UNIT_FILE.read_text(encoding="utf-8"), credentials_only=role)
     if systemctl_output("show", "-p", "FragmentPath", "--value", "orbis-host.service") != str(SETUP.UNIT_FILE):
         raise ValueError("systemd is not using the expected Orbis helper unit")
     profile = PROFILE.configuration(SETUP.UNIT_FILE, systemctl_output, HOST.AUTHORITY)
@@ -173,8 +172,12 @@ def preflight(root: Path, context: str, source: Path) -> dict:
     job_identity()
     source_files, source_unit = SETUP.source_files(source)
     validate_candidate_scripts(source_files)
-    validate_unit(source_unit.read_text(encoding="utf-8"))
+    environment = SETUP.ENV_FILE.read_bytes()
+    role = SETUP.environment_role(environment, root, context)
+    validate_unit(source_unit.read_text(encoding="utf-8"), credentials_only=role)
     PROFILE.require_support(source, profile)
+    if SETUP.ENV_FILE.read_bytes() != environment:
+        raise ValueError('Installed service environment changed during helper preflight')
     return {
         **ready,
         "installedScriptsSha256": digest_files(SETUP.INSTALL_DIR),
@@ -182,6 +185,7 @@ def preflight(root: Path, context: str, source: Path) -> dict:
         "installedUnitSha256": hashlib.sha256(SETUP.UNIT_FILE.read_bytes()).hexdigest(),
         "candidateUnitSha256": hashlib.sha256(source_unit.read_bytes()).hexdigest(),
         "observerProfile": profile,
+        "installedEnvironmentSha256": hashlib.sha256(environment).hexdigest(),
     }
 
 
@@ -206,11 +210,15 @@ def sync_directory(directory: Path) -> None:
 
 
 def atomic_copy(source: Path, destination: Path, mode: int) -> None:
+    atomic_contents(source.read_bytes(), destination, mode)
+
+
+def atomic_contents(body: bytes, destination: Path, mode: int) -> None:
     descriptor, temporary = tempfile.mkstemp(prefix=f".{destination.name}-", dir=destination.parent)
     try:
         with os.fdopen(descriptor, "wb") as stream:
             os.fchmod(stream.fileno(), mode)
-            stream.write(source.read_bytes())
+            stream.write(body)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, destination)
@@ -220,6 +228,7 @@ def atomic_copy(source: Path, destination: Path, mode: int) -> None:
 
 
 def verify_service(digest: str, root: Path, context: str) -> None:
+    credentials_only = SETUP.installed_credentials_only(root, context)
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
         try:
@@ -239,6 +248,14 @@ def verify_service(digest: str, root: Path, context: str) -> None:
                 and inside.returncode == 0
                 and json.loads(inside.stdout).get("currentDigest") == digest
                 and mounted.returncode == 0
+                and (not credentials_only or (status.get('serviceRole') == 'credentials-only'
+                                              and status.get('capabilities') == []
+                                              and type(status.get('credentialProtocol')) is int
+                                              and status.get('credentialProtocol') == 1
+                                              and json.loads(inside.stdout).get('serviceRole') == 'credentials-only'
+                                              and json.loads(inside.stdout).get('capabilities') == []
+                                              and type(json.loads(inside.stdout).get('credentialProtocol')) is int
+                                              and json.loads(inside.stdout).get('credentialProtocol') == 1))
             ):
                 SETUP.validate_running_mount(host_mount.st_dev, host_mount.st_ino, mounted.stdout)
                 return
@@ -268,12 +285,26 @@ def workspace_from_record(record: dict, root: Path, context: str) -> Path:
 
 def require_maintenance_identity(root, context):
     record = SERVICE.read_private(MAINTENANCE)
+    if record and 'environmentSha256' in record:
+        expected = record['environmentSha256']
+        require_root_owned(SETUP.ENV_FILE, directory=False, private=True)
+        if (type(expected) is not str or not re.fullmatch(r'[a-f0-9]{64}', expected)
+                or hashlib.sha256(SETUP.ENV_FILE.read_bytes()).hexdigest() != expected):
+            raise ValueError('The installed service role or environment changed during helper maintenance')
     if record and record.get("retainedSource") is not None:
         if HOST.retained_descriptor(root, context) != record["retainedSource"]:
             raise ValueError("retained source changed during helper maintenance")
         HOST.resolve_current_identity(root, context)
     elif HOST.retained_state(root):
         raise ValueError("retained helper recovery requires its protected source descriptor")
+
+
+def _require_custodied_copy(custody, member, directory, unit):
+    if custody is None:
+        return
+    if (type(custody) is not dict or set(custody) != {"selection", "prior", "candidate"}
+            or SETUP.actual_copy(directory, unit) != custody[member]):
+        raise ValueError("Helper maintenance copy differs from its exact journaled source")
 
 
 def restore_previous(workspace: Path, digest: str, root: Path, context: str) -> None:
@@ -283,7 +314,10 @@ def restore_previous(workspace: Path, digest: str, root: Path, context: str) -> 
     previous = workspace / "previous"
     if previous.exists() or previous.is_symlink():
         require_root_owned(previous, directory=True, private=True)
-    require_profile(profile, previous if previous.exists() else SETUP.INSTALL_DIR, loaded=False)
+    prior_directory = previous if previous.exists() else SETUP.INSTALL_DIR
+    custody = record.get("sourceCustody") if record else None
+    _require_custodied_copy(custody, "prior", prior_directory, workspace / "previous-unit")
+    require_profile(profile, prior_directory, loaded=False)
     stop_service(profile)
     if previous.exists():
         failed = workspace / "failed"
@@ -299,11 +333,16 @@ def restore_previous(workspace: Path, digest: str, root: Path, context: str) -> 
     if not SETUP.INSTALL_DIR.is_dir():
         raise RuntimeError("old helper scripts are missing; preserve the upgrade workspace")
     atomic_copy(workspace / "previous-unit", SETUP.UNIT_FILE, 0o644)
+    _require_custodied_copy(custody, "prior", SETUP.INSTALL_DIR, SETUP.UNIT_FILE)
     SETUP.run_systemctl("daemon-reload")
     require_profile(profile, SETUP.INSTALL_DIR)
     SETUP.run_systemctl("start", "orbis-host.service")
     verify_service(digest, root, context)
     require_profile(profile, SETUP.INSTALL_DIR)
+    if custody is not None:
+        record["stage"] = "restored"
+        SERVICE.write_private(MAINTENANCE, record)
+        SETUP.record_source_copy_transition(root, context, custody, outcome="prior-restored")
 
 
 def finish(workspace: Path) -> None:
@@ -313,13 +352,13 @@ def finish(workspace: Path) -> None:
     sync_directory(workspace.parent)
 
 
-def upgrade(root: Path, context: str, source: Path, confirmation: str | None) -> dict:
+def upgrade(root: Path, context: str, source: Path, confirmation: str | None, *, source_custody=None) -> dict:
     if os.geteuid() != 0:
         raise ValueError("helper upgrade requires root privileges")
     root = root.resolve(strict=True)
     if confirmation != str(root):
         raise ValueError(f"helper upgrade requires --confirm-root {root}")
-    with HOST.host_lock(root):
+    with HOST.host_lock(root), SETUP.hold_source_selection(source, source_custody) as selection:
         ready = preflight(root, context, source)
         if (
             ready["installedScriptsSha256"] == ready["candidateScriptsSha256"]
@@ -335,10 +374,28 @@ def upgrade(root: Path, context: str, source: Path, confirmation: str | None) ->
         sync_directory(workspace)
         files, unit = SETUP.source_files(source)
         try:
-            for file in files:
-                atomic_copy(file, new / file.name, 0o600)
+            copy_custody = None
+            if selection is None:
+                for file in files:
+                    atomic_copy(file, new / file.name, 0o600)
+                atomic_copy(unit, workspace / "candidate.service", 0o600)
+            else:
+                drivers = [source / name for name in ("orbis-host-service-setup.py",
+                    "orbis-host-service-enable.py", "orbis-host-service-upgrade.py")]
+                with SETUP._SetupSources([*files, *drivers], unit) as pinned:
+                    SETUP.require_selection_files(source, selection, pinned, [*files, *drivers, unit])
+                    candidate = {"inventory": {file.name: SETUP._hash(pinned.body(file)) for file in files},
+                                 "unitSha256": SETUP._hash(pinned.body(unit))}
+                    prior = SETUP.actual_copy(SETUP.INSTALL_DIR, SETUP.UNIT_FILE)
+                    for file in files:
+                        atomic_contents(pinned.body(file), new / file.name, 0o600)
+                    atomic_contents(pinned.body(unit), workspace / "candidate.service", 0o600)
+                    pinned.verify()
+                copy_custody = {"selection": {key: value for key, value in selection.items() if key != "inventory"},
+                                "prior": prior, "candidate": candidate}
+                _require_custodied_copy(copy_custody, "candidate", new, workspace / "candidate.service")
             atomic_copy(SETUP.UNIT_FILE, workspace / "previous-unit", 0o600)
-            atomic_copy(unit, workspace / "candidate.service", 0o600)
+            _require_custodied_copy(copy_custody, "prior", SETUP.INSTALL_DIR, workspace / "previous-unit")
             checked = subprocess.run(["/usr/bin/systemd-analyze", "verify", str(workspace / "candidate.service")], capture_output=True, check=False)
             if checked.returncode:
                 raise ValueError("systemd rejected the candidate Orbis helper unit")
@@ -351,11 +408,16 @@ def upgrade(root: Path, context: str, source: Path, confirmation: str | None) ->
                 "stage": "prepared",
                 "observerProfile": ready["observerProfile"],
             }
+            if 'installedEnvironmentSha256' in ready:
+                record['environmentSha256'] = ready['installedEnvironmentSha256']
+            if copy_custody is not None:
+                record["sourceCustody"] = copy_custody
             if HOST.retained_state(root):
                 record["retainedSource"] = HOST.retained_descriptor(root, context)
             SERVICE.write_private(MAINTENANCE, record)
             require_maintenance_identity(root, context)
             require_profile(ready['observerProfile'], new)
+            _require_custodied_copy(copy_custody, "prior", SETUP.INSTALL_DIR, SETUP.UNIT_FILE)
             stop_service(ready['observerProfile'])
             if job_identity() != previous_job:
                 raise ValueError("a core update was accepted while stopping the old helper; retry after resolving it")
@@ -368,6 +430,7 @@ def upgrade(root: Path, context: str, source: Path, confirmation: str | None) ->
             sync_directory(workspace)
             sync_directory(SETUP.INSTALL_DIR.parent)
             atomic_copy(workspace / "candidate.service", SETUP.UNIT_FILE, 0o644)
+            _require_custodied_copy(copy_custody, "candidate", SETUP.INSTALL_DIR, SETUP.UNIT_FILE)
             record["stage"] = "replaced"
             SERVICE.write_private(MAINTENANCE, record)
             SETUP.run_systemctl("daemon-reload")
@@ -375,6 +438,9 @@ def upgrade(root: Path, context: str, source: Path, confirmation: str | None) ->
             SETUP.run_systemctl("start", "orbis-host.service")
             verify_service(ready["digest"], root, context)
             require_profile(ready['observerProfile'], SETUP.INSTALL_DIR)
+            if copy_custody is not None:
+                receipt = SETUP.record_source_copy(root, context, selection, copy_custody["candidate"])
+                record["hostCopyCustodySha256"] = receipt
             record["stage"] = "verified"
             SERVICE.write_private(MAINTENANCE, record)
         except Exception as error:
@@ -385,8 +451,12 @@ def upgrade(root: Path, context: str, source: Path, confirmation: str | None) ->
                     raise RuntimeError("helper upgrade and rollback failed; preserve the maintenance record and workspace") from rollback_error
             finish(workspace)
             raise RuntimeError("helper upgrade failed; the previous helper was restored") from error
-    finish(workspace)
-    return {**ready, "service": "active", "socket": str(SETUP.SOCKET_FILE), "upgraded": True}
+        if copy_custody is not None:
+            transition = SETUP.record_source_copy_transition(root, context, copy_custody,
+                outcome="candidate-active", copy_receipt=receipt)
+            ready.update(hostCopyCustodySha256=receipt, hostCopyTransitionSha256=transition)
+        finish(workspace)
+        return {**ready, "service": "active", "socket": str(SETUP.SOCKET_FILE), "upgraded": True}
 
 
 def recover(root: Path, context: str, confirmation: str | None) -> dict[str, str]:
@@ -406,30 +476,101 @@ def recover(root: Path, context: str, confirmation: str | None) -> dict[str, str
         job_identity()
         require_maintenance_identity(root, context)
         require_profile(record.get('observerProfile'), loaded=False)
-        if record.get("stage") == "verified":
+        custody = record.get("sourceCustody")
+        if record.get("stage") == "restored" and custody is not None:
+            _require_custodied_copy(custody, "prior", SETUP.INSTALL_DIR, SETUP.UNIT_FILE)
+            verify_service(digest, root, context)
+            SETUP.record_source_copy_transition(root, context, custody, outcome="prior-restored")
+        elif record.get("stage") == "verified":
             try:
+                _require_custodied_copy(custody, "candidate", SETUP.INSTALL_DIR, SETUP.UNIT_FILE)
                 require_profile(record.get('observerProfile'), SETUP.INSTALL_DIR)
                 verify_service(digest, root, context)
                 require_profile(record.get('observerProfile'), SETUP.INSTALL_DIR)
             except RuntimeError:
                 restore_previous(workspace, digest, root, context)
+            else:
+                if custody is not None:
+                    receipt = record.get("hostCopyCustodySha256")
+                    if SETUP.record_source_copy(root, context, custody["selection"], custody["candidate"]) != receipt:
+                        raise ValueError("Verified helper copy differs from its exact recorded receipt")
+                    SETUP.record_source_copy_transition(root, context, custody,
+                        outcome="candidate-active", copy_receipt=receipt)
         else:
             restore_previous(workspace, digest, root, context)
-    finish(workspace)
-    return {"root": str(root), "dockerContext": context, "service": "active", "recovered": True}
+        finish(workspace)
+        return {"root": str(root), "dockerContext": context, "service": "active", "recovered": True}
+
+
+def review_host_source(root, context, confirmation, selection_directory, selection_sha, copy_sha):
+    """Join retained installer custody to the installed Sentinel review only."""
+    sentinel = SETUP.load_script("orbis-sentinel-install.py", "orbis_sentinel_host_source_review")
+    sentinel.require_host()
+    if (not root.is_absolute() or root.resolve(strict=True) != root or not root.is_dir()
+            or len(os.fsencode(root)) > 4096 or confirmation != str(root) or any(ord(char) < 32 or ord(char) == 127 for char in str(root))):
+        raise ValueError("Host source review requires the canonical installed root and matching --confirm-root")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", context):
+        raise ValueError("Host source review requires the exact installed Docker context")
+    if (selection_directory is None or not selection_directory.is_absolute()
+            or selection_directory.resolve(strict=True) != selection_directory
+            or any(ord(char) < 32 or ord(char) == 127 for char in str(selection_directory))
+            or not all(re.fullmatch(r"[a-f0-9]{64}", value or "") for value in (selection_sha, copy_sha))):
+        raise ValueError("Supply the retained installer directory, selection SHA-256 and Host-copy SHA-256")
+
+    protected = (sentinel.INSTALLED_ROOT, sentinel.INSTALLED_STATE, SETUP.INSTALL_DIR, SETUP.UNIT_FILE, SETUP.ENV_FILE)
+    if any(root.is_relative_to(path) or path.is_relative_to(root) for path in protected):
+        raise ValueError("The installation root overlaps protected Host or Sentinel paths")
+    source = selection_directory / "scripts"
+    files, unit = SETUP.source_files(source)
+    with ExitStack() as pins:
+        for descriptor in HOST.AUTHORITY.LAYOUT.open_locks(root, create=False):
+            pins.callback(os.close, descriptor)
+        if SERVICE.read_private(MAINTENANCE) is not None:
+            raise ValueError("Reconcile pending Host helper maintenance before requesting source review")
+        selection = pins.enter_context(SETUP.hold_source_selection(source, selection_sha))
+        inputs = pins.enter_context(SETUP._SetupSources(files, unit))
+        SETUP.require_selection_files(source, selection, inputs, [*files, unit])
+        expected = {"inventory": {file.name: SETUP._hash(inputs.body(file)) for file in files},
+                    "unitSha256": SETUP._hash(inputs.body(unit))}
+        actual = SETUP._source_copy_receipt(pins, root, context, selection, expected)
+        copies = pins.enter_context(HOST.AUTHORITY.protected_directory(selection_directory / "host-copy-custody"))
+        receipt = pins.enter_context(HOST.AUTHORITY.protected_file(copies, f"host-copy-{copy_sha}.json", 1024 * 1024))
+        if receipt != actual or SETUP._hash(receipt) != copy_sha:
+            raise ValueError("Retained Host-copy receipt differs from the exact installed Host copy")
+        operation = SETUP._hash(SETUP._receipt_bytes({
+            "schema": "orbis.installer.host-source-review.v1", "root": str(root), "context": context,
+            "selectionDirectory": str(selection_directory), "selectionSha256": selection_sha,
+            "hostCopySha256": copy_sha,
+        }))
+        inputs.verify()
+        result = sentinel.review_host_source(operation, selection_directory, copy_sha)
+        inputs.verify()
+        return result
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("plan", "upgrade", "recover"))
+    parser.add_argument("action", choices=("plan", "upgrade", "recover", "review-host-source"))
     parser.add_argument("root", type=Path)
     parser.add_argument("--docker-context", required=True)
-    parser.add_argument("--source-dir", type=Path, default=Path(__file__).parent)
+    parser.add_argument("--source-dir", type=Path)
     parser.add_argument("--confirm-root")
+    parser.add_argument("--installer-selection", type=Path, help="retained installer selection directory for Host source review")
+    parser.add_argument("--installer-selection-sha256", help="exact installer selection receipt digest")
+    parser.add_argument("--host-copy-sha256", help="exact installed Host-copy custody digest")
     args = parser.parse_args()
+    review = (args.installer_selection, args.installer_selection_sha256, args.host_copy_sha256)
+    if args.action == "review-host-source":
+        if any(value is None for value in review) or args.source_dir is not None:
+            parser.error("Host source review requires all three custody options and excludes --source-dir")
+    elif any(value is not None for value in review):
+        parser.error("Custody review options require review-host-source")
     try:
+        if args.action == "review-host-source":
+            print(json.dumps(review_host_source(args.root, args.docker_context, args.confirm_root, *review), indent=2))
+            return 0
         root = args.root.expanduser().resolve(strict=True)
-        source = args.source_dir.expanduser().resolve(strict=True)
+        source = (args.source_dir or Path(__file__).parent).expanduser().resolve(strict=True)
         result = (
             preflight(root, args.docker_context, source)
             if args.action == "plan"
@@ -440,7 +581,8 @@ def main() -> int:
         print(json.dumps(result, indent=2))
         return 0
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as error:
-        print(f"Orbis host service upgrade failed: {error}", file=sys.stderr)
+        label = "Host source review" if args.action == "review-host-source" else "Orbis host service upgrade"
+        print(f"{label} failed: {error}", file=sys.stderr)
         return 2
 
 

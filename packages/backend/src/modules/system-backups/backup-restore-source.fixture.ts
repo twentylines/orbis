@@ -1,12 +1,14 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { backupDatabaseTables } from './backup-database-records';
+import { backupDatabaseTables, backupMigrationDigest, type BackupDatabaseTable } from './backup-database-records';
 import { createBackupSourceSeal } from './backup-restore-source';
 import type { BackupDatabaseReview } from './backup-database.service';
 import type { FullBackupManifest } from './backup-import';
+import { installRequestDirectory, reserveInstallRequest, takeInstallRequestReceipt } from '../app-lifecycle/install-request-receipt';
+import { createAppUrn } from '@/common/helpers/app-helpers';
 
-export type ReviewedBackupRow = { table: (typeof backupDatabaseTables)[number]; row: Record<string, unknown> };
+export type ReviewedBackupRow = { table: 'user' | 'app_store' | 'app' | 'link'; row: Record<string, unknown> };
 export type ReviewedBackupFixture = {
   directory: string;
   content: string;
@@ -14,7 +16,12 @@ export type ReviewedBackupFixture = {
   seal: ReturnType<typeof createBackupSourceSeal>;
   manifest: FullBackupManifest;
 };
-export type ReviewedBackupFixtureOptions = { dbStatus?: string; manifestRunning?: boolean };
+export type ReviewedBackupFixtureOptions = {
+  dbStatus?: string;
+  manifestRunning?: boolean;
+  migrationIds?: string[];
+  installHold?: 'provisional' | 'pending' | 'spent' | 'settled';
+};
 
 const sha256 = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex');
 const jwtSecret = 'fixture-jwt-secret';
@@ -126,14 +133,28 @@ export async function makeReviewedBackupFixture(parentDirectory: string, options
   const dump = Buffer.from('PGDMP-disposable-fixture-dump');
   await fs.writeFile(path.join(content, 'database.dump'), dump, { mode: 0o600 });
 
-  const databaseRows = reviewedBackupRows(options.dbStatus ?? 'stopped');
+  const databaseRows: { table: BackupDatabaseTable; row: Record<string, unknown> }[] = reviewedBackupRows(options.dbStatus ?? 'stopped');
+  const version = options.migrationIds ? 2 : 1;
+  let migrationSha256: string | undefined;
+  if (options.migrationIds) {
+    const row = databaseRows.find(({ table }) => table === 'app')?.row;
+    if (!row) throw new Error('Missing fixture application');
+    row.migrations_baselined = true;
+    for (const id of options.migrationIds) databaseRows.push({ table: 'app_migration', row: { app_id: 9, migration_id: id } });
+    migrationSha256 = backupMigrationDigest(new Map([[9, true]]), new Map([[9, options.migrationIds]]));
+  }
   const records = Buffer.from(`${databaseRows.map((entry) => JSON.stringify(entry)).join('\n')}\n`);
   const counts = Object.fromEntries(
-    backupDatabaseTables.map((table) => [table, databaseRows.filter((entry) => entry.table === table).length]),
+    backupDatabaseTables(version).map((table) => [table, databaseRows.filter((entry) => entry.table === table).length]),
   ) as BackupDatabaseReview['counts'];
-  const normalized: BackupDatabaseReview = { counts, bytes: records.length, sha256: sha256(records) };
+  const normalized: BackupDatabaseReview = {
+    counts,
+    bytes: records.length,
+    sha256: sha256(records),
+    ...(migrationSha256 ? { migrationSha256 } : {}),
+  };
   await fs.writeFile(path.join(database, 'records.ndjson'), records, { mode: 0o600 });
-  await fs.writeFile(path.join(database, 'records.json'), JSON.stringify({ version: 1, ...normalized }), { mode: 0o600 });
+  await fs.writeFile(path.join(database, 'records.json'), JSON.stringify({ version, ...normalized }), { mode: 0o600 });
 
   const files = await Promise.all([
     fileMetadata(content, 'data/state/seed'),
@@ -143,6 +164,33 @@ export async function makeReviewedBackupFixture(parentDirectory: string, options
   const directories = await Promise.all(
     ['data/state', 'data/apps', 'data/apps/catalogue', 'data/apps/catalogue/fixture-app'].map((name) => directoryMetadata(content, name)),
   );
+  if (options.installHold) {
+    const appUrn = createAppUrn('fixture-app', 'catalogue');
+    const app = { id: 9, appName: 'fixture-app', appStoreSlug: 'catalogue', createdAt: 1_700_000_000 };
+    const request = { requestId: '11111111-1111-4111-8111-111111111111', owner: 'fixture-owner', app, skipRun: false };
+    const receipt = () =>
+      reserveInstallRequest(data, appUrn, request, async () => {
+        if (options.installHold === 'provisional') throw new Error('Fixture row insertion was interrupted.');
+        return app;
+      });
+    if (options.installHold === 'provisional') await receipt().catch(() => undefined);
+    else await receipt();
+    if (options.installHold === 'spent' || options.installHold === 'settled') {
+      const settle = await takeInstallRequestReceipt(data, request);
+      if (!settle) throw new Error('Fixture receipt was unavailable.');
+      if (options.installHold === 'settled') await settle();
+    }
+    const directory = installRequestDirectory(data, appUrn);
+    const relative = (entry: string) => path.relative(content, entry);
+    for (const entry of [path.dirname(directory), directory]) directories.push(await directoryMetadata(content, relative(entry)));
+    for (const name of await fs.readdir(directory, { withFileTypes: true })) {
+      const entry = path.join(directory, name.name);
+      if (name.isDirectory()) {
+        directories.push(await directoryMetadata(content, relative(entry)));
+        for (const file of await fs.readdir(entry)) files.push(await fileMetadata(content, relative(path.join(entry, file))));
+      } else files.push(await fileMetadata(content, relative(entry)));
+    }
+  }
   const manifest: FullBackupManifest = {
     format: 'orbis-full-backup',
     version: 1,

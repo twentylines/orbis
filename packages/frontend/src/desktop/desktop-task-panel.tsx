@@ -25,6 +25,7 @@ import { useReducedMotion } from './motion-preferences';
 import { activityIsHidden, canDismissActivity, completedActivity } from './task-centre-visibility';
 import { useTaskCentreVisibility } from './use-task-centre-visibility';
 import './desktop-task-panel.css';
+import { AppJobCancel } from '@/modules/app/components/app-job-progress/app-job-progress';
 
 export function taskPanelPosition(anchor: { left: number; right: number; bottom: number }, width: number, viewportWidth: number) {
   return { left: Math.max(16, Math.min((anchor.left + anchor.right - width) / 2, viewportWidth - width - 16)), top: anchor.bottom + 8 };
@@ -134,7 +135,17 @@ function TaskRow({
   );
 }
 
-export function TaskDetails({ record, close, dismiss }: { record: TaskCentreGroup; close: () => void; dismiss?: (id: string) => void }) {
+export function TaskDetails({
+  record,
+  close,
+  dismiss,
+  owner = 'current',
+}: {
+  record: TaskCentreGroup;
+  close: () => void;
+  dismiss?: (id: string) => void;
+  owner?: string;
+}) {
   const setup = record.task && isSetupFailureTask(record.task) ? record.task : null;
   const progress = reportedProgress(record);
   const duration = taskDuration(record);
@@ -214,6 +225,16 @@ export function TaskDetails({ record, close, dismiss }: { record: TaskCentreGrou
         </div>
       </dl>
       <div className="task-centre-detail-actions">
+        {record.task && record.task.cancellable !== undefined && (record.task.action === 'backup' || record.task.action === 'update') ? (
+          <AppJobCancel
+            key={`${owner}:${record.task.id}`}
+            owner={owner}
+            appUrn={record.task.appUrn}
+            requestId={record.task.id}
+            cancellable={record.task.cancellable}
+            status={record.task.status}
+          />
+        ) : null}
         {record.actions.map((action) => (
           <Link key={action.path} to={action.path} onClick={close}>
             {action.label}
@@ -704,7 +725,12 @@ export function DesktopTaskPanel({
             )}
             {selected ? (
               selectedRecord ? (
-                <TaskDetails record={selectedRecord} close={close} dismiss={view === 'history' ? undefined : dismissSetupFailure} />
+                <TaskDetails
+                  owner={visibilityOwner}
+                  record={selectedRecord}
+                  close={close}
+                  dismiss={view === 'history' ? undefined : dismissSetupFailure}
+                />
               ) : (
                 <div className="task-centre-empty">
                   <h3>Record no longer available</h3>

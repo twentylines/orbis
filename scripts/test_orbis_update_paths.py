@@ -57,7 +57,8 @@ class InstallerUpdateTests(unittest.TestCase):
         upgrade = SimpleNamespace(SERVICE=SimpleNamespace(
             installed_manifest=mock.Mock(return_value=CURRENT),
             read_channel=mock.Mock(side_effect=channel_reads),
-        ), SETUP=SimpleNamespace(SOCKET_FILE=Path('/run/orbis/host.sock')), upgrade=mock.Mock())
+        ), SETUP=SimpleNamespace(SOCKET_FILE=Path('/run/orbis/host.sock'),
+                                installed_credentials_only=mock.Mock(return_value=False)), upgrade=mock.Mock())
         enable = SimpleNamespace(enable=mock.Mock())
         planned = {'planId': 'owned-plan', 'targetTag': target['tag'], 'targetDigest': target['digest']}
         accepted = {'jobId': 'owned-plan', 'state': 'running'}

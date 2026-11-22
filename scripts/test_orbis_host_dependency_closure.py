@@ -22,11 +22,46 @@ def script_names():
                     for target in node.targets))
 
 
+def installer_only_loads(path, tree):
+    """Prove that retained-origin source custody is reachable only from its CLI.
+
+    The daemon imports admission for its broker API. Origin preparation also
+    lives in that module, but uses the retained installer selection rather than
+    the daemon installation. Do not require installer entrypoints in the daemon.
+    """
+    if path.name != 'orbis-host-recovery-admission.py':
+        return set()
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+
+    def owner(node):
+        while node in parents:
+            node = parents[node]
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                return node.name
+        return None
+
+    for name, caller in (('_origin_retained_source', '_origin_main'), ('_origin_main', 'main')):
+        references = [node for node in ast.walk(tree)
+                      if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id == name]
+        if len(references) != 1 or owner(references[0]) != caller:
+            raise ValueError('Retained installer source lookup escaped its CLI boundary')
+    loads = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+             and isinstance(node.func, ast.Name) and node.func.id == 'load' and node.args
+             and isinstance(node.args[0], ast.Constant)
+             and node.args[0].value == 'orbis-host-service-setup.py']
+    if len(loads) != 1 or owner(loads[0]) != '_origin_retained_source':
+        raise ValueError('Installer entrypoint lookup escaped retained source custody')
+    return set(loads)
+
+
 def literal_dependencies(path):
     """Follow literal local loads and with_name references, including workers."""
     tree = ast.parse(path.read_text())
     result = set()
+    cli_only = installer_only_loads(path, tree)
     for node in ast.walk(tree):
+        if node in cli_only:
+            continue
         if not isinstance(node, ast.Call) or not node.args:
             continue
         function = node.func
@@ -77,6 +112,20 @@ class HostDependencyClosure(unittest.TestCase):
             self.assertTrue(path.is_file(), name)
             if path.suffix == '.py':
                 pending.extend(literal_dependencies(path) - visited)
+
+    def test_installer_source_lookup_cannot_become_a_daemon_dependency(self):
+        path = SCRIPTS_DIR / 'orbis-host-recovery-admission.py'
+        tree = ast.parse(path.read_text())
+        self.assertEqual(len(installer_only_loads(path, tree)), 1)
+        dependencies = literal_dependencies(path)
+        self.assertIn('orbis-host-credential-service.py', dependencies)
+        self.assertNotIn('orbis-host-service-setup.py', dependencies)
+        for expression in ("_origin_retained_source(None, 'a', 'b')", "_origin_main([])",
+                           "load('orbis-host-service-setup.py', 'unexpected_daemon_loader')"):
+            changed = ast.parse(path.read_text())
+            changed.body.append(ast.parse('def daemon_handler():\n    ' + expression).body[0])
+            with self.subTest(expression=expression), self.assertRaises(ValueError):
+                installer_only_loads(path, changed)
 
     def test_installed_imports_and_missing_or_symlink_rejected(self):
         program = r'''

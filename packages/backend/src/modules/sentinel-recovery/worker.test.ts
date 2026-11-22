@@ -22,6 +22,30 @@ describe('independent recovery authentication worker protocol', () => {
       mode: 'describe-identity',
       identitySha256: 'a'.repeat(64),
     });
+    expect(recoveryAuthenticationArguments(['--describe-content', 'a'.repeat(64)])).toEqual({
+      mode: 'describe-content',
+      identitySha256: 'a'.repeat(64),
+    });
+  });
+
+  it('separates effective-content and counter-only modes from authentication', () => {
+    const challenge = randomBytes(32).toString('base64url');
+    expect(recoveryAuthenticationArguments(['--describe-effective-content', 'a'.repeat(64)])).toEqual({
+      mode: 'describe-effective-content',
+      identitySha256: 'a'.repeat(64),
+    });
+    expect(recoveryAuthenticationArguments(['--verify-counter', 'a'.repeat(64), challenge])).toEqual({
+      mode: 'verify-counter',
+      identitySha256: 'a'.repeat(64),
+      challenge,
+    });
+    expect(recoveryAuthenticationCapability).toMatchObject({
+      effectiveIdentityContentProof: 'orbis.sentinel-effective-identity-content.v1',
+      passkeyCounterProof: 'orbis.sentinel-passkey-counter.v1',
+      grantsAuthority: false,
+    });
+    expect(() => recoveryAuthenticationArguments(['--verify-counter', 'a'.repeat(64), 'short'])).toThrow();
+    expect(() => recoveryAuthenticationArguments(['--describe-effective-content', 'a'.repeat(64), 'extra'])).toThrow();
   });
 
   it.each(
@@ -36,6 +60,9 @@ describe('independent recovery authentication worker protocol', () => {
       ['--describe-identity'],
       ['--describe-identity', 'A'.repeat(64)],
       ['--describe-identity', 'a'.repeat(64), '/another/file'],
+      ['--describe-content'],
+      ['--describe-content', 'A'.repeat(64)],
+      ['--describe-content', 'a'.repeat(64), '/another/file'],
       ['--verify', 'a'.repeat(64), randomBytes(32).toString('base64url'), '--bypass'],
     ].map((args) => ({ args })),
   )('rejects unsupported arguments %# without printing input', ({ args }) => {

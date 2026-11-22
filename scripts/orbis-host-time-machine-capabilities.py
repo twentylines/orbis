@@ -16,6 +16,8 @@ VOLUME_REQUIRED = {'orbis-host-volume-capture.py', 'orbis-host-volume-engine.py'
 NAMES = re.compile(r'(?:orbis-[a-z-]+|install-orbis|migration-preflight)\.py|orbis-host-maintenance-responder\.mjs')
 REQUIRED = {'orbis-host-service.py', 'orbis-host.py', 'orbis-host-identity.py', 'orbis-host-retained-authority.py',
             'orbis-host-layout.py', 'orbis-reset-authority.py', 'orbis-proxy-identity.py', 'orbis-proxy-adoption.py',
+            'orbis-host-credential-fence.py', 'orbis-host-credential-peer.py', 'orbis-host-credential-service.py',
+            'orbis-host-recovery-admission.py', 'orbis-host-recovery-source.py',
             'orbis-host-capture-authority.py', 'orbis-host-app-runtime.py', 'orbis-host-retained-restore.py',
             'orbis-host-retained-restore-runtime.py', 'orbis-host-normal-bootstrap.py', 'orbis-host-retained-app-driver.py',
             'orbis-host-retained-app-effects.py', 'orbis-host-app-create-intent.py', 'orbis-host-app-port-policy.py',

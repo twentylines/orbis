@@ -1,8 +1,8 @@
 import path from 'node:path';
 import { extractAppUrn } from '@/common/helpers/app-helpers';
 import { ConfigurationService } from '@/core/config/configuration.service';
-import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { Injectable } from '@nestjs/common';
+import type { AppInfo } from '@runtipi/common/schemas';
 import type { AppUrn } from '@runtipi/common/types';
 import { EnvUtils } from '../env/env.utils';
 import type { AppEventFormInput } from '../queue/entities/app-events';
@@ -13,7 +13,6 @@ export class AppHelpers {
   constructor(
     private readonly appFilesManager: AppFilesManager,
     private readonly config: ConfigurationService,
-    private readonly filesytem: FilesystemService,
     private readonly envUtils: EnvUtils,
   ) {}
 
@@ -30,16 +29,27 @@ export class AppHelpers {
    * @throws Will throw an error if the app has an invalid config.json file or if a required variable is missing.
    */
   public generateEnvFile = async (appUrn: AppUrn, form: AppEventFormInput) => {
-    const { internalIp, envFilePath, rootFolderHost, userSettings } = this.config.getConfig();
-
     const config = await this.appFilesManager.getInstalledAppInfo(appUrn);
 
     if (!config) {
       throw new Error(`App ${appUrn} not found`);
     }
 
-    const baseEnvFile = await this.filesytem.readTextFile(envFilePath);
-    const envMap = this.envUtils.envStringToMap(baseEnvFile?.toString() ?? '');
+    const environment = await this.renderAppEnv(appUrn, config, form);
+    if (!(await this.appFilesManager.writeAppEnv(appUrn, environment))) {
+      throw new Error(`Failed to write app environment for ${appUrn}`);
+    }
+  };
+
+  public async renderAppEnv(appUrn: AppUrn, config: AppInfo, form: AppEventFormInput) {
+    const { internalIp, rootFolderHost, userSettings } = this.config.getConfig();
+
+    // Only public host values belong to an application's Compose interpolation scope.
+    const envMap = new Map([
+      ['LOCAL_DOMAIN', userSettings.localDomain],
+      ['TZ', userSettings.timeZone],
+      ['INTERNAL_IP', internalIp],
+    ]);
 
     const { appName, appStoreId } = extractAppUrn(appUrn);
 
@@ -129,6 +139,6 @@ export class AppHelpers {
       envMap.set('APP_PROTOCOL', 'https');
     }
 
-    await this.appFilesManager.writeAppEnv(appUrn, this.envUtils.envMapToString(envMap));
-  };
+    return this.envUtils.envMapToString(envMap);
+  }
 }

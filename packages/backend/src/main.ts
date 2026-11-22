@@ -44,6 +44,7 @@ async function setupSwagger(app: INestApplication) {
   }
 
   const { DocumentBuilder, SwaggerModule } = await import('@nestjs/swagger');
+  const { normalizeOpenApiOperationIds } = await import('./common/openapi-operation-id');
   const config = new DocumentBuilder()
     .setTitle('Runtipi API')
     .setDescription('API specs for Runtipi')
@@ -54,6 +55,7 @@ async function setupSwagger(app: INestApplication) {
   const document = SwaggerModule.createDocument(app, config, {
     operationIdFactory: (_: string, methodKey: string) => methodKey,
   });
+  normalizeOpenApiOperationIds(document);
   SwaggerModule.setup('api/docs', app, document);
 
   // write the swagger.json file to the assets folder

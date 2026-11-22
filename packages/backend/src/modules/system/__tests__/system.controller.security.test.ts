@@ -1,4 +1,5 @@
 import { LoggerService } from '@/core/logger/logger.service';
+import { cleanseErrorData, isRecoveryKeyHandoffEvent } from '@/common/helpers/error-helpers';
 import { Test } from '@nestjs/testing';
 import { type INestApplication, type NestMiddleware, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import request from 'supertest';
@@ -35,6 +36,7 @@ describe('SystemController certificate security', () => {
   const drives = mock<DriveHealthService>();
   const sentinel = mock<SentinelService>();
   const sentinelReleases = mock<SentinelReleasesService>();
+  const installedSoftware = mock<InstalledSoftwareService>();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -50,7 +52,7 @@ describe('SystemController certificate security', () => {
         { provide: DriveHealthService, useValue: drives },
         { provide: SentinelService, useValue: sentinel },
         { provide: SentinelReleasesService, useValue: sentinelReleases },
-        { provide: InstalledSoftwareService, useValue: mock<InstalledSoftwareService>() },
+        { provide: InstalledSoftwareService, useValue: installedSoftware },
         { provide: OrbisReleaseService, useValue: orbisReleases },
         { provide: OrbisReleaseChannelsService, useValue: releaseChannels },
         {
@@ -65,9 +67,15 @@ describe('SystemController certificate security', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
+    app.getHttpAdapter().getInstance().set('trust proxy', true);
     app.use(((req, _res, next) => {
       if (req.headers.authorization === 'Bearer cli-token') {
         req.user = { id: 1 };
+      } else if (req.headers.authorization === 'Bearer synthetic-operator') {
+        req.user = { id: 2, operator: true };
+      } else if (req.headers.authorization === 'Bearer synthetic-operator-session') {
+        req.user = { id: 2, operator: true };
+        req.authMethod = 'session';
       }
       next();
     }) as NestMiddleware['use']);
@@ -83,6 +91,7 @@ describe('SystemController certificate security', () => {
     orbisReleases.latest.mockReset();
     drives.read.mockReset();
     sentinel.read.mockReset();
+    sentinel.readRecoveryAccess.mockReset();
     sentinelReleases.list.mockReset();
     releaseChannels.read.mockReset().mockResolvedValue({ version: 1, channel: 'stable', revision: 'a65a9a64-f57e-4c73-9dc8-8d35d0b5b5a1' });
     releaseChannels.status.mockReset().mockResolvedValue({
@@ -96,6 +105,77 @@ describe('SystemController certificate security', () => {
         { id: 'nightly', available: true },
       ],
     });
+  });
+
+  it('authenticates recovery access and serves the fixed observation without caching', async () => {
+    const endpoint = '/system/sentinel/recovery-access';
+    const access = { state: 'configured', portalUrl: 'https://recovery.example/sentinel/recovery/', unitState: 'unknown' } as const;
+    sentinel.readRecoveryAccess.mockResolvedValue(access);
+    expect((await request(app.getHttpServer()).get(endpoint)).status).toBe(401);
+    expect(sentinel.readRecoveryAccess).not.toHaveBeenCalled();
+    const response = await request(app.getHttpServer()).get(endpoint).set('Authorization', 'Bearer cli-token');
+    expect(response.status).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.body).toEqual(access);
+    expect(sentinel.readRecoveryAccess).toHaveBeenCalledExactlyOnceWith();
+    expect(sentinel.read).not.toHaveBeenCalled();
+  });
+
+  it('returns only the sanitized enrollment phase to an authenticated operator', async () => {
+    const endpoint = '/system/sentinel/recovery-access';
+    const access = { state: 'configured', portalUrl: 'https://recovery.example/sentinel/recovery/', unitState: 'active' } as const;
+    sentinel.readRecoveryAccess.mockResolvedValue({ ...access, enrollment: 'key-prepared' });
+    const member = await request(app.getHttpServer()).get(endpoint).set('Authorization', 'Bearer cli-token');
+    const operator = await request(app.getHttpServer()).get(endpoint).set('Authorization', 'Bearer synthetic-operator');
+    expect(member.body).toEqual(access);
+    expect(operator.body).toEqual({ ...access, enrollment: 'key-prepared' });
+  });
+
+  it('requires a same-origin HTTPS Main operator session for both fixed recovery handoffs', async () => {
+    sentinel.recoveryKeyHandoff.mockResolvedValue({ state: 'acknowledged' });
+    for (const action of ['save-key', 'confirm-key'] as const) {
+      const endpoint = `/system/sentinel/enrollment/${action}`;
+      for (const [token, protocol, origin] of [
+        ['synthetic-operator', 'https', 'https://main.example'],
+        ['cli-token', 'https', 'https://main.example'],
+        ['synthetic-operator-session', 'http', 'http://main.example'],
+        ['synthetic-operator-session', 'https', 'https://other.example'],
+      ] as const) {
+        const refused = await request(app.getHttpServer())
+          .post(endpoint)
+          .set('Authorization', `Bearer ${token}`)
+          .set('X-Forwarded-Host', 'main.example')
+          .set('X-Forwarded-Proto', protocol)
+          .set('Origin', origin)
+          .send({});
+        expect(refused.status).toBe(403);
+      }
+      const accepted = await request(app.getHttpServer())
+        .post(endpoint)
+        .set('Authorization', 'Bearer synthetic-operator-session')
+        .set('X-Forwarded-Host', 'main.example')
+        .set('X-Forwarded-Proto', 'https')
+        .set('Origin', 'https://main.example')
+        .send({});
+      expect(accepted.status).toBe(200);
+      expect(accepted.headers['cache-control']).toBe('no-store');
+    }
+    expect(sentinel.recoveryKeyHandoff.mock.calls).toEqual([
+      ['save', {}],
+      ['confirm', {}],
+    ]);
+  });
+
+  it('retains ordinary error reporting without attaching secret-bearing handoff requests', () => {
+    for (const route of ['save-key', 'confirm-key']) {
+      const event = {
+        type: undefined,
+        request: { url: `https://main.example/api/system/sentinel/enrollment/${route}`, data: { handoff: 'synthetic-only' } },
+      };
+      expect(isRecoveryKeyHandoffEvent(event)).toBe(true);
+      expect(cleanseErrorData(event, {})).toBeNull();
+    }
+    expect(isRecoveryKeyHandoffEvent({ transaction: 'GET /api/system/sentinel/recovery-access' })).toBe(false);
   });
 
   it('authenticates independent Sentinel release discovery before any upstream request', async () => {
@@ -247,6 +327,18 @@ describe('SystemController certificate security', () => {
     expect(allowed.status).toBe(200);
     expect(allowed.body.version).toBe(process.env.ORBIS_VERSION || 'development');
     expect(allowed.body.runtipiCompatibility).toBe(process.env.TIPI_VERSION || null);
+  });
+
+  it('authenticates installed host software reads and returns only the fixed projection', async () => {
+    const endpoint = '/system/installed-software?path=unrelated';
+    expect((await request(app.getHttpServer()).get(endpoint)).status).toBe(401);
+    expect(installedSoftware.read).not.toHaveBeenCalled();
+    const versions = { osName: 'Debian GNU/Linux 13', osVersion: '13', dockerVersion: '29.2.1' };
+    installedSoftware.read.mockResolvedValue(versions);
+    const response = await request(app.getHttpServer()).get(endpoint).set('Authorization', 'Bearer cli-token');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(versions);
+    expect(installedSoftware.read).toHaveBeenCalledExactlyOnceWith();
   });
 
   it('authenticates host history before validating bounded logical lookups', async () => {

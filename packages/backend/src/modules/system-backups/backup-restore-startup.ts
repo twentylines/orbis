@@ -14,6 +14,8 @@ import { setRestoreRecoveryRequired } from '@/common/backup-maintenance';
 let startupRole: 'ordinary' | 'verify' | 'candidate' = 'ordinary';
 let retainedBootstrap = false;
 let retainedSettled = false;
+let terminalStartup: string | undefined;
+export const restoreTerminalStartup = (id?: string) => terminalStartup !== undefined && (id === undefined || id === terminalStartup);
 export const retainedSettledStartup = () => retainedSettled;
 export const retainedBootstrapStartup = () => retainedBootstrap;
 export const setRetainedBootstrapStartup = (value: boolean) => {
@@ -48,6 +50,7 @@ export async function waitForRestoreStartup(options: {
         data: options.dataDirectory,
         signal: options.signal ?? new AbortController().signal,
       });
+      terminalStartup = journal.state.id;
       return 'ordinary';
     }
     const maintenance = !journal && self ? await readRootRestorationState() : null;
@@ -132,12 +135,14 @@ export async function waitForRestoreStartup(options: {
       setRestoreRecoveryRequired(true);
       retainedBootstrap = true;
     }
-    if (!rootStatusPending && !retired && (!journal || restoreStartupAllowed(journal.state, options.controller, options.installation)))
+    if (!rootStatusPending && !retired && (!journal || restoreStartupAllowed(journal.state, options.controller, options.installation))) {
+      terminalStartup = journal && terminalPhase(journal.state) ? journal.state.id : undefined;
       return journal?.state.phase === 'verifying' && journal.state.verifierController?.startsWith(options.controller)
         ? 'verify'
         : journal?.state.phase === 'committing' && journal.state.candidateController.startsWith(options.controller)
           ? 'candidate'
           : 'ordinary';
+    }
     if (!notified) {
       options.onHeld();
       notified = true;

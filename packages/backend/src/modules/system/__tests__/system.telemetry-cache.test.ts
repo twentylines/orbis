@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { HostMemoryService } from '../host-memory.service';
 import { SystemService } from '../system.service';
 import si from 'systeminformation';
 import fs from 'node:fs/promises';
@@ -12,7 +13,7 @@ describe('shared telemetry sampling', () => {
   it('shares each one-second sample across simultaneous viewers', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-15T00:00:00Z'));
-    const service = new SystemService({} as never, {} as never, {} as never);
+    const service = systemService({} as never, {} as never, {} as never);
     let probes = 0;
     Reflect.set(service, 'readTelemetry', async () => ({ sampledAt: String(++probes) }));
 
@@ -41,7 +42,7 @@ describe('shared telemetry sampling', () => {
       if (path.endsWith('/meminfo')) return `MemTotal: 1000 kB\nMemAvailable: ${800 - tick} kB`;
       return '';
     });
-    const service = new SystemService({} as never, {} as never, { readTextFile } as never);
+    const service = systemService({} as never, {} as never, { readTextFile } as never);
     Reflect.set(service, 'readRuntimeNetwork', async () => []);
     const first = await service.getTelemetry();
     for (tick = 1; tick < 10; tick++) {
@@ -68,7 +69,7 @@ describe('shared telemetry sampling', () => {
     const disks = vi.spyOn(si, 'fsSize').mockRejectedValueOnce(new Error('disk unavailable')).mockResolvedValue([]);
     vi.spyOn(si, 'networkStats').mockResolvedValue([]);
     vi.spyOn(si, 'currentLoad').mockResolvedValue({ currentLoad: 0, cpus: [] } as never);
-    const service = new SystemService({} as never, {} as never, { readTextFile: async () => null } as never);
+    const service = systemService({} as never, {} as never, { readTextFile: async () => null } as never);
     Reflect.set(service, 'readRuntimeNetwork', async () => []);
     await expect(service.getTelemetry()).resolves.toHaveProperty('filesystems', []);
     await vi.advanceTimersByTimeAsync(1000);
@@ -89,11 +90,12 @@ describe('shared telemetry sampling', () => {
     const defaultInterface = vi.spyOn(si, 'networkInterfaceDefault').mockResolvedValue('eth0');
     let received = 0;
     let tick = 0;
-    const proc = vi.spyOn(fs, 'readFile').mockImplementation(async () => {
+    const proc = vi.spyOn(fs, 'readFile').mockImplementation(async (path) => {
+      if (path === '/proc/cpuinfo') return '';
       received += 1000;
       return `eth0: ${received} 0 0 0 0 0 0 0 9000 0 0 0 0 0 0 0`;
     });
-    const service = new SystemService(
+    const service = systemService(
       {} as never,
       {} as never,
       {
@@ -122,8 +124,22 @@ describe('shared telemetry sampling', () => {
     expect((await service.getTelemetry()).network[0]).toMatchObject({ interface: 'fallback', rxBytesPerSecond: 12, scope: 'runtime' });
   });
 
+  it('keeps measured clock speed on installations without the cpuinfo mount', async () => {
+    vi.spyOn(si, 'fsSize').mockResolvedValue([]);
+    vi.spyOn(si, 'currentLoad').mockResolvedValue({ currentLoad: 0, cpus: [] } as never);
+    const local = vi.spyOn(fs, 'readFile').mockResolvedValue('model name : Actual CPU\ncpu MHz : 1200.0\ncpu MHz : 2400.0\n');
+    const service = systemService({} as never, {} as never, { readTextFile: async () => null } as never);
+    Reflect.set(service, 'readRuntimeNetwork', async () => []);
+    expect((await service.getTelemetry()).cpu).toMatchObject({ model: 'Actual CPU', reportedClockGHz: 1.8 });
+    expect(local).toHaveBeenCalledWith('/proc/cpuinfo', 'utf8');
+    local.mockRejectedValue(new Error('CPU information unavailable'));
+    const unavailable = systemService({} as never, {} as never, { readTextFile: async () => null } as never);
+    Reflect.set(unavailable, 'readRuntimeNetwork', async () => []);
+    expect((await unavailable.getTelemetry()).cpu.reportedClockGHz).toBeUndefined();
+  });
+
   it('retries a failed sample', async () => {
-    const service = new SystemService({} as never, {} as never, {} as never);
+    const service = systemService({} as never, {} as never, {} as never);
     let probes = 0;
     Reflect.set(service, 'readTelemetry', async () => {
       if (++probes === 1) throw new Error('probe failed');
@@ -135,3 +151,6 @@ describe('shared telemetry sampling', () => {
     expect(probes).toBe(2);
   });
 });
+
+const systemService = (_logger: never, config: never, filesystem: never) =>
+  new SystemService(config, filesystem, new HostMemoryService({ error: vi.fn() } as never, { get: () => 0 } as never, filesystem, {} as never));

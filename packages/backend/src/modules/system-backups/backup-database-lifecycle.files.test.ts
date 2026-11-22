@@ -1,3 +1,4 @@
+import { reviewedBackupRows } from './backup-restore-source.fixture';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -123,6 +124,9 @@ async function prepareContent(test: ReturnType<typeof fixture>) {
   await fs.writeFile(path.join(test.content, 'recovery.json'), JSON.stringify({ jwtSecret: 'disposable-local-review-key' }), { mode: 0o600 });
   await fs.writeFile(path.join(test.content, 'database.dump'), 'PGDMPdisposable fixture', { mode: 0o600 });
 }
+const legacyProfile = { has_ledger: false, baseline_columns: 0, boolean_baseline: 0, ledger_cascade: 0, ledger_key: 0 };
+const ledgerProfile = { has_ledger: true, baseline_columns: 1, boolean_baseline: 1, ledger_cascade: 1, ledger_key: 1 };
+const line = (value: unknown) => Buffer.from(`${JSON.stringify(value)}\n`);
 async function orphanJournal(test: ReturnType<typeof fixture>) {
   const owner = { version: 1, name: `orbis-database-review-${randomUUID()}`, nonce: randomUUID(), image };
   await fs.mkdir(test.storage, { recursive: true, mode: 0o700 });
@@ -284,7 +288,9 @@ it('still removes its sandbox when failed destination cleanup itself throws', as
   const test = fixture();
   await prepareContent(test);
   exec.run.mockImplementation(async (options: { command: string[]; stdout: (chunk: Buffer) => Promise<void> }) => {
-    if (options.command[0] === 'psql') await options.stdout(Buffer.from('{}\n'));
+    if (options.command[0] === 'psql') {
+      await options.stdout(line(options.command.at(-1)?.includes('AS ledger_cascade') ? legacyProfile : {}));
+    }
     return 0;
   });
   const actualRemove = fs.rm.bind(fs);
@@ -331,6 +337,7 @@ it('writes private normalized rows and matching metadata, then removes the sandb
   const test = fixture();
   await prepareContent(test);
   exec.run.mockImplementation(async (options: { command: string[]; stdout: (chunk: Buffer) => Promise<void> }) => {
+    if (options.command[0] === 'psql' && options.command.at(-1)?.includes('AS ledger_cascade')) await options.stdout(line(legacyProfile));
     if (options.command[0] === 'psql' && options.command.at(-1)?.includes('FROM public."user"'))
       await options.stdout(Buffer.from(`${JSON.stringify(user())}\n`));
     return 0;
@@ -351,4 +358,28 @@ it('writes private normalized rows and matching metadata, then removes the sandb
   expect((await fs.stat(test.destination)).mode & 0o077).toBe(0);
   expect(test.sandbox.remove).toHaveBeenCalledWith(expect.objectContaining({ force: true, v: true }));
   await expect(fs.stat(test.journal)).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it('exports version 2 with constrained composite ordering, a migration count and separate digest', async () => {
+  const test = fixture();
+  await prepareContent(test);
+  const rows = reviewedBackupRows('stopped');
+  exec.run.mockImplementation(async (options: { command: string[]; stdout: (chunk: Buffer) => Promise<void> }) => {
+    const sql = options.command.at(-1) ?? '';
+    if (options.command[0] !== 'psql') return 0;
+    if (sql.includes('AS ledger_cascade')) await options.stdout(line(ledgerProfile));
+    for (const { table, row } of rows) {
+      if (sql.includes(`FROM public."${table}"`)) await options.stdout(line(table === 'app' ? { ...row, migrations_baselined: true } : row));
+    }
+    if (sql.includes('FROM public."app_migration"')) {
+      expect(sql).toContain('ORDER BY "app_id","migration_id"');
+      await options.stdout(line({ app_id: 9, migration_id: '001-layout' }));
+    }
+    return 0;
+  });
+  const result = await runReview(test);
+  expect(result.counts).toEqual({ user: 1, app_store: 1, app: 1, link: 0, app_migration: 1 });
+  expect(result.migrationSha256).toMatch(/^[a-f0-9]{64}$/);
+  const saved = JSON.parse(await fs.readFile(path.join(test.destination, 'records.json'), 'utf8'));
+  expect(saved).toEqual({ version: 2, ...result });
 });

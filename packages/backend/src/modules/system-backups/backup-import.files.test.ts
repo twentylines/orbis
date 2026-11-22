@@ -396,3 +396,59 @@ it('bounds extended-header floods independently of the visible file count', asyn
     'Invalid backup archive',
   );
 });
+
+it.each([1, 2, 3])('rejects migration recovery replay through files or directories in format v%s', async (version) => {
+  const fixture = await fullBackupFixture(root);
+  const manifest = { ...fixture.manifest, version, ...(version >= 2 ? { mediaPolicy: 'included' } : {}), ...(version === 3 ? { volumes: [] } : {}) };
+  for (const name of [
+    'data/state/orbis-app-migrations',
+    'data/state/orbis-app-migrations/request/journal.json',
+    'data/state/orbis-app-migrations/request/before.tar.gz',
+  ]) {
+    const metadata = { name, mode: 0o600, uid: 0, gid: 0, mtime: 0 };
+    expect(() => parseFullBackupManifest({ ...manifest, files: [...manifest.files, { ...metadata, bytes: 1, sha256: 'a'.repeat(64) }] })).toThrow(
+      'App migration recovery files cannot be restored',
+    );
+    expect(() => parseFullBackupManifest({ ...manifest, directories: [...manifest.directories, metadata] })).toThrow(
+      'App migration recovery files cannot be restored',
+    );
+  }
+});
+
+it.each(['0', '5'] as const)('rejects undeclared migration recovery tar members of type %s before extraction', async (kind) => {
+  const name = 'data/state/orbis-app-migrations/request/journal.json';
+  const archive = path.join(root, `migration-recovery-${kind}.tar.gz`);
+  const destination = path.join(root, `migration-recovery-destination-${kind}`);
+  await fs.writeFile(
+    archive,
+    gzipSync(Buffer.concat([tarMember(name, kind, kind === '0' ? Buffer.from('recovery') : Buffer.alloc(0)), Buffer.alloc(1024)])),
+  );
+  await expect(inspect(archive, destination)).rejects.toThrow('App migration recovery files cannot be restored');
+  await expect(fs.lstat(path.join(destination, name))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it.each([1, 2, 3])('rejects ordinary update completion replay in portable format v%s', async (version) => {
+  const fixture = await fullBackupFixture(root);
+  const manifest = { ...fixture.manifest, version, ...(version >= 2 ? { mediaPolicy: 'included' } : {}), ...(version === 3 ? { volumes: [] } : {}) };
+  for (const name of ['data/state/time-machine/image-pins/ordinary-results', 'data/state/time-machine/image-pins/ordinary-results/request.json']) {
+    const metadata = { name, mode: 0o600, uid: 0, gid: 0, mtime: 0 };
+    expect(() => parseFullBackupManifest({ ...manifest, files: [...manifest.files, { ...metadata, bytes: 1, sha256: 'a'.repeat(64) }] })).toThrow(
+      'App update recovery files cannot be restored',
+    );
+    expect(() => parseFullBackupManifest({ ...manifest, directories: [...manifest.directories, metadata] })).toThrow(
+      'App update recovery files cannot be restored',
+    );
+  }
+});
+
+it.each(['0', '5'] as const)('rejects undeclared ordinary update completion tar member type %s before extraction', async (kind) => {
+  const name = 'data/state/time-machine/image-pins/ordinary-results/request.json';
+  const archive = path.join(root, `update-completion-${kind}.tar.gz`);
+  const destination = path.join(root, `update-completion-destination-${kind}`);
+  await fs.writeFile(
+    archive,
+    gzipSync(Buffer.concat([tarMember(name, kind, kind === '0' ? Buffer.from('intent') : Buffer.alloc(0)), Buffer.alloc(1024)])),
+  );
+  await expect(inspect(archive, destination)).rejects.toThrow('App update recovery files cannot be restored');
+  await expect(fs.lstat(path.join(destination, name))).rejects.toMatchObject({ code: 'ENOENT' });
+});

@@ -11,6 +11,7 @@ import hashlib
 import http.client
 import http.server
 import importlib.util
+import ipaddress
 import json
 import io
 import secrets
@@ -61,6 +62,7 @@ CHECK = UPDATE.CHECK
 POLICY = PLAN.POLICY
 PLAN_TTL_SECONDS = 15 * 60
 BODY_LIMIT = 64 * 1024
+CREDENTIAL_BODY_TIMEOUT = 5
 PACKAGE_OUTPUT_BYTES = 8192
 RESTART_PLAN_TTL_SECONDS = 120
 CAPTURE_FENCE_TTL = 120
@@ -432,9 +434,11 @@ def installed_manifest(root: Path, context: str) -> dict[str, str]:
 
 
 class HostService:
-    def __init__(self, root: Path, context: str, snapshots: Path, state_dir: Path, *, recover_interrupted_job: bool = True):
-        if type(recover_interrupted_job) is not bool:
+    def __init__(self, root: Path, context: str, snapshots: Path, state_dir: Path, *, recover_interrupted_job: bool = True,
+                 credentials_only: bool = False):
+        if type(recover_interrupted_job) is not bool or type(credentials_only) is not bool:
             raise ValueError("host recovery mode must be explicit")
+        self.credentials_only = credentials_only
         self.HOST = HOST
         self.retained_restore_manager = None
         self.retained_restore_manager_type = None
@@ -457,6 +461,10 @@ class HostService:
         self.capture_fence_session = str(uuid.uuid4())
         self.prepared_capture = None
         self.lock = threading.Lock()
+        self.controller_handoff_factory_lock = threading.Lock()
+        self.controller_handoff_service = None
+        self.credential_factory_lock = threading.Lock()
+        self.credential_service = None
         self.restore_manager_lock = threading.Lock()
         self.bootstrap_inspection_factory_lock = threading.Lock()
         self.bootstrap_inspection_service = None
@@ -486,7 +494,7 @@ class HostService:
         self.drives = DRIVES.DriveHealth(self.state_dir)
         self.discovery = DISCOVERY.Discovery(policy_path=self.state_dir / "discovery-policy.json")
         previous = read_private(self.job_file)
-        if recover_interrupted_job and previous and previous.get("state") in {"running", "recovering"}:
+        if recover_interrupted_job and not credentials_only and previous and previous.get("state") in {"running", "recovering"}:
             previous["state"] = "interrupted"
             write_private(self.job_file, previous)
 
@@ -799,7 +807,7 @@ class HostService:
             try:
                 if action == "activate":
                     if manager.read(identifier)["phase"] == "allocated":
-                        manager.prepare(identifier, token)
+                        manager.prepare(identifier, token, for_activation=True)
                     manager.activate(identifier, token)
                 elif action == "prepare":
                     manager.prepare(identifier, token)
@@ -817,8 +825,76 @@ class HostService:
                     self.busy = False
         return manager.public(record), lambda: threading.Thread(target=run, daemon=True).start()
 
+    def controller_handoffs(self, module):
+        with self.controller_handoff_factory_lock:
+            if self.controller_handoff_service is None:
+                product = load_script('orbis-host-recovery-admission.py', 'orbis_controller_handoff_admission')
+                peer = load_script('orbis-host-credential-peer.py', 'orbis_controller_handoff_peer')
+                provider = module.ControllerProvider(self, product, peer, boot_id)
+                self.controller_handoff_service = module.ControllerHandoff(
+                    self, provider, product.C.json_body, write_private)
+            return self.controller_handoff_service
+
+    def credential_request(self, connection, operation, data):
+        with self.credential_factory_lock:
+            if self.credential_service is None:
+                module = load_script('orbis-host-credential-service.py', 'orbis_host_credential_service')
+                self.credential_peer_module = load_script('orbis-host-credential-peer.py', 'orbis_host_credential_peer')
+                # An existing admission, even malformed or aliased, never
+                # downgrades to bootstrap. Bootstrap independently requires the
+                # Root empty-target birth receipt and current enrolled peer.
+                if os.path.lexists(self.state_dir / module.CONFIG_NAME):
+                    factory = module.CredentialService
+                else:
+                    existing = load_script('orbis-host-existing-ownership.py', 'orbis_host_existing_ownership')
+                    if existing.present(self):
+                        factory = existing.ExistingService
+                    else:
+                        bootstrap = load_script('orbis-host-ownership-bootstrap.py', 'orbis_host_ownership_bootstrap')
+                        factory = bootstrap.BootstrapService
+                self.credential_service = factory(self,
+                    enrollment=lambda: installed_manifest(self.root, self.context))
+        return self.credential_service.request(connection, operation, data, peer_module=self.credential_peer_module)
+
     def require_idle_core(self) -> None:
         self.require_restart_clear()
+        self._require_idle_core_jobs()
+
+    def require_credential_idle(self, guard):
+        if (not isinstance(guard, HOST.CREDENTIAL_FENCE._Guard) or guard._host.LOCK_DESCRIPTOR is not HOST.LOCK_DESCRIPTOR
+                or guard._host.AUTHORITY is not HOST.AUTHORITY
+                or guard._root != self.root or guard._context != self.context):
+            raise ValueError('Credential host ownership could not be verified')
+        guard.read()  # Verify this live, opaque guard still holds the shared locks.
+        if getattr(self, 'credentials_only', False) is True:
+            return self.require_credential_role_idle()
+        self._require_restart_job_clear()
+        self._require_idle_core_jobs()
+
+    def require_credential_role_idle(self):
+        # A credential request cannot reconcile an old reboot/update or create
+        # overlay directories as a side effect of checking administrative jobs.
+        if self.busy or self.maintenance_file.exists() or self.maintenance_file.is_symlink():
+            raise ValueError('Host maintenance must finish before changing account security')
+        records = ((self.restart_job_file, 'orbis.restart-job.v1', {'complete'}),
+                   (self.package_job_file, 'orbis.package-job.v1', {'complete'}),
+                   (self.job_file, 'orbis.host-service-job.v1', {'complete', 'rolled-back', 'failed'}))
+        for file, schema, terminal in records:
+            value = read_private(file)
+            if value is None:
+                continue
+            identifier = value.get('id')
+            if (value.get('schema') != schema or type(identifier) is not str
+                    or type(value.get('state')) is not str or value['state'] not in terminal
+                    or value.get('overlayId') is not None):
+                raise ValueError('An administrative operation requires separate review before changing account security')
+            try:
+                if str(uuid.UUID(identifier)) != identifier or uuid.UUID(identifier).version != 4:
+                    raise ValueError()
+            except (ValueError, AttributeError):
+                raise ValueError('An administrative operation has invalid account security custody') from None
+
+    def _require_idle_core_jobs(self):
         self.require_package_clear()
         if self.maintenance_file.exists() or self.maintenance_file.is_symlink():
             raise ValueError("host helper maintenance is in progress")
@@ -1566,6 +1642,9 @@ class HostService:
 
     def require_restart_clear(self) -> None:
         self.require_capture_fence_clear()
+        self._require_restart_job_clear()
+
+    def _require_restart_job_clear(self):
         if not self.restart_job_file.exists() and not self.restart_job_file.is_symlink():
             return
         current = self.restart_status()
@@ -2027,8 +2106,32 @@ class HostService:
         module = load_script('orbis-host-core-capture-progress.py', 'orbis_capture_progress_for_observer')
         return module.CaptureProgress(self, reader).progress(point)
 
+    def credential_status(self) -> dict:
+        """Read-only listener health, never admission or update reconciliation."""
+        saved = HOST.saved_state(self.root)
+        enrolled = self.state_matches(saved)
+        core = HOST.current_core(self.root, self.context)
+        retained = None
+        if enrolled and saved and saved.get('schema') == HOST.IDENTITY.RETAINED_SCHEMA:
+            try:
+                retained = HOST.resolve_current_identity(self.root, self.context)
+            except (OSError, ValueError, RuntimeError):
+                enrolled = False
+        publication = retained.publication() if retained else (saved or {})
+        reference = retained.controller()['creationReference'] if retained else f"{PLAN.IMAGE}@{(saved or {}).get('digest')}"
+        job = read_private(self.job_file)
+        return {'available': True, 'capabilities': [], 'serviceRole': 'credentials-only', 'credentialProtocol': 1,
+                'enrolled': enrolled, 'currentTag': publication.get('tag'), 'currentDigest': publication.get('digest'),
+                'coreState': core.get('state'), 'coreHealth': core.get('health'),
+                'imageMatches': bool(enrolled and saved and core.get('image') == reference),
+                'job': {key: job.get(key) for key in ('id', 'state')} if job else None}
+
     def status(self) -> dict:
-        smart_capabilities = ["drives.tools-install.v1"] if PACKAGES.smart_tools_supported() else []
+        if getattr(self, 'credentials_only', False):
+            return self.credential_status()
+        capabilities = ["restart.v1", "packages.refresh.v1", "release-channels.v1", "controller-config.v1", "controller-update-no-backup.v1"]
+        if PACKAGES.smart_tools_supported():
+            capabilities.append("drives.tools-install.v1")
         saved = HOST.saved_state(self.root)
         enrolled = self.state_matches(saved)
         core = HOST.current_core(self.root, self.context)
@@ -2069,7 +2172,8 @@ class HostService:
                         job["message"] = "Stable is installed, but its channel change needs recovery. Refresh status to retry."
                         write_private(self.job_file, job)
                         return {
-                            "available": True, "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1", "controller-config.v1", "controller-update-no-backup.v1", *smart_capabilities],
+                            "available": True, "capabilities": capabilities,
+                            "serviceRole": "administration", "credentialProtocol": 1,
                             "enrolled": enrolled, "currentTag": saved.get("tag"), "currentDigest": saved.get("digest"),
                             "coreState": core.get("state"), "coreHealth": core.get("health"), "imageMatches": True,
                             "job": {key: job.get(key) for key in ("id", "state", "targetTag", "startedAt", "finishedAt", "message")},
@@ -2092,7 +2196,8 @@ class HostService:
             phase = "recovery-required"
         return {
             "available": True,
-            "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1", "controller-config.v1", "controller-update-no-backup.v1", *smart_capabilities],
+            "serviceRole": "administration", "credentialProtocol": 1,
+            "capabilities": capabilities,
             "enrolled": enrolled,
             "currentTag": publication.get("tag"),
             "currentDigest": publication.get("digest"),
@@ -2360,79 +2465,345 @@ def trusted_capture_peer(connection):
     return pid > 0 and uid == os.geteuid() == 0
 
 
-def sentinel_component_status(socket_path=Path('/run/orbis-sentinel/api.sock')):
-    unavailable = {'version': 1, 'available': False, 'status': None}
-    maximum = 64 * 1024
-    version = re.compile(r'(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?')
-    def valid_component(value):
-        return (isinstance(value, dict) and set(value) == {'installedVersion', 'availableVersion', 'state'}
-                and isinstance(value['state'], str) and value['state'] in {'unknown', 'healthy', 'unavailable', 'updating', 'recovering'}
-                and all(item is None or (isinstance(item, str) and len(item) <= 128 and version.fullmatch(item))
-                        for item in (value['installedVersion'], value['availableVersion'])))
+def _read_sentinel_local(socket_path, source):
+    if source == 'status':
+        request = b'GET /sentinel/api/v1/status HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n'
+        maximum, timeout = 64 * 1024, 1
+    elif source == 'system-readings':
+        request = b'GET /sentinel/api/v1/system-readings HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n'
+        maximum, timeout = 16 * 1024, 0.4
+    else:
+        raise ValueError('Unknown Sentinel read source')
+
     def pairs(items):
         result = dict(items)
         if len(result) != len(items):
-            raise ValueError('Duplicate Sentinel status key')
+            raise ValueError('Duplicate Sentinel response key')
         return result
+
     def socket_info(directory):
         info = os.stat(socket_path.name, dir_fd=directory, follow_symlinks=False)
         if not stat.S_ISSOCK(info.st_mode) or info.st_uid != HOST.AUTHORITY.OWNER or stat.S_IMODE(info.st_mode) != 0o600:
             raise ValueError('Sentinel socket authority is unavailable')
         return HOST.AUTHORITY.seal(info)
-    try:
-        with HOST.AUTHORITY.protected_directory(socket_path.parent, private=False) as directory:
-            before = socket_info(directory)
-            deadline = time.monotonic() + 1
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as transport:
-                transport.settimeout(max(0.001, deadline - time.monotonic()))
-                transport.connect(str(socket_path))
+
+    with HOST.AUTHORITY.protected_directory(socket_path.parent, private=False) as directory:
+        before = socket_info(directory)
+        deadline = time.monotonic() + timeout
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as transport:
+            transport.settimeout(max(0.001, deadline - time.monotonic()))
+            transport.connect(str(socket_path))
+            if source == 'system-readings' and not trusted_capture_peer(transport):
+                raise ValueError('Sentinel readings peer is unavailable')
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ValueError('Sentinel read timed out')
+            transport.settimeout(remaining)
+            transport.sendall(request)
+            wire = bytearray()
+            while True:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    raise ValueError('Sentinel status timed out')
+                    raise ValueError('Sentinel read timed out')
                 transport.settimeout(remaining)
-                transport.sendall(b'GET /sentinel/api/v1/status HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n')
-                wire = bytearray()
-                while True:
-                    remaining = deadline - time.monotonic()
-                    if remaining <= 0:
-                        raise ValueError('Sentinel status timed out')
-                    transport.settimeout(remaining)
-                    chunk = transport.recv(min(16384, maximum + 16384 + 1 - len(wire)))
-                    if not chunk:
-                        break
-                    wire.extend(chunk)
-                    if len(wire) > maximum + 16384:
-                        raise ValueError('Sentinel response exceeds its limit')
-            class ResponseBuffer(io.BytesIO):
-                # Keep the final offset after HTTPResponse closes its input.
-                def close(self):
-                    pass
-            stream = ResponseBuffer(wire)
-            response = http.client.HTTPResponse(SimpleNamespace(makefile=lambda *args, **kwargs: stream))
-            try:
-                response.begin()
-                if (len(response.headers.get_all('Content-Length', [])) > 1
-                        or ('Content-Length' in response.headers and 'Transfer-Encoding' in response.headers)):
-                    raise ValueError('Sentinel HTTP framing is ambiguous')
-                body = response.read()
-                if response.status != 200 or len(body) > maximum or stream.tell() != len(wire):
-                    raise ValueError('Sentinel status is unavailable')
-            finally:
-                response.close()
-                io.BytesIO.close(stream)
-            if socket_info(directory) != before:
-                raise ValueError('Sentinel socket changed')
-            value = json.loads(body.decode('utf-8'), object_pairs_hook=pairs)
-            if (not isinstance(value, dict) or set(value) != {'schema', 'protocolVersion', 'components'}
-                    or value['schema'] != 'orbis-sentinel.status.v1' or type(value['protocolVersion']) is not int
-                    or value['protocolVersion'] != 1 or not isinstance(value['components'], dict)
-                    or set(value['components']) != {'orbis', 'sentinel'}
-                    or not all(valid_component(item) for item in value['components'].values())):
-                raise ValueError('Sentinel status is invalid')
+                chunk = transport.recv(min(16384, maximum + 16384 + 1 - len(wire)))
+                if not chunk:
+                    break
+                wire.extend(chunk)
+                if len(wire) > maximum + 16384:
+                    raise ValueError('Sentinel response exceeds its limit')
+
+        class ResponseBuffer(io.BytesIO):
+            # Keep the final offset after HTTPResponse closes its input.
+            def close(self):
+                pass
+
+        stream = ResponseBuffer(wire)
+        response = http.client.HTTPResponse(SimpleNamespace(makefile=lambda *args, **kwargs: stream))
+        try:
+            response.begin()
+            lengths = response.headers.get_all('Content-Length', [])
+            if (len(lengths) > 1 or (lengths and 'Transfer-Encoding' in response.headers)
+                    or (source == 'system-readings' and
+                        (len(lengths) != 1 or 'Transfer-Encoding' in response.headers or 'Content-Encoding' in response.headers
+                         or response.headers.get_all('Content-Type', []) != ['application/json']
+                         or not re.fullmatch(r'[0-9]{1,5}', lengths[0]) or int(lengths[0]) > maximum))):
+                raise ValueError('Sentinel HTTP framing is ambiguous')
+            body = response.read()
+            if (response.status != 200 or len(body) > maximum or stream.tell() != len(wire)
+                    or (source == 'system-readings' and len(body) != int(lengths[0]))):
+                raise ValueError('Sentinel response is unavailable')
+        finally:
+            response.close()
+            io.BytesIO.close(stream)
+        if socket_info(directory) != before:
+            raise ValueError('Sentinel socket changed')
+        return json.loads(body.decode('utf-8'), object_pairs_hook=pairs)
+
+
+def sentinel_component_status(socket_path=Path('/run/orbis-sentinel/api.sock')):
+    unavailable = {'version': 1, 'available': False, 'status': None}
+    version = re.compile(r'(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?')
+
+    def valid_component(value):
+        return (isinstance(value, dict) and set(value) == {'installedVersion', 'availableVersion', 'state'}
+                and isinstance(value['state'], str) and value['state'] in {'unknown', 'healthy', 'unavailable', 'updating', 'recovering'}
+                and all(item is None or (isinstance(item, str) and len(item) <= 128 and version.fullmatch(item))
+                        for item in (value['installedVersion'], value['availableVersion'])))
+
+    try:
+        value = _read_sentinel_local(socket_path, 'status')
+        if (not isinstance(value, dict) or set(value) != {'schema', 'protocolVersion', 'components'}
+                or value['schema'] != 'orbis-sentinel.status.v1' or type(value['protocolVersion']) is not int
+                or value['protocolVersion'] != 1 or not isinstance(value['components'], dict)
+                or set(value['components']) != {'orbis', 'sentinel'}
+                or not all(valid_component(item) for item in value['components'].values())):
+            return unavailable
         return {'version': 1, 'available': True, 'status': value}
-    except (OSError, ValueError, TypeError, http.client.HTTPException):
+    except (OSError, ValueError, TypeError, RecursionError, http.client.HTTPException):
         return unavailable
 
+
+_RECOVERY_PROFILE = Path('/var/lib/orbis-sentinel/recovery/config.json')
+
+
+def _recovery_portal_url(value):
+    if type(value) is not str or len(value) > 512 or not re.fullmatch(
+            r'(?i:https)://(?:[a-zA-Z0-9.-]+|\[[a-fA-F0-9:.]+\])(?::[0-9]{1,5})?', value):
+        raise ValueError('Invalid recovery origin')
+    origin = urlsplit(value)
+    host = origin.hostname
+    if not host or origin.port == 0:
+        raise ValueError('Invalid recovery origin')
+    if ':' not in host:
+        labels = host.removesuffix('.').split('.')
+        if any(not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label) for label in labels):
+            raise ValueError('Invalid recovery host')
+        if re.fullmatch(r'(?:[0-9]+|0x[0-9a-f]*)', labels[-1]):
+            ipaddress.IPv4Address(host)
+    return value + '/sentinel/recovery/'
+
+
+def _recovery_unit_state():
+    deadline = time.monotonic() + 0.75
+    with subprocess.Popen(
+        ['/usr/bin/systemctl', '--no-pager', 'show', '--property=ActiveState', '--value',
+         'orbis-sentinel-recovery.service'],
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        env={'LC_ALL': 'C'},
+    ) as process:
+        try:
+            output = bytearray()
+            while len(output) <= 32:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not select.select([process.stdout], [], [], remaining)[0]:
+                    return 'unknown'
+                block = os.read(process.stdout.fileno(), 33 - len(output))
+                if not block:
+                    if process.wait(timeout=max(0, deadline - time.monotonic())) != 0:
+                        return 'unknown'
+                    if output == b'active\n':
+                        return 'active'
+                    return 'inactive' if bytes(output) in {b'inactive\n', b'failed\n'} else 'unknown'
+                output.extend(block)
+            return 'unknown'
+        finally:
+            if process.poll() is None:
+                process.kill()
+
+
+_ENROLLMENT_STAGES = {'not-started', 'staging', 'operator-staged', 'key-prepared', 'key-expired',
+                      'key-acknowledged', 'activation-pending', 'activated'}
+
+
+def _recovery_bootstrap_request(profile, reader, config, operation, arguments):
+    directory = _RECOVERY_PROFILE.parent
+    if config['directory'] != str(directory) or stat.S_IMODE(os.fstat(profile.fds[-1][1]).st_mode) != 0o700:
+        return None
+    endpoint = directory / 'bootstrap-control.sock'
+    schema = 'orbis.sentinel-root-bootstrap-control.v1'
+    body = json.dumps({'schema': schema, 'operation': operation, 'arguments': arguments}).encode()
+    deadline = time.monotonic() + (0.75 if operation == 'bootstrap-enrollment-state' else 4)
+    try:
+        profile.verify()
+        before = endpoint.lstat()
+        if (not stat.S_ISSOCK(before.st_mode) or before.st_uid != 0 or before.st_nlink != 1
+                or stat.S_IMODE(before.st_mode) != 0o600):
+            return None
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            def timeout():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError()
+                connection.settimeout(remaining)
+
+            def read(size):
+                result = bytearray()
+                while len(result) < size:
+                    timeout()
+                    chunk = connection.recv(size - len(result))
+                    if not chunk:
+                        raise ValueError('Incomplete enrollment reply.')
+                    result.extend(chunk)
+                return bytes(result)
+
+            timeout()
+            connection.connect(str(endpoint))
+            if not trusted_capture_peer(connection):
+                return None
+            timeout()
+            connection.sendall(struct.pack('!I', len(body)) + body)
+            connection.shutdown(socket.SHUT_WR)
+            size, = struct.unpack('!I', read(4))
+            if not 0 < size <= 1024:
+                return None
+            value = reader.json_body(read(size))
+            timeout()
+            if connection.recv(1):
+                return None
+        if reader.seal(before) != reader.seal(endpoint.lstat()):
+            return None
+        profile.verify()
+        result = value.get('result')
+        if (set(value) == {'schema', 'ok', 'result'} and value['schema'] == schema and value['ok'] is True
+                and type(result) is dict and result.get('origin') == config['origin']):
+            return result
+    except (OSError, ValueError, RuntimeError):
+        pass
+    return None
+
+
+def _read_recovery_enrollment(profile, reader, config):
+    reply = _recovery_bootstrap_request(profile, reader, config, 'bootstrap-enrollment-state', {})
+    if reply is not None and set(reply) == {'origin', 'stage'} and type(reply['stage']) is str and reply['stage'] in _ENROLLMENT_STAGES:
+        return reply['stage']
+    return None
+
+
+_BROWSER_KEY_ROUTES = {'/v1/sentinel/enrollment/save-key': 'bootstrap-browser-deliver',
+                       '/v1/sentinel/enrollment/confirm-key': 'bootstrap-browser-confirm'}
+
+
+def sentinel_browser_key(route, body):
+    operation = _BROWSER_KEY_ROUTES[route]
+    reader = load_script('orbis-host-credential-service.py', 'orbis_host_recovery_profile_reader')
+    request = reader.json_body(body)
+    hashes = {'operationId', 'reviewSha256', 'planSha256', 'keyRevision', 'deliveryEpoch'}
+    saving = operation == 'bootstrap-browser-deliver'
+    extra = {'handoff'} if saving else {'handoff', 'recoveryKey'}
+    if (set(request) != hashes | extra
+            or any(type(request[name]) is not str or not re.fullmatch(r'[a-f0-9]{64}', request[name]) for name in hashes)
+            or type(request['handoff']) is not str or not re.fullmatch(r'[A-Za-z0-9_-]{43}', request['handoff'])
+            or not saving and (type(request['recoveryKey']) is not str
+                               or not re.fullmatch(r'orbis-recovery-[A-Za-z0-9_-]{43}', request['recoveryKey']))):
+        raise ValueError('Recovery handoff request is invalid.')
+    profile = reader.PinnedFile(_RECOVERY_PROFILE, limit=16384, private=True)
+    try:
+        config = reader.json_body(profile.body)
+        if (set(config) != {'schema', 'origin', 'directory', 'imageId', 'listenPort', 'statusSocket'}
+                or config['schema'] != 'orbis.sentinel-recovery-config.v1' or _recovery_unit_state() != 'active'):
+            raise ValueError('Recovery handoff service is unavailable.')
+        _recovery_portal_url(config['origin'])
+        reply = _recovery_bootstrap_request(profile, reader, config, operation, request)
+        if reply is not None:
+            if saving and set(reply) == {'origin', 'recoveryKey'} and type(reply['recoveryKey']) is str and re.fullmatch(
+                    r'orbis-recovery-[A-Za-z0-9_-]{43}', reply['recoveryKey']):
+                return {'recoveryKey': reply['recoveryKey']}
+            if not saving and reply == {'origin': config['origin'], 'state': 'acknowledged'}:
+                return {'state': 'acknowledged'}
+        raise ValueError('Recovery handoff could not be verified.')
+    finally:
+        profile.close()
+
+
+def sentinel_recovery_access():
+    def result(state, portal_url=None, unit_state=None):
+        return {'version': 1, 'state': state, 'portalUrl': portal_url, 'unitState': unit_state}
+
+    try:
+        try:
+            before = _RECOVERY_PROFILE.lstat()
+        except FileNotFoundError:
+            before = None
+        reader = load_script('orbis-host-credential-service.py', 'orbis_host_recovery_profile_reader')
+        try:
+            profile = reader.PinnedFile(_RECOVERY_PROFILE, limit=16384, private=True)
+        except FileNotFoundError:
+            return result('missing' if before is None else 'unavailable')
+        try:
+            if before is None or profile.identity != reader.seal(before):
+                return result('unavailable')
+            config = reader.json_body(profile.body)
+            if (set(config) != {'schema', 'origin', 'directory', 'imageId', 'listenPort', 'statusSocket'}
+                    or config['schema'] != 'orbis.sentinel-recovery-config.v1'
+                    or type(config['listenPort']) is not int or not 1024 <= config['listenPort'] <= 65535
+                    or type(config['imageId']) is not str or not re.fullmatch(r'sha256:[a-f0-9]{64}', config['imageId'])):
+                return result('unavailable')
+            for key in ('directory', 'statusSocket'):
+                value = config[key]
+                if (type(value) is not str or not 0 < len(value) <= 4096 or '\0' in value
+                        or not value.startswith('/') or os.path.normpath(value) != value
+                        or os.path.realpath(value) != value):
+                    return result('unavailable')
+            portal_url = _recovery_portal_url(config['origin'])
+            try:
+                unit_state = _recovery_unit_state()
+            except (OSError, subprocess.SubprocessError):
+                unit_state = 'unknown'
+            observed = result('configured', portal_url, unit_state)
+            if unit_state == 'active':
+                enrollment = _read_recovery_enrollment(profile, reader, config)
+                if enrollment is not None:
+                    observed['enrollment'] = enrollment
+            profile.verify()
+            return observed
+        finally:
+            profile.close()
+    except (OSError, ValueError, RecursionError):
+        return result('unavailable')
+
+
+_SENTINEL_SYSTEM_READINGS = 'orbis-sentinel.system-readings.v1'
+
+
+def sentinel_system_readings(socket_path=Path('/run/orbis-sentinel/api.sock')):
+    unavailable = {'schema': _SENTINEL_SYSTEM_READINGS, 'state': 'unavailable', 'ageMs': None, 'sample': None}
+    safe_integer = 2 ** 53 - 1
+
+    def number(value, limit):
+        return type(value) in (int, float) and 0 <= value <= limit
+
+    def integer(value):
+        return type(value) is int and 0 <= value <= safe_integer
+
+    try:
+        value = _read_sentinel_local(socket_path, 'system-readings')
+        if (type(value) is not dict or set(value) != set(unavailable) or value['schema'] != _SENTINEL_SYSTEM_READINGS
+                or value['state'] not in ('ready', 'starting', 'stale', 'unavailable')
+                or (value['ageMs'] is not None and not integer(value['ageMs']))):
+            return unavailable
+        sample = value['sample']
+        if value['state'] != 'ready':
+            return value if sample is None else unavailable
+        if (not integer(value['ageMs']) or type(sample) is not dict
+                or set(sample) != {'sampledAt', 'cpu', 'memory'} or not integer(sample['sampledAt']) or sample['sampledAt'] == 0):
+            return unavailable
+        cpu, memory = sample['cpu'], sample['memory']
+        if (type(cpu) is not dict or set(cpu) != {'model', 'reportedClockGHz', 'totalPercent', 'perCorePercent', 'uptimeSeconds'}
+                or type(memory) is not dict or set(memory) != {'totalBytes', 'availableBytes', 'swapTotalBytes', 'swapFreeBytes'}):
+            return unavailable
+        model, cores, clock = cpu['model'], cpu['perCorePercent'], cpu['reportedClockGHz']
+        if (not isinstance(model, str) or not 0 < len(model) <= 200 or model != model.strip()
+                or any(ord(character) < 32 or ord(character) == 127 for character in model)
+                or not number(clock, 100) or clock == 0 or not number(cpu['totalPercent'], 100)
+                or not number(cpu['uptimeSeconds'], safe_integer) or type(cores) is not list
+                or not 0 < len(cores) <= 256 or not all(number(core, 100) for core in cores)
+                or not all(integer(count) for count in memory.values()) or memory['totalBytes'] <= 0
+                or memory['availableBytes'] > memory['totalBytes'] or memory['swapFreeBytes'] > memory['swapTotalBytes']):
+            return unavailable
+        return value
+    except (OSError, ValueError, TypeError, RecursionError, http.client.HTTPException):
+        return unavailable
 
 def core_capture_reader(service):
     reader = getattr(service, '_core_capture_reader', None)
@@ -2551,6 +2922,12 @@ def core_capture_sentinel_reader(service):
     return result
 
 
+CONTROLLER_HANDOFF_BASE = '/v1/sentinel/controller-handoff'
+CONTROLLER_HANDOFF_STATUS = re.compile(CONTROLLER_HANDOFF_BASE + r'/([a-f0-9-]{36})/status')
+CONTROLLER_HANDOFF_POSTS = {CONTROLLER_HANDOFF_BASE + '/' + action: action
+                            for action in ('plan', 'apply', 'return', 'return-approved', 'return-readiness')}
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     server: UnixHTTPServer
 
@@ -2576,7 +2953,131 @@ class Handler(http.server.BaseHTTPRequestHandler):
             raise ValueError("request body must be an object")
         return data
 
+    def credential_route(self, method):
+        """Dedicated bounded framing; no generic JSON/control relay or fallback."""
+        self.close_connection = True
+        routes = {('GET', '/v1/credentials/admission'): 'admission',
+                  ('GET', '/v1/credentials/change-admission'): 'change-admission',
+                  ('POST', '/v1/credentials/prepare'): 'prepare',
+                  ('POST', '/v1/credentials/complete'): 'complete',
+                  ('POST', '/v1/credentials/counter-challenge'): 'counter-challenge',
+                  ('POST', '/v1/credentials/counter-complete'): 'counter-complete',
+                  ('POST', '/v1/credentials/counter-floors'): 'counter-floors',
+                  ('POST', '/v1/credentials/ownership-prepare'): 'ownership-prepare',
+                  ('POST', '/v1/credentials/ownership-check'): 'ownership-check',
+                  ('POST', '/v1/credentials/ownership-complete'): 'ownership-complete'}
+        operation = routes.get((method, self.path))
+        if operation is None:
+            self.send_json(404, {'error': 'Credential route is unavailable.'})
+            return
+        try:
+            if (len(self.headers.get_all('Host', [])) != 1 or self.headers.get('Host') != 'orbis'
+                    or self.headers.get('Transfer-Encoding') is not None
+                    or self.headers.get('Content-Encoding') is not None):
+                raise ValueError('Invalid credential framing')
+            lengths = self.headers.get_all('Content-Length', [])
+            if method == 'GET':
+                if lengths not in ([], ['0']) or self.headers.get('Content-Type') is not None:
+                    raise ValueError('Invalid credential framing')
+                data = {}
+            else:
+                if (len(lengths) != 1 or not re.fullmatch(r'[1-9][0-9]{0,5}', lengths[0])
+                        or not 1 <= int(lengths[0]) <= 196608
+                        or self.headers.get_all('Content-Type', []) != ['application/json']):
+                    raise ValueError('Invalid credential framing')
+                deadline = time.monotonic() + CREDENTIAL_BODY_TIMEOUT
+                body = bytearray()
+                while len(body) < int(lengths[0]):
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise ValueError('Credential body deadline expired')
+                    self.connection.settimeout(remaining)
+                    block = self.rfile.read1(min(65536, int(lengths[0]) - len(body)))
+                    if not block:
+                        raise ValueError('Incomplete credential body')
+                    body.extend(block)
+                module = load_script('orbis-host-credential-service.py', 'orbis_host_credential_framing')
+                data = module.json_body(bytes(body))
+            self.connection.settimeout(180)
+            result = self.server.service.credential_request(self.connection, operation, data)
+            self.send_json(200, result)
+        except Exception:
+            self.send_json(503, {'error': 'Credential synchronization is unavailable; protected recovery needs review.'})
+
+    def controller_handoff_route(self, *, action=None, identifier=None):
+        self.close_connection = True
+        module = load_script('orbis-host-controller-handoff.py', 'orbis_controller_handoff')
+        authorized = trusted_capture_peer(self.connection) and (action != 'return' or module.root_operator(self.connection))
+        if not authorized:
+            self.send_json(403, {'error': 'Controller recovery handoff is unavailable.'})
+            return
+        launch = None
+        try:
+            if (self.headers.get_all('Host', []) != ['orbis']
+                    or any(name in self.headers for name in ('Transfer-Encoding', 'Content-Encoding'))):
+                raise ValueError('Invalid controller handoff framing.')
+            lengths = self.headers.get_all('Content-Length', [])
+            if action is None:
+                if lengths not in ([], ['0']) or self.headers.get_all('Content-Type', []):
+                    raise ValueError('Controller recovery status does not accept a request body.')
+                result = self.server.service.controller_handoffs(module).status(identifier)
+            else:
+                maximum = {'return-approved': 256, 'return-readiness': 384}.get(action, 128)
+                if (len(lengths) != 1 or not re.fullmatch(r'[1-9][0-9]{0,2}', lengths[0])
+                        or int(lengths[0]) > maximum or self.headers.get_all('Content-Type', []) != ['application/json']):
+                    raise ValueError('Invalid controller handoff framing.')
+                size = int(lengths[0])
+                deadline = time.monotonic() + 2
+                body = bytearray()
+                while len(body) < size:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise ValueError('Controller handoff request expired.')
+                    self.connection.settimeout(remaining)
+                    chunk = self.rfile.read1(size - len(body))
+                    if not chunk:
+                        raise ValueError('Controller handoff request is incomplete.')
+                    body.extend(chunk)
+                service = self.server.service.controller_handoffs(module)
+                data = service.read(bytes(body))
+                if action == 'plan':
+                    result = service.review(self.connection, data)
+                elif action == 'return-readiness':
+                    result = service.provider.return_readiness(self.connection, data)
+                elif action == 'return-approved':
+                    if (type(data) is not dict or set(data) != {'planId', 'approvalId'}
+                            or not module.matches(module.UUID, data['planId'])
+                            or not module.matches(module.HASH, data['approvalId'])):
+                        raise ValueError('Choose one approved controller recovery handoff.')
+                    result, launch = service.return_approved(self.connection, data['planId'], data['approvalId'])
+                else:
+                    if set(data) != {'planId'} or not module.matches(module.UUID, data['planId']):
+                        raise ValueError('Choose one reviewed controller recovery handoff.')
+                    if action == 'apply':
+                        result, launch = service.apply(self.connection, data['planId'])
+                    else:
+                        result, launch = service.return_to_orbis(data['planId'])
+        except module.OPERATION_ERRORS:
+            self.send_json(409, {'error': 'The controller recovery handoff needs review.'})
+            return
+        try:
+            self.connection.settimeout(2)
+            pending = action in {'apply', 'return', 'return-approved'} and result['state'] in module.PENDING
+            self.send_json(202 if pending else 200, result)
+        finally:
+            if launch is not None:
+                launch()
+
     def do_GET(self) -> None:
+        if getattr(self.server.service, 'credentials_only', False) is True:
+            return CredentialHandler.do_GET(self)
+        handoff = CONTROLLER_HANDOFF_STATUS.fullmatch(self.path)
+        if handoff:
+            self.controller_handoff_route(identifier=handoff[1])
+            return
+        if self.path.startswith('/v1/credentials'):
+            self.credential_route('GET')
+            return
         if self.path == '/v1/sentinel/update-progress':
             self.close_connection = True
             if not trusted_capture_peer(self.connection):
@@ -2598,6 +3099,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_json(403, {'error': 'Sentinel status is unavailable.'})
                 return
             self.send_json(200, sentinel_component_status())
+            return
+        if self.path == '/v1/sentinel/recovery-access':
+            self.close_connection = True
+            if not trusted_capture_peer(self.connection):
+                self.send_json(403, {'error': 'Sentinel recovery access is unavailable.'})
+                return
+            if (self.headers.get_all('Content-Length', []) not in ([], ['0'])
+                    or any(header in self.headers for header in ('Transfer-Encoding', 'Content-Encoding', 'Content-Type'))):
+                self.send_json(400, {'error': 'Sentinel recovery access does not accept a request body.'})
+                return
+            self.send_json(200, sentinel_recovery_access())
+            return
+        if self.path == '/v1/sentinel/system-readings':
+            if not trusted_capture_peer(self.connection):
+                self.send_json(403, {'error': 'Sentinel system readings are unavailable.'})
+                return
+            if self.headers.get_all('Content-Length', []) not in ([], ['0']) or 'Transfer-Encoding' in self.headers:
+                self.send_json(400, {'error': 'Sentinel system readings do not accept a request body.'})
+                return
+            self.send_json(200, sentinel_system_readings())
             return
         if self.path == '/v1/core-captures/restart-retirement-capability':
             if not trusted_capture_peer(self.connection):
@@ -2790,6 +3311,61 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json(503, {"error": "package changelog is unavailable"})
 
     def do_POST(self) -> None:
+        if getattr(self.server.service, 'credentials_only', False) is True:
+            return CredentialHandler.do_POST(self)
+        if self.path in CONTROLLER_HANDOFF_POSTS:
+            self.controller_handoff_route(action=CONTROLLER_HANDOFF_POSTS[self.path])
+            return
+        if self.path == '/v1/app-storage/observe':
+            self.close_connection = True
+            try:
+                if (not trusted_capture_peer(self.connection) or self.headers.get_all('Host', []) != ['orbis']
+                        or self.headers.get('Transfer-Encoding') is not None or self.headers.get('Content-Encoding') is not None
+                        or self.headers.get_all('Content-Type', []) != ['application/json']):
+                    raise ValueError('Invalid storage observation framing')
+                lengths = self.headers.get_all('Content-Length', [])
+                if len(lengths) != 1 or not re.fullmatch(r'[1-9][0-9]{0,3}', lengths[0]) or int(lengths[0]) > 1024:
+                    raise ValueError('Invalid storage observation length')
+                deadline, body = time.monotonic() + 5, bytearray()
+                while len(body) < int(lengths[0]):
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise ValueError('Storage observation body deadline expired')
+                    self.connection.settimeout(remaining)
+                    block = self.rfile.read1(min(1024, int(lengths[0]) - len(body)))
+                    if not block:
+                        raise ValueError('Incomplete storage observation body')
+                    body.extend(block)
+                module = load_script('orbis-host-app-storage.py', 'orbis_app_storage_for_request')
+                request = module.PEER._json(bytes(body))
+                result = module.observe(self.server.service, self.connection, request)
+                self.send_json(200, result)
+            except (OSError, ValueError, RuntimeError, TypeError, subprocess.SubprocessError):
+                self.send_json(409, {'error': 'The app storage binding could not be verified.'})
+            return
+        if self.path in _BROWSER_KEY_ROUTES:
+            self.close_connection = True
+            try:
+                if not trusted_capture_peer(self.connection):
+                    self.send_json(403, {'error': 'Recovery handoff is unavailable.'})
+                    return
+                lengths = self.headers.get_all('Content-Length', [])
+                if (len(lengths) != 1 or not re.fullmatch(r'[1-9][0-9]{0,3}', lengths[0]) or int(lengths[0]) > 1024
+                        or self.headers.get_all('Content-Type', []) != ['application/json']
+                        or any(name in self.headers for name in ('Transfer-Encoding', 'Content-Encoding'))):
+                    self.send_json(400, {'error': 'Invalid recovery handoff.'})
+                    return
+                self.connection.settimeout(2)
+                body = self.rfile.read(int(lengths[0]))
+                if len(body) != int(lengths[0]):
+                    raise ValueError('Recovery handoff body is incomplete.')
+                self.send_json(200, sentinel_browser_key(self.path, body))
+            except (OSError, ValueError, RuntimeError):
+                self.send_json(409, {'error': 'Recovery handoff could not be completed.'})
+            return
+        if self.path.startswith('/v1/credentials'):
+            self.credential_route('POST')
+            return
         if self.path.startswith('/v1/selected-captures/'):
             self.close_connection = True
             started = False
@@ -3543,6 +4119,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json(409, {"error": str(error) if isinstance(error, ValueError) else "host operation could not start"})
 
 
+class CredentialHandler(Handler):
+    """Only credential RPCs and read-only health exist in this listener role."""
+    def do_GET(self):
+        self.close_connection = True
+        if self.path == '/v1/status':
+            try:
+                self.send_json(200, self.server.service.credential_status())
+            except Exception:
+                self.send_json(503, {'error': 'Account security service health is unavailable.'})
+        elif self.path.startswith('/v1/credentials/'):
+            self.credential_route('GET')
+        else:
+            self.send_json(404, {'error': 'Host administration is disabled.'})
+
+    def do_POST(self):
+        self.close_connection = True
+        if self.path.startswith('/v1/credentials/'):
+            self.credential_route('POST')
+        else:
+            self.send_json(404, {'error': 'Host administration is disabled.'})
+
+
 def serve(socket_path: Path, service: HostService) -> None:
     parent = socket_path.parent.resolve(strict=True)
     if not parent.is_dir() or stat.S_IMODE(parent.stat().st_mode) & 0o022:
@@ -3563,7 +4161,7 @@ def serve(socket_path: Path, service: HostService) -> None:
             probe.close()
     old_umask = os.umask(0o177)
     try:
-        server = UnixHTTPServer(str(socket_path), Handler)
+        server = UnixHTTPServer(str(socket_path), CredentialHandler if service.credentials_only else Handler)
     finally:
         os.umask(old_umask)
     server.service = service
@@ -3571,15 +4169,16 @@ def serve(socket_path: Path, service: HostService) -> None:
     recovery_thread = None
     try:
         os.chmod(socket_path, 0o600)
-        service.resume_pending_retained_restore()
-        socket_recovery = load_script("orbis-host-docker-socket-recovery.py", "orbis_docker_socket_recovery")
-        docker_runtime = load_script("orbis-host-retained-restore-runtime.py", "orbis_socket_recovery_proc")
-        docker = socket_recovery.LocalDocker(service, docker_runtime.DockerRestoreRuntime.socket_in_root)
-        recovery = socket_recovery.Recovery(service, docker, package_locks, read_capture_job, write_private, boot_id)
-        recovery_thread = threading.Thread(
-            target=socket_recovery.supervise, name="orbis-docker-socket-recovery", daemon=True,
-            args=(recovery, recovery_stop, lambda result: print(f"Orbis Docker socket recovery: {result}", file=sys.stderr)))
-        recovery_thread.start()
+        if not service.credentials_only:
+            service.resume_pending_retained_restore()
+            socket_recovery = load_script("orbis-host-docker-socket-recovery.py", "orbis_docker_socket_recovery")
+            docker_runtime = load_script("orbis-host-retained-restore-runtime.py", "orbis_socket_recovery_proc")
+            docker = socket_recovery.LocalDocker(service, docker_runtime.DockerRestoreRuntime.socket_in_root)
+            recovery = socket_recovery.Recovery(service, docker, package_locks, read_capture_job, write_private, boot_id)
+            recovery_thread = threading.Thread(
+                target=socket_recovery.supervise, name="orbis-docker-socket-recovery", daemon=True,
+                args=(recovery, recovery_stop, lambda result: print(f"Orbis Docker socket recovery: {result}", file=sys.stderr)))
+            recovery_thread.start()
         try:
             server.serve_forever(poll_interval=0.5)
         except KeyboardInterrupt:
@@ -3588,8 +4187,11 @@ def serve(socket_path: Path, service: HostService) -> None:
         recovery_stop.set()
         if recovery_thread is not None and recovery_thread.ident is not None:
             recovery_thread.join(timeout=2)
-        service.discovery.disable()
+        if not service.credentials_only:
+            service.discovery.disable()
         server.server_close()
+        if getattr(service, 'credential_service', None) is not None:
+            service.credential_service.close()
         socket_path.unlink(missing_ok=True)
 
 
@@ -3600,14 +4202,19 @@ def main() -> int:
     parser.add_argument("--socket", required=True, type=Path)
     parser.add_argument("--snapshots", required=True, type=Path)
     parser.add_argument("--state-dir", required=True, type=Path)
+    parser.add_argument("--credentials-only", action='store_true')
     args = parser.parse_args()
     observer = observer_thread = None
     try:
-        if os.environ.get('LISTEN_PID') == str(os.getpid()):
+        if not args.credentials_only and os.environ.get('LISTEN_PID') == str(os.getpid()):
             module = load_script('orbis-host-sentinel-observer.py', 'orbis_sentinel_observer_for_service')
             observer = module.activated_observer(lambda: service.sentinel_observer_progress(),
-                capture_provider=lambda point: service.sentinel_capture_progress(point))
-        service = HostService(args.root, args.docker_context, args.snapshots, args.state_dir)
+                capture_provider=lambda point: service.sentinel_capture_progress(point),
+                component_provider=lambda: module.observe_component(service.root, service.context),
+                handoff_provider=module.HandoffObservation(lambda: service.controller_handoffs(
+                    load_script('orbis-host-controller-handoff.py', 'orbis_controller_handoff'))))
+        service = HostService(args.root, args.docker_context, args.snapshots, args.state_dir,
+                              credentials_only=True) if args.credentials_only else HostService(args.root, args.docker_context, args.snapshots, args.state_dir)
         if observer is not None:
             observer_thread = threading.Thread(target=observer.serve_forever, name='orbis-progress-observer', daemon=True)
             observer_thread.start()

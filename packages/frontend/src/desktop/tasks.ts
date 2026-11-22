@@ -18,12 +18,14 @@ export const taskLabels: Record<TaskRecord['action'], string> = {
 export const taskStates: Record<TaskRecord['status'], string> = {
   queued: 'Queued',
   running: 'In progress',
+  cancelling: 'Cancelling',
+  cancelled: 'Cancelled',
   succeeded: 'Completed',
   failed: 'Failed',
   interrupted: 'Interrupted',
   unconfirmed: 'Awaiting confirmation',
 };
-export const taskIsActive = (task: TaskRecord) => task.status === 'queued' || task.status === 'running';
+export const taskIsActive = (task: TaskRecord) => task.status === 'queued' || task.status === 'running' || task.status === 'cancelling';
 export const useTasks = () => {
   const visible = useWindowVisible();
   return useQuery({

@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
@@ -51,11 +52,16 @@ describe('Streamed backup uploads with real files and archives', () => {
   };
 
   beforeEach(async () => {
-    root = await fs.promises.mkdtemp('/tmp/orbis-upload-files-');
+    root = await fs.promises.mkdtemp(path.join(tmpdir(), 'orbis-upload-files-'));
     backups = path.join(root, 'data/backups/store/demo');
     storage = new BackupUploadStorage(path.join(root, 'data/backups'));
     const logger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as LoggerService;
     const filesystem = new FilesystemService(logger);
+    const originalSafePath = filesystem.getSafeFilePath.bind(filesystem);
+    vi.spyOn(filesystem, 'getSafeFilePath').mockImplementation((file) => {
+      const resolved = path.resolve(file);
+      return resolved.startsWith(root + path.sep) ? resolved : originalSafePath(file);
+    });
     archive = new ArchiveService(logger);
     const appDataDir = path.join(root, 'app-data/store/demo');
     const appInstalledDir = path.join(root, 'apps/store/demo');
@@ -63,7 +69,12 @@ describe('Streamed backup uploads with real files and archives', () => {
       getAppPaths: () => ({ appDataDir, appInstalledDir }),
       getInstalledAppInfo: async () => JSON.parse(await fs.promises.readFile(path.join(appInstalledDir, 'config.json'), 'utf8')),
     } as unknown as AppFilesManager;
-    const repository = { getAppByUrn: vi.fn().mockResolvedValue({ id: 1 }), updateAppById: vi.fn() } as unknown as AppsRepository;
+    const repository = {
+      getAppByUrn: vi.fn().mockResolvedValue({ id: 1 }),
+      updateAppById: vi.fn(),
+      getMigrationLedger: vi.fn().mockResolvedValue({ baselined: false, migrationIds: [] }),
+      replaceMigrationLedger: vi.fn(),
+    } as unknown as AppsRepository;
     const configuration = { get: () => ({ dataDir: path.join(root, 'data') }) } as unknown as ConfigurationService;
     manager = new BackupManager(archive, logger, configuration, filesystem, apps, repository);
     const source = path.join(root, 'source');

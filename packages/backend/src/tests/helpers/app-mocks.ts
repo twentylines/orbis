@@ -74,6 +74,7 @@ export const createMockApp = (data: Partial<AppWithStore> = {}): AppWithStore =>
   templateUrn: null,
   templateVersion: null,
   lastTemplateSyncAt: null,
+  migrationsBaselined: false,
   appStore: createMockAppStore(),
   ...data,
 });

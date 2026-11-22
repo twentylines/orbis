@@ -3,6 +3,18 @@ import { appInfoSchema } from '../src/schemas/app-info.js';
 import { dynamicComposeUnion } from '../src/schemas/dynamic-compose.js';
 import { dynamicComposeSchemaArk } from '../src/schemas/dynamic-compose-ark.js';
 import { dynamicComposeSchemaV1 } from '../src/schemas/utils/converters/v1.js';
+import { portableJsonSchema } from '../src/schemas/portable-json-schema.js';
+
+const schemaOptions: Parameters<typeof dynamicComposeSchemaArk.toJsonSchema>[0] = {
+  fallback: {
+    unit: ({ unit }) => {
+      if (unit === undefined) return { not: {} };
+      throw new Error('A non-JSON value cannot be exported in an application schema.');
+    },
+    // Runtime predicates retain their JSON-compatible base constraints in the reference schema.
+    predicate: ({ base }) => base,
+  },
+};
 
 const omitProperty = (schema: unknown, key: string): unknown => {
   // biome-ignore lint/suspicious/noExplicitAny: JSON schema post-processing
@@ -23,13 +35,13 @@ const omitProperty = (schema: unknown, key: string): unknown => {
 };
 
 const main = async () => {
-  const dynamicCompose = dynamicComposeUnion.toJsonSchema({});
-  const appInfo = omitProperty(appInfoSchema.toJsonSchema({}), 'urn');
+  const dynamicCompose = portableJsonSchema(dynamicComposeUnion.toJsonSchema(schemaOptions));
+  const appInfo = omitProperty(appInfoSchema.toJsonSchema(schemaOptions), 'urn');
 
   const outDir = './json-schemas';
 
-  const v1 = dynamicComposeSchemaV1.toJsonSchema({});
-  const v2 = dynamicComposeSchemaArk.toJsonSchema({});
+  const v1 = dynamicComposeSchemaV1.toJsonSchema(schemaOptions);
+  const v2 = portableJsonSchema(dynamicComposeSchemaArk.toJsonSchema(schemaOptions));
 
   await mkdir(outDir, { recursive: true });
   await mkdir(`${outDir}/v1`, { recursive: true });

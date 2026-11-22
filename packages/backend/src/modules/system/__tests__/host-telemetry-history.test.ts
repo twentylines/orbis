@@ -104,7 +104,7 @@ describe('host cache timing with autonomous history', () => {
     expect(Date.now() - Date.parse(result.lastSampleAt ?? '')).toBe(20000);
   });
 
-  it('expires successful readings nine seconds after request start while coalescing delayed readers', async () => {
+  it('expires successful readings after 800 milliseconds from request start while coalescing delayed readers', async () => {
     const firstGate = deferred<HostTelemetry>();
     const secondGate = deferred<HostTelemetry>();
     releases.push(
@@ -115,7 +115,7 @@ describe('host cache timing with autonomous history', () => {
     const telemetry = new HostTelemetryService();
     const first = telemetry.read();
     expect(telemetry.read()).toBe(first);
-    await vi.advanceTimersByTimeAsync(8999);
+    await vi.advanceTimersByTimeAsync(799);
     expect(telemetry.read()).toBe(first);
     firstGate.resolve(reading(origin + 20000));
     const value = await first;
@@ -129,6 +129,28 @@ describe('host cache timing with autonomous history', () => {
     expect(telemetry.read()).toBe(refreshed);
     secondGate.resolve(reading());
     await refreshed;
+  });
+
+  it('does not renew successful cache freshness when a coalesced request exceeds the sampling interval', async () => {
+    const firstGate = deferred<HostTelemetry>();
+    const secondGate = deferred<HostTelemetry>();
+    releases.push(
+      () => firstGate.resolve(reading()),
+      () => secondGate.resolve(reading()),
+    );
+    socket.mockImplementationOnce(async () => firstGate.promise).mockImplementationOnce(async () => secondGate.promise);
+    const telemetry = new HostTelemetryService();
+    const first = telemetry.read();
+    await vi.advanceTimersByTimeAsync(1200);
+    expect(telemetry.read()).toBe(first);
+    expect(socket).toHaveBeenCalledTimes(1);
+    firstGate.resolve(reading());
+    await first;
+    const next = telemetry.read();
+    expect(next).not.toBe(first);
+    expect(socket).toHaveBeenCalledTimes(2);
+    secondGate.resolve(reading());
+    await next;
   });
 
   it.each(['unavailable', 'rejected'])('retains two seconds of unavailable backoff after a delayed %s response', async (kind) => {

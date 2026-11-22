@@ -27,3 +27,17 @@ it('declares the connected retained phases and protected app-engine contract', a
     'COPY --from=builder /app/packages/backend/src/retained-app-engine-capability.json ./retained-app-engine-capability.json',
   );
 });
+
+it('packages the verified install-hold effect contract without declaring historical direct activation', async () => {
+  const marker = JSON.parse(await readFile(path.resolve('src/restore-install-hold-capability.json'), 'utf8'));
+  expect(marker).toEqual({
+    schema: 'orbis.restore-install-hold-effect.v1',
+    version: 1,
+    policy: 'verified-live-store-before-app-resume.v1',
+  });
+  const dockerfile = await readFile(path.resolve('../../Dockerfile'), 'utf8');
+  expect(dockerfile).toContain(
+    'COPY --from=builder /app/packages/backend/src/restore-install-hold-capability.json ./restore-install-hold-capability.json',
+  );
+  expect(dockerfile).not.toContain('retained-app-activation-capability.json');
+});

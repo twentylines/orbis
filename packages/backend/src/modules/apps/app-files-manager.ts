@@ -1,7 +1,9 @@
+import { readAppPackageAsset } from '../app-stores/app-package-links';
+import { readAppMigrationIds, readAppMigrationSources } from './app-migrations';
 import path from 'node:path';
+import { makeAppDataWritable } from './app-data-permissions';
 import { APP_GENERATED_COMPOSE_FILENAME, APP_REL_COMPOSE_FILENAME } from '@/common/constants';
 import { extractAppUrn } from '@/common/helpers/app-helpers';
-import { execFileAsync } from '@/common/helpers/exec-helpers';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { LoggerService } from '@/core/logger/logger.service';
@@ -35,13 +37,21 @@ export class AppFilesManager {
     };
   }
 
+  public async getAppMigrationIds(appUrn: AppUrn, packageDirectory = this.getAppPaths(appUrn).appInstalledDir): Promise<string[]> {
+    return [...(await readAppMigrationIds(this.filesystem.getSafeFilePath(packageDirectory)))];
+  }
+
+  public getAppMigrations(appUrn: AppUrn, packageDirectory = this.getAppPaths(appUrn).appInstalledDir, selectedIds?: readonly string[]) {
+    return readAppMigrationSources(this.filesystem.getSafeFilePath(packageDirectory), selectedIds);
+  }
+
   /**
    * Get the app info from the installed apps apps
    * @param id - The app id
    */
-  public async getInstalledAppInfo(appUrn: AppUrn) {
+  public async getInstalledAppInfo(appUrn: AppUrn, stagedDirectory?: string) {
     try {
-      const { appInstalledDir } = this.getAppPaths(appUrn);
+      const appInstalledDir = stagedDirectory ?? this.getAppPaths(appUrn).appInstalledDir;
       const configPath = path.join(appInstalledDir, 'config.json');
 
       if (await this.filesystem.isFile(configPath)) {
@@ -57,8 +67,8 @@ export class AppFilesManager {
         }
 
         if (parsedConfig.available) {
-          const descriptionPath = path.join(appInstalledDir, 'metadata', 'description.md');
-          const description = (await this.filesystem.isFile(descriptionPath)) ? ((await this.filesystem.readTextFile(descriptionPath)) ?? '') : '';
+          const description =
+            (await readAppPackageAsset(appInstalledDir, 'metadata/description.md').catch(() => undefined))?.bytes.toString('utf8') ?? '';
 
           return { ...parsedConfig, description };
         }
@@ -107,8 +117,8 @@ export class AppFilesManager {
    * @param appUrn - The app id
    * @returns The content as a DynamicComposeSchemaYaml object and path
    */
-  public async getSourceDockerComposeYaml(appUrn: AppUrn) {
-    const { appInstalledDir } = this.getAppPaths(appUrn);
+  public async getSourceDockerComposeYaml(appUrn: AppUrn, stagedDirectory?: string) {
+    const appInstalledDir = stagedDirectory ?? this.getAppPaths(appUrn).appInstalledDir;
 
     // 1. Try new source name: docker-compose.yml
     const appYamlPath = path.join(appInstalledDir, APP_REL_COMPOSE_FILENAME);
@@ -166,17 +176,19 @@ export class AppFilesManager {
     const { appInstalledDir } = this.getAppPaths(appUrn);
     const dockerComposePath = path.join(appInstalledDir, APP_GENERATED_COMPOSE_FILENAME);
 
-    await this.filesystem.writeTextFile(dockerComposePath, composeFile);
+    if (!(await this.filesystem.writeTextFile(dockerComposePath, composeFile))) {
+      throw new Error(`Failed to write generated docker compose file for ${appUrn}`);
+    }
   }
 
   public async deleteAppFolder(appUrn: AppUrn) {
     const { appInstalledDir } = this.getAppPaths(appUrn);
-    await this.filesystem.removeDirectory(appInstalledDir);
+    if (!(await this.filesystem.removeDirectory(appInstalledDir))) throw new Error('The installed app files could not be removed.');
   }
 
   public async deleteAppDataDir(appUrn: AppUrn) {
     const { appDataDir } = this.getAppPaths(appUrn);
-    await this.filesystem.removeDirectory(appDataDir);
+    if (!(await this.filesystem.removeDirectory(appDataDir))) throw new Error('The app data could not be removed.');
   }
 
   public async createAppDataDir(appUrn: AppUrn) {
@@ -190,10 +202,7 @@ export class AppFilesManager {
    */
   public async setAppDataDirPermissions(appUrn: AppUrn) {
     const { appDataDir } = this.getAppPaths(appUrn);
-
-    await execFileAsync('chmod', ['-Rf', 'a+rwx', appDataDir]).catch(() => {
-      this.logger.error(`Error setting permissions for app ${appUrn}`);
-    });
+    await makeAppDataWritable(this.filesystem.getSafeFilePath(appDataDir));
   }
 
   public async getAppEnv(appUrn: AppUrn) {
@@ -203,7 +212,9 @@ export class AppFilesManager {
 
     let env = '';
     if (await this.filesystem.isFile(envPath)) {
-      env = (await this.filesystem.readTextFile(envPath)) ?? '';
+      const content = await this.filesystem.readTextFile(envPath);
+      if (content === null) throw new Error(`Failed to read app environment for ${appUrn}`);
+      env = content;
     }
 
     return { path: envPath, content: env };
@@ -214,7 +225,7 @@ export class AppFilesManager {
 
     const envPath = path.join(appDataDir, 'app.env');
 
-    await this.filesystem.writeTextFile(envPath, env);
+    return this.filesystem.writePrivateTextFile(envPath, env);
   }
 
   /**

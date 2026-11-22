@@ -1,3 +1,12 @@
+import { AppJobService } from '../services/app-job.service';
+const jobService = () => {
+  const jobs = mock<AppJobService>();
+  jobs.withCurrent.mockImplementation(async (_event, apply) => {
+    await apply();
+    return true;
+  });
+  return jobs;
+};
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { AppsRepository } from '@/modules/apps/apps.repository';
 import { AppEventsQueue, appEventResultSchema } from '@/modules/queue/entities/app-events';
@@ -31,7 +40,7 @@ describe('BackupAppHandler runtime preservation', () => {
       ...(test.statePreserved === undefined ? {} : { statePreserved: test.statePreserved }),
     });
     queue.publish.mockResolvedValue(reply);
-    const handler = new BackupAppHandler(repository, queue, status, start, config);
+    const handler = new BackupAppHandler(repository, queue, status, start, config, jobService());
 
     await handler.execute(urn);
     const emit = test.success ? status.emitSuccess : status.emitError;
@@ -49,7 +58,7 @@ describe('BackupAppHandler runtime preservation', () => {
     const urn = 'demo:store' as AppUrn;
     repository.getAppByUrn.mockResolvedValue(createMockApp({ status: 'running' }));
     queue.publish.mockResolvedValue({ success: true, message: 'Backup completed' });
-    await new BackupAppHandler(repository, queue, status, start, config).execute(urn);
+    await new BackupAppHandler(repository, queue, status, start, config, jobService()).execute(urn);
     await vi.waitFor(() => expect(start.execute).toHaveBeenCalledExactlyOnceWith(urn));
   });
 });

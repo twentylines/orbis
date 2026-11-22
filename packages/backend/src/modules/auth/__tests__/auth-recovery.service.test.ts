@@ -12,6 +12,7 @@ import { mock } from 'vitest-mock-extended';
 import { AuthService } from '../auth.service';
 import { SessionManager } from '../session.manager';
 import { PasskeyStore } from '../passkey.store';
+import { credentialChangeFixture } from './credential-change.fixture';
 
 describe('Local operator recovery', () => {
   const now = 1_800_000_000;
@@ -37,9 +38,11 @@ describe('Local operator recovery', () => {
   let passwords: PasswordService;
   let config: ReturnType<typeof mock<ConfigurationService>>;
   let passkeys: ReturnType<typeof mock<PasskeyStore>>;
+  let changes: ReturnType<typeof credentialChangeFixture>;
 
   beforeEach(async () => {
-    directory = await mkdtemp('/tmp/orbis-recovery-test-');
+    if (!process.env.TMPDIR) throw new Error('Project-scoped TMPDIR required.');
+    directory = await mkdtemp(path.join(process.env.TMPDIR, 'orbis-recovery-test-'));
     await mkdir(path.join(directory, 'state'), { mode: 0o700 });
     requestFile = path.join(directory, 'state', 'password-change-request');
     users = mock<UserRepository>();
@@ -59,7 +62,8 @@ describe('Local operator recovery', () => {
     vi.spyOn(passwords, 'hash');
     vi.spyOn(Date, 'now').mockReturnValue(now * 1000);
     passkeys = mock<PasskeyStore>();
-    auth = new AuthService(users, sessions, config, mock<EncryptionService>(), mock<CacheService>(), filesystem, passwords, passkeys);
+    changes = credentialChangeFixture(users);
+    auth = new AuthService(users, sessions, config, mock<EncryptionService>(), mock<CacheService>(), filesystem, passwords, passkeys, changes.sync);
   });
 
   afterEach(async () => {
@@ -164,16 +168,18 @@ describe('Local operator recovery', () => {
     expect(sessions.destroyAllSessionsByUserId).not.toHaveBeenCalled();
   });
 
-  it('removes passkeys before replacing recovered credentials and leaves the host request retryable if revocation fails', async () => {
+  it('plans passkey removal in the coordinated reset and retains the request if synchronization refuses', async () => {
     await request();
-    passkeys.removeAll.mockRejectedValueOnce(new Error('passkey storage unavailable'));
-    await expect(auth.changeOperatorPassword({ newPassword: 'new-password-123' })).rejects.toThrow('passkey storage unavailable');
+    changes.control.failure = new Error('credential storage unavailable');
+    await expect(auth.changeOperatorPassword({ newPassword: 'new-password-123' })).rejects.toThrow('credential storage unavailable');
     expect(users.updateUser).not.toHaveBeenCalled();
     expect(sessions.destroyAllSessionsByUserId).not.toHaveBeenCalled();
     expect(await readFile(requestFile, 'utf8')).toBe(String(now));
+    delete changes.control.failure;
+    changes.control.state.users[String(operator.id)] = { handle: 'aGFuZGxl', credentials: [] };
     await auth.changeOperatorPassword({ newPassword: 'new-password-123' });
-    expect(passkeys.removeAll).toHaveBeenCalledWith(operator.id);
-    expect(passkeys.removeAll.mock.invocationCallOrder[1]).toBeLessThan(users.updateUser.mock.invocationCallOrder[0] ?? 0);
+    expect(changes.control.plans.at(-1)?.users[String(operator.id)]).toBeUndefined();
+    expect(passkeys.removeAll).not.toHaveBeenCalled();
   });
 
   it('reports a partial reset and retains its request when real SQLite session enumeration fails, then allows recovery retry', async () => {
@@ -185,7 +191,17 @@ describe('Local operator recovery', () => {
     const cache = Object.create(CacheService.prototype) as CacheService;
     Object.defineProperty(cache, 'db', { value: database, configurable: true });
     const actualSessions = new SessionManager(cache);
-    const recovery = new AuthService(users, actualSessions, config, mock<EncryptionService>(), cache, filesystem, passwords, mock<PasskeyStore>());
+    const recovery = new AuthService(
+      users,
+      actualSessions,
+      config,
+      mock<EncryptionService>(),
+      cache,
+      filesystem,
+      passwords,
+      mock<PasskeyStore>(),
+      changes.sync,
+    );
     try {
       const oldSession = await actualSessions.createSession(operator.id);
       const unrelatedSession = await actualSessions.createSession(operator.id + 1);
@@ -222,7 +238,17 @@ describe('Local operator recovery', () => {
     const cache = Object.create(CacheService.prototype) as CacheService;
     Object.defineProperty(cache, 'db', { value: database });
     const actualSessions = new SessionManager(cache);
-    const recovery = new AuthService(users, actualSessions, config, mock<EncryptionService>(), cache, filesystem, passwords, mock<PasskeyStore>());
+    const recovery = new AuthService(
+      users,
+      actualSessions,
+      config,
+      mock<EncryptionService>(),
+      cache,
+      filesystem,
+      passwords,
+      mock<PasskeyStore>(),
+      changes.sync,
+    );
     try {
       const oldSession = await actualSessions.createSession(operator.id);
       const unrelatedSession = await actualSessions.createSession(operator.id + 1);

@@ -57,7 +57,10 @@ export class MarketplaceController {
   @Get('apps/:urn/image')
   @SkipThrottle()
   async getImage(@Param('urn') urn: string, @Res() res: Response, @Req() req: Request) {
-    const { image, etag } = await this.marketplaceService.getAppImage(castAppUrn(urn));
+    const { image, etag, contentType, remoteUrl } = await this.marketplaceService.getAppImage(castAppUrn(urn));
+
+    if (remoteUrl) return res.redirect(302, remoteUrl);
+    res.set({ 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" });
 
     if (!image) {
       throw new NotFoundException('App image not found');
@@ -66,7 +69,7 @@ export class MarketplaceController {
     if (req.headers['if-none-match'] === etag) {
       res.set({
         'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400, stale-if-error=86400',
-        'Content-Type': 'image/jpeg',
+        'Content-Type': contentType ?? 'image/jpeg',
         ETag: etag,
       });
       return res.status(304).end();
@@ -74,7 +77,7 @@ export class MarketplaceController {
 
     res.set({
       'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400, stale-if-error=86400',
-      'Content-Type': 'image/jpeg',
+      'Content-Type': contentType ?? 'image/jpeg',
       ETag: etag,
     });
 

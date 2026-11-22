@@ -1,4 +1,6 @@
 import importlib.util
+import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,6 +18,59 @@ class OrbisHostServiceUpgradeTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
+
+    def test_custodied_rollback_refuses_crossed_prior_and_persists_exact_restored_copy(self):
+        root = self.base / "installation"
+        root.mkdir()
+        extraction = self.base / "selected"
+        extraction.mkdir(mode=0o700)
+        receipts = extraction / "host-copy-custody"
+        receipts.mkdir(mode=0o700)
+        workspace = self.base / "workspace"
+        workspace.mkdir(mode=0o700)
+        prior = workspace / "previous"
+        prior.mkdir(mode=0o700)
+        installed = self.base / "host-service"
+        installed.mkdir(mode=0o700)
+        unit = self.base / "orbis-host.service"
+        previous_unit = workspace / "previous-unit"
+        prior_source = prior / "orbis-host-service.py"
+        candidate_source = installed / "orbis-host-service.py"
+        candidate_source.write_bytes(b"# candidate\n")
+        prior_source.write_bytes(b"# prior\n")
+        unit.write_bytes(b"candidate unit\n")
+        previous_unit.write_bytes(b"prior unit\n")
+        for path in (prior_source, candidate_source, previous_unit):
+            path.chmod(0o600)
+        maintenance = self.base / "helper-maintenance.json"
+        with (mock.patch.object(UPGRADE.SETUP.HOST.AUTHORITY, "OWNER", os.geteuid()),
+              mock.patch.multiple(UPGRADE.SETUP, INSTALL_DIR=installed, UNIT_FILE=unit),
+              mock.patch.object(UPGRADE, "MAINTENANCE", maintenance),
+              mock.patch.object(UPGRADE, "require_maintenance_identity"),
+              mock.patch.object(UPGRADE, "require_root_owned"),
+              mock.patch.object(UPGRADE, "require_profile"),
+              mock.patch.object(UPGRADE, "verify_service"),
+              mock.patch.object(UPGRADE.SETUP, "run_systemctl"),
+              mock.patch.object(UPGRADE, "stop_service") as stop):
+            custody = {"selection": {"directory": str(extraction), "selectionSha256": "a" * 64},
+                       "prior": UPGRADE.SETUP.actual_copy(prior, previous_unit),
+                       "candidate": UPGRADE.SETUP.actual_copy(installed, unit)}
+            UPGRADE.SERVICE.write_private(maintenance, {"stage": "replaced", "sourceCustody": custody})
+            prior_source.write_bytes(candidate_source.read_bytes())
+            with self.assertRaisesRegex(ValueError, "exact journaled source"):
+                UPGRADE.restore_previous(workspace, "digest", root, "test")
+            stop.assert_not_called()
+            self.assertEqual(list(receipts.iterdir()), [])
+            prior_source.write_bytes(b"# prior\n")
+            UPGRADE.restore_previous(workspace, "digest", root, "test")
+            stop.assert_called_once()
+            self.assertEqual(UPGRADE.SETUP.actual_copy(installed, unit), custody["prior"])
+            self.assertEqual(UPGRADE.SERVICE.read_private(maintenance)["stage"], "restored")
+            receipt, = receipts.iterdir()
+            body = receipt.read_bytes()
+            self.assertEqual(receipt.name, f"host-copy-transition-{UPGRADE.SETUP._hash(body)}.json")
+            self.assertEqual(json.loads(body)["sources"], custody)
+            self.assertEqual(json.loads(body)["outcome"], "prior-restored")
 
     def test_candidate_scripts_distinguish_python_and_maintenance_javascript(self):
         python = self.base / "helper.py"

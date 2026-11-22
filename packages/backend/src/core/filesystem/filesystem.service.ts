@@ -117,6 +117,47 @@ export class FilesystemService {
     }
   }
 
+  async writePrivateTextFile(filePath: string, content: string): Promise<boolean> {
+    let handle: fs.promises.FileHandle | undefined;
+    let parent: fs.promises.FileHandle | undefined;
+    try {
+      const selected = this.getSafeFilePath(filePath);
+      let directory = path.parse(selected).root;
+      for (const part of path.dirname(selected).split(path.sep).filter(Boolean)) {
+        directory = path.join(directory, part);
+        const info = await fs.promises.lstat(directory).catch(async (error: NodeJS.ErrnoException) => {
+          if (error.code !== 'ENOENT') throw error;
+          await fs.promises.mkdir(directory);
+          return fs.promises.lstat(directory);
+        });
+        if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('Invalid private file parent.');
+      }
+      const named = await fs.promises.lstat(path.dirname(selected));
+      parent = await fs.promises.open(path.dirname(selected), fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
+      const pinned = await parent.stat();
+      if (named.dev !== pinned.dev || named.ino !== pinned.ino) throw new Error('Private file parent changed.');
+      const target = process.platform === 'linux' ? `/proc/self/fd/${parent.fd}/${path.basename(selected)}` : selected;
+      handle = await fs.promises.open(
+        target,
+        fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+        0o600,
+      );
+      const info = await handle.stat();
+      if (!info.isFile() || info.nlink !== 1 || info.uid !== process.geteuid?.()) throw new Error('App environment file is not privately owned.');
+      await handle.chmod(0o600);
+      await handle.truncate(0);
+      await handle.writeFile(`${content}${EOL}`);
+      await handle.sync();
+      return true;
+    } catch {
+      this.logger.error('The private app file could not be written.');
+      return false;
+    } finally {
+      await handle?.close();
+      await parent?.close();
+    }
+  }
+
   async writeBinaryFile(filePath: string, data: Buffer): Promise<boolean> {
     try {
       await fs.promises.mkdir(this.getSafeFilePath(filePath.split('/').slice(0, -1).join('/')), { recursive: true });
@@ -189,6 +230,7 @@ export class FilesystemService {
       await fs.promises.unlink(this.getSafeFilePath(filePath));
       return true;
     } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return true;
       this.logger.error(`Error removing file ${filePath}:`, error);
       return false;
     }
@@ -220,7 +262,15 @@ export class FilesystemService {
   }
 
   async createTempDirectory(prefix: string): Promise<string | null> {
-    return fs.promises.mkdtemp(prefix);
+    const directory = await fs.promises.mkdtemp(prefix);
+    try {
+      await fs.promises.chmod(directory, 0o700);
+      if (((await fs.promises.lstat(directory)).mode & 0o777) !== 0o700) throw new Error('The temporary app directory is not private.');
+      return directory;
+    } catch (error) {
+      await fs.promises.rmdir(directory).catch(() => undefined);
+      throw error;
+    }
   }
 
   async getStats(filePath: string) {

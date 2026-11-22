@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import yaml from 'yaml';
 import { DockerComposeBuilder } from '../compose.builder';
 import { createAppUrn } from '@/common/helpers/app-helpers';
+import type { DynamicComposeSchemaYaml } from '@runtipi/common/schemas';
 
 const urn = createAppUrn('nginx', 'store-id');
 const subnet = '10.128.1.0/24';
@@ -246,6 +247,79 @@ services:
   });
 
   describe('Port configuration', () => {
+    const mainPort = '${APP_PORT}:80';
+    const composeWithPorts = (ports: unknown[]): DynamicComposeSchemaYaml => ({
+      'x-runtipi': { schema_version: 2 },
+      services: { web: { image: 'nginx:alpine', ports, 'x-runtipi': { is_main: true, internal_port: 80 } } },
+    });
+    const generatedPorts = (ports: unknown[], port?: number) =>
+      yaml.parse(composeBuilder.getDockerCompose(composeWithPorts(ports), { openPort: true, port }, urn, subnet)).services.web.ports;
+
+    it.each([
+      mainPort,
+      '$APP_PORT:80/tcp',
+      '127.0.0.1:${APP_PORT}:80',
+      '::1:${APP_PORT}:80',
+      '[::1]:${APP_PORT}:80/tcp',
+      '${INTERNAL_IP}:${APP_PORT}:80',
+      '${BIND_IP:-127.0.0.1}:${APP_PORT:-8080}:80',
+    ])('does not widen or repeat an existing TCP mapping %s', (binding) => {
+      expect(generatedPorts([binding])).toEqual([binding]);
+    });
+
+    it.each([
+      ['127.0.0.1:8080:80/tcp', 8080],
+      ['[::1]:8080-8081:80-81', 8080],
+      ['8080-8082:79-81', 8081],
+    ] as const)('recognizes a matching selected numeric port in %s', (binding, selected) => {
+      expect(generatedPorts([binding], selected)).toEqual([binding]);
+    });
+
+    it.each([
+      '${APP_PORT}:80/udp',
+      '127.0.0.1:${APP_PORT}:80/udp',
+      '[::1]:${APP_PORT}:80/udp',
+      '${APP_PORT}:81',
+      '${OTHER_PORT}:80',
+      '80:${APP_PORT}',
+      '80:8080',
+      '8081:80',
+      '8080-8082:80',
+      'invalid:${APP_PORT}:80',
+      '80',
+    ])('still publishes TCP for a different or unproven mapping %s', (binding) => {
+      expect(generatedPorts([binding], 8080)).toEqual([binding, mainPort]);
+    });
+
+    it('does not infer an app default from a literal mapping when no selected port is available', () => {
+      expect(generatedPorts(['8080:80'])).toEqual(['8080:80', mainPort]);
+    });
+
+    it('preserves long-form TCP address and other Compose options', () => {
+      const binding = { target: 80, published: '${APP_PORT}', host_ip: '127.0.0.1', app_protocol: 'http', name: 'admin', mode: 'host' };
+      expect(generatedPorts([binding])).toEqual([binding]);
+      const selected = { ...binding, published: '8080', host_ip: '::1', protocol: 'tcp' };
+      expect(generatedPorts([selected], 8080)).toEqual([selected]);
+    });
+
+    it('retains a long-form UDP binding and does not mistake automatic allocation for the selected port', () => {
+      const udp = { target: 80, published: '${APP_PORT}', host_ip: '127.0.0.1', protocol: 'udp' };
+      const automatic = { target: 80, mode: 'host' };
+      expect(generatedPorts([udp, automatic], 8080)).toEqual([udp, automatic, mainPort]);
+    });
+
+    it('checks the winning architecture-specific bindings after array replacement', () => {
+      const compose = composeWithPorts([mainPort]);
+      const arm = { target: 80, published: '${APP_PORT}', host_ip: '::1' };
+      compose['x-runtipi'].overrides = [{ architecture: 'arm64', services: { web: { image: 'nginx:arm64', ports: [arm] } } }];
+      const command = (architecture: string) =>
+        yaml.parse(composeBuilder.getDockerCompose(compose, { openPort: true }, urn, subnet, architecture)).services.web;
+
+      expect(command('arm64')).toMatchObject({ image: 'nginx:arm64', ports: [arm] });
+      expect(command('amd64')).toMatchObject({ image: 'nginx:alpine', ports: [mainPort] });
+      expect(compose.services.web?.ports).toEqual([mainPort]);
+    });
+
     it('should add port when is_main and openPort are set', () => {
       const doc = `x-runtipi:
   schema-version: 2
@@ -547,6 +621,9 @@ volumes:
     network_mode: host
     ports:
       - "8080:80"
+    x-runtipi:
+      is_main: true
+      internal_port: 80
 `;
 
       const parsed = yaml.parse(doc);

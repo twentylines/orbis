@@ -5,16 +5,29 @@ import { validateAppUrn } from '@/common/helpers/app-helpers';
 import { spawnAsync } from '@/common/helpers/exec-helpers';
 import type { FilesystemService } from '@/core/filesystem/filesystem.service';
 import type { LoggerService } from '@/core/logger/logger.service';
+import { type } from 'arktype';
 import type { AppUrn } from '@runtipi/common/types';
 import { assertNoRestoreMounts } from './restore-mounts';
+import { appMigrationLedgerSchema } from '../apps/app-migration-ledger';
 import { validateBackupTree } from './backup-links';
 
 const groups = ['app-data', 'app', 'user-config'] as const;
 type Group = (typeof groups)[number];
 type Entry = { name: Group; target: string; parent: string; existed: boolean };
-type Journal = { version: 1; appUrn: AppUrn; id: string; phase: 'preparing' | 'swapping' | 'committed'; entries: Entry[] };
+type Journal = {
+  version: 1;
+  appUrn: AppUrn;
+  id: string;
+  phase: 'preparing' | 'swapping' | 'committed';
+  entries: Entry[];
+  migration?: RestoreMigration;
+};
+const restoreMigrationSchema = type({ appId: 'number.integer > 0 & number <= 2147483647', ledger: appMigrationLedgerSchema }).onUndeclaredKey(
+  'reject',
+);
+type RestoreMigration = typeof restoreMigrationSchema.infer;
 type Locations = Record<Group, string>;
-type Sources = Record<Group, string | null>;
+type Sources = Record<Group, string | null> & { migration?: RestoreMigration };
 
 const stat = async (file: string) =>
   fs.promises.lstat(file).catch((error: NodeJS.ErrnoException) => {
@@ -129,7 +142,7 @@ export class RestoreTransaction {
     private readonly logger: LoggerService,
     private readonly root: () => string,
     private readonly locations: (appUrn: AppUrn) => Locations,
-    private readonly reconcile: (appUrn: AppUrn) => Promise<void> = async () => undefined,
+    private readonly reconcile: (appUrn: AppUrn, migration?: RestoreMigration) => Promise<void> = async () => undefined,
     private readonly checkMounts: (directory: string) => Promise<void> = assertNoRestoreMounts,
   ) {}
 
@@ -195,7 +208,8 @@ export class RestoreTransaction {
       !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(record.id) ||
       !['preparing', 'swapping', 'committed'].includes(record.phase) ||
       !Array.isArray(record.entries) ||
-      record.entries.length !== groups.length
+      record.entries.length !== groups.length ||
+      (record.migration !== undefined && restoreMigrationSchema(record.migration) instanceof type.errors)
     )
       throw new Error('Invalid restore recovery journal');
     for (const [index, name] of groups.entries()) {
@@ -272,7 +286,7 @@ export class RestoreTransaction {
     } else if (journal.phase === 'committed') {
       for (const entry of journal.entries) await requireDirectory(entry.target);
     }
-    await this.reconcile(appUrn);
+    await this.reconcile(appUrn, journal.phase === 'committed' ? journal.migration : undefined);
     await this.cleanup(journal);
   }
 
@@ -354,6 +368,7 @@ export class RestoreTransaction {
           await syncDirectory(workspace);
           await syncDirectory(path.dirname(workspace));
         }
+        if (sources.migration) journal.migration = restoreMigrationSchema.assert(sources.migration);
         journal.phase = 'swapping';
         await this.write(journal);
         for (const entry of entries) {
@@ -377,7 +392,7 @@ export class RestoreTransaction {
         }
         throw error;
       }
-      await this.reconcile(appUrn);
+      await this.reconcile(appUrn, journal.migration);
       try {
         await this.cleanup(journal);
       } catch (error) {

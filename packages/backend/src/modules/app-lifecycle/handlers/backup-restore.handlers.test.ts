@@ -1,3 +1,12 @@
+import { AppJobService } from '../services/app-job.service';
+const jobService = () => {
+  const jobs = mock<AppJobService>();
+  jobs.withCurrent.mockImplementation(async (_event, apply) => {
+    await apply();
+    return true;
+  });
+  return jobs;
+};
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { AppFilesManager } from '@/modules/apps/app-files-manager';
 import { AppsRepository } from '@/modules/apps/apps.repository';
@@ -40,13 +49,19 @@ describe('BackupAppHandler', () => {
   it('publishes a backup job and restores the previous stopped status on success', async () => {
     appRepository.getAppByUrn.mockResolvedValue(fromPartial({ id: 12, status: 'stopped', config: { foo: 'bar' } }));
 
-    const handler = new BackupAppHandler(appRepository, appEventsQueue, statusManager, startAppHandler, config);
+    const handler = new BackupAppHandler(appRepository, appEventsQueue, statusManager, startAppHandler, config, jobService());
     const result = await handler.execute(appUrn);
     await flushPromises();
 
     expect(result.requestId).toEqual(expect.any(String));
     expect(statusManager.transitionTo).toHaveBeenCalledWith(12, appUrn, 'backing_up');
-    expect(appEventsQueue.publish).toHaveBeenCalledWith({ appUrn, command: 'backup', requestId: result.requestId, form: { foo: 'bar' } });
+    expect(appEventsQueue.publish).toHaveBeenCalledWith({
+      appUrn,
+      command: 'backup',
+      requestId: result.requestId,
+      form: { foo: 'bar' },
+      jobVersion: 1,
+    });
     expect(statusManager.emitSuccess).toHaveBeenCalledWith({
       appId: 12,
       appUrn,
@@ -58,7 +73,7 @@ describe('BackupAppHandler', () => {
   it('restarts the app after backing up an app that was running', async () => {
     appRepository.getAppByUrn.mockResolvedValue(fromPartial({ id: 13, status: 'running', config: {} }));
 
-    const handler = new BackupAppHandler(appRepository, appEventsQueue, statusManager, startAppHandler, config);
+    const handler = new BackupAppHandler(appRepository, appEventsQueue, statusManager, startAppHandler, config, jobService());
     await handler.execute(appUrn);
     await flushPromises();
 

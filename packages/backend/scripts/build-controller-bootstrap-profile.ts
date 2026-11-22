@@ -5,7 +5,7 @@ import { assertNoPrivateBuildPaths } from './production-artifact-privacy';
 
 if (Bun.version !== '1.3.0') throw new Error('Build the host probe with pinned Bun 1.3.0.');
 const require = createRequire(import.meta.url);
-const versions = { yaml: '2.8.2', dotenv: '17.2.3', validator: '13.15.20' };
+const versions = { yaml: '2.9.1', dotenv: '17.2.3', validator: '13.15.35' };
 const licenses: string[] = [];
 for (const [name, version] of Object.entries(versions)) {
   const metadata = require.resolve(`${name}/package.json`);

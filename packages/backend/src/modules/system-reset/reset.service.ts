@@ -1,7 +1,8 @@
+import { credentialWriters } from '../sentinel-recovery/writer-gate';
 import { coreCaptureRecoveryRequired } from '@/common/backup-maintenance';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import os from 'node:os';
-import { BadRequestException, ConflictException, Inject, Injectable, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, Optional, ServiceUnavailableException } from '@nestjs/common';
 import type { Request } from 'express';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { DATABASE, type Database } from '@/core/database/database.module';
@@ -29,6 +30,8 @@ import { SettingsBackupsService } from '../system-backups/settings-backups.servi
 import { ResetState, type ResetAccounts, type ResetJournal } from './reset-state';
 import { resetSensitiveActionBinding } from './reset-contract';
 import type { LegacyResetJournal } from './reset-contract';
+import { CredentialSynchronization } from '../sentinel-recovery/credential-synchronization.service';
+import type { OwnershipWriteLease } from '../sentinel-recovery/ownership-authority';
 
 const invalid = () => new BadRequestException('Confirm resetting Orbis and choose whether to keep accounts.');
 export function resetChoice(value: unknown): ResetAccounts {
@@ -59,6 +62,7 @@ export class ResetService {
     private readonly backups: SystemBackupsService,
     private readonly bundles: SettingsBackupsService,
     @Optional() store?: ResetState,
+    @Optional() private readonly ownership?: CredentialSynchronization,
   ) {
     this.store = store ?? new ResetState(config.get('directories').dataDir);
   }
@@ -118,20 +122,39 @@ export class ResetService {
     this.busy = true;
     let release: (() => void) | undefined;
     let lease: (() => Promise<void>) | undefined;
+    let ownership: OwnershipWriteLease | undefined;
+    const journalId = pending?.id ?? randomUUID();
     try {
       if (accounts === 'remove') {
+        // Root's durable hold spans reconciliation outside this process gate;
+        // reconciliation owns a separate backup-mutation scope and can wait
+        // for earlier custody work that itself needs credentialWriters.
+        await credentialWriters.run(async () => {
+          if (!sameActor(before, await this.auth.operatorActionContext(request)))
+            throw new ConflictException('Your sign-in changed. Confirm this reset again.');
+          if (!this.ownership) throw new ServiceUnavailableException('Account ownership could not be verified. Check recovery before trying again.');
+          ownership = await this.ownership.beginOwnership('account-removal', {
+            requestId: createHash('sha256').update(`orbis-main-account-removal-v1:${journalId}`).digest('hex'),
+            replay: Boolean(pending),
+          });
+          // Reconciliation can itself mutate ownership. Root's hold must precede
+          // it, not just the later SQL deletion. A retry retains earlier writes.
+          if (pending) await ownership.verifyCurrent();
+          else await ownership.beforeWrite();
+        });
         await this.bundles.reconcileResetOwnership(before.userId, request);
         await this.machine.reconcileResetOwnership(before.userId, request);
       }
       release = await acquireBackupMaintenance(AbortSignal.timeout(30_000));
       if (!eligible((await readOperationStatus()).state) || !sameActor(before, await this.auth.operatorActionContext(request)))
         throw new ConflictException('Server state changed. Confirm this reset again.');
+      if (ownership) await ownership.verifyCurrent();
       lease = await this.store.acquireLease();
       const users = (await this.db.select({ id: user.id }).from(user)).map((account) => account.id);
       if (!users.includes(before.userId)) throw new ConflictException('Your account changed. Confirm this reset again.');
       const journal: LegacyResetJournal = pending
         ? { ...pending, controller: os.hostname(), phase: 'prepared' }
-        : { version: 1, id: randomUUID(), controller: os.hostname(), accounts, users, phase: 'prepared', createdAt: Date.now() };
+        : { version: 1, id: journalId, controller: os.hostname(), accounts, users, phase: 'prepared', createdAt: Date.now() };
       if (pending && users.some((id) => !pending.users.includes(id)))
         throw new ConflictException('Accounts changed since this reset. Local recovery review is required.');
       await this.store.preflight(journal);
@@ -156,7 +179,7 @@ export class ResetService {
         start: () => {
           if (started) return;
           started = true;
-          void this.run(journal).finally(async () => {
+          void this.run(journal, ownership).finally(async () => {
             try {
               await unlockLease();
             } catch {
@@ -170,6 +193,10 @@ export class ResetService {
         },
       };
     } catch (error) {
+      if (ownership) {
+        if (ownership.outcome.writes === 'not-started') await ownership.cancelUnwritten().catch(() => false);
+        else setResetRecoveryRequired(true);
+      }
       this.busy = false;
       throw error;
     } finally {
@@ -237,56 +264,66 @@ export class ResetService {
     await this.bundles.completeResetOwnership(journal, verifyReceipt);
     await this.machine.completeResetOwnership(journal, verifyReceipt);
   }
-  private async run(journal: LegacyResetJournal) {
-    try {
-      // The durable intent is replayable; app rows, app-store rows and deployment configuration never enter this transaction.
-      await this.automatic.resetOrbisPreferences();
-      const { version: _version, revision: _revision, ...defaults } = defaultTimeMachinePreferences();
-      await this.machine.updatePreferences({ ...defaults, expectedRevision: (await this.machine.preferences()).revision });
-      await this.cluster.transaction(async (state) => {
-        delete state.invite;
-        await this.sync.transaction(state.id, (sync) => {
-          sync.revision++;
-          sync.receiving = { revision: sync.receiving.revision + 1, userId: null, categories: [], trustRevision: null };
-          sync.plans = [];
-          sync.receipts = {};
+  private async run(journal: LegacyResetJournal, ownership?: OwnershipWriteLease) {
+    return credentialWriters.run(async () => {
+      try {
+        if (journal.accounts === 'remove') {
+          if (!ownership) throw new ServiceUnavailableException('Reset ownership requires recovery review.');
+          await ownership.verifyCurrent();
+        }
+        // The durable intent is replayable; app rows, app-store rows and deployment configuration never enter this transaction.
+        await this.automatic.resetOrbisPreferences();
+        const { version: _version, revision: _revision, ...defaults } = defaultTimeMachinePreferences();
+        await this.machine.updatePreferences({ ...defaults, expectedRevision: (await this.machine.preferences()).revision });
+        await this.cluster.transaction(async (state) => {
+          delete state.invite;
+          await this.sync.transaction(state.id, (sync) => {
+            sync.revision++;
+            sync.receiving = { revision: sync.receiving.revision + 1, userId: null, categories: [], trustRevision: null };
+            sync.plans = [];
+            sync.receipts = {};
+          });
         });
-      });
-      await this.config.setUserSettings({
-        advancedSettings: false,
-        allowAutoThemes: true,
-        allowErrorMonitoring: false,
-        guestDashboard: false,
-        themeBase: 'light',
-        themeColor: 'blue',
-      });
-      await this.store.save({ ...journal, phase: 'preferences' });
-      await this.store.erasePreferences(journal);
-      if (journal.accounts === 'remove') {
-        for (const id of journal.users) await this.sessions.destroyAllSessionsByUserId(id);
-        await this.keys.change((state) => {
-          for (const id of journal.users) delete state.users[id];
+        await this.config.setUserSettings({
+          advancedSettings: false,
+          allowAutoThemes: true,
+          allowErrorMonitoring: false,
+          guestDashboard: false,
+          themeBase: 'light',
+          themeColor: 'blue',
         });
+        await this.store.save({ ...journal, phase: 'preferences' });
+        await this.store.erasePreferences(journal);
+        if (journal.accounts === 'remove') {
+          for (const id of journal.users) await this.sessions.destroyAllSessionsByUserId(id);
+          await this.keys.change((state) => {
+            for (const id of journal.users) delete state.users[id];
+          });
+        }
+        await this.store.save({ ...journal, phase: 'accounts' });
+        await this.db.transaction(async (tx) => {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(7301001)`);
+          await tx.delete(link).where(inArray(link.userId, journal.users));
+          if (journal.accounts === 'remove') await tx.delete(user).where(inArray(user.id, journal.users));
+          else await tx.update(user).set({ hasSeenWelcome: false, locale: 'en' }).where(inArray(user.id, journal.users));
+          await tx
+            .insert(orbisResetReceipt)
+            .values({ id: journal.id, completedAt: Math.floor(Date.now() / 1000) })
+            .onConflictDoNothing();
+        });
+        const complete = { ...journal, phase: 'complete' as const };
+        await this.store.save(complete);
+        await this.completeBackupOwnership(complete);
+        if (journal.accounts === 'remove') {
+          if (!ownership) throw new ServiceUnavailableException('Reset ownership requires recovery review.');
+          await ownership.finishCommitted();
+        }
+        setResetRecoveryRequired(false);
+      } catch {
+        // Keep the operation authoritative after a partial write. An ordinary reload cannot dismiss it.
+        await this.store.save({ ...journal, phase: 'recovery' }).catch(() => undefined);
+        setResetRecoveryRequired(true);
       }
-      await this.store.save({ ...journal, phase: 'accounts' });
-      await this.db.transaction(async (tx) => {
-        await tx.execute(sql`SELECT pg_advisory_xact_lock(7301001)`);
-        await tx.delete(link).where(inArray(link.userId, journal.users));
-        if (journal.accounts === 'remove') await tx.delete(user).where(inArray(user.id, journal.users));
-        else await tx.update(user).set({ hasSeenWelcome: false, locale: 'en' }).where(inArray(user.id, journal.users));
-        await tx
-          .insert(orbisResetReceipt)
-          .values({ id: journal.id, completedAt: Math.floor(Date.now() / 1000) })
-          .onConflictDoNothing();
-      });
-      const complete = { ...journal, phase: 'complete' as const };
-      await this.store.save(complete);
-      await this.completeBackupOwnership(complete);
-      setResetRecoveryRequired(false);
-    } catch {
-      // Keep the operation authoritative after a partial write. An ordinary reload cannot dismiss it.
-      await this.store.save({ ...journal, phase: 'recovery' }).catch(() => undefined);
-      setResetRecoveryRequired(true);
-    }
+    });
   }
 }

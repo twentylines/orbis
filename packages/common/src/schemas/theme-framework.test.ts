@@ -2,6 +2,8 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { type } from 'arktype';
+import { desktopAppearanceSchema, normaliseDesktopAppearance } from './desktop-appearance.js';
+import { resolveInterfaceThemeSettings } from './interface-theme-resolution.js';
 import { adaptLegacyThemeFramework } from './theme-framework-adapter.js';
 import {
   dismissThemeFrameworkUiNotice,
@@ -33,8 +35,8 @@ import {
   type FrameworkProjectionHost,
 } from './theme-framework-resolution.js';
 import { themePackManifestSchema } from './theme-pack.js';
-import type { InterfaceThemeSettingsState } from './interface-theme.js';
-import { builtinInterfaceTheme, legacyThemeIdentities, legacyThemeVersions } from './interface-theme-registry.js';
+import { interfaceThemeSettingsEntryAllows, type InterfaceThemeSettingsState } from './interface-theme.js';
+import { builtinInterfaceTheme, legacyThemeDescriptor, legacyThemeIdentities, legacyThemeVersions } from './interface-theme-registry.js';
 
 // Contract data only: no distributable package, bundled theme or runtime renderer.
 function document(): ThemeFrameworkDocument {
@@ -463,6 +465,99 @@ describe('silent and gesture-aware sounds', () => {
 });
 
 describe('lossless host legacy adapter', () => {
+  test('desktop and registered theme materials agree on whole opacity percentages and retain zero and null', () => {
+    const descriptors = [builtinInterfaceTheme, legacyThemeDescriptor('alpine', '1.0.0')!];
+    for (const opacity of [null, 0, 37, 100]) {
+      const material = { surfaceOpacity: opacity, chromeOpacity: opacity };
+      expect(desktopAppearanceSchema.allows(material)).toBe(true);
+      expect(normaliseDesktopAppearance(JSON.parse(JSON.stringify(material)))).toMatchObject(material);
+      for (const descriptor of descriptors) {
+        expect(
+          interfaceThemeSettingsEntryAllows(descriptor, {
+            id: descriptor.id,
+            settingsVersion: descriptor.settingsVersion,
+            values: [
+              { key: 'panel-opacity', value: opacity },
+              { key: 'chrome-opacity', value: opacity },
+            ],
+          }),
+        ).toBe(true);
+      }
+    }
+    for (const opacity of [-1, 101, 0.5, '37']) {
+      for (const [appearanceKey, themeKey] of [
+        ['surfaceOpacity', 'panel-opacity'],
+        ['chromeOpacity', 'chrome-opacity'],
+      ] as const) {
+        expect(desktopAppearanceSchema.allows({ [appearanceKey]: opacity })).toBe(false);
+        for (const descriptor of descriptors) {
+          expect(
+            interfaceThemeSettingsEntryAllows(descriptor, {
+              id: descriptor.id,
+              settingsVersion: descriptor.settingsVersion,
+              values: [{ key: themeKey, value: opacity }],
+            }),
+          ).toBe(false);
+        }
+      }
+    }
+  });
+
+  test('legacy material controls infer Custom once and explicit Default keeps the saved overrides inactive', () => {
+    for (const transparency of ['system', 'glass', 'solid'] as const) {
+      const legacy = { transparency, surfaceOpacity: 0, chromeBlur: 24, themeColour: '#a41645' };
+      expect(normaliseDesktopAppearance(legacy)).toMatchObject({ ...legacy, materialMode: 'custom' });
+      const saved = { ...legacy, materialMode: 'default' as const };
+      expect(normaliseDesktopAppearance(JSON.parse(JSON.stringify(saved)))).toMatchObject(saved);
+    }
+    expect(normaliseDesktopAppearance({ themeColour: '#f2b03f' })).toMatchObject({ themeColour: '#f2b03f', materialMode: 'default' });
+    expect(normaliseDesktopAppearance({ glassTint: 0 }).materialMode).toBe('custom');
+    expect(normaliseDesktopAppearance()).toMatchObject({
+      materialMode: 'default',
+      themeColour: null,
+      accent: null,
+      wallpaperColours: false,
+      wallpaperUnsplash: null,
+      transparency: 'system',
+    });
+    for (const value of [{ themeColour: 'red' }, { themeColour: '#fff' }, { materialMode: 'automatic' }])
+      expect(desktopAppearanceSchema.allows(value)).toBe(false);
+  });
+
+  test('accepts an opaque online wallpaper identifier and rejects paths, URLs and overflow', () => {
+    const valid = { wallpaperUnsplash: 'image_ab-42' };
+    expect(normaliseDesktopAppearance(valid)).toMatchObject(valid);
+    for (const wallpaperUnsplash of ['../capture', 'https://example.invalid/picture', 'a'.repeat(49), '', 42])
+      expect(desktopAppearanceSchema.allows({ wallpaperUnsplash })).toBe(false);
+  });
+
+  test('resolves legacy namespace materials and explicit Default with independent theme and accent colours', () => {
+    const resolve = (values: InterfaceThemeSettingsState['entries'][number]['values']) =>
+      Object.fromEntries(
+        resolveInterfaceThemeSettings(null, {
+          formatVersion: 1,
+          entries: [{ id: builtinInterfaceTheme.id, settingsVersion: builtinInterfaceTheme.settingsVersion, values }],
+        }).values.map(({ key, value }) => [key, value]),
+      );
+    const saved = [
+      { key: 'panel-opacity', value: 0 },
+      { key: 'chrome-opacity', value: 37 },
+      { key: 'theme-colour', value: '#e34b31' },
+      { key: 'accent', value: '#834dd2' },
+      { key: 'palette', value: 'orange' },
+    ];
+    expect(resolve(saved)).toMatchObject({
+      'material-mode': 'custom',
+      'panel-opacity': 0,
+      'chrome-opacity': 37,
+      'theme-colour': '#e34b31',
+      accent: '#834dd2',
+      palette: 'orange',
+    });
+    expect(resolve([...saved, { key: 'material-mode', value: 'default' }])).toMatchObject({ 'material-mode': 'default', 'panel-opacity': 0 });
+    expect(resolve([])).toMatchObject({ 'material-mode': 'default', 'theme-colour': null, accent: null, 'panel-opacity': null });
+  });
+
   test('Default retains exact built-in identity, settings, appearance and all saved namespaces', () => {
     const preferences = {
       palette: 'forest',

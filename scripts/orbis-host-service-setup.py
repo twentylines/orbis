@@ -6,11 +6,11 @@ be in the enrolled, healthy core configuration.
 """
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
 import re
-import shutil
 import socket
 import stat
 import struct
@@ -19,6 +19,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from contextlib import ExitStack, contextmanager
 
 
 def load_script(name: str, module_name: str):
@@ -41,6 +42,17 @@ SCRIPTS = (
     "orbis-host-identity.py",
     "orbis-host-retained-authority.py",
     "orbis-host-layout.py",
+    "orbis-host-credential-fence.py",
+    "orbis-host-credential-peer.py",
+    "orbis-host-app-storage.py",
+    "orbis-host-credential-service.py",
+    "orbis-host-ownership-authority.py",
+    "orbis-host-ownership-bootstrap.py",
+    "orbis-host-existing-ownership.py",
+    "orbis-host-legacy-ownership.py",
+    "orbis-host-fresh-ownership.py",
+    "orbis-host-controller-handoff.py",
+    "orbis-host-recovery-admission.py", "orbis-host-recovery-source.py",
     "orbis-host-capture-authority.py",
     "orbis-host-app-runtime.py",
     "orbis-host-volume-capture.py",
@@ -149,6 +161,46 @@ OBSERVER_DROP_IN_CONTENT = b"[Unit]\nRequires=orbis-host-observer.socket\nAfter=
 SOCKET_FILE = Path("/run/orbis/host.sock")
 
 
+def service_environment(root, context, *, credentials_only=False):
+    if type(credentials_only) is not bool:
+        raise ValueError('Host service role must be explicit')
+    content = (
+        f"ORBIS_SERVICE_SOURCE={systemd_quote(str(INSTALL_DIR / 'orbis-host-service.py'))}\n"
+        f"ORBIS_ROOT={systemd_quote(str(root))}\n"
+        f"ORBIS_DOCKER_CONTEXT={systemd_quote(context)}\n"
+    )
+    if credentials_only:
+        content += 'ORBIS_CREDENTIAL_FLAGS="--credentials-only"\n'
+    return content.encode()
+
+
+def environment_role(body, root, context):
+    for selected in (False, True):
+        if body == service_environment(root, context, credentials_only=selected):
+            return selected
+    raise ValueError('Installed Host environment differs from the exact copy context')
+
+
+def installed_credentials_only(root, context):
+    with HOST.AUTHORITY.protected_directory(ENV_FILE.parent, private=False) as directory:
+        with HOST.AUTHORITY.protected_file(directory, ENV_FILE.name, 16384) as body:
+            return environment_role(body, root, context)
+
+
+def require_role_unit(body, *, credentials_only=False):
+    if type(credentials_only) is not bool:
+        raise ValueError('Host service role must be explicit')
+    if not credentials_only:
+        return
+    expected = ('ExecStart=/usr/bin/python3 ${ORBIS_SERVICE_SOURCE} --root ${ORBIS_ROOT} '
+                '--docker-context ${ORBIS_DOCKER_CONTEXT} --socket /run/orbis/host.sock '
+                '--snapshots /var/lib/orbis/snapshots --state-dir /var/lib/orbis/state $ORBIS_CREDENTIAL_FLAGS')
+    lines = [line.strip() for line in body.decode('utf-8').splitlines()]
+    if ([line for line in lines if line.startswith('ExecStart=')] != [expected]
+            or [line for line in lines if line.startswith('EnvironmentFile=')] != ['EnvironmentFile=/etc/orbis/host-service.env']):
+        raise ValueError('The candidate unit cannot preserve the account security role')
+
+
 def systemd_quote(value: str) -> str:
     if any(character in value for character in "\r\n\0"):
         raise ValueError("systemd environment value contains a control character")
@@ -165,6 +217,294 @@ def source_files(source: Path) -> tuple[list[Path], Path]:
             raise ValueError(f"required source file is missing or is a symlink: {file.name}")
     return files, unit
 
+
+class _SetupSources:
+    """Hold the reviewed copy inputs; this is custody, not publisher authority."""
+
+    def __init__(self, files: list[Path], unit: Path):
+        self.directories = {}
+        self.files = {}
+        self.descriptors = []
+        try:
+            if not 1 <= len(files) <= 128 or len({file.name for file in files}) != len(files) or unit in files:
+                raise ValueError("host service source inventory is invalid")
+            total = 0
+            for path in [*files, unit]:
+                if not path.is_absolute() or ".." in path.parts:
+                    raise ValueError("host service sources must have absolute paths")
+                parent = self._directory(path.parent)
+                before = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+                if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or not 0 <= before.st_size <= 1024 * 1024:
+                    raise ValueError("host service source must be a bounded regular file without links")
+                descriptor = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=parent)
+                self.descriptors.append(descriptor)
+                identity = self._file_identity(os.fstat(descriptor))
+                if identity != self._file_identity(before):
+                    raise ValueError("host service source changed while opening")
+                body = os.pread(descriptor, 1024 * 1024 + 1, 0)
+                if len(body) != before.st_size or self._file_identity(os.fstat(descriptor)) != identity:
+                    raise ValueError("host service source changed while reading")
+                total += len(body)
+                if total > 8 * 1024 * 1024:
+                    raise ValueError("host service source inventory exceeds its limit")
+                self.files[path] = (descriptor, identity, body)
+            self.verify()
+        except BaseException:
+            self.close()
+            raise
+
+    @staticmethod
+    def _directory_identity(details):
+        return details.st_dev, details.st_ino, details.st_mode, details.st_uid, details.st_gid
+
+    @staticmethod
+    def _file_identity(details):
+        return (details.st_dev, details.st_ino, details.st_mode, details.st_uid, details.st_gid,
+                details.st_nlink, details.st_size, details.st_mtime_ns, details.st_ctime_ns)
+
+    def _directory(self, path):
+        if path in self.directories:
+            return self.directories[path][0]
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+        if path == Path(path.anchor):
+            parent, name = None, str(path)
+            descriptor = os.open(name, flags)
+        else:
+            parent, name = self._directory(path.parent), path.name
+            descriptor = os.open(name, flags, dir_fd=parent)
+        self.descriptors.append(descriptor)
+        identity = self._directory_identity(os.fstat(descriptor))
+        named = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        if self._directory_identity(named) != identity:
+            raise ValueError("host service source directory changed while opening")
+        self.directories[path] = (descriptor, parent, name, identity)
+        return descriptor
+
+    def verify(self):
+        for descriptor, parent, name, identity in self.directories.values():
+            if (self._directory_identity(os.fstat(descriptor)) != identity
+                    or self._directory_identity(os.stat(name, dir_fd=parent, follow_symlinks=False)) != identity):
+                raise ValueError("host service source directory changed during staging")
+        for path, (descriptor, identity, body) in self.files.items():
+            parent = self.directories[path.parent][0]
+            if (self._file_identity(os.fstat(descriptor)) != identity
+                    or self._file_identity(os.stat(path.name, dir_fd=parent, follow_symlinks=False)) != identity
+                    or os.pread(descriptor, len(body) + 1, 0) != body):
+                raise ValueError("host service source changed during staging")
+
+    def body(self, path):
+        return self.files[path][2]
+
+    def close(self):
+        while self.descriptors:
+            os.close(self.descriptors.pop())
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        self.close()
+
+
+
+def _hash(body):
+    return hashlib.sha256(body).hexdigest()
+
+
+def _receipt_bytes(value):
+    return (json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n").encode("ascii")
+
+
+@contextmanager
+def hold_source_selection(source, expected):
+    """Hold actual verified extraction custody while copying installer files."""
+    if expected is None:
+        yield None
+        return
+    if type(expected) is not str or not re.fullmatch(r"[a-f0-9]{64}", expected):
+        raise ValueError("Installer source selection is invalid")
+    boot = load_script("install-orbis.py", "orbis_host_source_selection")
+    limits = {boot.SOURCE_LAUNCHER: 1024 * 1024, "release-manifest.json": 16 * 1024,
+              boot.MANIFEST: 64 * 1024, boot.ARCHIVE: 8 * 1024 * 1024}
+    with ExitStack() as pins:
+        root = pins.enter_context(HOST.AUTHORITY.protected_directory(source.parent))
+
+        def read(name, maximum):
+            return pins.enter_context(HOST.AUTHORITY.protected_file(root, name, maximum))
+
+        record = read(boot.SOURCE_SELECTION, 16384)
+        selection = json.loads(record)
+        if (_hash(record) != expected or not isinstance(selection, dict)
+                or selection.get("schema") != "orbis.installer-source-selection.v1"
+                or selection.get("mode") not in ("release", "modular") or selection.get("channel") not in ("stable", "nightly")
+                or type(selection.get("proofs")) is not dict or set(selection["proofs"]) != set(limits)):
+            raise ValueError("Installer selection changed before copying")
+        execution = read(boot.SOURCE_EXECUTION, 4096)
+        proof_bytes = {name: read(name, maximum) for name, maximum in limits.items()}
+        observed = {name: {"bytes": len(body), "sha256": _hash(body)} for name, body in proof_bytes.items()}
+        if observed != selection["proofs"] or json.loads(execution) != {
+                "schema": "orbis.installer-source-execution.v1", "selectionSha256": expected,
+                "launcherSha256": observed[boot.SOURCE_LAUNCHER]["sha256"], "channel": selection["channel"]}:
+            raise ValueError("Installer execution receipt differs from the exact selection")
+        identity = selection["installer"]
+        if selection["mode"] == "release":
+            manifest = boot.verify_manifest(proof_bytes[boot.MANIFEST], identity)
+            if _hash(proof_bytes["release-manifest.json"]) != manifest["releaseManifestSha256"]:
+                raise ValueError("Core manifest differs from the release-bound selection")
+        else:
+            manifest = boot.verify_installer_manifest(proof_bytes[boot.MANIFEST], identity)
+        files = boot.verify_files(proof_bytes[boot.ARCHIVE], manifest)
+        if proof_bytes[boot.SOURCE_LAUNCHER] != boot._render_installer(
+                selection["mode"], identity, files["scripts/install-orbis.py"]):
+            raise ValueError("Installer launcher differs from the verified template")
+        yield {"directory": str(source.parent), "selectionSha256": expected,
+               "executionSha256": _hash(execution), "mode": selection["mode"],
+               "installer": identity, "coreSha256": observed["release-manifest.json"]["sha256"],
+               "inventory": manifest["files"]}
+
+
+def require_selection_files(source, selection, inputs, files):
+    if selection is None:
+        return
+    for path in files:
+        record = selection["inventory"].get(path.relative_to(source.parent).as_posix())
+        body = inputs.body(path)
+        if record != {"size": len(body), "sha256": _hash(body)}:
+            raise ValueError("Host copy input differs from verified installer membership")
+
+
+def _copy_binding(info):
+    return [info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode]
+
+
+def _copy_file(pins, folder, name, maximum, **options):
+    def observe():
+        info = os.stat(name, dir_fd=folder, follow_symlinks=False)
+        return [*_copy_binding(info), info.st_nlink, info.st_size, info.st_mtime_ns, info.st_ctime_ns]
+
+    def recheck():
+        if observe() != binding:
+            raise ValueError("Installed Host copy file was replaced while held")
+
+    binding = observe()
+    body = pins.enter_context(HOST.AUTHORITY.protected_file(folder, name, maximum, **options))
+    recheck()
+    pins.callback(recheck)
+    return body, binding
+
+
+def _copy_snapshot(pins, directory, unit):
+    source = pins.enter_context(HOST.AUTHORITY.protected_directory(directory))
+    names = sorted(os.listdir(source))
+    if not 1 <= len(names) <= 128 or any(not re.fullmatch(r"(?:[a-z-]+\.py|orbis-[a-z-]+\.mjs)", name)
+                                            for name in names):
+        raise ValueError("Host copy has an unexpected inventory")
+    inventory, files = {}, {}
+    for name in names:
+        digest, files[name] = _copy_file(pins, source, name, 1024 * 1024, digest_only=True)
+        inventory[name] = digest.removeprefix("sha256:")
+
+    def recheck_inventory():
+        if sorted(os.listdir(source)) != names:
+            raise ValueError("Host copy inventory changed while held")
+
+    recheck_inventory()
+    pins.callback(recheck_inventory)
+    folder = pins.enter_context(HOST.AUTHORITY.protected_directory(unit.parent, private=False))
+    body, unit_binding = _copy_file(pins, folder, unit.name, 32768, private=False)
+    return ({"inventory": inventory, "unitSha256": _hash(body)},
+            {"fileIdentities": files, "sourceDirectory": _copy_binding(os.fstat(source)), "unit": unit_binding})
+
+
+def actual_copy(directory, unit):
+    """Capture private current helper source bytes independently of an installer."""
+    with ExitStack() as pins:
+        copied, _ = _copy_snapshot(pins, directory, unit)
+        return copied
+
+
+def record_source_copy(root, context, selection, expected):
+    if selection is None:
+        return None
+    with ExitStack() as pins:
+        receipt = _source_copy_receipt(pins, root, context, selection, expected)
+        return _write_custody_receipt(selection, "host-copy-", receipt)
+
+
+def _source_copy_receipt(pins, root, context, selection, expected):
+    actual, bindings = _copy_snapshot(pins, INSTALL_DIR, UNIT_FILE)
+    if actual != expected:
+        raise ValueError("Actual installed Host copy differs from the verified candidate")
+    config = pins.enter_context(HOST.AUTHORITY.protected_directory(ENV_FILE.parent, private=False))
+    environment, bindings["environment"] = _copy_file(pins, config, ENV_FILE.name, 16384)
+    environment_role(environment, root, context)
+    return _receipt_bytes({"schema": "orbis.host-copy-custody.v1", "root": str(root),
+        "context": context, "selection": {key: value for key, value in selection.items() if key != "inventory"},
+        "installed": {**actual, "environmentSha256": _hash(environment)}, "bindings": bindings})
+
+
+def record_source_copy_transition(root, context, custody, *, outcome, copy_receipt=None):
+    if custody is None:
+        return None
+    if (outcome not in ("candidate-active", "prior-restored")
+            or (outcome == "candidate-active" and not re.fullmatch(r"[a-f0-9]{64}", copy_receipt or ""))
+            or (outcome == "prior-restored" and copy_receipt is not None)):
+        raise ValueError("Host copy transition has an invalid outcome")
+    receipt = _receipt_bytes({"schema": "orbis.host-copy-transition.v1", "root": str(root),
+        "context": context, "outcome": outcome, "hostCopyCustodySha256": copy_receipt, "sources": custody})
+    return _write_custody_receipt(custody["selection"], "host-copy-transition-", receipt)
+
+
+def _write_custody_receipt(selection, prefix, receipt):
+    digest = _hash(receipt)
+    name = prefix + digest + ".json"
+    pending = "." + name + ".pending"
+    with HOST.AUTHORITY.protected_directory(Path(selection["directory"])) as extraction:
+        folder = os.open("host-copy-custody", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                         dir_fd=extraction)
+        try:
+            info = os.fstat(folder)
+            if info.st_uid != HOST.AUTHORITY.OWNER or stat.S_IMODE(info.st_mode) != 0o700:
+                raise ValueError("Host copy custody directory is unsafe")
+            _publish_custody_receipt(folder, name, pending, receipt)
+            observed = os.stat("host-copy-custody", dir_fd=extraction, follow_symlinks=False)
+            if _SetupSources._directory_identity(observed) != _SetupSources._directory_identity(info):
+                raise ValueError("Host copy custody directory changed")
+        finally:
+            os.close(folder)
+    return digest
+
+
+def _publish_custody_receipt(folder, name, pending, receipt):
+    try:
+        os.stat(name, dir_fd=folder, follow_symlinks=False)
+    except FileNotFoundError:
+        flags = os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+        try:
+            fd = os.open(pending, flags | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=folder)
+        except FileExistsError:
+            fd = os.open(pending, flags, dir_fd=folder)
+        else:
+            os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "r+b") as output:
+            before = os.fstat(output.fileno())
+            existing = output.read(len(receipt) + 1)
+            if (not stat.S_ISREG(before.st_mode) or before.st_uid != HOST.AUTHORITY.OWNER
+                    or before.st_nlink != 1 or stat.S_IMODE(before.st_mode) != 0o600
+                    or before.st_size != len(existing) or not receipt.startswith(existing)
+                    or HOST.AUTHORITY.seal(before) != HOST.AUTHORITY.seal(os.fstat(output.fileno()))):
+                raise ValueError("Pending Host copy custody differs; preserve for review")
+            output.write(receipt[len(existing):])
+            output.flush()
+            os.fsync(output.fileno())
+            if HOST.AUTHORITY.seal(os.fstat(output.fileno())) != HOST.AUTHORITY.seal(
+                    os.stat(pending, dir_fd=folder, follow_symlinks=False)):
+                raise ValueError("Pending Host copy custody changed; preserve for review")
+            os.replace(pending, name, src_dir_fd=folder, dst_dir_fd=folder)
+    with HOST.AUTHORITY.protected_file(folder, name, 64 * 1024) as current:
+        if current != receipt:
+            raise ValueError("Existing Host copy custody differs; preserve for review")
+    os.fsync(folder)
 
 def validate_socket_mount(config: dict) -> None:
     services = config.get("services")
@@ -278,9 +618,31 @@ def install(root: Path, context: str, source: Path, confirmation: str | None) ->
         return install_locked(root, context, source)
 
 
-def _stage_service_files(root: Path, context: str, source: Path, *, resume: bool = False) -> None:
+def _stage_service_files(root: Path, context: str, source: Path, *, resume: bool = False,
+                         expected_sources: dict[str, str] | None = None, source_custody=None, credentials_only=False):
     """Copy exact root-owned files; callers separately establish their authority."""
+    if type(credentials_only) is not bool:
+        raise ValueError('Host service role must be explicit')
     files, unit = source_files(source)
+    checked_files = files if expected_sources is None and source_custody is None else [
+        *files, source / "orbis-host-service-setup.py", source / "orbis-host-service-enable.py"]
+    with hold_source_selection(source, source_custody) as selection, _SetupSources(checked_files, unit) as inputs:
+        require_role_unit(inputs.body(unit), credentials_only=credentials_only)
+        if expected_sources is not None:
+            actual = {str(path.relative_to(source.parent)): _hash(inputs.body(path)) for path in [*checked_files, unit]}
+            if actual != expected_sources:
+                raise ValueError("host service sources differ from the reviewed setup journal")
+        require_selection_files(source, selection, inputs, [*checked_files, unit])
+        copied = {"inventory": {path.name: _hash(inputs.body(path)) for path in files},
+                  "unitSha256": _hash(inputs.body(unit))}
+        role = {'credentials_only': True} if credentials_only else {}
+        _stage_source_snapshot(root, context, files, unit, inputs, resume=resume, **role)
+        inputs.verify()
+        return record_source_copy(root, context, selection, copied)
+
+
+def _stage_source_snapshot(root: Path, context: str, files: list[Path], unit: Path, inputs: _SetupSources, *, resume: bool,
+                           credentials_only=False) -> None:
     for directory in (INSTALL_DIR.parent, ENV_FILE.parent, UNIT_FILE.parent):
         if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
             raise ValueError(f"setup directory is unsafe: {directory}")
@@ -295,32 +657,30 @@ def _stage_service_files(root: Path, context: str, source: Path, *, resume: bool
         if details.st_uid != 0 or stat.S_IMODE(details.st_mode) != 0o700:
             raise ValueError("the partial host service directory is not private and root-owned")
         for file in files:
-            _require_staged_file(INSTALL_DIR / file.name, file.read_bytes(), 0o600)
+            _require_staged_file(INSTALL_DIR / file.name, inputs.body(file), 0o600)
     else:
         staged = Path(tempfile.mkdtemp(prefix=".host-service-", dir=INSTALL_DIR.parent))
         os.chmod(staged, 0o700)
         for file in files:
-            shutil.copyfile(file, staged / file.name)
-            os.chmod(staged / file.name, 0o600)
-            with (staged / file.name).open("rb") as copied:
+            with (staged / file.name).open("xb") as copied:
+                os.fchmod(copied.fileno(), 0o600)
+                copied.write(inputs.body(file))
+                copied.flush()
                 os.fsync(copied.fileno())
         directory = os.open(staged, os.O_RDONLY)
         try:
             os.fsync(directory)
         finally:
             os.close(directory)
+        inputs.verify()
         os.replace(staged, INSTALL_DIR)
         directory = os.open(INSTALL_DIR.parent, os.O_RDONLY)
         try:
             os.fsync(directory)
         finally:
             os.close(directory)
-    environment = (
-        f"ORBIS_SERVICE_SOURCE={systemd_quote(str(INSTALL_DIR / 'orbis-host-service.py'))}\n"
-        f"ORBIS_ROOT={systemd_quote(str(root))}\n"
-        f"ORBIS_DOCKER_CONTEXT={systemd_quote(context)}\n"
-    ).encode()
-    for target, expected, mode in ((ENV_FILE, environment, 0o600), (UNIT_FILE, unit.read_bytes(), 0o644)):
+    environment = service_environment(root, context, credentials_only=credentials_only)
+    for target, expected, mode in ((ENV_FILE, environment, 0o600), (UNIT_FILE, inputs.body(unit), 0o644)):
         if target.exists() or target.is_symlink():
             if not resume:
                 raise ValueError("a host service configuration already exists")
@@ -338,9 +698,11 @@ def _stage_service_files(root: Path, context: str, source: Path, *, resume: bool
             os.fsync(directory)
         finally:
             os.close(directory)
+    inputs.verify()
     result = subprocess.run(["/usr/bin/systemd-analyze", "verify", str(UNIT_FILE)], capture_output=True, check=False)
     if result.returncode:
         raise RuntimeError("systemd rejected the Orbis host service unit")
+    inputs.verify()
 
 
 def _require_staged_file(target: Path, expected: bytes, mode: int) -> None:
@@ -355,7 +717,7 @@ def _start_service() -> None:
     run_systemctl("enable", "--now", "orbis-host.service")
 
 
-def _systemd_main_pid(root: Path, context: str) -> int:
+def _systemd_main_pid(root: Path, context: str, *, credentials_only=False) -> int:
     properties = ("ActiveState", "SubState", "MainPID", "FragmentPath", "DropInPaths", "User", "NeedDaemonReload")
     result = subprocess.run(["/usr/bin/systemctl", "show", "orbis-host.service", *["--property=" + key for key in properties]], capture_output=True, text=True, check=False)
     values = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
@@ -374,34 +736,45 @@ def _systemd_main_pid(root: Path, context: str) -> int:
     pid = int(values["MainPID"])
     expected = ["/usr/bin/python3", str(INSTALL_DIR / "orbis-host-service.py"), "--root", str(root),
                 "--docker-context", context, "--socket", str(SOCKET_FILE), "--snapshots", "/var/lib/orbis/snapshots", "--state-dir", "/var/lib/orbis/state"]
+    if credentials_only:
+        expected.append('--credentials-only')
     process = Path("/proc") / str(pid)
     if pid <= 1 or process.stat().st_uid != 0 or (process / "cmdline").read_bytes() != b"\0".join(item.encode() for item in expected) + b"\0":
         raise ValueError("the systemd host service process does not match the installed helper")
     return pid
 
 
-def authenticated_socket_status(root: Path, context: str) -> dict:
+def authenticated_socket_status(root: Path, context: str, *, credentials_only=False) -> dict:
     details = SOCKET_FILE.lstat()
     parent = SOCKET_FILE.parent.lstat()
     if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or stat.S_IMODE(parent.st_mode) != 0o700
             or not stat.S_ISSOCK(details.st_mode) or details.st_uid != 0 or stat.S_IMODE(details.st_mode) != 0o600):
         raise ValueError("the host service socket is not private and root-owned")
-    pid = _systemd_main_pid(root, context)
+    role = {'credentials_only': True} if credentials_only else {}
+    pid = _systemd_main_pid(root, context, **role)
     status = read_socket_status(expected_pid=pid)
-    if _systemd_main_pid(root, context) != pid:
+    if _systemd_main_pid(root, context, **role) != pid:
         raise ValueError("the host service process changed during authentication")
+    if credentials_only and (status.get('serviceRole') != 'credentials-only' or type(status.get('credentialProtocol')) is not int
+                             or status.get('credentialProtocol') != 1
+                             or status.get('capabilities') != []):
+        raise ValueError('The authenticated account security listener has a different role')
     return status
 
 
-def _verify_service(root: Path, context: str, ready: dict) -> dict:
+def _verify_service(root: Path, context: str, ready: dict, *, credentials_only=False) -> dict:
     deadline = time.monotonic() + 12
     while time.monotonic() < deadline:
         try:
-            status = authenticated_socket_status(root, context)
+            role = {'credentials_only': True} if credentials_only else {}
+            status = authenticated_socket_status(root, context, **role)
             inside = HOST.docker(context, ["exec", "runtipi", "curl", "-fsS", "--unix-socket", str(SOCKET_FILE), "http://localhost/v1/status"], root)
             if (status.get("enrolled") and status.get("coreHealth") == "healthy" and status.get("imageMatches")
                     and status.get("currentDigest") == ready["digest"] and inside.returncode == 0
-                    and json.loads(inside.stdout).get("currentDigest") == ready["digest"]):
+                    and json.loads(inside.stdout).get("currentDigest") == ready["digest"]
+                    and (not credentials_only or (json.loads(inside.stdout).get('serviceRole') == 'credentials-only'
+                                                  and type(json.loads(inside.stdout).get('credentialProtocol')) is int
+                                                  and json.loads(inside.stdout).get('credentialProtocol') == 1))):
                 return {**ready, "service": "active", "socket": str(SOCKET_FILE)}
         except (OSError, ValueError, json.JSONDecodeError):
             pass

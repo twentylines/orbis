@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigurationService } from '../config/configuration.service';
 
 @Injectable()
@@ -8,7 +8,7 @@ export class EncryptionService {
   algorithm = 'aes-256-gcm' as const;
   keyLength = 32;
 
-  constructor(private readonly config: ConfigurationService) {}
+  constructor(@Inject(ConfigurationService) private readonly config: { get(key: 'jwtSecret'): string }) {}
 
   /**
    * Given a string, encrypts it using the provided salt

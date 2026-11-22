@@ -102,6 +102,7 @@ export const AppBackups = ({ info, status }: Props) => {
 
   const disableActions =
     status === 'missing' ||
+    status === 'updating' ||
     status === 'backing_up' ||
     status === 'restoring' ||
     backupApp.isPending ||

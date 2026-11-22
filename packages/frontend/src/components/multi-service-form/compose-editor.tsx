@@ -13,13 +13,14 @@ import { deepClean } from '@/utils/objects';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs/tabs';
 import betterAjvErrors from 'better-ajv-errors';
 import Ajv from 'ajv/dist/2020';
+import { portableJsonSchema } from '@runtipi/common/schemas/portable-json-schema';
 
 type Props = {
   onChange: (value: string, format: 'yaml' | 'json', error?: string) => void;
   initialFormat?: 'yaml' | 'json';
 };
 
-const jsonSchema = dynamicComposeSchemaArk.omit('schemaVersion').toJsonSchema({ fallback: { default: (ctx) => ctx.base } });
+const jsonSchema = portableJsonSchema(dynamicComposeSchemaArk.omit('schemaVersion').toJsonSchema({ fallback: { default: (ctx) => ctx.base } }));
 const ajv = new Ajv({ allErrors: true });
 ajv.addKeyword('message');
 const validateJson = ajv.compile(jsonSchema);

@@ -666,10 +666,16 @@ def pending_transaction(root):
     return None if journal.get('phase') in {'complete','rolled-back','cancelled'} else (directory,journal)
 
 
+def host_authority():
+    spec=importlib.util.spec_from_file_location('orbis_host_for_prerequisites',Path(__file__).with_name('orbis-host.py'))
+    authority=importlib.util.module_from_spec(spec);spec.loader.exec_module(authority)
+    return authority
+
+
 @contextlib.contextmanager
 def host_barrier(root):
-    configuration=Path('/etc/orbis/host-service.env');state=Path('/var/lib/orbis/state');descriptor=None;owned=False
-    if not configuration.exists():
+    configuration=Path('/etc/orbis/host-service.env');state=Path('/var/lib/orbis/state');owned=False
+    if not configuration.exists() and not configuration.is_symlink():
         yield;return
     values={}
     for line in protected(configuration,65536).read_text().splitlines():
@@ -680,23 +686,21 @@ def host_barrier(root):
     installation=Path(values.get('ORBIS_ROOT',''))
     if not installation.is_absolute() or installation!=installation.resolve(strict=True) or not installation.is_dir():raise PrerequisiteError('The existing Orbis installation cannot be locked safely.')
     private_directory(state)
-    spec=importlib.util.spec_from_file_location('orbis_layout_for_prerequisites',Path(__file__).with_name('orbis-host-layout.py'))
-    layout=importlib.util.module_from_spec(spec);spec.loader.exec_module(layout)
-    descriptors=layout.open_locks(installation);descriptor=descriptors[0]
-    marker=state/'helper-maintenance.json';record={'schema':'orbis.docker-setup-maintenance.v1','setupRoot':str(root)}
-    try:
-        fcntl.flock(descriptor,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        for name in ['job.json','package-job.json','restart-job.json']:
-            path=state/name
-            if path.exists() and read(path).get('state') in {'running','recovering','interrupted','queued'}:raise PrerequisiteError('Finish or recover the active Orbis host task before Docker setup.')
-        if marker.exists() or marker.is_symlink():
-            if read(marker)!=record:raise PrerequisiteError('Another Orbis maintenance operation is in progress.')
-        else:save(marker,record)
-        owned=True
-        yield
-    finally:
-        if owned and marker.exists() and read(marker)==record and pending_transaction(root) is None:marker.unlink()
-        for item in reversed(descriptors):os.close(item)
+    # Use the same authority checks and legacy-first locks as ordinary host
+    # lifecycle operations. A durable credential/capture hold outlives its flock.
+    with host_authority().host_lock(installation):
+        marker=state/'helper-maintenance.json';record={'schema':'orbis.docker-setup-maintenance.v1','setupRoot':str(root)}
+        try:
+            for name in ['job.json','package-job.json','restart-job.json']:
+                path=state/name
+                if path.exists() and read(path).get('state') in {'running','recovering','interrupted','queued'}:raise PrerequisiteError('Finish or recover the active Orbis host task before Docker setup.')
+            if marker.exists() or marker.is_symlink():
+                if read(marker)!=record:raise PrerequisiteError('Another Orbis maintenance operation is in progress.')
+            else:save(marker,record)
+            owned=True
+            yield
+        finally:
+            if owned and marker.exists() and read(marker)==record and pending_transaction(root) is None:marker.unlink()
 
 
 def resume_transaction(directory,journal,progress):

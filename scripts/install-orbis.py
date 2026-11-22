@@ -21,10 +21,16 @@ from urllib.request import Request, urlopen
 EXPECTED_RELEASE = None
 INSTALLER = None
 CHANNEL_CATALOG = None
+INSTALLER_SOURCE_CUSTODY = 1
 CHANNEL_METADATA_URL = "https://twentylines.github.io/orbis/channels.json"
 INSTALLER_BASE_URL = "https://twentylines.github.io/orbis/installer/"
 ARCHIVE = "orbis-installer.tar.gz"
 MANIFEST = "orbis-installer-manifest.json"
+SOURCE_SELECTION = "installer-source-selection.json"
+SOURCE_LAUNCHER = "installer-source-launcher.py"
+SOURCE_EXECUTION = "installer-source-execution.json"
+SOURCE_COPIES = "host-copy-custody"
+OWNER = 0
 ALLOWED = re.compile(r"scripts/(?:orbis-[a-z-]+|install-orbis|migration-preflight)\.py|scripts/(?:orbis-host-maintenance-responder|orbis-controller-bootstrap-profile)\.mjs|packaging/systemd/orbis-host\.service")
 REQUIRED = {"scripts/install-orbis.py", "scripts/orbis-install.py", "scripts/orbis-install-prerequisites.py", "scripts/orbis-install-ui.py", "scripts/orbis-install-new.py", "scripts/orbis-install-replace.py", "scripts/orbis-install-fresh.py", "scripts/orbis-host-service-enable.py", "scripts/orbis-host-discovery.py", "scripts/orbis-release-check.py", "packaging/systemd/orbis-host.service", "scripts/orbis-proxy-identity.py", "scripts/orbis-host-maintenance-responder.mjs"}
 
@@ -34,6 +40,10 @@ REQUIRED |= {
     "scripts/orbis-controller-bootstrap-profile.mjs",
     "scripts/orbis-reset-authority.py",
     "scripts/orbis-host-layout.py",
+    "scripts/orbis-host-credential-fence.py",
+    "scripts/orbis-host-credential-peer.py",
+    "scripts/orbis-host-credential-service.py",
+    "scripts/orbis-host-recovery-admission.py", "scripts/orbis-host-recovery-source.py",
     "scripts/orbis-proxy-adoption.py",
     "scripts/orbis-host-app-create-intent.py",
     "scripts/orbis-host-app-inet-diag.py",
@@ -51,6 +61,7 @@ REQUIRED |= {
 
 LEGACY_REQUIRED = frozenset(REQUIRED)
 REQUIRED |= {
+    "scripts/orbis-host-controller-handoff.py",
     "scripts/orbis-host-core-restoration-review.py",
     "scripts/orbis-host-core-restoration.py",
     "scripts/orbis-host-core-live-restoration.py",
@@ -75,8 +86,10 @@ REQUIRED |= {
 }
 
 REQUIRED |= {"scripts/orbis-sentinel-install.py"}
+REQUIRED_V5 = REQUIRED | {"scripts/orbis-host-docker-socket-recovery.py"}
 FILE_LIMITS = {"orbis.installer-bundle.v1": 66, "orbis.installer-bundle.v2": 66,
-               "orbis.installer-bundle.v3": 128, "orbis.installer-bundle.v4": 128}
+               "orbis.installer-bundle.v3": 128, "orbis.installer-bundle.v4": 128,
+               "orbis.installer-bundle.v5": 160, "orbis.installer-bundle.v6": 160}
 
 
 def require_supported_host():
@@ -188,7 +201,12 @@ def verify_files_manifest(value, required=None):
     if not isinstance(schema, str) or schema not in FILE_LIMITS:
         raise ValueError('Installer format is unsupported')
     if required is None:
-        required = LEGACY_REQUIRED if schema in {'orbis.installer-bundle.v1', 'orbis.installer-bundle.v2'} else REQUIRED
+        if schema in {'orbis.installer-bundle.v1', 'orbis.installer-bundle.v2'}:
+            required = LEGACY_REQUIRED
+        elif schema in {'orbis.installer-bundle.v5', 'orbis.installer-bundle.v6'}:
+            required = REQUIRED_V5
+        else:
+            required = REQUIRED
     if type(value.get("archiveBytes")) is not int or not 0 < value["archiveBytes"] <= 8 * 1024 * 1024:
         raise ValueError("Installer archive size is invalid")
     if not re.fullmatch(r"[0-9a-f]{64}", str(value.get("archiveSha256", ""))):
@@ -211,7 +229,10 @@ def verify_manifest(data, identity, *, required=None):
     if sha(data) != identity.get("manifestSha256"):
         raise ValueError("Installer manifest does not match this release launcher")
     value = json.loads(data)
-    if not isinstance(value, dict) or value.get("schema") not in {"orbis.installer-bundle.v1", "orbis.installer-bundle.v3"} or any(value.get(key) != identity[key] for key in ("tag", "commit")) or value.get("archive") != ARCHIVE:
+    if (not isinstance(value, dict) or not isinstance(value.get("schema"), str)
+            or value["schema"] not in {"orbis.installer-bundle.v1", "orbis.installer-bundle.v3", "orbis.installer-bundle.v5"}
+            or "installerCommit" in value or any(value.get(key) != identity[key] for key in ("tag", "commit"))
+            or value.get("archive") != ARCHIVE):
         raise ValueError("Installer package has a different release identity")
     if not re.fullmatch(r"[0-9a-f]{64}", str(value.get("releaseManifestSha256", ""))):
         raise ValueError("Installer package hash is invalid")
@@ -225,7 +246,10 @@ def verify_installer_manifest(data, identity, *, required=None):
     if sha(data) != identity["manifestSha256"]:
         raise ValueError("Installer manifest does not match this installer launcher")
     value = json.loads(data)
-    if not isinstance(value, dict) or value.get("schema") not in {"orbis.installer-bundle.v2", "orbis.installer-bundle.v4"} or value.get("installerCommit") != identity["commit"] or value.get("archive") != ARCHIVE:
+    if (not isinstance(value, dict) or not isinstance(value.get("schema"), str)
+            or value["schema"] not in {"orbis.installer-bundle.v2", "orbis.installer-bundle.v4", "orbis.installer-bundle.v6"}
+            or any(field in value for field in ("tag", "commit", "releaseManifestSha256"))
+            or value.get("installerCommit") != identity["commit"] or value.get("archive") != ARCHIVE):
         raise ValueError("Installer package has a different source identity")
     verify_files_manifest(value, required)
     return value
@@ -270,6 +294,216 @@ def private_directory(path):
     return path
 
 
+
+def _receipt_bytes(value):
+    return (json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n").encode("ascii")
+
+
+def _render_installer(mode, identity, template):
+    if mode == "release":
+        marker = b"EXPECTED_RELEASE = " + b"None"
+        if template.count(marker) != 1:
+            raise ValueError("The verified installer archive cannot bind its release launcher")
+        ordered = {key: identity[key] for key in ("tag", "commit", "manifestSha256")}
+        launcher = template.replace(marker, ("EXPECTED_RELEASE = " + repr(ordered)).encode())
+    elif mode == "modular":
+        marker = b"INSTALLER = " + b"None"
+        if template.count(marker) != 1:
+            raise ValueError("The verified installer archive cannot bind its modular launcher")
+        ordered = {key: identity[key] for key in ("commit", "manifestSha256")}
+        launcher = template.replace(marker, ("INSTALLER = " + repr(ordered)).encode())
+    else:
+        raise ValueError("The verified installer selection mode is invalid")
+    return launcher
+
+
+def stage_verified_installer(destination, *, mode, identity, channel, release, manifest, archive, files):
+    """Persist publisher-selected bytes as private custody before executing scripts."""
+    launcher = _render_installer(mode, identity, files["scripts/install-orbis.py"])
+    proofs = {SOURCE_LAUNCHER: launcher, "release-manifest.json": release, MANIFEST: manifest, ARCHIVE: archive}
+    selection = _receipt_bytes({
+        "schema": "orbis.installer-source-selection.v1", "mode": mode, "installer": identity, "channel": channel,
+        "proofs": {name: {"bytes": len(body), "sha256": sha(body)} for name, body in proofs.items()},
+    })
+    # Extraction files are limited to verified bundle membership. The source
+    # selection is last, so an incomplete copy cannot look ready to the child.
+    directories = {destination}
+    if _custody_template(files["scripts/install-orbis.py"]):
+        copies = destination / SOURCE_COPIES
+        copies.mkdir(mode=0o700)
+        os.chmod(copies, 0o700)
+        directories.add(copies)
+    for name, body in {**files, **proofs, SOURCE_SELECTION: selection}.items():
+        target = destination / name
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        directories.update(parent for parent in target.parents if parent.is_relative_to(destination))
+        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+        with os.fdopen(fd, "wb") as output:
+            os.fchmod(output.fileno(), 0o600)
+            output.write(body)
+            output.flush()
+            os.fsync(output.fileno())
+    for folder in sorted(directories, key=lambda directory: len(directory.parts), reverse=True):
+        fd = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    return sha(selection)
+
+
+def _custody_template(template):
+    return any(
+        isinstance(node, ast.Assign) and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name) and node.targets[0].id == "INSTALLER_SOURCE_CUSTODY"
+        and isinstance(node.value, ast.Constant) and type(node.value.value) is int and node.value.value == 1
+        for node in ast.parse(template).body
+    )
+
+
+def _held_private_file(directory, name, maximum):
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+    fd = os.open(name, flags, dir_fd=directory)
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != OWNER or stat.S_IMODE(info.st_mode) != 0o600
+                or info.st_nlink != 1 or not 0 < info.st_size <= maximum):
+            raise ValueError("Installer proof file is unsafe")
+        body = os.pread(fd, maximum + 1, 0)
+        if len(body) != info.st_size or _identity(os.fstat(fd)) != _identity(info):
+            raise ValueError("Installer proof changed while reading")
+        return fd, body, info
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _identity(info):
+    return info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode, info.st_nlink, info.st_size, info.st_mtime_ns, info.st_ctime_ns
+
+
+def _exec_guided(destination, channel, remaining, selection=None):
+    print(f"Verified installer. Recovery files: {destination}", flush=True)
+    arguments = [sys.executable, str(destination / "scripts/orbis-install.py"),
+        "--manifest", str(destination / "release-manifest.json"), "--state-dir", str(destination / "transactions"),
+        "--channel", channel]
+    if selection is not None:
+        arguments.extend(("--installer-custody-sha256", selection))
+    os.execv(sys.executable, [*arguments, *remaining])
+
+
+def _exec_verified_installer(destination, channel, remaining, selection, files):
+    if not _custody_template(files["scripts/install-orbis.py"]):
+        return _exec_guided(destination, channel, remaining)
+    directory = os.open(destination, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    launcher = None
+    try:
+        manifest_fd, record, _ = _held_private_file(directory, SOURCE_SELECTION, 16384)
+        os.close(manifest_fd)
+        if sha(record) != selection:
+            raise ValueError("Installer selection changed before second stage")
+        launcher, body, info = _held_private_file(directory, SOURCE_LAUNCHER, 1024 * 1024)
+        proof = json.loads(record)["proofs"][SOURCE_LAUNCHER]
+        if (proof != {"bytes": len(body), "sha256": sha(body)}
+                or _identity(os.stat(SOURCE_LAUNCHER, dir_fd=directory, follow_symlinks=False)) != _identity(info)):
+            raise ValueError("Selected installer launcher changed before execution")
+        os.set_inheritable(launcher, True)
+        os.execv(sys.executable, [sys.executable, "-I", "-B", f"/proc/self/fd/{launcher}",
+            "--continue-verified-installer", str(destination), selection, channel, *remaining])
+    finally:
+        if launcher is not None:
+            os.close(launcher)
+        os.close(directory)
+
+
+def _continue_verified_installer(arguments):
+    if len(arguments) < 3:
+        raise ValueError("Installer continuation is missing its private selection")
+    location, selection, channel, *remaining = arguments
+    match = re.fullmatch(r"/proc/self/fd/([0-9]+)", __file__)
+    if (match is None or channel not in ("stable", "nightly") or not re.fullmatch(r"[a-f0-9]{64}", selection)
+            or any(arg.split("=", 1)[0] in {"--manifest", "--state-dir", "--installer-custody-sha256",
+                                            "--continue-verified-installer", "--channel"} for arg in remaining)):
+        raise ValueError("Installer continuation is not bound to the selected launcher")
+    running = int(match[1])
+    destination = Path(location)
+    if not destination.is_absolute() or not destination.is_dir() or destination.resolve(strict=True) != destination:
+        raise ValueError("Installer selection directory is missing or changed")
+    destination = private_directory(destination)
+    directory = os.open(destination, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    held = []
+    script_directory = driver_fd = None
+    def read(name, maximum):
+        fd, body, info = _held_private_file(directory, name, maximum)
+        held.append((fd, name, info))
+        return body, info
+
+    def recheck():
+        held_dir, named_dir = os.fstat(directory), destination.lstat()
+        if (held_dir.st_dev, held_dir.st_ino, held_dir.st_uid, held_dir.st_mode) != (
+                named_dir.st_dev, named_dir.st_ino, named_dir.st_uid, named_dir.st_mode):
+            raise ValueError("Installer selection directory changed")
+        for fd, name, info in held:
+            if (_identity(os.fstat(fd)) != _identity(info)
+                    or _identity(os.stat(name, dir_fd=directory, follow_symlinks=False)) != _identity(info)):
+                raise ValueError("Installer proof changed before continuation")
+        if (_identity(os.fstat(driver_fd)) != _identity(driver_info)
+                or _identity((destination / "scripts/orbis-install.py").lstat()) != _identity(driver_info)
+                or _identity(os.fstat(running)) != _identity(launcher_info)
+                or os.pread(running, len(launcher) + 1, 0) != launcher):
+            raise ValueError("Installer executable changed before continuation")
+
+    try:
+        record_body, _ = read(SOURCE_SELECTION, 16384)
+        record = json.loads(record_body)
+        mode, identity = record["mode"], record["installer"]
+        if (sha(record_body) != selection or record["schema"] != "orbis.installer-source-selection.v1"
+                or record["channel"] != channel or mode not in ("release", "modular")
+                or identity != (EXPECTED_RELEASE if mode == "release" else INSTALLER)):
+            raise ValueError("Installer selection identity changed")
+        bundle, _ = read(MANIFEST, 64 * 1024)
+        core, _ = read("release-manifest.json", 16 * 1024)
+        archive, _ = read(ARCHIVE, 8 * 1024 * 1024)
+        launcher, launcher_info = read(SOURCE_LAUNCHER, 1024 * 1024)
+        if _identity(os.fstat(running)) != _identity(launcher_info) or os.pread(running, len(launcher) + 1, 0) != launcher:
+            raise ValueError("Installer continuation was not executed from the held selected launcher")
+        proofs = {SOURCE_LAUNCHER: launcher, "release-manifest.json": core, MANIFEST: bundle, ARCHIVE: archive}
+        if record["proofs"] != {name: {"bytes": len(body), "sha256": sha(body)} for name, body in proofs.items()}:
+            raise ValueError("Installer proof bytes changed before continuation")
+        manifest = verify_manifest(bundle, identity) if mode == "release" else verify_installer_manifest(bundle, identity)
+        if mode == "release" and sha(core) != manifest["releaseManifestSha256"]:
+            raise ValueError("Selected core differs from the release-bound installer")
+        files = verify_files(archive, manifest)
+        if launcher != _render_installer(mode, identity, files["scripts/install-orbis.py"]):
+            raise ValueError("Held launcher does not match the verified embedded template")
+        script_directory = os.open("scripts", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)
+        driver_fd, driver, driver_info = _held_private_file(script_directory, "orbis-install.py", 1024 * 1024)
+        if driver != files["scripts/orbis-install.py"]:
+            raise ValueError("Guided installer differs from the verified bundle")
+        recheck()
+        execution = _receipt_bytes({"schema": "orbis.installer-source-execution.v1", "selectionSha256": selection,
+                                    "launcherSha256": sha(launcher), "channel": channel})
+        fd = os.open(SOURCE_EXECUTION, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+                     0o600, dir_fd=directory)
+        with os.fdopen(fd, "wb") as output:
+            os.fchmod(output.fileno(), 0o600)
+            output.write(execution)
+            output.flush()
+            os.fsync(output.fileno())
+        os.fsync(directory)
+        recheck()
+        os.set_inheritable(running, False)
+        _exec_guided(destination, channel, remaining, selection)
+    finally:
+        if driver_fd is not None:
+            os.close(driver_fd)
+        if script_directory is not None:
+            os.close(script_directory)
+        for fd, _, _ in reversed(held):
+            os.close(fd)
+        os.close(directory)
+
+
 def run_published_installer(args, remaining):
     if not isinstance(INSTALLER, dict) or set(INSTALLER) != {"commit", "manifestSha256"} or not re.fullmatch(r"[0-9a-f]{40}", str(INSTALLER.get("commit", ""))) or not re.fullmatch(r"[0-9a-f]{64}", str(INSTALLER.get("manifestSha256", ""))):
         raise ValueError("Download the installer from the published Orbis installer endpoint")
@@ -309,31 +543,25 @@ def run_published_installer(args, remaining):
     print(f"Downloading Orbis {display_release(record['tag'])} installer…", flush=True)
     manifest_data = fetch(base + MANIFEST, 64 * 1024)
     manifest = verify_installer_manifest(manifest_data, INSTALLER)
-    files = verify_files(fetch(base + ARCHIVE, manifest["archiveBytes"]), manifest)
+    archive = fetch(base + ARCHIVE, manifest["archiveBytes"])
+    files = verify_files(archive, manifest)
     parent = private_directory(args.work_dir)
     destination = Path(tempfile.mkdtemp(prefix="installer-" + INSTALLER["commit"][:12] + "-", dir=parent))
-    for name, content in files.items():
-        file = destination / name
-        file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        file.write_bytes(content)
-        file.chmod(0o600)
-    release_file = destination / "release-manifest.json"
-    release_file.write_bytes(release_data)
-    release_file.chmod(0o600)
-    package_manifest = destination / MANIFEST
-    package_manifest.write_bytes(manifest_data)
-    package_manifest.chmod(0o600)
-    print(f"Verified installer. Recovery files: {destination}", flush=True)
-    os.execv(sys.executable, [sys.executable, str(destination / "scripts/orbis-install.py"), "--manifest", str(release_file), "--state-dir", str(destination / "transactions"), "--channel", channel, *remaining])
+    selection = stage_verified_installer(destination, mode="modular", identity=INSTALLER, channel=channel,
+        release=release_data, manifest=manifest_data, archive=archive, files=files)
+    _exec_verified_installer(destination, channel, remaining, selection, files)
 
 
 def main():
+    if sys.argv[1:2] == ["--continue-verified-installer"]:
+        require_supported_host()
+        return _continue_verified_installer(sys.argv[2:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work-dir", type=Path, default=Path("/var/lib/orbis/installer"))
     parser.add_argument("--channel", choices=("stable", "nightly"))
     args, remaining = parser.parse_known_args()
     require_supported_host()
-    if any(arg.split("=", 1)[0] in {"--manifest", "--state-dir"} for arg in remaining):
+    if any(arg.split("=", 1)[0] in {"--manifest", "--state-dir", "--installer-custody-sha256", "--continue-verified-installer"} for arg in remaining):
         raise ValueError("The release launcher supplies its own manifest and state directory")
     if EXPECTED_RELEASE is None and isinstance(INSTALLER, dict):
         run_published_installer(args, remaining)
@@ -387,22 +615,13 @@ def main():
     release = json.loads(release_data)
     if any(release.get(key) != identity[key] for key in ("tag", "commit")):
         raise ValueError("Core image and installer have different source identities")
-    files = verify_files(fetch(base + ARCHIVE, manifest["archiveBytes"]), manifest)
+    archive = fetch(base + ARCHIVE, manifest["archiveBytes"])
+    files = verify_files(archive, manifest)
     parent = private_directory(args.work_dir)
     destination = Path(tempfile.mkdtemp(prefix=identity["tag"] + "-", dir=parent))
-    for name, content in files.items():
-        file = destination / name
-        file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        file.write_bytes(content)
-        file.chmod(0o600)
-    release_file = destination / "release-manifest.json"
-    release_file.write_bytes(release_data)
-    release_file.chmod(0o600)
-    package_manifest = destination / MANIFEST
-    package_manifest.write_bytes(manifest_data)
-    package_manifest.chmod(0o600)
-    print(f"Verified installer. Recovery files: {destination}", flush=True)
-    os.execv(sys.executable, [sys.executable, str(destination / "scripts/orbis-install.py"), "--manifest", str(release_file), "--state-dir", str(destination / "transactions"), "--channel", channel, *remaining])
+    selection = stage_verified_installer(destination, mode="release", identity=identity, channel=channel,
+        release=release_data, manifest=manifest_data, archive=archive, files=files)
+    _exec_verified_installer(destination, channel, remaining, selection, files)
 
 
 if __name__ == "__main__":

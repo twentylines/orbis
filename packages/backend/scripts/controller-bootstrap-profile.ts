@@ -5,6 +5,7 @@ import YAML from 'yaml';
 import dotenv from 'dotenv';
 import validator from 'validator';
 import { DatabaseSync } from 'node:sqlite';
+import { isDeepStrictEqual } from 'node:util';
 
 const sha = (value: crypto.BinaryLike) => crypto.createHash('sha256').update(value).digest('hex');
 const read = (file: string, limit = 1048576) => {
@@ -38,23 +39,24 @@ const legacyCapability = {
   preserveRunningApps: true,
   environment: 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1',
 };
-const capabilities = [
-  legacyCapability,
-  { ...legacyCapability, schema: 'orbis.controller-overlay-startup.v2', version: 2, updateBackupPolicy: 'none' },
-];
+const currentCapability = { ...legacyCapability, schema: 'orbis.controller-overlay-startup.v2', version: 2, updateBackupPolicy: 'none' };
+const cliCapability = {
+  ...currentCapability,
+  schema: 'orbis.controller-overlay-startup.v3',
+  version: 3,
+  cliIdentity: { path: '/data/.secrets/cli-secret', encoding: 'hex32', creator: 'backend' },
+};
+const networkCapability = {
+  ...cliCapability,
+  schema: 'orbis.controller-overlay-startup.v4',
+  version: 4,
+  coreNetwork: { name: 'runtipi_tipi_core_network', internal: true, peers: ['runtipi-db', 'runtipi-queue'] },
+};
+const capabilities = [legacyCapability, currentCapability, cliCapability, networkCapability];
 const codeSha256 = sha(read('/app/main.mjs', 32 * 1024 * 1024));
 if (process.env.ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS === '1' && fs.existsSync('/app/controller-overlay-capability.json')) {
   const actual: Record<string, unknown> = JSON.parse(read('/app/controller-overlay-capability.json', 4096).toString('utf8'));
-  if (
-    !actual ||
-    Array.isArray(actual) ||
-    typeof actual !== 'object' ||
-    !capabilities.some(
-      (capability) =>
-        JSON.stringify(Object.keys(actual).sort()) === JSON.stringify(Object.keys(capability).sort()) &&
-        Object.entries(capability).every(([key, value]) => actual[key] === value),
-    )
-  )
+  if (!actual || Array.isArray(actual) || typeof actual !== 'object' || !capabilities.some((capability) => isDeepStrictEqual(actual, capability)))
     throw new Error('Unsupported source capability');
   process.stdout.write(
     JSON.stringify({ schema: 'orbis.controller-bootstrap-profile.v1', profile: 'controller-preservation.v1', codeSha256, observedAt: Date.now() }),

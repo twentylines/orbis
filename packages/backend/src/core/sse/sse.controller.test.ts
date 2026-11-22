@@ -1,6 +1,6 @@
 import { AuthGuard } from '@/modules/auth/auth.guard';
 import { DesktopPreferencesService } from '@/modules/desktop-preferences/desktop-preferences.service';
-import { type CallHandler, type ExecutionContext, type INestApplication, type NestMiddleware } from '@nestjs/common';
+import { type INestApplication, type NestMiddleware } from '@nestjs/common';
 import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { ArkValidationPipe } from 'nestjs-arktype';
@@ -13,13 +13,17 @@ import { SSEController } from './sse.controller';
 import { SSEService } from './sse.service';
 import { MonitoringActivityService } from '../monitoring/monitoring-activity.service';
 import { notifyClientStatusChanged } from '@/common/restoration-status';
-import { acquireBackupMaintenance } from '@/common/backup-maintenance';
+import { acquireBackupMaintenance, BackupMaintenanceInterceptor } from '@/common/backup-maintenance';
+import { TasksService } from '@/modules/tasks/tasks.service';
+import { CacheService } from '../cache/cache.service';
 
 describe('SSEController log query validation', () => {
   let app: INestApplication;
   const service = mock<SSEService>();
   const preferences = mock<DesktopPreferencesService>();
   const activity = new MonitoringActivityService();
+  const tasks = mock<TasksService>();
+  const cache = mock<CacheService>();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -27,12 +31,13 @@ describe('SSEController log query validation', () => {
       providers: [
         AuthGuard,
         { provide: APP_PIPE, useClass: ArkValidationPipe },
-        // Production's Sentry interceptor defers pipes into the SSE observable.
-        { provide: APP_INTERCEPTOR, useValue: { intercept: (_context: ExecutionContext, next: CallHandler) => next.handle() } },
+        { provide: APP_INTERCEPTOR, useClass: BackupMaintenanceInterceptor },
         { provide: LoggerService, useValue: mock<LoggerService>() },
         { provide: SSEService, useValue: service },
         { provide: DesktopPreferencesService, useValue: preferences },
         { provide: MonitoringActivityService, useValue: activity },
+        { provide: TasksService, useValue: tasks },
+        { provide: CacheService, useValue: cache },
       ],
     }).compile();
 
@@ -49,6 +54,9 @@ describe('SSEController log query validation', () => {
   });
 
   beforeEach(() => {
+    service.shutdownEvents.mockReturnValue(EMPTY);
+    tasks.changesForClient.mockReset();
+    tasks.changesForClient.mockReturnValue(EMPTY);
     preferences.changesFor.mockReset();
     preferences.changesFor.mockReturnValue(EMPTY);
     service.getLogStreamObservable.mockReset();
@@ -74,7 +82,7 @@ describe('SSEController log query validation', () => {
     const changes: boolean[] = [];
     const stop = activity.subscribe((active) => changes.push(active));
     service.getTopicObservable.mockReturnValue(new Subject());
-    const controller = new SSEController(service, preferences, activity);
+    const controller = new SSEController(service, preferences, activity, tasks, cache);
     const stream = controller.appEvents({ user: { id: 1 } } as never);
     expect(changes).toEqual([false]);
     const first = stream.subscribe();
@@ -87,9 +95,30 @@ describe('SSEController log query validation', () => {
     stop();
   });
 
+  it('sends task invalidations only to authenticated opted-in streams with no task payload', () => {
+    service.getTopicObservable.mockReturnValue(EMPTY);
+    const changed = new Subject<void>();
+    tasks.changesForClient.mockReturnValue(changed);
+    const controller = new SSEController(service, preferences, activity, tasks, cache);
+    const opted: unknown[] = [];
+    const legacy: unknown[] = [];
+    const guest: unknown[] = [];
+    const subscriptions = [
+      controller.appEvents({ user: { id: 1 } } as never, '1').subscribe((event) => opted.push(event)),
+      controller.appEvents({ user: { id: 1 } } as never).subscribe((event) => legacy.push(event)),
+      controller.appEvents({} as never, '1').subscribe((event) => guest.push(event)),
+    ];
+    changed.next();
+    expect(opted).toEqual([{ data: { changed: true }, type: 'tasks-changed' }]);
+    expect(legacy).toEqual([]);
+    expect(guest).toEqual([]);
+    for (const subscription of subscriptions) subscription.unsubscribe();
+    expect(changed.observed).toBe(false);
+  });
+
   it('notifies both opted-in client streams after reset without exposing journal or account details', async () => {
     service.getTopicObservable.mockReturnValue(EMPTY);
-    const controller = new SSEController(service, preferences, activity);
+    const controller = new SSEController(service, preferences, activity, tasks, cache);
     const first: unknown[] = [];
     const second: unknown[] = [];
     const legacy: unknown[] = [];

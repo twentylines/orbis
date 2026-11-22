@@ -1,3 +1,4 @@
+import { backupDatabaseCountsSchema, backupDatabaseVersion } from './backup-database-records';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -18,6 +19,19 @@ import { deriveRestoreStorageLayout, verifyRestoreStorageMounts } from './backup
 import { attachVerifierDiagnostics, restoreFailureProgress, verifierDiagnosticCheck } from './backup-restore-diagnostics';
 import { verifyRestoreHostIdentity, verifyPreservedTraefik } from './backup-restore-host-identity';
 import type { RestoreTreeName } from './backup-restore-materialize';
+import { verifyStandaloneWorkerCapability } from './backup-restore-worker-capability';
+import {
+  dispatchRestoreMutation,
+  restoreInstallHeld,
+  restoreProjectUrns,
+  restoreStateBind,
+  restoreStateFailure,
+  withVerifiedRestoreState,
+  type RestoreMutation,
+  type RestoreStateIdentity,
+} from './backup-restore-live-state';
+import { validateAppUrn } from '@/common/helpers/app-helpers';
+import type { AppUrn } from '@runtipi/common/types';
 
 const hash = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex');
 const digest = type('string').narrow((value) => /^[a-f0-9]{64}$/.test(value));
@@ -67,14 +81,9 @@ const operationSchema = type({
     '+': 'reject',
     connection: restoreDatabaseConnectionSchema,
     owner: type({ '+': 'reject', name: text, oid: 'number.integer > 0', marker: text }),
-    counts: type({
-      '+': 'reject',
-      user: 'number.integer >= 0',
-      app: 'number.integer >= 0',
-      app_store: 'number.integer >= 0',
-      link: 'number.integer >= 0',
-    }),
-  }),
+    counts: backupDatabaseCountsSchema,
+    'migrationSha256?': digest,
+  }).narrow((value) => (backupDatabaseVersion(value.counts) === 2) === Boolean(value.migrationSha256)),
   originalEnvSha256: digest,
   incomingEnvSha256: digest,
   'hostIdentity?': type({ '+': 'reject', bytes: 'number.integer > 0 & number <= 67108864', sha256: digest }),
@@ -284,6 +293,7 @@ export async function writeRestoreOperation(journal: BackupRestoreJournal, opera
 export class BackupRestoreDockerRuntime implements RestoreRuntime {
   private readonly data: string;
   private readonly cache: string;
+  private effectWorker?: Snapshot;
   constructor(
     private readonly docker: Dockerode,
     private readonly journal: BackupRestoreJournal,
@@ -353,6 +363,11 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
     return inspect;
   }
   async verifyWorker(hostname: string, options: { preparing?: boolean; retainedProvisional?: boolean } = {}) {
+    const worker = await this.inspectVerifiedWorker(hostname, options);
+    if (!options.retainedProvisional) this.effectWorker = snapshotRestoreContainer(worker);
+    return worker.Id;
+  }
+  async inspectVerifiedWorker(hostname: string, options: { preparing?: boolean; retainedProvisional?: boolean } = {}) {
     const state = await this.journal.refresh();
     const worker = await this.docker.getContainer(hostname).inspect();
     if (
@@ -423,7 +438,10 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
     verifyRestoreVerifierMounts(original, verifier, !state.roots.includes('traefik'), options.retainedProvisional);
     if (verifier.HostConfig.Devices?.length || verifier.HostConfig.DeviceRequests?.length || verifier.HostConfig.PidMode === 'host')
       throw failed('verifier-devices');
-    return worker.Id;
+    // Retained admission has a separate Root gate. The provisional definition
+    // checked above is only ever used for an inert staging handoff.
+    if (this.retained || options.retainedProvisional) return worker;
+    return verifyStandaloneWorkerCapability(this.docker, worker, { ...state, image: this.operation.image });
   }
   private async fileRoots() {
     const roots: Record<string, string> = {};
@@ -677,28 +695,196 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
     await verifyRestoreFiles(files);
     await this.preservedTraefik(signal);
   }
+  private async requireLocalResumeEngine() {
+    // docker-modem resolves its default Unix endpoint lazily.
+    const modem = this.docker.modem as { getSocketPath?: () => Promise<string> };
+    if ((await modem?.getSocketPath?.()) !== '/var/run/docker.sock') throw restoreStateFailure();
+  }
+
+  private readonly discardedStateIdentity: RestoreStateIdentity = {};
+
+  private async workerResumeEffect(
+    direction: 'commit' | 'rollback',
+    urns: readonly AppUrn[],
+    inspectTarget: () => Promise<Dockerode.ContainerInspectInfo>,
+    plan: (current: Dockerode.ContainerInspectInfo, held: boolean) => RestoreMutation | undefined,
+  ) {
+    const recorded = this.effectWorker;
+    if (!recorded) throw restoreStateFailure();
+    await this.requireLocalResumeEngine();
+    const state = await this.journal.refresh();
+    if (
+      state.decision !== direction ||
+      (direction === 'commit' ? state.phase !== 'committing' : !['discarded', 'rolled-back'].includes(state.phase)) ||
+      state.worker !== recorded.id ||
+      state.id !== this.operation.id ||
+      state.nonce !== this.operation.nonce
+    )
+      throw restoreStateFailure();
+    const original = await this.owned(this.operation.original);
+    const worker = await this.owned(recorded);
+    // Observe the target's state and policy after the other Engine reads.
+    const target = await inspectTarget();
+    const mount = restoreStateBind(worker);
+    if (
+      worker.Image !== this.operation.image ||
+      !worker.State.Running ||
+      worker.State.Restarting ||
+      worker.State.Paused ||
+      worker.State.Dead ||
+      worker.HostConfig.RestartPolicy?.Name !== 'no' ||
+      target.State.Restarting ||
+      target.State.Paused ||
+      target.State.Dead ||
+      restoreStateBind(original).source !== mount.source ||
+      (direction === 'commit' && restoreStateBind(target).source !== mount.source)
+    )
+      throw restoreStateFailure();
+    const verify = <T>(effect: (held: boolean) => T) =>
+      withVerifiedRestoreState({
+        data: this.data,
+        journal: this.journal,
+        state,
+        mount: mount.target,
+        urns,
+        unpreparedIdentity: state.phase === 'discarded' && !('database' in this.operation) ? this.discardedStateIdentity : undefined,
+        effect,
+      });
+    const mutation = verify((held) => plan(target, held));
+    if (mutation !== undefined) {
+      await dispatchRestoreMutation(this.docker, target.Id, mutation, (dispatch) =>
+        verify((held) => {
+          if (plan(target, held) !== mutation) throw restoreStateFailure();
+          dispatch();
+        }),
+      );
+    }
+    return mutation;
+  }
+
+  private async startForResume(direction: 'commit' | 'rollback', urns: readonly AppUrn[], inspect: () => Promise<Dockerode.ContainerInspectInfo>) {
+    const disabled = { Name: 'no', MaximumRetryCount: 0 };
+    const isDisabled = (current: Dockerode.ContainerInspectInfo) => {
+      const policy = current.HostConfig.RestartPolicy;
+      return (policy?.Name || 'no') === disabled.Name && (policy?.MaximumRetryCount ?? 0) === disabled.MaximumRetryCount;
+    };
+    const mutation = await this.workerResumeEffect(direction, urns, inspect, (current, held) => {
+      if (held) throw restoreInstallHeld();
+      if (current.State.Running) return;
+      return isDisabled(current) ? 'start' : disabled;
+    });
+    if (mutation === disabled) {
+      await this.workerResumeEffect(direction, urns, inspect, (current, held) => {
+        if (held) throw restoreInstallHeld();
+        if (!isDisabled(current)) throw restoreStateFailure();
+        if (!current.State.Running) return 'start';
+      });
+    }
+  }
+
+  async candidateAppEffect<T>(hostname: string, urn: AppUrn, effect: () => T) {
+    const operation = this.preparedOperation();
+    await this.requireLocalResumeEngine();
+    const state = await this.journal.refresh();
+    if (
+      this.retained ||
+      state.phase !== 'committing' ||
+      state.decision !== 'commit' ||
+      !operation.worker ||
+      !operation.resumeApps.some((selected) => selected.appUrn === urn)
+    )
+      throw restoreStateFailure();
+    const self = await this.docker.getContainer(hostname).inspect();
+    const candidate = await this.role(operation.candidate, 'candidate');
+    const original = await this.owned(operation.original);
+    const worker = await this.owned(operation.worker);
+    const mount = restoreStateBind(candidate);
+    if (
+      self.Id !== state.candidateController ||
+      candidate.Id !== self.Id ||
+      !candidate.State.Running ||
+      candidate.State.Restarting ||
+      candidate.State.Paused ||
+      candidate.State.Dead ||
+      worker.Id !== state.worker ||
+      worker.Image !== operation.image ||
+      !worker.State.Running ||
+      worker.State.Restarting ||
+      worker.State.Paused ||
+      worker.State.Dead ||
+      worker.HostConfig.RestartPolicy?.Name !== 'no' ||
+      restoreStateBind(original).source !== mount.source ||
+      restoreStateBind(worker).source !== mount.source
+    )
+      throw restoreStateFailure();
+    return withVerifiedRestoreState({
+      data: this.data,
+      journal: this.journal,
+      state,
+      mount: mount.target,
+      standaloneCandidate: true,
+      urns: [urn],
+      effect: (held) => {
+        if (held) throw restoreInstallHeld();
+        return effect();
+      },
+    });
+  }
+
   async activate() {
-    this.preparedOperation();
+    const operation = this.preparedOperation();
     await this.preservedTraefik(new AbortController().signal);
-    const current = await this.role(this.operation.candidate, 'candidate');
+    const inspect = () => this.role(operation.candidate, 'candidate');
+    const current = await inspect();
     if (!current.State.Running) await this.clearCache();
-    const container = this.docker.getContainer(current.Id);
-    await container.update({ RestartPolicy: this.operation.original.restart });
-    if (!current.State.Running) await container.start();
-    await this.health(this.operation.candidate, 'resume', AbortSignal.timeout(20 * 60_000));
+    const urns = operation.resumeApps.map(({ appUrn }) => validateAppUrn(appUrn));
+    await this.startForResume('commit', urns, inspect);
+    await this.health(operation.candidate, 'resume', AbortSignal.timeout(20 * 60_000));
     await this.preservedTraefik(new AbortController().signal);
+    await this.workerResumeEffect('commit', urns, inspect, (candidate, held) => {
+      if (held || !candidate.State.Running) throw held ? restoreInstallHeld() : restoreStateFailure();
+      return operation.original.restart;
+    });
   }
   async restoreDatabasePointer() {
     await this.setEnvironment('original');
     await this.clearCache();
   }
   async resumeOriginal() {
-    for (const record of [...this.operation.apps.map((app) => app.container), this.operation.original]) {
-      const current = await this.owned(record);
-      const container = this.docker.getContainer(record.id);
-      await container.update({ RestartPolicy: record.restart });
-      if (record.running && !current.State.Running) await container.start();
+    const original = this.operation.original;
+    const runningUrns = this.operation.apps.filter((app) => app.container.running).flatMap((app) => restoreProjectUrns(app.project));
+    const inspectOriginal = () => this.owned(original);
+    const requireClear = (held: boolean) => {
+      if (held) throw restoreInstallHeld();
+    };
+    // Check the recorded running set before beginning rollback replay. Each
+    // dispatch below still has to prove its own current state.
+    await this.workerResumeEffect('rollback', runningUrns, inspectOriginal, (_current, held) => {
+      requireClear(held);
+      return undefined;
+    });
+    for (const { container: record, project } of this.operation.apps) {
+      const urns = restoreProjectUrns(project);
+      const inspect = async () => {
+        const current = await this.owned(record);
+        if (current.Config.Labels?.['com.docker.compose.project'] !== project || (!record.running && current.State.Running))
+          throw restoreStateFailure();
+        return current;
+      };
+      if (record.running) await this.startForResume('rollback', urns, inspect);
+      await this.workerResumeEffect('rollback', urns, inspect, (current, held) => {
+        if (held && !record.running && current.HostConfig.RestartPolicy?.Name === 'no') return;
+        requireClear(held);
+        if (record.running && !current.State.Running) throw restoreStateFailure();
+        return record.restart;
+      });
     }
-    await this.health(this.operation.original, 'normal', AbortSignal.timeout(120_000));
+    if (original.running) await this.startForResume('rollback', runningUrns, inspectOriginal);
+    await this.workerResumeEffect('rollback', runningUrns, inspectOriginal, (current, held) => {
+      requireClear(held);
+      if (original.running && !current.State.Running) throw restoreStateFailure();
+      return original.restart;
+    });
+    await this.health(original, 'normal', AbortSignal.timeout(120_000));
   }
 }

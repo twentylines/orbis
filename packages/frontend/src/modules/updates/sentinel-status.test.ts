@@ -1,10 +1,83 @@
 import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
-import { parseSentinelStatus, readSentinelStatus, SentinelStatusError, sentinelStatusLabel, sentinelStatusOptions } from './sentinel-status';
+import {
+  parseSentinelStatus,
+  readSentinelRecoveryAccess,
+  readSentinelStatus,
+  sentinelRecoveryAccessOptions,
+  SentinelStatusError,
+  sentinelStatusLabel,
+  sentinelStatusOptions,
+} from './sentinel-status';
 import type { SentinelStatus } from './sentinel-status';
 
 const healthy = { available: true, installedVersion: '0.1.0-dev.11', availableVersion: null, state: 'healthy' as const };
 const unavailable = { available: false, installedVersion: null, availableVersion: null, state: 'unknown' as const };
+
+test('reads recovery access only from the fixed authenticated route and rejects unsafe portal links', async () => {
+  const original = globalThis.fetch;
+  const configured = { state: 'configured', portalUrl: 'https://independent.example:8443/sentinel/recovery/', unitState: 'active' } as const;
+  let body: unknown = configured;
+  globalThis.fetch = Object.assign(
+    async (url: unknown, options?: RequestInit) => {
+      expect(url).toBe('/api/system/sentinel/recovery-access');
+      expect(options).toMatchObject({ method: 'GET', credentials: 'same-origin', cache: 'no-store' });
+      return Response.json(body);
+    },
+    { preconnect: original.preconnect },
+  );
+  try {
+    const signal = new AbortController().signal;
+    expect(await readSentinelRecoveryAccess(signal)).toEqual(configured);
+    body = { ...configured, enrollment: 'key-prepared' };
+    expect(await readSentinelRecoveryAccess(signal)).toMatchObject({ enrollment: 'key-prepared' });
+    for (body of [
+      { ...configured, portalUrl: 'https://independent.example@other.example/sentinel/recovery/' },
+      { ...configured, portalUrl: 'https://independent.example/other/' },
+      { ...configured, portalUrl: 'https://independent.example/Sentinel/recovery/' },
+      { ...configured, portalUrl: 'https://independent.example/sentinel/recovery/\n' },
+      { ...configured, state: 'unavailable' },
+      { ...configured, unitState: 'ready' },
+      { ...configured, enrollment: 'untrusted' },
+      { ...configured, unitState: 'unknown', enrollment: 'activated' },
+      { ...configured, extra: 'private data' },
+    ])
+      await expect(readSentinelRecoveryAccess(signal)).rejects.toBeInstanceOf(SentinelStatusError);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('recovery polling pauses while inactive and stops after an auth failure', () => {
+  const client = new QueryClient();
+  const active = sentinelRecoveryAccessOptions(true);
+  const inactive = sentinelRecoveryAccessOptions(false);
+  const query = client.getQueryCache().build(client, {
+    queryKey: [...active.queryKey],
+    queryFn: ({ signal }) => readSentinelRecoveryAccess(signal),
+  });
+  try {
+    if (
+      typeof active.enabled !== 'function' ||
+      typeof inactive.enabled !== 'function' ||
+      typeof active.refetchInterval !== 'function' ||
+      typeof inactive.refetchInterval !== 'function'
+    )
+      throw new Error('Expected visibility and authentication-aware recovery polling');
+    expect(active.enabled(query)).toBe(true);
+    expect(active.refetchInterval(query)).toBe(15_000);
+    expect(inactive.enabled(query)).toBe(false);
+    expect(inactive.refetchInterval(query)).toBe(false);
+    expect(active.refetchIntervalInBackground).toBe(false);
+    for (const status of [401, 403]) {
+      query.setState({ status: 'error', error: new SentinelStatusError(status) });
+      expect(active.enabled(query)).toBe(false);
+      expect(active.refetchInterval(query)).toBe(false);
+    }
+  } finally {
+    client.clear();
+  }
+});
 
 describe('Sentinel status contract', () => {
   test('preserves reported versions and explicit unknown observations without inferring an update', () => {

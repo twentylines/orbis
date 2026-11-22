@@ -6,8 +6,10 @@ import type { FsMock } from './__mocks__/fs';
 
 vi.mock('fs', async () => {
   const { fsMock } = await import('./__mocks__/fs');
+  const { constants } = await vi.importActual<typeof import('node:fs')>('node:fs');
   return {
     ...fsMock,
+    constants,
   };
 });
 

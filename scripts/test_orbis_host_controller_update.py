@@ -3,6 +3,8 @@ from contextlib import contextmanager
 import importlib.util
 import io
 import json
+import os
+import stat
 import tarfile
 import tempfile
 import unittest
@@ -459,6 +461,8 @@ class ControllerUpdateTests(unittest.TestCase):
         cases = [(False, {**C.CAPABILITY, 'version': 2}, False),
                  (False, C.NO_BACKUP_CAPABILITY, False),
                  (True, C.NO_BACKUP_CAPABILITY, True),
+                 (False, C.CLI_CAPABILITY, True), (True, C.CLI_CAPABILITY, True),
+                 (False, C.NETWORK_CAPABILITY, True), (True, C.NETWORK_CAPABILITY, True),
                  (False, C.CAPABILITY, True), (True, C.CAPABILITY, True)]
         for without_backup, capability, accepted in cases:
             with self.subTest(without_backup=without_backup, capability=capability):
@@ -472,12 +476,16 @@ class ControllerUpdateTests(unittest.TestCase):
                 self.record['checkpoint'] = review
                 self.runtime.bounded_output = mock.Mock(return_value=archive(capability))
                 with mock.patch.object(C.TOOLS, 'validate_review'), \
+                        mock.patch.object(self.updater, 'prepare_cli_storage') as cli, \
+                        mock.patch.object(C.CoreNetwork, 'prepare') as network, \
                         mock.patch.object(C.BOOTSTRAP, 'probe', return_value={'profile': C.BOOTSTRAP.CAPABLE}):
                     if accepted:
                         self.updater.prepare(review)
                     else:
                         with self.assertRaises(C.CapabilityError):
                             self.updater.prepare(review)
+                self.assertEqual(cli.call_count, int(accepted and capability in (C.CLI_CAPABILITY, C.NETWORK_CAPABILITY)))
+                self.assertEqual(network.call_count, int(accepted and capability == C.NETWORK_CAPABILITY))
                 intent = self.runtime.engine.call_args.args[2]
                 self.assertNotIn('Binds', intent['HostConfig'])
                 self.assertNotIn('Mounts', intent['HostConfig'])
@@ -486,6 +494,52 @@ class ControllerUpdateTests(unittest.TestCase):
                 self.assertEqual(self.calls, [['rm', probe['Id']]] if accepted else [])
                 if accepted:
                     self.assertEqual(self.record['phase'], 'prepared')
+
+    def test_real_cli_storage_is_prepared_only_after_target_capability_and_health_seals_the_backend_key(self):
+        with tempfile.TemporaryDirectory(prefix='controller-cli-flow-') as directory, mock.patch.object(C, 'CLI_OWNER', os.geteuid()):
+            self.root = Path(directory) / 'installation'
+            self.root.mkdir(mode=0o700)
+            self.updater.root = self.root
+            self.runtime.reader._object.return_value = {'ID': 'fixture-daemon', 'SecurityOptions': []}
+            self.record.pop('candidateId')
+            review = {'storage': {'backupScope': C.SCOPE}}
+            self.record['checkpoint'] = review
+            self.updater.lookup = mock.Mock(side_effect=ValueError('missing'))
+            probe = {'Id': '6' * 64, 'Image': 'sha256:' + '2' * 64,
+                     'Config': {'Labels': {'io.orbis.controller-probe': 'b' * 64}},
+                     'State': {'Running': False}, 'Mounts': [], 'HostConfig': {'NetworkMode': 'none'}}
+            self.objects[probe['Id']] = probe
+            self.runtime.engine = mock.Mock(return_value=json.dumps({'Id': probe['Id']}).encode())
+            output = io.BytesIO()
+            payload = json.dumps(C.CLI_CAPABILITY).encode()
+            with tarfile.open(fileobj=output, mode='w:') as archive:
+                entry = tarfile.TarInfo('controller-overlay-capability.json')
+                entry.size = len(payload)
+                archive.addfile(entry, io.BytesIO(payload))
+            self.runtime.bounded_output = mock.Mock(return_value=output.getvalue())
+            with mock.patch.object(C.BOOTSTRAP, 'probe', return_value={'profile': C.BOOTSTRAP.CAPABLE}):
+                prepared = self.updater.prepare(review)
+            self.assertEqual(prepared['phase'], 'prepared')
+            self.assertIsNone(prepared['cliStorage']['keySha256'])
+            self.assertEqual(list((self.root / '.secrets').iterdir()), [])
+            self.assertEqual(self.calls, [['rm', probe['Id']]])
+            candidate = self.objects['2' * 64]
+            candidate['Mounts'] = [{'Type': 'bind', 'Source': str(self.root / '.secrets'), 'Destination': C.CLI_TARGET, 'RW': True}]
+            candidate['State'].update(Running=True, Status='running')
+            candidate['Name'] = '/runtipi'
+            prepared['candidateId'] = candidate['Id']
+            with self.assertRaisesRegex(ValueError, 'did not establish'):
+                self.updater.healthy(prepared, candidate['Id'], candidate['Image'])
+            key = self.root / '.secrets/cli-secret'
+            key.write_bytes(os.urandom(32).hex().encode())
+            key.chmod(0o600)
+            self.updater.healthy(prepared, candidate['Id'], candidate['Image'])
+            self.assertEqual(prepared['cliStorage']['keySha256'], C.hashlib.sha256(key.read_bytes()).hexdigest())
+            self.assertNotIn(key.read_text(), json.dumps(prepared))
+            self.updater.save(prepared)
+            key.write_bytes(os.urandom(32).hex().encode())
+            with self.assertRaisesRegex(ValueError, 'storage changed'):
+                self.updater.preserved(self.updater.read())
 
     def test_protected_commit_retires_only_stopped_original_and_reconciles_lost_reply(self):
         self.updater.start_target()
@@ -657,6 +711,501 @@ class ControllerUpdateTests(unittest.TestCase):
         self.updater.stop_for_rollback()
         self.updater.start_original()
         self.assertTrue(self.objects['1' * 64]['State']['Running'])
+
+
+class CliStorageTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix='controller-cli-')
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name) / 'installation'
+        self.root.mkdir(mode=0o700)
+        self.owner = mock.patch.object(C, 'CLI_OWNER', os.geteuid())
+        self.owner.start()
+        self.addCleanup(self.owner.stop)
+        self.updater = C.ControllerUpdate.__new__(C.ControllerUpdate)
+        self.updater.root = self.root
+        self.updater.runtime = SimpleNamespace(reader=mock.Mock())
+        self.updater.runtime.reader._object.return_value = {'ID': 'fixture-daemon', 'SecurityOptions': ['name=seccomp']}
+        self.record = {'source': {'Mounts': []}, 'body': {'HostConfig': {'Binds': []}, 'User': ''}}
+
+    def key(self, value=None):
+        folder = self.root / '.secrets'
+        folder.mkdir(mode=0o700, exist_ok=True)
+        key = folder / 'cli-secret'
+        key.write_bytes(value if value is not None else os.urandom(32).hex().encode())
+        key.chmod(0o600)
+        return key
+
+    def test_private_directory_creation_is_durable_idempotent_and_does_not_generate_a_key(self):
+        with self.assertRaises(FileNotFoundError): C.cli_storage(self.root)
+        self.assertFalse((self.root / '.secrets').exists())
+        first = C.cli_storage(self.root, create=True)
+        self.assertEqual(first, C.cli_storage(self.root, create=True))
+        self.assertIsNone(first['keySha256'])
+        self.assertEqual(stat.S_IMODE((self.root / '.secrets').stat().st_mode), 0o700)
+        self.assertEqual(list((self.root / '.secrets').iterdir()), [])
+
+    def test_existing_key_is_observed_without_modification_or_key_bytes_in_the_receipt(self):
+        key = self.key()
+        before = C.cli_file_identity(key.stat())
+        receipt = C.cli_storage(self.root, create=True)
+        self.assertEqual(before, C.cli_file_identity(key.stat()))
+        self.assertNotIn(key.read_text(), json.dumps(receipt))
+        self.assertEqual(receipt['keySha256'], C.hashlib.sha256(key.read_bytes()).hexdigest())
+
+    def test_partial_malformed_exposed_and_hardlinked_keys_are_preserved_and_refused(self):
+        key = self.key()
+        for value in (b'', b'invalid', os.urandom(33).hex().encode(), os.urandom(32).hex().encode() + b'\n'):
+            key.write_bytes(value)
+            with self.assertRaises(ValueError): C.cli_storage(self.root, create=True)
+            self.assertEqual(key.read_bytes(), value)
+        self.key()
+        key.chmod(0o640)
+        with self.assertRaises(ValueError): C.cli_storage(self.root, create=True)
+        self.assertEqual(stat.S_IMODE(key.stat().st_mode), 0o640)
+        key.chmod(0o600)
+        os.link(key, self.root / 'alias')
+        with self.assertRaises(ValueError): C.cli_storage(self.root, create=True)
+        self.assertTrue((self.root / 'alias').exists())
+
+    def test_symlink_key_directory_and_root_paths_are_refused(self):
+        outside = self.root.parent / 'outside'
+        outside.mkdir(mode=0o700)
+        private = self.root / '.secrets'
+        private.symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(OSError): C.cli_storage(self.root, create=True)
+        private.unlink()
+        private.mkdir(mode=0o700)
+        (private / 'cli-secret').symlink_to(outside / 'missing')
+        with self.assertRaises(OSError): C.cli_storage(self.root, create=True)
+        alias = self.root.parent / 'root-alias'
+        alias.symlink_to(self.root, target_is_directory=True)
+        with self.assertRaises(OSError): C.cli_storage(alias, create=True)
+        self.assertEqual(list(outside.iterdir()), [])
+
+    def test_directory_permissions_and_parent_exposure_are_not_repaired_silently(self):
+        private = self.root / '.secrets'
+        private.mkdir(mode=0o755)
+        with self.assertRaises(ValueError): C.cli_storage(self.root, create=True)
+        self.assertEqual(stat.S_IMODE(private.stat().st_mode), 0o755)
+        private.chmod(0o700)
+        self.root.chmod(0o777)
+        with self.assertRaises(ValueError): C.cli_storage(self.root, create=True)
+
+    def test_directory_sync_failure_retains_private_storage_and_retry_reuses_it(self):
+        with mock.patch.object(C.os, 'fsync', side_effect=OSError('durability fixture')):
+            with self.assertRaises(OSError): C.cli_storage(self.root, create=True)
+        inode = (self.root / '.secrets').stat().st_ino
+        self.assertEqual(C.cli_storage(self.root, create=True)['inode'], inode)
+
+    def test_new_candidate_mounts_target_identity_and_replay_never_allocates_a_replacement(self):
+        original = copy.deepcopy(self.record)
+        self.updater.prepare_cli_storage(self.record)
+        receipt = copy.deepcopy(self.record)
+        self.updater.prepare_cli_storage(self.record)
+        self.assertEqual(receipt, self.record)
+        self.assertEqual(original['source'], self.record['source'])
+        mount = self.record['body']['HostConfig']['Mounts'][0]
+        self.assertEqual(mount, {'Type': 'bind', 'Source': str(self.root / '.secrets'), 'Target': C.CLI_TARGET,
+                                'ReadOnly': False, 'BindOptions': {'Propagation': 'rprivate'}})
+        (self.root / '.secrets').rmdir()
+        with self.assertRaises(FileNotFoundError): self.updater.prepare_cli_storage(self.record)
+        self.assertFalse((self.root / '.secrets').exists())
+
+    def test_existing_bind_and_key_survive_both_mount_encodings(self):
+        key = self.key()
+        digest = C.hashlib.sha256(key.read_bytes()).hexdigest()
+        observed = {'Type': 'bind', 'Source': str(key.parent), 'Destination': C.CLI_TARGET, 'RW': True}
+        for structured in (False, True):
+            with self.subTest(structured=structured):
+                record = copy.deepcopy(self.record)
+                record['source']['Mounts'] = [observed]
+                record['body']['HostConfig'] = ({'Mounts': [{'Type': 'bind', 'Source': str(key.parent), 'Target': C.CLI_TARGET, 'ReadOnly': False}]}
+                                               if structured else {'Binds': [str(key.parent) + ':' + C.CLI_TARGET + ':rw']})
+                before = copy.deepcopy(record['body'])
+                self.updater.prepare_cli_storage(record)
+                self.assertEqual(record['body'], before)
+                self.assertEqual(record['cliStorage']['keySha256'], digest)
+                self.updater.require_cli_storage(record, candidate={'Mounts': [observed]}, require_key=True)
+        self.assertEqual(C.hashlib.sha256(key.read_bytes()).hexdigest(), digest)
+
+    def test_success_requires_the_healthy_candidate_key_then_pins_it_across_recovery(self):
+        self.updater.prepare_cli_storage(self.record)
+        observed = {'Type': 'bind', 'Source': str(self.root / '.secrets'), 'Destination': C.CLI_TARGET, 'RW': True}
+        with self.assertRaises(ValueError):
+            self.updater.require_cli_storage(self.record, candidate={'Mounts': [observed]}, require_key=True)
+        key = self.key()
+        self.updater.require_cli_storage(self.record, candidate={'Mounts': [observed]}, require_key=True)
+        self.assertIsNotNone(self.record['cliStorage']['keySha256'])
+        self.key()
+        with self.assertRaises(ValueError): self.updater.require_cli_storage(self.record)
+        key.unlink()
+        with self.assertRaises(ValueError): self.updater.require_cli_storage(self.record)
+
+    def test_replacement_directory_or_candidate_mount_cannot_pass_the_retained_receipt(self):
+        self.updater.prepare_cli_storage(self.record)
+        with self.assertRaises(ValueError): self.updater.require_cli_storage(self.record, candidate={'Mounts': []})
+        private = self.root / '.secrets'
+        private.rename(self.root / 'retained-identity')
+        private.mkdir(mode=0o700)
+        with self.assertRaises(ValueError): self.updater.require_cli_storage(self.record)
+
+    def test_custom_uid_or_unmapped_rootless_daemon_is_refused_before_allocation(self):
+        for changes, security in [({'User': '1000'}, []), ({}, ['name=rootless']), ({}, ['name=userns']),
+                                   ({'HostConfig': {'UsernsMode': 'private'}}, [])]:
+            with self.subTest(changes=changes, security=security):
+                record = copy.deepcopy(self.record)
+                record['body'].update(changes)
+                self.updater.runtime.reader._object.return_value = {'ID': 'fixture-daemon', 'SecurityOptions': security}
+                with self.assertRaises(C.CapabilityError): self.updater.prepare_cli_storage(record)
+                self.assertFalse((self.root / '.secrets').exists())
+
+    def test_foreign_sources_shadow_mounts_and_aliases_are_refused_before_allocation(self):
+        cases = [({'Type': 'volume', 'Source': 'foreign', 'Destination': C.CLI_TARGET, 'RW': True}),
+                 {'Type': 'bind', 'Source': str(self.root / 'foreign'), 'Destination': C.CLI_TARGET, 'RW': True},
+                 {'Type': 'bind', 'Source': str(self.root / '.secrets' / 'nested'), 'Destination': '/other', 'RW': True},
+                 {'Type': 'bind', 'Source': str(self.root / 'foreign'), 'Destination': C.CLI_TARGET + '/cli-secret', 'RW': True},
+                 {'Type': 'bind', 'Source': str(self.root), 'Destination': '/other', 'RW': False}]
+        for mount in cases:
+            with self.subTest(mount=mount):
+                record = copy.deepcopy(self.record)
+                record['source']['Mounts'] = [mount]
+                with self.assertRaises(ValueError): self.updater.prepare_cli_storage(record)
+                self.assertFalse((self.root / '.secrets').exists())
+
+
+class CoreNetworkTests(unittest.TestCase):
+    def setUp(self):
+        ControllerUpdateTests.setUp(self)
+        # This fixture models persisted replacement, including removed keys;
+        # its working record and saved journal are separate objects.
+        def save(record):
+            self.record = copy.deepcopy(record)
+        self.updater.save = save
+        self.net = C.CoreNetwork(self.updater)
+        self.networks = {}
+        self.network_calls = []
+        self.lost = None
+        self.updater.optional_container = lambda identifier: copy.deepcopy(self.objects.get(identifier))
+        self.runtime.engine = self.engine
+        change = self.runtime.change
+        def start(arguments):
+            change(arguments)
+            if arguments[0] == 'start':
+                for name, endpoint in self.objects[arguments[1]]['NetworkSettings']['Networks'].items():
+                    endpoint['NetworkID'] = '7' * 64 if name == C.CORE_NETWORK else 'f' * 64
+        self.runtime.change = start
+
+    def engine(self, method, route, body=None, **options):
+        if method == 'POST' and route.startswith('/containers/create?name=orbis-controller-probe-'):
+            probe = {'Id': '6' * 64, 'Image': 'sha256:' + '2' * 64, 'Config': {'Labels': copy.deepcopy(body['Labels'])},
+                     'State': {'Running': False}, 'Mounts': [], 'HostConfig': {'NetworkMode': 'none'}}
+            self.objects[probe['Id']] = probe
+            return json.dumps({'Id': probe['Id']}).encode()
+        if method == 'GET' and route == '/containers/json?all=true':
+            return json.dumps([{'Id': raw['Id'], 'NetworkSettings': raw['NetworkSettings']} for raw in self.objects.values()]).encode()
+        if method == 'GET' and route.startswith('/containers/'):
+            raw = self.objects.get(route.split('/')[2])
+            return None if raw is None else json.dumps(raw).encode()
+        if method == 'DELETE':
+            identifier = route.split('/')[-1]
+            name = next(name for name, network in self.networks.items() if network['Id'] == identifier)
+            self.networks.pop(name)
+            self.network_calls.append(('delete', identifier))
+            if self.lost == 'delete': raise RuntimeError('lost network retirement reply')
+            if self.lost == 'crash-delete': raise SystemExit('interrupted after network retirement')
+            return b''
+        if method == 'GET':
+            name = route.split('/')[-1]
+            network = next((n for n in self.networks.values() if n['Id'] == name or n['Name'] == name), None)
+            if network is None and not options.get('allow_missing'): raise ValueError('missing network')
+            return None if network is None else json.dumps(network).encode()
+        if route == '/networks/create':
+            self.networks[C.CORE_NETWORK] = {**copy.deepcopy(body), 'Id': '7' * 64, 'Scope': 'local', 'Options': {}, 'IPAM': {}}
+            self.network_calls.append(('create', C.CORE_NETWORK))
+            if self.lost == 'create': raise RuntimeError('lost create reply')
+            return json.dumps({'Id': '7' * 64}).encode()
+        net = C.CORE_NETWORK if route.split('/')[2] == '7' * 64 else 'managed'
+        operation = route.split('/')[-1]
+        raw = self.objects[body['Container']]
+        self.network_calls.append((operation, net, raw['Id']))
+        if operation == 'connect':
+            raw['NetworkSettings']['Networks'][net] = {**copy.deepcopy(body['EndpointConfig']), 'NetworkID': ''}
+        elif operation == 'disconnect':
+            self.assertFalse(body['Force'])
+            raw['NetworkSettings']['Networks'].pop(net)
+        else: raise AssertionError((method, route))
+        if self.lost == operation: raise RuntimeError('lost endpoint reply')
+        if self.lost == 'crash-' + operation: raise SystemExit('interrupted after endpoint change')
+        return b''
+
+    def prepared(self):
+        record = self.updater.read()
+        self.net.prepare(record)
+        return record
+
+    def test_preparation_only_adds_an_isolated_network_and_keeps_peers_and_apps_unchanged(self):
+        prior = copy.deepcopy(self.objects)
+        record = self.prepared()
+        self.assertEqual(self.objects, prior)
+        network = self.networks[C.CORE_NETWORK]
+        self.assertTrue(network['Internal'])
+        self.assertEqual(network['Driver'], 'bridge')
+        self.assertEqual(network['Labels']['orbis.managed'], 'true')
+        self.assertEqual(network['Labels']['io.orbis.controller-update'], record['nonce'])
+        self.assertEqual(record['body']['NetworkingConfig']['EndpointsConfig'][C.CORE_NETWORK], {'Aliases': ['runtipi']})
+        self.assertEqual(record['peerDefinitions'], self.record['peerDefinitions'])
+        self.net.prepare(record)
+        self.assertEqual(self.network_calls, [('create', C.CORE_NETWORK)])
+
+    def test_already_isolated_source_reuses_its_exact_network_and_preserves_custom_aliases(self):
+        source = self.objects['1' * 64]
+        source['NetworkSettings']['Networks'][C.CORE_NETWORK] = {'NetworkID': '7' * 64, 'Aliases': ['runtipi', 'operator-core']}
+        self.record['source'] = copy.deepcopy(source)
+        self.record['sourceDefinition'] = self.runtime.definition(source)
+        self.record['body']['NetworkingConfig']['EndpointsConfig'][C.CORE_NETWORK] = {'Aliases': ['runtipi', 'operator-core']}
+        for name, peer in self.record['peers'].items():
+            raw = self.objects[peer['Id']]
+            raw['HostConfig']['NetworkMode'] = C.CORE_NETWORK
+            raw['NetworkSettings']['Networks'] = {C.CORE_NETWORK: {'NetworkID': '7' * 64, 'Aliases': [name]}}
+            self.record['peers'][name] = copy.deepcopy(raw)
+            self.record['peerDefinitions'][name] = self.runtime.definition(raw)
+        self.networks[C.CORE_NETWORK] = {'Name': C.CORE_NETWORK, 'Id': '7' * 64, 'Scope': 'local', 'Driver': 'bridge',
+                                         'Internal': True, 'Labels': {'orbis.managed': 'true'}, 'Options': {}}
+        record = self.prepared()
+        self.net.move(record, 'target')
+        self.net.move(record, 'source')
+        self.assertEqual(self.network_calls, [])
+        self.assertEqual(record['body']['NetworkingConfig']['EndpointsConfig'][C.CORE_NETWORK]['Aliases'], ['runtipi', 'operator-core'])
+
+    def test_rollback_reuses_reviewed_source_aliases_static_address_and_endpoint_options(self):
+        prior = self.objects['4' * 64]
+        endpoint = prior['NetworkSettings']['Networks']['managed']
+        endpoint.update(Aliases=['runtipi-db', 'operator-db'], IPAMConfig={'IPv4Address': '192.0.2.31'}, DriverOpts={'fixture': 'preserved'})
+        self.record['peers']['runtipi-db'] = copy.deepcopy(prior)
+        self.record['peerDefinitions']['runtipi-db'] = self.runtime.definition(prior)
+        record = self.prepared()
+        self.net.move(record, 'target')
+        target = self.objects[prior['Id']]['NetworkSettings']['Networks'][C.CORE_NETWORK]
+        self.assertEqual(target['Aliases'], ['operator-db', 'runtipi-db'])
+        self.assertNotIn('IPAMConfig', target)
+        self.net.move(record, 'source')
+        restored = self.objects[prior['Id']]['NetworkSettings']['Networks']['managed']
+        self.assertEqual(restored['IPAMConfig'], endpoint['IPAMConfig'])
+        self.assertEqual(restored['DriverOpts'], endpoint['DriverOpts'])
+        self.assertEqual(restored['Aliases'], endpoint['Aliases'])
+
+    def test_daemon_drift_or_peer_topology_change_blocks_network_creation(self):
+        for change in ('daemon', 'peer'):
+            with self.subTest(change=change):
+                self.setUp()
+                if change == 'daemon': self.runtime.reader._object.return_value = {'ID': 'other-daemon'}
+                else: self.objects['4' * 64]['NetworkSettings']['Networks']['unreviewed'] = {'NetworkID': '8' * 64}
+                with self.assertRaises(ValueError): self.net.prepare(self.updater.read())
+                self.assertEqual(self.network_calls, [])
+
+    def test_public_prepare_keeps_the_original_legacy_network_review_across_lost_creation_reply(self):
+        self.record.pop('candidateId')
+        review = {'storage': {'backupScope': C.SCOPE}}
+        self.record['checkpoint'] = review
+        self.updater.lookup = mock.Mock(side_effect=ValueError('missing'))
+        output = io.BytesIO()
+        payload = json.dumps(C.NETWORK_CAPABILITY).encode()
+        with tarfile.open(fileobj=output, mode='w:') as archive:
+            entry = tarfile.TarInfo('controller-overlay-capability.json')
+            entry.size = len(payload)
+            archive.addfile(entry, io.BytesIO(payload))
+        self.runtime.bounded_output = mock.Mock(return_value=output.getvalue())
+        original = [{'id': 'f' * 64, 'preservedEndpoints': ['3' * 64]}]
+        def networks(updater, record):
+            self.assertNotIn(C.CORE_NETWORK, self.networks)
+            return copy.deepcopy(original)
+        with mock.patch.object(self.updater, 'prepare_cli_storage') as cli, \
+                mock.patch.object(C.BOOTSTRAP, 'probe', return_value={'profile': C.BOOTSTRAP.LEGACY}), \
+                mock.patch.object(C.BOOTSTRAP, 'preserved_networks', side_effect=networks) as prior:
+            self.lost = 'create'
+            with self.assertRaises(RuntimeError): self.updater.prepare(review)
+            self.assertEqual(self.record['sourceBootstrapNetworks'], original)
+            self.lost = None
+            prepared = self.updater.prepare(review)
+            self.assertEqual(prepared['phase'], 'prepared')
+            self.assertEqual(prepared['sourceBootstrapNetworks'], original)
+            self.assertEqual(prior.call_count, 1)
+            self.assertEqual(cli.call_count, 2)
+        self.assertEqual(sum(event[0] == 'create' for event in self.network_calls), 1)
+
+    def test_lost_create_reply_reuses_only_the_same_journaled_network(self):
+        self.lost = 'create'
+        with self.assertRaises(RuntimeError): self.net.prepare(self.updater.read())
+        self.assertIsNone(self.record['coreNetwork']['id'])
+        self.lost = None
+        record = self.updater.read()
+        self.net.prepare(record)
+        self.net.verify(record)
+        self.assertEqual(len(self.network_calls), 1)
+
+    def test_foreign_network_or_changed_network_definition_is_preserved_and_refused(self):
+        network = {'Name': C.CORE_NETWORK, 'Id': '7' * 64, 'Scope': 'local', 'Driver': 'bridge', 'Internal': True, 'Labels': {}}
+        self.networks[C.CORE_NETWORK] = copy.deepcopy(network)
+        with self.assertRaises(ValueError): self.net.prepare(self.updater.read())
+        self.assertEqual(self.networks[C.CORE_NETWORK], network)
+        self.assertEqual(self.network_calls, [])
+        self.networks.clear()
+        record = self.prepared()
+        self.networks[C.CORE_NETWORK]['Internal'] = False
+        with self.assertRaises(ValueError): self.net.verify(record)
+
+    def test_forward_endpoint_changes_and_rollback_preserve_every_peer_config_mount_and_id(self):
+        record = self.prepared()
+        before = copy.deepcopy(self.objects)
+        self.net.move(record, 'target')
+        self.assertIsNone(record['coreNetwork']['active'])
+        for name, peer in record['peers'].items():
+            raw = self.objects[peer['Id']]
+            self.assertEqual(set(raw['NetworkSettings']['Networks']), {C.CORE_NETWORK})
+            self.assertEqual(raw['Config'], before[raw['Id']]['Config'])
+            self.assertEqual(raw['HostConfig'], before[raw['Id']]['HostConfig'])
+            self.assertEqual(raw['Mounts'], before[raw['Id']]['Mounts'])
+            self.assertEqual(raw['NetworkSettings']['Networks'][C.CORE_NETWORK]['Aliases'], [name])
+        self.net.move(record, 'source')
+        for peer in record['peers'].values(): self.assertEqual(set(self.objects[peer['Id']]['NetworkSettings']['Networks']), {'managed'})
+        self.assertEqual(self.objects['3' * 64], before['3' * 64])
+        self.assertEqual(record['peerDefinitions'], self.record['peerDefinitions'])
+
+    def test_lost_connect_and_disconnect_replies_are_observed_without_repeating_effects(self):
+        for operation in ('connect', 'disconnect'):
+            with self.subTest(operation=operation):
+                self.setUp()
+                record = self.prepared()
+                self.lost = operation
+                self.net.move(record, 'target')
+                self.assertEqual(len([event for event in self.network_calls if event[0] == 'connect']), 2)
+                self.assertEqual(len([event for event in self.network_calls if event[0] == 'disconnect']), 2)
+                self.net.verify(record)
+
+    def test_interrupted_effect_replay_does_not_repeat_connection_or_force_forward_after_abort(self):
+        for destination in ('target', 'source'):
+            with self.subTest(destination=destination):
+                self.setUp()
+                record = self.prepared()
+                self.lost = 'crash-connect'
+                with self.assertRaises(SystemExit): self.net.move(record, 'target')
+                self.assertIsNotNone(self.record['coreNetwork']['active'])
+                self.lost = None
+                record = self.updater.read()
+                self.net.move(record, destination)
+                expected = {C.CORE_NETWORK} if destination == 'target' else {'managed'}
+                for peer in record['peers'].values():
+                    self.assertEqual(set(self.objects[peer['Id']]['NetworkSettings']['Networks']), expected)
+                first_peer = record['peers']['runtipi-db']['Id']
+                self.assertEqual(sum(event == ('connect', C.CORE_NETWORK, first_peer) for event in self.network_calls), 1)
+                self.assertIsNone(record['coreNetwork']['active'])
+
+    def test_running_or_restart_enabled_controllers_and_peers_cannot_change_endpoints(self):
+        for identifier, field in [('1' * 64, 'running'), ('2' * 64, 'running'), ('4' * 64, 'running'), ('5' * 64, 'restart')]:
+            with self.subTest(identifier=identifier, field=field):
+                self.setUp()
+                record = self.prepared()
+                if field == 'running': self.objects[identifier]['State']['Running'] = True
+                else: self.objects[identifier]['HostConfig']['RestartPolicy']['Name'] = 'always'
+                with self.assertRaises(ValueError): self.net.move(record, 'target')
+                self.assertEqual(len(self.network_calls), 1)
+
+    def test_legacy_rollback_retires_only_its_empty_new_network_before_original_startup(self):
+        record = self.prepared()
+        record['sourceBootstrapProfile'] = {'profile': C.BOOTSTRAP.LEGACY}
+        self.net.move(record, 'target')
+        self.net.move(record, 'source')
+        self.net.retire_for_legacy_rollback(record)
+        self.assertEqual(record['coreNetwork']['retirement'], 'complete')
+        self.assertNotIn(C.CORE_NETWORK, self.networks)
+        self.net.verify(record)
+        before = list(self.network_calls)
+        self.net.retire_for_legacy_rollback(record)
+        self.assertEqual(self.network_calls, before)
+        with self.assertRaises(ValueError): self.net.move(record, 'target')
+        with self.assertRaises(ValueError): self.net.prepare(record)
+
+    def test_lost_or_interrupted_legacy_network_retirement_reconciles_exact_absence(self):
+        for loss in ('delete', 'crash-delete'):
+            with self.subTest(loss=loss):
+                self.setUp()
+                record = self.prepared()
+                record['sourceBootstrapProfile'] = {'profile': C.BOOTSTRAP.LEGACY}
+                self.updater.save(record)
+                self.lost = loss
+                if loss == 'crash-delete':
+                    with self.assertRaises(SystemExit): self.net.retire_for_legacy_rollback(record)
+                    self.assertEqual(self.record['coreNetwork']['retirement'], 'intent')
+                    record = self.updater.read()
+                    self.lost = None
+                    self.net.retire_for_legacy_rollback(record)
+                else: self.net.retire_for_legacy_rollback(record)
+                self.assertEqual(record['coreNetwork']['retirement'], 'complete')
+                self.assertEqual(sum(event[0] == 'delete' for event in self.network_calls), 1)
+
+    def test_unexpected_network_absence_and_attached_container_block_legacy_retirement(self):
+        record = self.prepared()
+        record['sourceBootstrapProfile'] = {'profile': C.BOOTSTRAP.LEGACY}
+        network = self.networks.pop(C.CORE_NETWORK)
+        with self.assertRaises(ValueError): self.net.retire_for_legacy_rollback(record)
+        self.networks[C.CORE_NETWORK] = network
+        self.objects['2' * 64]['NetworkSettings']['Networks'][C.CORE_NETWORK] = {'NetworkID': '7' * 64}
+        with self.assertRaises(ValueError): self.net.retire_for_legacy_rollback(record)
+        self.assertIn(C.CORE_NETWORK, self.networks)
+        self.assertNotEqual(record['coreNetwork']['retirement'], 'complete')
+
+    def test_foreign_stopped_and_running_members_are_rejected(self):
+        record = self.prepared()
+        for running in (False, True):
+            raw = copy.deepcopy(self.objects['2' * 64])
+            raw.update(Id='8' * 64, Name='/unrelated')
+            raw['State']['Running'] = running
+            raw['NetworkSettings']['Networks'] = {C.CORE_NETWORK: {'NetworkID': '7' * 64}}
+            self.objects[raw['Id']] = raw
+            with self.assertRaisesRegex(ValueError, 'unrelated'): self.net.verify(record)
+            self.objects.pop(raw['Id'])
+
+    def test_peer_drift_and_extra_aliases_or_networks_never_become_a_new_baseline(self):
+        record = self.prepared()
+        self.net.move(record, 'target')
+        peer = self.objects['4' * 64]
+        before = copy.deepcopy(peer)
+        for field in ('environment', 'alias', 'network', 'address'):
+            with self.subTest(field=field):
+                self.objects['4' * 64] = copy.deepcopy(before)
+                peer = self.objects['4' * 64]
+                if field == 'environment': peer['Config']['Env'].append('UNREVIEWED=1')
+                elif field == 'alias': peer['NetworkSettings']['Networks'][C.CORE_NETWORK]['Aliases'].append('other')
+                elif field == 'network': peer['NetworkSettings']['Networks']['foreign'] = {'NetworkID': '9' * 64}
+                else: peer['NetworkSettings']['Networks'][C.CORE_NETWORK]['IPAMConfig'] = {'IPv4Address': '192.0.2.99'}
+                with self.assertRaises(ValueError): self.net.verify(record)
+                self.assertEqual(record['peerDefinitions'], self.record['peerDefinitions'])
+
+    def test_completed_topology_is_idempotent_even_when_the_healthy_controller_and_peers_are_running(self):
+        record = self.prepared()
+        self.net.move(record, 'target')
+        for identifier in ('2' * 64, '4' * 64, '5' * 64): self.runtime.change(['start', identifier])
+        before = list(self.network_calls)
+        self.net.move(record, 'target')
+        self.assertEqual(self.network_calls, before)
+
+    def test_actual_replacement_and_rollback_functions_use_the_protected_network_transition(self):
+        record = self.prepared()
+        candidate = self.objects['2' * 64]
+        candidate['NetworkSettings']['Networks'][C.CORE_NETWORK] = {'NetworkID': '7' * 64, 'Aliases': ['runtipi']}
+        record['candidateDefinition'] = self.runtime.definition(candidate)
+        self.updater.save(record)
+        self.updater.start_target()
+        self.assertEqual(self.record['phase'], 'active')
+        self.assertEqual(self.record['coreNetwork']['goal'], 'target')
+        self.assertEqual(self.objects['3' * 64]['Name'], '/runtipi-reverse-proxy')
+        self.updater.stop_for_rollback()
+        self.assertEqual(self.record['coreNetwork']['goal'], 'source')
+        self.updater.start_original()
+        self.assertEqual(self.record['phase'], 'rolled-back')
+        self.assertTrue(self.objects['1' * 64]['State']['Running'])
+        self.assertEqual(set(self.objects['4' * 64]['NetworkSettings']['Networks']), {'managed'})
 
 
 class DedicatedSourceReconstructionTests(unittest.TestCase):

@@ -62,7 +62,7 @@ export async function runRetainedRestorePhase(options: {
         return 'prepared' as const;
       }
       if (phase === 'rollback' && ['staging', 'preparing', 'discarded'].includes(state.phase)) {
-        if (state.phase !== 'discarded') await runtime.discardPreparation(signal);
+        await runtime.discardPreparation(signal);
         await authority.verify();
         if ((await journal.refresh()).phase !== 'discarded') throw fail();
         return 'rolled-back' as const;

@@ -1,13 +1,15 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   beginAppImagePinUpdate,
   requireAppImagePinUpdate,
   requireNoAppImagePinUpdates,
+  requireStagedAppUpdateActivation,
   appImagePinSourceSha256,
   readAppImagePins,
+  readStagedAppUpdate,
   removeAppImagePins,
   writeAppImagePins,
 } from './app-image-pins';
@@ -108,6 +110,104 @@ describe('retained update metadata barrier', () => {
     await fs.writeFile(path.join(data, 'accepted-write'), 'original-data');
     return { metadata, data, env };
   };
+
+  const binding = { activationSha256: '6'.repeat(64), imageIds: { demo: `sha256:${'4'.repeat(64)}` } };
+
+  const staged = async (pulled = true) => {
+    const f = await fixture();
+    const original = await fs.stat(f.metadata);
+    const transaction = await beginAppImagePinUpdate(directory, source.appUrn, f.metadata, f.env, true);
+    await fs.mkdir(transaction.targetDirectory, { mode: 0o750 });
+    await fs.writeFile(path.join(transaction.targetDirectory, 'source.json'), 'new-source', { mode: 0o640 });
+    await transaction.stageTarget('services: {}', 'NEW_SETTING=fixture');
+    if (pulled) await transaction.recordPulledImages(binding);
+    return { ...f, original, transaction };
+  };
+
+  it('prepares only private staged files before the original directory can be switched', async () => {
+    const f = await staged(false);
+    const files = await readStagedAppUpdate(directory, source.appUrn, f.transaction.id);
+    expect(await fs.readFile(files.compose, 'utf8')).toBe('services: {}');
+    expect((await fs.stat(files.env)).mode & 0o777).toBe(0o600);
+    expect((await fs.stat(f.metadata)).ino).toBe(f.original.ino);
+    expect(await fs.readFile(path.join(f.metadata, 'source.json'), 'utf8')).toBe('old-source');
+    expect(await fs.readFile(f.env, 'utf8')).toBe('OLD_SETTING=kept');
+    await f.transaction.restoreMetadata();
+    expect((await fs.stat(f.metadata)).ino).toBe(f.original.ino);
+    await expect(requireNoAppImagePinUpdates(directory)).resolves.toBeUndefined();
+  });
+
+  it('gates publication on durable evidence of immutable image IDs', async () => {
+    const f = await staged(false);
+    const files = await readStagedAppUpdate(directory, source.appUrn, f.transaction.id);
+    await expect(f.transaction.publishTarget()).rejects.toThrow('explicit recovery');
+    await expect(f.transaction.recordPulledImages({ ...binding, imageIds: { demo: 'fixture:latest' } })).rejects.toThrow('explicit recovery');
+    await f.transaction.recordPulledImages(binding);
+    const journal = path.join(files.staging, 'journal.json');
+    expect((await fs.stat(journal)).mode & 0o777).toBe(0o600);
+    expect(JSON.parse(await fs.readFile(journal, 'utf8')).pulledImages).toEqual(binding);
+    await f.transaction.publishTarget();
+    await f.transaction.activationAttempted();
+    const altered = { ...binding, activationSha256: '7'.repeat(64) };
+    await expect(requireStagedAppUpdateActivation(directory, source.appUrn, f.transaction.id, altered)).rejects.toThrow('explicit recovery');
+    await expect(requireStagedAppUpdateActivation(directory, source.appUrn, f.transaction.id, binding)).resolves.toBeUndefined();
+  });
+
+  it('can restore the exact original directory and environment after promotion and before activation', async () => {
+    const f = await staged();
+    await f.transaction.publishTarget();
+    expect(await fs.readFile(path.join(f.metadata, 'source.json'), 'utf8')).toBe('new-source');
+    expect(await fs.readFile(f.env, 'utf8')).toBe('NEW_SETTING=fixture');
+
+    await f.transaction.restoreMetadata();
+    expect((await fs.stat(f.metadata)).ino).toBe(f.original.ino);
+    expect(await fs.readFile(path.join(f.metadata, 'source.json'), 'utf8')).toBe('old-source');
+    expect(await fs.readFile(f.env, 'utf8')).toBe('OLD_SETTING=kept');
+    expect(await fs.readFile(path.join(f.data, 'accepted-write'), 'utf8')).toBe('original-data');
+  });
+
+  it.each(['target', 'environment'])('restores the inode and old bytes after a partial %s promotion failure', async (failure) => {
+    const f = await staged();
+    const rename = fs.rename.bind(fs);
+    const fault = vi.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+      if ((failure === 'target' && from === f.transaction.targetDirectory) || (failure === 'environment' && to === f.env))
+        throw new Error('Synthetic rename failure');
+      return rename(from, to);
+    });
+    try {
+      await expect(f.transaction.publishTarget()).rejects.toThrow('Synthetic rename failure');
+    } finally {
+      fault.mockRestore();
+    }
+    await expect(requireAppImagePinUpdate(directory, source.appUrn)).rejects.toThrow('explicit recovery');
+    await f.transaction.restoreMetadata();
+    expect((await fs.stat(f.metadata)).ino).toBe(f.original.ino);
+    expect(await fs.readFile(path.join(f.metadata, 'source.json'), 'utf8')).toBe('old-source');
+    expect(await fs.readFile(f.env, 'utf8')).toBe('OLD_SETTING=kept');
+    await expect(requireNoAppImagePinUpdates(directory)).resolves.toBeUndefined();
+  });
+
+  it('rejects substituting an equivalent-looking staged directory', async () => {
+    const f = await staged();
+    const target = f.transaction.targetDirectory;
+    await fs.rename(target, `${target}-previous`);
+    await fs.cp(`${target}-previous`, target, { recursive: true });
+    await expect(readStagedAppUpdate(directory, source.appUrn, f.transaction.id)).rejects.toThrow('explicit recovery');
+    await expect(f.transaction.publishTarget()).rejects.toThrow('explicit recovery');
+    expect((await fs.stat(f.metadata)).ino).toBe(f.original.ino);
+    expect(await fs.readFile(f.env, 'utf8')).toBe('OLD_SETTING=kept');
+  });
+
+  it('leaves the new data and update journal in place after the activation barrier', async () => {
+    const f = await staged();
+    await f.transaction.publishTarget();
+    await f.transaction.activationAttempted();
+    await fs.writeFile(path.join(f.data, 'accepted-write'), 'accepted-new-data');
+    await expect(f.transaction.restoreMetadata()).rejects.toThrow('explicit recovery');
+    await expect(requireNoAppImagePinUpdates(directory)).rejects.toThrow('explicit recovery');
+    expect(await fs.readFile(f.env, 'utf8')).toBe('NEW_SETTING=fixture');
+    expect(await fs.readFile(path.join(f.data, 'accepted-write'), 'utf8')).toBe('accepted-new-data');
+  });
   it('restores only sealed metadata and original permissions before activation, leaving app data untouched', async () => {
     const f = await fixture();
     const transaction = await beginAppImagePinUpdate(directory, source.appUrn, f.metadata, f.env);
@@ -121,6 +221,17 @@ describe('retained update metadata barrier', () => {
     expect(await fs.readFile(f.env, 'utf8')).toBe('OLD_SETTING=kept');
     expect(await fs.readFile(path.join(f.data, 'accepted-write'), 'utf8')).toBe('original-data');
     await expect(requireNoAppImagePinUpdates(directory)).resolves.toBeUndefined();
+  });
+  it('seals and restores portable package links through the legacy metadata barrier without following them', async () => {
+    const f = await fixture();
+    await fs.writeFile(path.join(f.metadata, 'logo.jpg'), 'old-image', { mode: 0o640 });
+    await fs.symlink('logo.jpg', path.join(f.metadata, 'image.jpg'));
+    const transaction = await beginAppImagePinUpdate(directory, source.appUrn, f.metadata, f.env);
+    await fs.writeFile(path.join(f.metadata, 'logo.jpg'), 'new-image');
+    await transaction.prepare();
+    await transaction.restoreMetadata();
+    expect(await fs.readlink(path.join(f.metadata, 'image.jpg'))).toBe('logo.jpg');
+    expect(await fs.readFile(path.join(f.metadata, 'image.jpg'), 'utf8')).toBe('old-image');
   });
   it('durably blocks ordinary operations after activation and preserves any accepted new writes', async () => {
     const f = await fixture();

@@ -19,3 +19,4 @@
 !**/nest-cli.json
 !**/.swcrc
 /.orbis-tests.*/
+**/node_modules/**

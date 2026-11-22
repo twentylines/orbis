@@ -7,18 +7,36 @@ import { describeSentinelUpdate, sentinelUpdateProgressOptions, type SentinelUpd
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SentinelStatus } from './sentinel-status';
-import { SentinelStatusError, type SentinelStatus as Status, sentinelStatusOptions } from '../sentinel-status';
+import {
+  type SentinelRecoveryAccess,
+  SentinelStatusError,
+  type SentinelStatus as Status,
+  sentinelRecoveryAccessOptions,
+  sentinelStatusOptions,
+} from '../sentinel-status';
 
 const healthy: Status = { available: true, installedVersion: '0.1.0-dev.11', availableVersion: null, state: 'healthy' };
 
-function render({ value, error, active = true }: { value?: Status; error?: Error; active?: boolean } = {}) {
+type RenderOptions = {
+  value?: Status;
+  error?: Error;
+  active?: boolean;
+  operator?: boolean;
+  access?: SentinelRecoveryAccess;
+  accessError?: Error;
+};
+
+function render({ value, error, active = true, operator = false, access, accessError }: RenderOptions = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false } } });
   const options = sentinelStatusOptions(active);
   if (value) client.setQueryData(options.queryKey, value);
   if (error) client.getQueryCache().build(client, { queryKey: options.queryKey }).setState({ status: 'error', error });
+  const accessOptions = sentinelRecoveryAccessOptions(active);
+  if (access) client.setQueryData(accessOptions.queryKey, access);
+  if (accessError) client.getQueryCache().build(client, { queryKey: accessOptions.queryKey }).setState({ status: 'error', error: accessError });
   const markup = renderToStaticMarkup(
     <QueryClientProvider client={client}>
-      <SentinelStatus active={active} />
+      <SentinelStatus active={active} operator={operator} />
     </QueryClientProvider>,
   );
   client.clear();
@@ -159,4 +177,57 @@ test('an available version is shown only when it was actually reported', () => {
   expect(markup).toContain('<dt>Available version</dt>');
   expect(markup).toContain('<dd>0.2.0-beta.1</dd>');
   expect(markup).not.toContain('Install update');
+});
+
+const portalUrl = 'https://independent.example:8443/sentinel/recovery/';
+
+test('shows the staged operator the next human step without claiming emergency key confirmation', () => {
+  const access = { state: 'configured', portalUrl, unitState: 'active', enrollment: 'key-prepared' } as const;
+  const operator = render({ operator: true, access });
+  expect(operator).toContain('Emergency key prepared.');
+  expect(operator).toContain('confirm the saved file');
+  expect(operator).not.toContain('Host recorded a key acknowledgment.');
+  expect(render({ access })).not.toContain('Emergency key prepared.');
+});
+
+test('renders a native recovery link to the reported independent portal with qualified unit state', () => {
+  for (const unitState of ['active', 'inactive', 'unknown'] as const) {
+    const markup = render({ access: { state: 'configured', portalUrl, unitState } });
+    expect(markup).toContain(`href="${portalUrl}" target="_blank" rel="noopener noreferrer">Open recovery</a>`);
+    expect(markup).toContain(unitState === 'unknown' ? 'Recovery service status unknown.' : `Recovery service ${unitState}.`);
+    expect(markup).toContain('Open the portal to check sign-in availability.');
+    expect(markup).not.toContain('<button');
+    expect(markup).not.toContain('tabindex=');
+  }
+});
+
+test('healthy Sentinel and stale access after authentication failure cannot fabricate recovery access', () => {
+  const missing = render({ value: healthy, access: { state: 'missing', portalUrl: null, unitState: null } });
+  expect(missing).toContain('Recovery portal setup required.');
+  expect(missing).not.toContain('href=');
+  const stale = render({
+    value: healthy,
+    operator: true,
+    access: { state: 'configured', portalUrl, unitState: 'active', enrollment: 'activated' },
+    accessError: new SentinelStatusError(401),
+  });
+  expect(stale).toContain('Sign in again to check recovery access.');
+  expect(stale).not.toContain('href=');
+  expect(stale).not.toContain('Recovery service active.');
+  expect(stale).not.toContain('Recovery credentials activated.');
+  const unknownEnrollment = render({ operator: true, access: { state: 'configured', portalUrl, unitState: 'active' } });
+  expect(unknownEnrollment).toContain('Enrollment progress could not be verified.');
+  expect(unknownEnrollment).not.toContain('Recovery credentials activated.');
+  const unavailable = render({ value: healthy, access: { state: 'unavailable', portalUrl: null, unitState: null } });
+  expect(unavailable).toContain('Recovery access could not be verified.');
+  expect(unavailable).not.toContain('href=');
+});
+
+test('recovery entry is offered only to an operator with active, activated recovery', () => {
+  const access = { state: 'configured', portalUrl, unitState: 'active', enrollment: 'activated' } as const;
+  expect(render({ operator: true, access })).toContain('Enter recovery');
+  expect(render({ access })).not.toContain('Enter recovery');
+  expect(render({ operator: true, access: { ...access, unitState: 'inactive' } })).not.toContain('Enter recovery');
+  expect(render({ operator: true, access: { ...access, enrollment: 'operator-staged' } })).not.toContain('Enter recovery');
+  expect(render({ operator: true, access, accessError: new SentinelStatusError(401) })).not.toContain('Enter recovery');
 });

@@ -1,4 +1,18 @@
-import { BadRequestException, Controller, ForbiddenException, Get, Header, Query, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Header,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { LoadDto } from './dto/system.dto';
@@ -131,6 +145,65 @@ export class SystemController {
   sentinelUpdateProgress(@Req() request: Request) {
     if (request.user?.operator !== true) throw new ForbiddenException('An operator session is required.');
     return this.sentinel.readUpdateProgress();
+  }
+
+  @UseGuards(AuthGuard)
+  @Header('Cache-Control', 'no-store')
+  @Get('/sentinel/recovery-access')
+  async sentinelRecoveryAccess(@Req() request: Request) {
+    const access = await this.sentinel.readRecoveryAccess();
+    if (request.user?.operator === true || access.state !== 'configured') return access;
+    return { state: access.state, portalUrl: access.portalUrl, unitState: access.unitState };
+  }
+
+  @UseGuards(AuthGuard)
+  @Header('Cache-Control', 'no-store')
+  @HttpCode(200)
+  @Post('/sentinel/enrollment/save-key')
+  saveSentinelEmergencyKey(@Req() request: Request, @Body() body: unknown) {
+    this.requireRecoveryOperator(request);
+    return this.sentinel.recoveryKeyHandoff('save', body);
+  }
+
+  @UseGuards(AuthGuard)
+  @Header('Cache-Control', 'no-store')
+  @HttpCode(200)
+  @Post('/sentinel/enrollment/confirm-key')
+  confirmSentinelEmergencyKey(@Req() request: Request, @Body() body: unknown) {
+    this.requireRecoveryOperator(request);
+    return this.sentinel.recoveryKeyHandoff('confirm', body);
+  }
+
+  @UseGuards(AuthGuard)
+  @Header('Cache-Control', 'no-store')
+  @HttpCode(200)
+  @Post('/sentinel/controller-handoff/plan')
+  reviewControllerHandoff(@Req() request: Request, @Body() body: unknown) {
+    this.requireRecoveryOperator(request);
+    return this.sentinel.reviewControllerHandoff(body);
+  }
+
+  @UseGuards(AuthGuard)
+  @Header('Cache-Control', 'no-store')
+  @HttpCode(202)
+  @Post('/sentinel/controller-handoff/apply')
+  applyControllerHandoff(@Req() request: Request, @Body() body: unknown) {
+    this.requireRecoveryOperator(request);
+    return this.sentinel.applyControllerHandoff(body);
+  }
+
+  @UseGuards(AuthGuard)
+  @Header('Cache-Control', 'no-store')
+  @Get('/sentinel/controller-handoff/:planId/status')
+  controllerHandoffStatus(@Req() request: Request, @Param('planId') planId: string) {
+    this.requireRecoveryOperator(request);
+    return this.sentinel.controllerHandoffStatus(planId);
+  }
+
+  private requireRecoveryOperator(request: Request) {
+    if (request.user?.operator !== true || request.authMethod !== 'session' || !request.secure) {
+      throw new ForbiddenException('An HTTPS operator session is required.');
+    }
   }
 
   @UseGuards(AuthGuard)

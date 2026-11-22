@@ -284,6 +284,29 @@ describe('explicit idempotent legacy migration', () => {
     await expect(service.migrate(9, { expectedRevision: 10 })).rejects.toThrow('changed');
     await expect(fs.stat(file(9))).rejects.toMatchObject({ code: 'ENOENT' });
   });
+
+  it('migrates independent theme colour and prior material overrides, preserving an explicit Default on a newer save', async () => {
+    await desktop.write(7, {
+      serverName: 'Fixture',
+      preset: 'rose',
+      density: 'comfortable',
+      appearance: { accent: '#112233', themeColour: '#ee5577', materialMode: 'default' },
+    });
+    await service.update(7, update(0, 'panel-opacity', 0));
+    const migrated = await service.migrate(7, { expectedRevision: 1 });
+    const values = Object.fromEntries(migrated.current.values.map(({ key, value }) => [key, value]));
+    expect(values).toMatchObject({
+      'material-mode': 'custom',
+      'panel-opacity': 0,
+      'theme-colour': '#ee5577',
+      accent: '#112233',
+      palette: 'rose',
+    });
+    const next = { ...values, 'material-mode': 'default', 'chrome-opacity': 37 };
+    await service.update(7, { ...update(2), values: Object.entries(next).map(([key, value]) => ({ key, value })) });
+    const reloaded = await new ThemeSettingsService(config, packs, desktop).snapshot(7);
+    expect(Object.fromEntries(reloaded.current.values.map(({ key, value }) => [key, value]))).toMatchObject(next);
+  });
 });
 
 describe('per-user browser-session endpoint admission', () => {

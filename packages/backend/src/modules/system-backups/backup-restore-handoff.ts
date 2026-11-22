@@ -2,6 +2,7 @@ import type Dockerode from 'dockerode';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { BackupRequirementError } from './backup-files';
+import { requireBackupInstallHoldsClear } from './backup-install-admission';
 import { BackupRestoreJournal } from './backup-restore-journal';
 import { withRestoreLease } from './backup-restore-lease';
 import {
@@ -123,6 +124,11 @@ export async function prepareRestoreHandoff(options: RestoreHandoffOptions) {
       throw failed();
     apps.push({ container: snapshotRestoreContainer(value), project: expected.project });
   }
+  await requireBackupInstallHoldsClear(
+    options.directories.data,
+    apps.filter((app) => app.container.running).map((app) => app.project),
+    'live',
+  );
   let verifier: Dockerode.Container | undefined;
   let worker: Dockerode.Container | undefined;
   let journal: BackupRestoreJournal | undefined;

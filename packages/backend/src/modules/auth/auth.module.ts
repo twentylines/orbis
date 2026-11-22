@@ -9,11 +9,21 @@ import { PasskeyStore } from './passkey.store';
 import { PasskeyService } from './passkey.service';
 import { AccountSecurityService } from './account-security.service';
 import { AccountSecurityController } from './account-security.controller';
+import { CredentialSynchronization } from '../sentinel-recovery/credential-synchronization.service';
+import { MainPasskeySynchronization } from '../sentinel-recovery/main-passkey-synchronization.service';
 
 @Module({
   imports: [UserModule, EncryptionModule, PasswordModule],
   controllers: [AuthController, AccountSecurityController],
-  providers: [AuthService, SessionManager, PasskeyStore, PasskeyService, AccountSecurityService],
-  exports: [AuthService, PasskeyService, PasskeyStore, SessionManager, AccountSecurityService],
+  providers: [
+    AuthService,
+    SessionManager,
+    PasskeyStore,
+    PasskeyService,
+    AccountSecurityService,
+    CredentialSynchronization,
+    MainPasskeySynchronization,
+  ],
+  exports: [AuthService, PasskeyService, PasskeyStore, SessionManager, AccountSecurityService, CredentialSynchronization, MainPasskeySynchronization],
 })
 export class AuthModule {}

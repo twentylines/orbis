@@ -1,13 +1,13 @@
 import { LoggerService } from '@/core/logger/logger.service';
 import { AppFilesManager } from '@/modules/apps/app-files-manager';
 import { AppHelpers } from '@/modules/apps/app.helpers';
-import { DockerService } from '@/modules/docker/docker.service';
+import { DockerService, type RestoreComposeStart } from '@/modules/docker/docker.service';
 import type { AppEventFormInput } from '@/modules/queue/entities/app-events';
 import type { AppUrn } from '@runtipi/common/types';
 import { AppLifecycleCommand } from './command';
 
 export class StartAppCommand extends AppLifecycleCommand {
-  public async execute(appUrn: AppUrn, form: AppEventFormInput) {
+  public async execute(appUrn: AppUrn, form: AppEventFormInput, restoreStart?: RestoreComposeStart) {
     const logger = this.moduleRef.get(LoggerService, { strict: false });
     const appFilesManager = this.moduleRef.get(AppFilesManager, { strict: false });
     const dockerService = this.moduleRef.get(DockerService, { strict: false });
@@ -17,6 +17,7 @@ export class StartAppCommand extends AppLifecycleCommand {
       const config = await appFilesManager.getInstalledAppInfo(appUrn);
 
       if (!config) {
+        if (restoreStart) throw new Error('Restored app config could not be verified.');
         return { success: true, message: 'App config not found. Skipping...' };
       }
 
@@ -30,7 +31,9 @@ export class StartAppCommand extends AppLifecycleCommand {
       }
 
       const forcePull = !form.skipPull && (form.forcePull ?? config.force_pull);
-      await dockerService.composeApp(appUrn, `up --detach --force-recreate --remove-orphans ${forcePull ? '--pull always' : ''}`);
+      const command = `up --detach --force-recreate --remove-orphans ${forcePull ? '--pull always' : ''}`;
+      if (restoreStart) await dockerService.composeApp(appUrn, command, { restoreStart });
+      else await dockerService.composeApp(appUrn, command);
 
       logger.info(`App ${appUrn} started`);
 

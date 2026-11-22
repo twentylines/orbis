@@ -239,7 +239,7 @@ function client(endpoint: string) {
   return result;
 }
 beforeAll(async () => {
-  directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-publication-client-')));
+  directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-pub-')));
   socket = path.join(directory, 'host.sock');
   server = http.createServer(async (request, response) => {
     const chunks: Buffer[] = [];

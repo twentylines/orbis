@@ -19,6 +19,41 @@ def load(name, key):
 PROFILE = load('orbis-host-core-inspection-profile.py', 'orbis_supervised_core_inspection_profile')
 HEX = re.compile('[a-f0-9]{64}')
 
+STRUCTURE_V1 = 'orbis.core-database-structure.v1'
+STRUCTURE_V2 = 'orbis.core-database-structure.v2'
+STRUCTURE_V3 = 'orbis.core-database-structure.v3'
+APP_MIGRATION_SQL_SHA256 = '931cd10ce91be3582efccc9c17d34d9042db48db925b90b2e88b75496060602a'
+APP_MIGRATION_JOURNAL_TIME = '1795203554058'
+APP_COMMIT_SQL_SHA256 = '838b363174dd85025ce1eff4d4a0c29aaa5cf68a9276b722ff8e8ca39153f3b8'
+APP_COMMIT_JOURNAL_TIME = '1795305600000'
+
+
+def structure_history_schema(history):
+    commits = [row for row in history
+               if row['hash'] == APP_COMMIT_SQL_SHA256 or row['created_at'] == APP_COMMIT_JOURNAL_TIME]
+    if commits and (len(commits) != 1 or commits[0]['hash'] != APP_COMMIT_SQL_SHA256
+                    or commits[0]['created_at'] != APP_COMMIT_JOURNAL_TIME):
+        return None
+    markers = [row for row in history
+               if row['hash'] == APP_MIGRATION_SQL_SHA256 or row['created_at'] == APP_MIGRATION_JOURNAL_TIME]
+    if not markers:
+        return None if commits else STRUCTURE_V1
+    if (len(markers) == 1 and markers[0]['hash'] == APP_MIGRATION_SQL_SHA256
+            and markers[0]['created_at'] == APP_MIGRATION_JOURNAL_TIME):
+        return STRUCTURE_V3 if commits else STRUCTURE_V2
+    return None
+
+
+def structure_row_tables(schema):
+    legacy = {'user', 'link', 'app_store', 'app', 'orbis_reset_receipt', '__drizzle_migrations'}
+    if schema == STRUCTURE_V1:
+        return legacy
+    if schema == STRUCTURE_V2:
+        return legacy | {'app_migration'}
+    if schema == STRUCTURE_V3:
+        return legacy | {'app_migration', 'app_migration_commit'}
+    return None
+
 
 class ExecutorError(ValueError):
     pass
@@ -241,12 +276,13 @@ class InspectionSupervisor:
             raise ExecutorError('Inspection output did not bind its exact admitted input')
         structure = report['structure']
         expected_major = profile['major'] if versioned else 17
+        row_tables = structure_row_tables(structure.get('schema')) if isinstance(structure, dict) else None
         if (not self.P.exact(structure, {'schema', 'sha256', 'major', 'catalogSha256', 'rows', 'authenticationVerified', 'restoreAuthority'})
-                or structure['schema'] != 'orbis.core-database-structure.v1'
-                or versioned and type(structure['major']) is not int or structure['major'] != expected_major
+                or row_tables is None
+                or type(structure['major']) is not int or structure['major'] != expected_major
                 or structure['authenticationVerified'] is not False or structure['restoreAuthority'] is not False
                 or any(not isinstance(structure[key], str) or not HEX.fullmatch(structure[key]) for key in ('sha256', 'catalogSha256'))
-                or not self.P.exact(structure['rows'], {'user', 'link', 'app_store', 'app', 'orbis_reset_receipt', '__drizzle_migrations'})
+                or not self.P.exact(structure['rows'], row_tables)
                 or any(type(value) is not int or not 0 <= value <= 100000 for value in structure['rows'].values())):
             raise ExecutorError('Inspection structure evidence is invalid')
         owner = report['sourceOwner']
@@ -299,6 +335,8 @@ class InspectionSupervisor:
                     or int(row['created_at']) > 9007199254740991):
                 raise ExecutorError('Authenticated source migration history is invalid')
             previous = row['id']
+        if structure_history_schema(evidence['migrationLedger']) != structure['schema']:
+            raise ExecutorError('The inspection structure differs from authenticated migration history')
         if catalog:
             users = evidence['catalogUserIdentities']
             if (type(users) is not list or not 1 <= len(users) <= 250000

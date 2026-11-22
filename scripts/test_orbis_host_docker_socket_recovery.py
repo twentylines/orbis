@@ -192,7 +192,8 @@ class ServiceLifecycleTests(unittest.TestCase):
                 root = Path(directory)
                 socket_file = root / 'host.sock'
                 service = SimpleNamespace(HOST=Mock(), root=root, context='fixture', state_dir=root,
-                    discovery=Mock(), resume_pending_retained_restore=Mock(), credential_service=None)
+                    discovery=Mock(), resume_pending_retained_restore=Mock(), credential_service=None,
+                    credentials_only=False)
                 server, worker = Mock(), Mock()
                 worker.ident = 1
                 observed = {}

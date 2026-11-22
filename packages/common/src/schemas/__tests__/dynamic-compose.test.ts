@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 
 import { serviceSchema, dynamicComposeSchema } from '../dynamic-compose.js';
+import { dynamicComposeSchemaYaml } from '../compose-yaml.js';
+import { convertLegacyToYaml } from '../utils/convert-legacy-schema.js';
+import { portableJsonSchema } from '../portable-json-schema.js';
 import { type } from 'arktype';
 
 type ValidationResult<T> = { success: true; data: T } | { success: false };
@@ -17,6 +20,27 @@ function safeParseArk<T>(schema: any, data: unknown): ValidationResult<T> {
 }
 
 const safeParse = safeParseArk;
+
+it.each([[[]], [[{ id: '001-schema', service: 'migration' }]], [null], ['001-schema']])(
+  'rejects inline migration declarations before legacy conversion or YAML admission: %j',
+  (migrations) => {
+    const legacy = { schemaVersion: 2, services: [{ name: 'app', image: 'example:latest' }], migrations };
+    const yaml = { services: { app: { image: 'example:latest' } }, 'x-runtipi': { schema_version: 2, migrations } };
+    expect(dynamicComposeSchema(legacy)).toBeInstanceOf(type.errors);
+    expect(dynamicComposeSchemaYaml(yaml)).toBeInstanceOf(type.errors);
+    expect(() => convertLegacyToYaml(legacy)).toThrow();
+  },
+);
+
+it('keeps ordinary Compose packages valid and exports the inline migration refusal in JSON schema', () => {
+  const legacy = { schemaVersion: 2, services: [{ name: 'app', image: 'example:latest' }] };
+  expect(dynamicComposeSchema(legacy)).not.toBeInstanceOf(type.errors);
+  expect(dynamicComposeSchemaYaml(convertLegacyToYaml(legacy))).not.toBeInstanceOf(type.errors);
+  expect(portableJsonSchema(dynamicComposeSchema.toJsonSchema({}))).toMatchObject({ properties: { migrations: { not: {} } } });
+  expect(portableJsonSchema(dynamicComposeSchemaYaml.toJsonSchema({}))).toMatchObject({
+    properties: { 'x-runtipi': { properties: { migrations: { not: {} } } } },
+  });
+});
 
 describe('DynamicCompose Schema Tests', () => {
   describe('Service Schema V2', () => {

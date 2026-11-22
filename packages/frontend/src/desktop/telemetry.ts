@@ -11,7 +11,7 @@ export type Telemetry = {
     reportedClockGHz?: number | null;
   };
   memory: {
-    scope: 'host-proc';
+    scope: 'host-proc' | 'cgroup' | 'containers' | 'runtime' | 'unavailable';
     totalBytes: number | null;
     availableBytes: number | null;
     swapTotalBytes: number | null;

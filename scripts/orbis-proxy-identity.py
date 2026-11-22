@@ -18,6 +18,7 @@ def load(name, key):
 
 
 HOST = load('orbis-host.py', 'orbis_host_for_proxy_identity')
+BOOTSTRAP = load('orbis-host-ownership-bootstrap.py', 'orbis_ownership_for_proxy_identity')
 A, P = HOST.AUTHORITY, HOST.IDENTITY.PUBLICATION
 SCHEMA = 'orbis.proxy-host-identity.v1'
 POLICY = 'preserve-live-proxy-identity.v1'
@@ -49,6 +50,8 @@ def configuration_path(root):
 def shared_path(root):
     if adoption_selected(root):
         return A.LAYOUT.namespace(root) / 'proxy-identity'
+    if _birth_identity(root) is not None:
+        return A.LAYOUT.namespace(root) / 'proxy-identity'
     return root.parent / ('.' + root.name + '.orbis-proxy-identity')
 
 
@@ -56,14 +59,101 @@ def receipt_path(root):
     return root.parent / ('.' + root.name + '.orbis-proxy-identity.json')
 
 
-def declaration(root):
+def declaration(root, *, installer_storage=None):
+    shared = prepared_shared_path(root, installer_storage) if installer_storage is not None else shared_path(root)
     return {'schema': SCHEMA, 'policy': POLICY, 'configuration': {'source': str(configuration_path(root)), 'destination': '/etc/traefik', 'readOnly': True,
             'capture': 'encrypted-review-only', 'restore': 'preserve-live'},
-            'mutableIdentity': {'source': str(shared_path(root)), 'destination': '/shared', 'capture': 'excluded', 'restore': 'preserve-live'}}
+            'mutableIdentity': {'source': str(shared), 'destination': '/shared', 'capture': 'excluded', 'restore': 'preserve-live'}}
 
 
-def initialize(root):
+def prepared_shared_path(root, installer_storage):
+    if BOOTSTRAP.verify_installer_storage(HOST, root, installer_storage) is None:
+        raise fail()
+    return A.LAYOUT.namespace(root) / 'proxy-identity'
+
+
+def _birth_identity_value(root, store, details, storage):
+    return {'schema': SCHEMA, 'policy': POLICY, 'phase': 'owned',
+            'rootSha256': hashlib.sha256(str(root).encode()).hexdigest(),
+            'directorySha256': hashlib.sha256(str(store).encode()).hexdigest(),
+            'device': str(details.st_dev), 'inode': str(details.st_ino),
+            'uid': details.st_uid, 'gid': details.st_gid, 'mode': stat.S_IMODE(details.st_mode),
+            'custody': storage['custody']}
+
+
+def _birth_identity(root):
+    if adoption_selected(root):
+        return None
+    storage = BOOTSTRAP.installer_storage(HOST, root)
+    if storage is None:
+        return None
+    namespace = A.LAYOUT.namespace(root)
+    receipt, store = namespace / 'proxy-birth-identity.json', namespace / 'proxy-identity'
+    if not os.path.lexists(receipt):
+        if os.path.lexists(store):
+            raise fail()
+        return None
+    with HOST.CREDENTIAL_FENCE._directory(namespace, protected=True) as directory:
+        with A.protected_file(directory.fd, receipt.name, 4096) as body:
+            value = P.metadata(body)
+        with A.protected_directory(store) as identity:
+            expected = _birth_identity_value(root, store, os.fstat(identity), storage)
+        if P.canonical(value) != P.canonical(expected):
+            raise fail()
+        BOOTSTRAP.verify_installer_storage(HOST, root, storage)
+        return value
+
+
+def _initialize_birth(root, storage, birth_reference, context, daemon_sha256):
+    if HOST.LOCK_DESCRIPTOR.get() is None:
+        raise fail()
+    if adoption_selected(root) or BOOTSTRAP.verify_installer_storage(HOST, root, storage, context) is None:
+        raise fail()
+    BOOTSTRAP.verify_reference(HOST, root, context, daemon_sha256, birth_reference)
+    legacy_store = root.parent / ('.' + root.name + '.orbis-proxy-identity')
+    legacy_receipt = root.parent / ('.' + root.name + '.orbis-proxy-identity.json')
+    if any(os.path.lexists(path) for path in (legacy_store, legacy_receipt)):
+        raise fail()
+    namespace = A.LAYOUT.namespace(root)
+    store, receipt = namespace / 'proxy-identity', namespace / 'proxy-birth-identity.json'
+    intent = {'schema': SCHEMA, 'policy': POLICY, 'phase': 'allocating',
+              'rootSha256': hashlib.sha256(str(root).encode()).hexdigest(),
+              'directorySha256': hashlib.sha256(str(store).encode()).hexdigest(), 'custody': storage['custody']}
+    with HOST.CREDENTIAL_FENCE._directory(namespace, protected=True) as directory:
+        if os.path.lexists(receipt):
+            with A.protected_file(directory.fd, receipt.name, 4096) as body:
+                existing = P.metadata(body)
+            if existing.get('phase') == 'owned':
+                value = _birth_identity(root)
+                if value is None:
+                    raise fail()
+                return value
+            if P.canonical(existing) != P.canonical(intent):
+                raise fail()
+        else:
+            if os.path.lexists(store):
+                raise fail()
+            BOOTSTRAP.verify_installer_storage(HOST, root, storage, context)
+            A.atomic(receipt, P.canonical(intent))
+        if not os.path.lexists(store):
+            os.mkdir(store.name, 0o700, dir_fd=directory.fd)
+            os.fsync(directory.fd)
+        with A.protected_directory(store) as identity:
+            if os.listdir(identity):
+                raise fail()
+            value = _birth_identity_value(root, store, os.fstat(identity), storage)
+        BOOTSTRAP.verify_installer_storage(HOST, root, storage, context)
+        A.atomic(receipt, P.canonical(value))
+    return value
+
+
+def initialize(root, *, installer_storage=None, birth_reference=None, context=None, daemon_sha256=None):
     root = Path(root)
+    if installer_storage is not None:
+        return _initialize_birth(root, installer_storage, birth_reference, context, daemon_sha256)
+    existing = _birth_identity(root)
+    if existing is not None:
+        return existing
     with A.protected_directory(root.parent, private=False):
         pass
     store, receipt = shared_path(root), receipt_path(root)
@@ -102,6 +192,9 @@ def owned(root, context=None, proxy=None):
         if context is None or proxy is None:
             raise fail()
         return adoption_module().verified_authority(root, context, proxy)
+    existing = _birth_identity(root)
+    if existing is not None:
+        return existing
     store, receipt = shared_path(root), receipt_path(root)
     with A.protected_directory(root.parent, private=False) as parent:
         with A.protected_file(parent, receipt.name, 4096) as body:
@@ -141,9 +234,16 @@ def observe(root, context, proxy):
         static_sha = ownership['static']['sha256']
         root_sha = hashlib.sha256(str(root).encode()).hexdigest()
     else:
-        with A.protected_directory(root / 'traefik', private=False) as directory:
-            with A.protected_file(directory, 'traefik.yml', 1024 * 1024, private=False) as body:
-                static_sha = hashlib.sha256(body).hexdigest()
+        if 'custody' in ownership:
+            storage = BOOTSTRAP.installer_storage(HOST, root, context)
+            with HOST.CREDENTIAL_FENCE._directory(root / 'traefik', protected=False) as directory:
+                with A.protected_file(directory.fd, 'traefik.yml', 1024 * 1024, private=False) as body:
+                    static_sha = hashlib.sha256(body).hexdigest()
+            BOOTSTRAP.verify_installer_storage(HOST, root, storage, context)
+        else:
+            with A.protected_directory(root / 'traefik', private=False) as directory:
+                with A.protected_file(directory, 'traefik.yml', 1024 * 1024, private=False) as body:
+                    static_sha = hashlib.sha256(body).hexdigest()
         root_sha = ownership['rootSha256']
     image = proxy.get('Image')
     identifier = proxy.get('Id')

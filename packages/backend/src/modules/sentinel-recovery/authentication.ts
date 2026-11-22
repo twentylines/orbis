@@ -19,6 +19,19 @@ export type RecoveryAuthenticationResult =
       credential: { id: string; previousCounter: number; newCounter: number } | null;
     };
 
+export type RecoveryCounterVerification =
+  | { schema: 'orbis.sentinel-passkey-counter.v1'; verified: false }
+  | {
+      schema: 'orbis.sentinel-passkey-counter.v1';
+      verified: true;
+      accountId: number;
+      revision: string;
+      identitySha256: string;
+      challenge: string;
+      verifiedAtMs: number;
+      credential: { id: string; previousCounter: number; newCounter: number };
+    };
+
 function assertion(value: unknown): value is AuthenticationResponseJSON {
   if (!exactRecoveryObject(value, ['id', 'rawId', 'type', 'response', 'clientExtensionResults'], ['authenticatorAttachment'])) return false;
   if (value.type !== 'public-key' || !recoveryBase64(value.id) || value.rawId !== value.id) return false;
@@ -48,6 +61,62 @@ function totp(identity: RecoveryIdentity, raw: unknown, method: 'password' | 'pa
   const verifier = TotpAuthenticator.clone();
   verifier.options = { epoch: now, window: 0 };
   return verifier.check(raw, identity.totpSecret) ? Math.floor(now / 30_000) : false;
+}
+
+async function passkeyCounter(identity: RecoveryIdentity, challenge: string, response: AuthenticationResponseJSON) {
+  const origin = new URL(identity.realm.origin);
+  if (origin.hostname !== 'localhost' && (origin.protocol !== 'https:' || isIP(origin.hostname))) return null;
+  const stored = identity.credentials.find((key) => key.id === response.id && key.rpID === identity.realm.rpID);
+  if (!stored || (response.response.userHandle != null && response.response.userHandle !== identity.userHandle)) return null;
+  const checked = await verifyAuthenticationResponse({
+    response,
+    expectedChallenge: challenge,
+    expectedOrigin: identity.realm.origin,
+    expectedRPID: identity.realm.rpID,
+    requireUserVerification: true,
+    credential: { id: stored.id, publicKey: new Uint8Array(Buffer.from(stored.publicKey, 'base64url')), counter: stored.counter },
+  });
+  return checked.verified ? { id: stored.id, previousCounter: stored.counter, newCounter: checked.authenticationInfo.newCounter } : null;
+}
+
+/** Counter metadata proof only. It cannot satisfy Root authentication and does
+ * not bypass Main's separate TOTP/session/action checks. Root owns and consumes
+ * the nonce and checks the latest floor before acknowledging an advancement.
+ */
+export async function verifyRecoveryPasskeyCounter(input: {
+  identityBytes: Uint8Array;
+  expectedIdentitySha256: string;
+  challenge: string;
+  request: unknown;
+}): Promise<RecoveryCounterVerification> {
+  const failure = { schema: 'orbis.sentinel-passkey-counter.v1', verified: false } as const;
+  try {
+    const { expectedIdentitySha256, challenge, request } = input;
+    const identity = readRecoveryIdentity(input.identityBytes, expectedIdentitySha256);
+    if (
+      !recoveryBase64(challenge, 43) ||
+      Buffer.from(challenge, 'base64url').length !== 32 ||
+      !exactRecoveryObject(request, ['response']) ||
+      !assertion(request.response) ||
+      Buffer.byteLength(JSON.stringify(request)) > 32768
+    )
+      return failure;
+    const credential = await passkeyCounter(identity, challenge, request.response);
+    const verifiedAtMs = Date.now();
+    if (!credential || !Number.isSafeInteger(verifiedAtMs) || verifiedAtMs <= 0) return failure;
+    return {
+      schema: 'orbis.sentinel-passkey-counter.v1',
+      verified: true,
+      accountId: identity.accountId,
+      revision: identity.revision,
+      identitySha256: expectedIdentitySha256,
+      challenge,
+      verifiedAtMs,
+      credential,
+    };
+  } catch {
+    return failure;
+  }
 }
 
 /** Root must separately consume the challenge, counters and identity revision before issuing a session or action grant. */
@@ -80,21 +149,8 @@ export async function verifyRecoveryCredentials(input: {
       if (!valid || request.username.trim().toLowerCase() !== identity.username) return failure;
     } else if (method === 'passkey') {
       if (!exactRecoveryObject(request, ['method', 'response'], ['totpCode']) || !assertion(request.response)) return failure;
-      const origin = new URL(identity.realm.origin);
-      if (origin.hostname !== 'localhost' && (origin.protocol !== 'https:' || isIP(origin.hostname))) return failure;
-      const response = request.response;
-      const stored = identity.credentials.find((key) => key.id === response.id && key.rpID === identity.realm.rpID);
-      if (!stored || (response.response.userHandle != null && response.response.userHandle !== identity.userHandle)) return failure;
-      const checked = await verifyAuthenticationResponse({
-        response,
-        expectedChallenge: challenge,
-        expectedOrigin: identity.realm.origin,
-        expectedRPID: identity.realm.rpID,
-        requireUserVerification: true,
-        credential: { id: stored.id, publicKey: new Uint8Array(Buffer.from(stored.publicKey, 'base64url')), counter: stored.counter },
-      });
-      if (!checked.verified) return failure;
-      credential = { id: stored.id, previousCounter: stored.counter, newCounter: checked.authenticationInfo.newCounter };
+      credential = await passkeyCounter(identity, challenge, request.response);
+      if (!credential) return failure;
     } else return failure;
     const now = Date.now();
     if (!Number.isSafeInteger(now) || now <= 0) return failure;

@@ -36,7 +36,7 @@ FROM ${ALPINE_IMAGE} AS runner_base
 
 COPY --from=node_base /usr/local/bin/node /usr/local/bin/node
 COPY --from=node_base /usr/local/lib/orbis/verify-node-security.cjs /usr/local/lib/orbis/verify-node-security.cjs
-RUN apk add --no-cache curl openssl git file tar coreutils libstdc++ && \
+RUN apk add --no-cache curl openssl git file tar pigz coreutils libstdc++ && \
     node /usr/local/lib/orbis/verify-node-security.cjs
 
 # ---- BUILDER ----
@@ -84,6 +84,8 @@ RUN node ./verify-runtime-dependencies.cjs
 COPY --from=builder_base /deps/docker-binary /usr/local/bin/docker-compose
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/packages/backend/dist ./
+RUN test -s /app/sentinel-recovery-source.mjs && test -s /app/sentinel-recovery-auth.mjs
+COPY --from=builder /app/packages/backend/src/restore-install-hold-capability.json ./restore-install-hold-capability.json
 COPY --from=builder /app/packages/backend/src/retained-terminal-capability.json ./retained-terminal-capability.json
 COPY --from=builder /app/packages/backend/src/retained-app-engine-capability.json ./retained-app-engine-capability.json
 COPY --from=builder /app/packages/backend/src/controller-overlay-capability.json ./controller-overlay-capability.json

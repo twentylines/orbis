@@ -22,8 +22,10 @@ import { UpdateConfigHandler } from './handlers/update-config.handler';
 import { BackupAppHandler } from './handlers/backup-app.handler';
 import { RestoreAppHandler } from './handlers/restore-app.handler';
 import { TasksService } from '../tasks/tasks.service';
-import { INSTALLATION_MESSAGE, installationHeld } from '@/common/installation-mode';
+import { INSTALLATION_MESSAGE, installationHeld, installationMode } from '@/common/installation-mode';
+import type { RestoreComposeStart } from '../docker/docker.service';
 import { enterBackupMutation } from '@/common/backup-maintenance';
+import type { AppJobContext, JobEvent } from './services/app-job.service';
 
 @Injectable()
 export class AppLifecycleService {
@@ -52,15 +54,123 @@ export class AppLifecycleService {
     this.appEventsQueue.onEvent((data, reply, delivery) => this.invokeCommand(data, reply, delivery?.redelivered ?? false));
   }
 
-  async invokeCommand(data: typeof appEventSchema.infer, reply: (response: typeof appEventResultSchema.infer) => Promise<void>, redelivered = false) {
+  async invokeCommand(
+    data: typeof appEventSchema.infer,
+    deliverResponse: (response: typeof appEventResultSchema.infer) => Promise<void>,
+    redelivered = false,
+  ) {
+    let reply = deliverResponse;
     if (installationHeld()) {
       await reply({ success: false, message: INSTALLATION_MESSAGE });
       return;
     }
     await this.tasks.enqueue(data);
     const release = await this.mutex.acquire(data.appUrn);
+    let job: AppJobContext | undefined;
+    let jobSettled = false;
+    let freshJob = false;
 
     try {
+      if ('jobVersion' in data && data.jobVersion === 1) {
+        if (data.command !== 'backup' && data.command !== 'update') throw new Error('Invalid app operation command.');
+        const jobEvent = data as JobEvent;
+        const previous = (await this.tasks.read()).tasks.find((task) => task.id === data.requestId);
+        const begun = await this.commandFactory.beginJob(jobEvent, redelivered || previous?.status !== 'queued');
+        if (begun.result) {
+          await reply(begun.result);
+          return;
+        }
+        job = begun.context;
+        if (!job) throw new Error('The app operation worker could not be verified.');
+        freshJob = begun.fresh === true;
+        const deliver = reply;
+        const currentJob = job;
+        const currentEvent = jobEvent;
+        reply = async (result) => {
+          jobSettled = true;
+          await deliver(await this.commandFactory.finishJob(currentEvent, currentJob, result));
+        };
+      }
+      let install: Awaited<ReturnType<InstallAppHandler['claim']>>;
+      if (data.command === 'install') {
+        const previous = (await this.tasks.read()).tasks.find((task) => task.id === data.requestId);
+        if (previous && (previous.appUrn !== data.appUrn || previous.action !== data.command)) {
+          await reply({ success: false, message: 'This install request does not match its recorded operation.' });
+          return;
+        }
+        if (previous?.status === 'succeeded') {
+          const completed = await this.reconcileInstall(data);
+          await reply(completed ?? { success: true, message: 'This install request has already completed.', alreadyCompleted: true });
+          return;
+        }
+
+        try {
+          if (!redelivered) install = await this.installAppHandler.claim(data.appUrn, data.requestId, data.form.skipRun === true);
+        } catch {
+          this.logger.warn('An app install receipt could not be verified. Its files were preserved.');
+        }
+        if (!install) {
+          const completed = await this.reconcileInstall(data);
+          if (completed) {
+            await this.tasks.finish(data, true);
+            await reply(completed);
+            return;
+          }
+          await this.tasks.interrupt(data);
+          await reply({ success: false, message: 'This install request no longer owns an app reservation. Review the app before retrying.' });
+          return;
+        }
+      } else if (data.command !== 'stop' && data.command !== 'uninstall') {
+        try {
+          await this.installAppHandler.requireNoInstallHold(data.appUrn);
+        } catch (error) {
+          await this.tasks.finish(data, false);
+          await reply({
+            success: false,
+            message: error instanceof ConflictException ? error.message : 'The app install hold could not be verified.',
+          });
+          return;
+        }
+      }
+      if (data.command === 'update') {
+        const previous = (await this.tasks.read()).tasks.find((task) => task.id === data.requestId);
+        if (previous && (previous.appUrn !== data.appUrn || previous.action !== data.command)) {
+          await reply({ success: false, message: 'This update request does not match its recorded operation.' });
+          return;
+        }
+        if (previous?.status === 'succeeded') {
+          await reply({ success: true, message: 'This update request has already completed.', alreadyCompleted: true });
+          return;
+        }
+        if (!freshJob && (redelivered || previous?.status !== 'queued')) {
+          if (previous?.status === 'failed') {
+            const committed = await this.reconcileUpdate(data);
+            if (committed) {
+              await this.tasks.finish(data, true);
+              await reply(committed);
+              return;
+            }
+            await reply({ success: false, message: 'This update request has already failed. Review the app before retrying.' });
+            return;
+          }
+          let resumed: typeof appEventResultSchema.infer;
+          try {
+            // A competing restore must never be promoted as a side effect of update redelivery.
+            if (await this.backups.hasPendingRestore(data.appUrn)) throw new Error('Restore recovery is pending.');
+            await this.tasks.start(data);
+            resumed = await this.commandFactory.resumeUpdate(data);
+            if (!resumed) throw new Error('The saved update could not be verified.');
+          } catch {
+            resumed = { success: false, message: 'This update was interrupted. Review the app before starting a new update.' };
+          }
+          if (!job) {
+            if (resumed.success || resumed.statePreserved === true) await this.tasks.finish(data, resumed.success);
+            else await this.tasks.interrupt(data);
+          }
+          await reply(resumed);
+          return;
+        }
+      }
       if (data.command === 'restore') {
         const previous = (await this.tasks.read()).tasks.find((task) => task.id === data.requestId);
         if (previous && (previous.appUrn !== data.appUrn || previous.action !== data.command))
@@ -83,17 +193,59 @@ export class AppLifecycleService {
       await this.tasks.start(data);
       let result: typeof appEventResultSchema.infer;
       try {
-        await this.recoverInterruptedRestore(data.appUrn);
-        const command = this.commandFactory.createCommand(data);
-        result = await command.execute(data.appUrn, data.form);
+        if (install) {
+          if (await this.backups.hasPendingRestore(data.appUrn))
+            throw new Error('An interrupted restore requires recovery before installing this app.');
+        } else {
+          await this.recoverInterruptedRestore(data.appUrn);
+        }
+        const command = install
+          ? this.commandFactory.createCommand(data, install.ownership)
+          : job
+            ? this.commandFactory.createCommand(data, undefined, job)
+            : this.commandFactory.createCommand(data);
+        result = await command.execute(data.appUrn, install?.form ?? data.form);
       } catch (err) {
         this.logger.error('Error invoking command:', err);
         result = { success: false, message: String(err) };
       }
-      await this.tasks.finish(data, result.success);
+      if (install) {
+        if (!result.success && result.statePreserved !== true) result = (await this.reconcileInstall(data)) ?? result;
+        try {
+          await install.settle(result);
+        } catch (err) {
+          this.logger.error('Error settling app install:', err);
+          result = { success: false, message: 'The app install outcome could not be recorded. Review the app before retrying.' };
+        }
+      }
+      if (data.command === 'update' && !result.success && result.statePreserved !== true) result = (await this.reconcileUpdate(data)) ?? result;
+      if (!job) await this.tasks.finish(data, result.success);
       await reply(result);
+    } catch (error) {
+      if (job && !jobSettled) {
+        await reply({ success: false, message: 'The app operation was interrupted. Review recovery before retrying.' });
+      } else throw error;
     } finally {
       release();
+    }
+  }
+
+  private async reconcileInstall(data: Pick<typeof appEventSchema.infer, 'appUrn' | 'requestId' | 'form'>) {
+    try {
+      const completed = await this.commandFactory.reconcileInstall(data);
+      return completed?.success && completed.alreadyCompleted ? completed : undefined;
+    } catch {
+      return;
+    }
+  }
+
+  private async reconcileUpdate(data: Extract<typeof appEventSchema.infer, { command: 'update' }>) {
+    try {
+      if (await this.backups.hasPendingRestore(data.appUrn)) return;
+      const committed = await this.commandFactory.reconcileUpdate(data);
+      return committed?.success && committed.alreadyCompleted ? committed : undefined;
+    } catch {
+      return;
     }
   }
 
@@ -142,8 +294,29 @@ export class AppLifecycleService {
     }
   }
 
+  private async admitAppRequest<T>(appUrn: AppUrn, request: () => Promise<T>, allowInstallRecovery = false) {
+    if (!allowInstallRecovery && this.mutex.resourceLocks.has(appUrn)) await this.installAppHandler.requireNoInstallHold(appUrn);
+    const release = await this.mutex.acquire(appUrn);
+    try {
+      if (!allowInstallRecovery) await this.installAppHandler.requireNoInstallHold(appUrn);
+      return await request();
+    } finally {
+      release();
+    }
+  }
+
+  async resumeRestoredApp(appUrn: AppUrn, transactionId: string, appId: number, start: RestoreComposeStart) {
+    const mode = installationMode();
+    if (mode.phase !== 'resume' || mode.transactionId !== transactionId) throw new Error('Restore app startup is held.');
+    await this.admitAppRequest(appUrn, async () => {
+      const app = await this.appRepository.getAppById(appId);
+      if (!app || createAppUrn(app.appName, app.appStoreSlug) !== appUrn) throw new Error('Restored app startup ownership changed.');
+      await this.commandFactory.resumeRestoredApp(appUrn, app.config, start);
+    });
+  }
+
   async startApp(params: { appUrn: AppUrn; skipPull?: boolean }) {
-    return this.startAppHandler.execute(params.appUrn, { skipPull: params.skipPull });
+    return this.admitAppRequest(params.appUrn, () => this.startAppHandler.execute(params.appUrn, { skipPull: params.skipPull }));
   }
 
   async installApp(params: { appUrn: AppUrn; form: unknown; skipRun?: boolean; requireNew?: boolean }) {
@@ -151,35 +324,36 @@ export class AppLifecycleService {
   }
 
   public async stopApp(params: { appUrn: AppUrn }) {
-    return this.stopAppHandler.execute(params.appUrn);
+    return this.admitAppRequest(params.appUrn, () => this.stopAppHandler.execute(params.appUrn), true);
   }
 
   public async restartApp(params: { appUrn: AppUrn; skipPull?: boolean }) {
-    return this.restartAppHandler.execute(params.appUrn, { skipPull: params.skipPull });
+    return this.admitAppRequest(params.appUrn, () => this.restartAppHandler.execute(params.appUrn, { skipPull: params.skipPull }));
   }
 
   public async uninstallApp(params: { appUrn: AppUrn; removeBackups: boolean }) {
-    return this.uninstallAppHandler.execute(params.appUrn, { removeBackups: params.removeBackups });
+    return this.admitAppRequest(params.appUrn, () => this.uninstallAppHandler.execute(params.appUrn, { removeBackups: params.removeBackups }), true);
   }
 
   public async resetApp(params: { appUrn: AppUrn }) {
-    return this.resetAppHandler.execute(params.appUrn);
+    return this.admitAppRequest(params.appUrn, () => this.resetAppHandler.execute(params.appUrn));
   }
 
   public async updateAppSettings(params: { appUrn: AppUrn; form: unknown }) {
+    await this.installAppHandler.requireNoInstallHold(params.appUrn);
     return this.updateConfigHandler.execute(params.appUrn, { form: params.form });
   }
 
   public async updateApp(params: { appUrn: AppUrn; performBackup: boolean }) {
-    return this.updateAppHandler.execute(params.appUrn, { performBackup: params.performBackup });
+    return this.admitAppRequest(params.appUrn, () => this.updateAppHandler.execute(params.appUrn, { performBackup: params.performBackup }));
   }
 
   public async backupApp(params: { appUrn: AppUrn }) {
-    return this.backupAppHandler.execute(params.appUrn);
+    return this.admitAppRequest(params.appUrn, () => this.backupAppHandler.execute(params.appUrn));
   }
 
   public async restoreApp(params: { appUrn: AppUrn; filename: string }) {
-    return this.restoreAppHandler.execute(params.appUrn, { filename: params.filename });
+    return this.admitAppRequest(params.appUrn, () => this.restoreAppHandler.execute(params.appUrn, { filename: params.filename }));
   }
 
   async updateAllApps() {

@@ -19,6 +19,9 @@ const state = vi.hoisted(() => ({
   client: undefined as FakeClient | undefined,
   actualTarget: {} as Row,
   major: 17,
+  ledgerProfile: false,
+  commitProfile: false,
+  commitCount: '0',
   serverVersion: '170006',
   objects: false,
   extensions: [{ name: 'plpgsql' }],
@@ -102,8 +105,31 @@ vi.mock('pg', async (original) => ({
         return { rows: [] };
       }
       if (sql.startsWith('SELECT * FROM drizzle.__drizzle_migrations')) return { rows: structuredClone(state.ledger) };
+      if (sql.includes('AS ledger_cascade'))
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              has_ledger: state.ledgerProfile,
+              baseline_columns: Number(state.ledgerProfile),
+              boolean_baseline: Number(state.ledgerProfile),
+              ledger_cascade: Number(state.ledgerProfile),
+              ledger_key: Number(state.ledgerProfile),
+            },
+          ],
+        };
       if (sql.startsWith('SELECT count(*)::text AS count'))
-        return { rows: [{ count: sql.includes('"app_store"') ? String(state.seedRows.length) : state.otherCount }] };
+        return {
+          rows: [
+            {
+              count: sql.includes('"app_store"')
+                ? String(state.seedRows.length)
+                : sql.includes('"app_migration_commit"')
+                  ? state.commitCount
+                  : state.otherCount,
+            },
+          ],
+        };
       if (sql === 'SELECT * FROM public.app_store LIMIT 2') return { rows: structuredClone(state.seedRows.slice(0, 2)) };
       if (sql === 'BEGIN ISOLATION LEVEL SERIALIZABLE') {
         state.transaction = { seed: structuredClone(state.seedRows), ledger: structuredClone(state.ledger) };
@@ -269,6 +295,9 @@ beforeEach(async () => {
   vi.clearAllMocks();
   state.client = undefined;
   state.major = 17;
+  state.ledgerProfile = false;
+  state.commitProfile = false;
+  state.commitCount = '0';
   state.serverVersion = '170006';
   state.objects = false;
   state.extensions = [{ name: 'plpgsql' }];
@@ -323,7 +352,11 @@ beforeEach(async () => {
     '0000_fixture.sql': 'CREATE TABLE public.fixture(id integer);\n--> statement-breakpoint\nALTER TABLE public.fixture ADD value text;',
   });
   vi.mocked(inspectCoreDatabaseStructure).mockImplementation(async () => ({
-    schema: 'orbis.core-database-structure.v1',
+    schema: state.commitProfile
+      ? 'orbis.core-database-structure.v3'
+      : state.ledgerProfile
+        ? 'orbis.core-database-structure.v2'
+        : 'orbis.core-database-structure.v1',
     sha256: 'a'.repeat(64),
     major: state.major,
     catalogSha256: state.catalog,
@@ -336,6 +369,8 @@ beforeEach(async () => {
       app_store: state.seedRows.length,
       orbis_reset_receipt: Number(state.otherCount),
       __drizzle_migrations: state.ledger.length,
+      ...(state.ledgerProfile ? { app_migration: Number(state.otherCount) } : {}),
+      ...(state.commitProfile ? { app_migration_commit: Number(state.commitCount) } : {}),
     },
   }));
 });
@@ -418,7 +453,15 @@ it('accepts the actual current executable asset/journal dialect without changing
   const files: Record<string, string> = { 'meta/_journal.json': await fs.readFile(path.join(source, 'meta/_journal.json'), 'utf8') };
   for (const name of sourceNames) files[name] = await fs.readFile(path.join(source, name), 'utf8');
   await setupMigrations(files);
-  await bootstrapCoreCleanTarget(options());
+  expect(expectedLedger.at(-1)).toMatchObject({
+    hash: '838b363174dd85025ce1eff4d4a0c29aaa5cf68a9276b722ff8e8ca39153f3b8',
+    created_at: '1795305600000',
+  });
+  state.ledgerProfile = true;
+  state.commitProfile = true;
+  const report = await bootstrapCoreCleanTarget(options());
+  expect(report.structure).toMatchObject({ schema: 'orbis.core-database-structure.v3', rows: { app_migration: 0, app_migration_commit: 0 } });
+  expect(state.queries.some((sql) => sql.startsWith('LOCK TABLE') && sql.includes('public.app_migration_commit'))).toBe(true);
   expect(state.ledger).toEqual(expectedLedger);
   expect(state.ledger.length).toBeGreaterThan(30);
 }, 30_000); // Cold reads of the real migration tree can exceed Vitest's five-second default.

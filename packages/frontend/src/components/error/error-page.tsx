@@ -7,7 +7,7 @@ import { useStartupReady } from '../startup/startup-boundary';
 
 type ErrorPageProps = {
   onReset: () => void;
-  error: Error;
+  error: unknown;
 };
 
 export function retryErrorPage(onReset: () => void, location: Pick<Location, 'reload'> = window.location) {
@@ -35,7 +35,7 @@ export const FallbackSurface = ({ children }: PropsWithChildren) => {
 };
 
 export const ErrorPage = ({ error, onReset }: ErrorPageProps) => {
-  const message = typeof error?.message === 'string' ? error.message.trim() : '';
+  const message = error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message.trim() : '';
   return (
     <FallbackSurface>
       <section className="orbis-error" aria-labelledby="orbis-error-title">

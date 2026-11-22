@@ -28,11 +28,13 @@ let root: string;
 let service: DockerService;
 let apps: ReturnType<typeof mock<AppsService>>;
 let release: ReturnType<typeof vi.fn>;
+let logger: ReturnType<typeof mock<LoggerService>>;
 let child: EventEmitter & { stdout: EventEmitter; stderr: EventEmitter; kill: ReturnType<typeof vi.fn> };
 const frozenArgs = ['--project-name', 'app_test', '--project-directory', '/project', '--file', '/proc/self/fd/3'];
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  vi.stubEnv('ORBIS_PARENT_ONLY_CANARY', 'excluded-from-app-interpolation');
   mocks.authority.mockResolvedValue(null);
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'docker-volume-invocation-')));
   const config = mock<ConfigurationService>();
@@ -44,7 +46,8 @@ beforeEach(async () => {
   files.getUserComposeFile.mockResolvedValue({ path: '/user.yml', content: 'services: {}' });
   apps = mock<AppsService>();
   apps.getApp.mockResolvedValue({ app: { userConfigEnabled: true } } as never);
-  service = new DockerService(mock<LoggerService>(), config, files, mock<FilesystemService>(), apps);
+  logger = mock<LoggerService>();
+  service = new DockerService(logger, config, files, mock<FilesystemService>(), apps);
   release = vi.fn().mockResolvedValue(undefined);
   mocks.read.mockResolvedValue({ effective: 'model' });
   mocks.prepare.mockImplementation(async () => ({ args: [...frozenArgs], fd: 42, release }));
@@ -52,7 +55,32 @@ beforeEach(async () => {
   mocks.spawn.mockReturnValue(child);
 });
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await fs.rm(root, { recursive: true, force: true });
+});
+
+it('preserves Compose output across chunk, whitespace and UTF-8 boundaries without logging interpolated configuration', async () => {
+  const run = service.composeApp(urn, 'config --format json');
+  await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalledOnce());
+  const text = '{"value":" a café b "}\n';
+  const bytes = Buffer.from(text);
+  const boundary = bytes.indexOf(Buffer.from('é')) + 1;
+  child.stdout.emit('data', bytes.subarray(0, boundary));
+  child.stdout.emit('data', bytes.subarray(boundary));
+  child.stderr.emit('data', Buffer.from(' first warning\n'));
+  child.stderr.emit('data', Buffer.from(' second warning\n'));
+  child.emit('close', 0);
+  await expect(run).resolves.toEqual({ success: true, stdout: text, stderr: ' first warning\n second warning\n' });
+  expect(logger.debug).not.toHaveBeenCalled();
+});
+
+it('retains the complete Compose error across stderr chunks', async () => {
+  const run = service.composeApp(urn, 'up --detach');
+  await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalledOnce());
+  child.stderr.emit('data', Buffer.from('first part\n'));
+  child.stderr.emit('data', Buffer.from('last part\n'));
+  child.emit('close', 2);
+  await expect(run).rejects.toThrow('first part\nlast part');
 });
 
 it.each([
@@ -98,9 +126,46 @@ it.each([
   expect(mocks.spawn).toHaveBeenCalledWith(
     'docker-compose',
     [...frozenArgs, 'up', '--detach', ...(explicit ? [] : ['--no-build', '--pull', 'never'])],
-    { stdio: ['pipe', 'pipe', 'pipe', 42] },
+    {
+      env: expect.objectContaining({ DOCKER_HOST: 'unix:///var/run/docker.sock', DOCKER_CONTEXT: '', DOCKER_TLS_VERIFY: '' }),
+      stdio: ['pipe', 'pipe', 'pipe', 42],
+    },
   );
+  expect(mocks.spawn.mock.calls[0]?.[2].env).not.toHaveProperty('ORBIS_PARENT_ONLY_CANARY');
   expect(release).not.toHaveBeenCalled();
+  child.emit('close', 0);
+  await expect(run).resolves.toMatchObject({ success: true });
+  expect(release).toHaveBeenCalledOnce();
+});
+
+it('runs the restore gate after final Compose preparation and skips spawn on a late refusal', async () => {
+  mocks.authority.mockResolvedValue({ pins });
+  await expect(
+    service.composeApp(urn, 'up --detach', {
+      restoreStart: async () => {
+        expect(mocks.prepare).toHaveBeenCalledOnce();
+        throw new Error('live restore hold');
+      },
+    }),
+  ).rejects.toThrow('live restore hold');
+  expect(mocks.spawn).not.toHaveBeenCalled();
+  expect(release).toHaveBeenCalledOnce();
+});
+
+it('dispatches an admitted restore using the pinned local Docker endpoint', async () => {
+  mocks.authority.mockResolvedValue({ pins });
+  const run = service.composeApp(urn, 'up --detach', {
+    restoreStart: async (effect) => {
+      expect(mocks.prepare).toHaveBeenCalledOnce();
+      expect(mocks.spawn).not.toHaveBeenCalled();
+      return effect();
+    },
+  });
+  await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalledOnce());
+  expect(mocks.spawn).toHaveBeenCalledWith('docker-compose', [...frozenArgs, 'up', '--detach'], {
+    env: expect.objectContaining({ DOCKER_HOST: 'unix:///var/run/docker.sock', DOCKER_CONTEXT: '' }),
+    stdio: ['pipe', 'pipe', 'pipe', 42],
+  });
   child.emit('close', 0);
   await expect(run).resolves.toMatchObject({ success: true });
   expect(release).toHaveBeenCalledOnce();
@@ -110,8 +175,10 @@ it('keeps a log-stream descriptor until the child exits and releases it after cl
   mocks.authority.mockResolvedValue({ pins });
   const stream = await service.getLogsStream(25, urn);
   expect(mocks.spawn).toHaveBeenCalledWith('docker-compose', [...frozenArgs, 'logs', '--follow', '-n', '25'], {
+    env: expect.objectContaining({ DOCKER_HOST: 'unix:///var/run/docker.sock', DOCKER_CONTEXT: '' }),
     stdio: ['pipe', 'pipe', 'pipe', 42],
   });
+  expect(mocks.spawn.mock.calls[0]?.[2].env).not.toHaveProperty('ORBIS_PARENT_ONLY_CANARY');
   expect(release).not.toHaveBeenCalled();
   stream.kill();
   expect(child.kill).toHaveBeenCalledWith('SIGINT');
@@ -147,25 +214,31 @@ it('terminates an aborted invocation and releases its descriptor after child exi
   expect(release).toHaveBeenCalledOnce();
 });
 
-it('keeps ordinary no-pin compose invocation unchanged', async () => {
+it('keeps ordinary no-pin arguments and configured transport while excluding parent app values', async () => {
+  vi.stubEnv('DOCKER_HOST', 'tcp://example.invalid:2376');
   const run = service.composeApp(urn, 'up --detach');
   await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalledOnce());
   expect(mocks.read).not.toHaveBeenCalled();
   expect(mocks.prepare).not.toHaveBeenCalled();
-  expect(mocks.spawn).toHaveBeenCalledWith('docker-compose', [
-    '--env-file',
-    '/app.env',
-    '--env-file',
-    '/user.env',
-    '--project-name',
-    'app_test',
-    '-f',
-    '/project/generated.yml',
-    '--file',
-    '/user.yml',
-    'up',
-    '--detach',
-  ]);
+  expect(mocks.spawn).toHaveBeenCalledWith(
+    'docker-compose',
+    [
+      '--env-file',
+      '/app.env',
+      '--env-file',
+      '/user.env',
+      '--project-name',
+      'app_test',
+      '-f',
+      '/project/generated.yml',
+      '--file',
+      '/user.yml',
+      'up',
+      '--detach',
+    ],
+    { env: expect.objectContaining({ DOCKER_HOST: 'tcp://example.invalid:2376' }) },
+  );
+  expect(mocks.spawn.mock.calls[0]?.[2].env).not.toHaveProperty('ORBIS_PARENT_ONLY_CANARY');
   child.emit('close', 0);
   await expect(run).resolves.toMatchObject({ success: true });
   expect(release).not.toHaveBeenCalled();

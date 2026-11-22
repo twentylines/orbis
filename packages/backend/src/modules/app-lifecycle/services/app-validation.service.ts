@@ -6,6 +6,7 @@ import type { AppInfo } from '@runtipi/common/schemas';
 import type { AppUrn } from '@runtipi/common/types';
 import { lt, valid } from 'semver';
 import validator from 'validator';
+import { assertUmbrelRuntimeAccess } from '../../app-stores/umbrel-catalog';
 import { AppsRepository } from '../../apps/apps.repository';
 import { appFormSchema } from '../dto/app-lifecycle.dto';
 
@@ -104,6 +105,7 @@ export class AppValidationService {
   }
 
   public async validateInstallSettings(appUrn: AppUrn, appInfo: AppInfo, form: ParsedForm) {
+    assertUmbrelRuntimeAccess(appInfo, form);
     await this.validateDemoModeLimit();
     this.validateDomainSettings(form);
     this.validateArchitecture(appUrn, appInfo);
@@ -125,6 +127,7 @@ export class AppValidationService {
   }
 
   public async validateUpdateConfigSettings(appUrn: AppUrn, appInfo: AppInfo, form: ParsedForm, excludeAppId: number) {
+    assertUmbrelRuntimeAccess(appInfo, form);
     this.validateDomainSettings(form);
     this.validateExposability(appUrn, appInfo, form);
     this.validateForceExpose(appUrn, appInfo, form.exposed);

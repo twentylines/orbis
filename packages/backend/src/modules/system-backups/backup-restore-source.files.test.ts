@@ -1,9 +1,12 @@
 import fs from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { pinBackupSource, validateBackupSource } from './backup-restore-source';
 import { makeReviewedBackupFixture, type ReviewedBackupFixture, type ReviewedBackupFixtureOptions } from './backup-restore-source.fixture';
+import { hasInstallRequestHold } from '../app-lifecycle/install-request-receipt';
+import { createAppUrn } from '@/common/helpers/app-helpers';
 
 let temporaryRoot: string;
 const signal = () => new AbortController().signal;
@@ -37,6 +40,97 @@ it('validates private reviewed content and selects app resumes from the manifest
   ).resolves.toMatchObject({
     resumeApps: [],
   });
+});
+
+it.each(['provisional', 'pending', 'spent'] as const)(
+  'refuses a reviewed archive with a running %s hold before pinning or replay',
+  async (installHold) => {
+    const fixture = await makeFixture({ dbStatus: 'stopped', installHold });
+    const destination = path.join(temporaryRoot, 'pinned');
+    const expected = fixture.seal;
+    await expect(pinBackupSource({ directory: fixture.directory, destination, expected, signal: signal() })).rejects.toThrow(
+      'unfinished install recovery',
+    );
+    await expect(fs.stat(destination)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.readFile(path.join(fixture.content, 'manifest.json'), 'utf8')).resolves.toBe(JSON.stringify(fixture.manifest));
+    await expect(hasInstallRequestHold(path.join(fixture.content, 'data'), createAppUrn('fixture-app', 'catalogue'))).resolves.toBe(true);
+  },
+);
+
+it.each(['provisional', 'pending', 'spent'] as const)(
+  'pins an archived %s hold for an already stopped app without scheduling activation',
+  async (installHold) => {
+    const fixture = await makeFixture({ dbStatus: 'stopped', manifestRunning: false, installHold });
+    const pinned = await pinBackupSource({
+      directory: fixture.directory,
+      destination: path.join(temporaryRoot, 'pinned'),
+      expected: fixture.seal,
+      signal: signal(),
+    });
+    expect(pinned.resumeApps).toEqual([]);
+    await expect(hasInstallRequestHold(path.join(pinned.directory, 'content', 'data'), createAppUrn('fixture-app', 'catalogue'))).resolves.toBe(true);
+    await expect(fs.readFile(path.join(pinned.directory, 'content', 'manifest.json'), 'utf8')).resolves.toBe(JSON.stringify(fixture.manifest));
+  },
+);
+
+it('keeps the prior action for a running app with an empty settled receipt directory', async () => {
+  const fixture = await makeFixture({ installHold: 'settled' });
+  await expect(validateBackupSource({ directory: fixture.directory, expected: fixture.seal, signal: signal() })).resolves.toMatchObject({
+    resumeApps: [{ id: 9, appUrn: 'fixture-app:catalogue' }],
+  });
+});
+
+it.each(['namespace mode', 'app mode', 'namespace owner', 'app owner'] as const)(
+  'refuses unsafe restored receipt metadata before pinning a running app: %s',
+  async (field) => {
+    const fixture = await makeFixture({ installHold: 'settled' });
+    const receipt = 'data/state/orbis-install-requests';
+    const metadata = fixture.manifest.directories.find(({ name }) =>
+      field.startsWith('namespace') ? name === receipt : name.startsWith(`${receipt}/`),
+    );
+    if (!metadata) throw new Error('Fixture receipt metadata missing.');
+    if (field.endsWith('mode')) metadata.mode = 0o755;
+    else metadata.uid = metadata.uid === 0 ? 1 : 0;
+    const bytes = Buffer.from(JSON.stringify(fixture.manifest));
+    await fs.writeFile(path.join(fixture.content, 'manifest.json'), bytes);
+    fixture.seal.manifest = { bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+    const destination = path.join(temporaryRoot, 'pinned');
+    await expect(pinBackupSource({ directory: fixture.directory, destination, expected: fixture.seal, signal: signal() })).rejects.toThrow(
+      'recovery storage could not be verified',
+    );
+    await expect(fs.lstat(destination)).rejects.toMatchObject({ code: 'ENOENT' });
+    // Extraction deliberately keeps directories private; admission must inspect
+    // the archived attributes which materialization would actually restore.
+    const extracted = path.join(fixture.content, metadata.name);
+    expect((await fs.stat(extracted)).mode & 0o777).toBe(0o700);
+  },
+);
+
+it.each(['state', 'namespace', 'app'] as const)('refuses a case-aliased %s receipt path before pinning a restart', async (part) => {
+  const fixture = await makeFixture({ installHold: 'settled' });
+  const namespace = 'data/state/orbis-install-requests';
+  const receipt = fixture.manifest.directories.find(({ name }) => name.startsWith(`${namespace}/`))?.name;
+  if (!receipt) throw new Error('Fixture receipt metadata missing.');
+  const original = part === 'state' ? 'data/state' : part === 'namespace' ? namespace : receipt;
+  const alias =
+    part === 'state'
+      ? 'data/State'
+      : part === 'namespace'
+        ? 'data/state/Orbis-Install-Requests'
+        : receipt.toUpperCase().replace('DATA/STATE/ORBIS-INSTALL-REQUESTS', namespace);
+  await fs.rename(path.join(fixture.content, original), path.join(fixture.content, alias));
+  for (const entry of [...fixture.manifest.directories, ...fixture.manifest.files]) {
+    if (entry.name === original || entry.name.startsWith(`${original}/`)) entry.name = `${alias}${entry.name.slice(original.length)}`;
+  }
+  const metadata = fixture.manifest.directories.find(({ name }) => name === `${alias}${receipt.slice(original.length)}`);
+  if (!metadata) throw new Error('Fixture receipt metadata missing.');
+  metadata.mode = 0o755;
+  const bytes = Buffer.from(JSON.stringify(fixture.manifest));
+  await fs.writeFile(path.join(fixture.content, 'manifest.json'), bytes);
+  fixture.seal.manifest = { bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+  const destination = path.join(temporaryRoot, 'pinned');
+  await expect(pinBackupSource({ directory: fixture.directory, destination, expected: fixture.seal, signal: signal() })).rejects.toThrow();
+  await expect(fs.lstat(destination)).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
 it.each(['manifest', 'recovery', 'database dump'] as const)('rejects tampered reviewed critical content: %s', async (name) => {
@@ -73,6 +167,17 @@ it('accepts reordered normalized metadata keys and rejects extra or changed coun
 
   const counts = { ...(saved.counts as Record<string, number>), app: 0 };
   await fs.writeFile(fixture.normalized, JSON.stringify({ ...reordered, counts }), { mode: 0o600 });
+  await expectInvalid(fixture);
+});
+
+it('seals the version 2 migration projection without changing the older seal shape', async () => {
+  const fixture = await makeFixture({ migrationIds: ['001-schema'] });
+  await expect(validateBackupSource({ directory: fixture.directory, expected: fixture.seal, signal: signal() })).resolves.toBeDefined();
+  const saved = JSON.parse(await fs.readFile(fixture.normalized, 'utf8')) as Record<string, unknown>;
+  expect(saved).toMatchObject({ version: 2, counts: { app_migration: 1 }, migrationSha256: fixture.seal.normalized.migrationSha256 });
+  await fs.writeFile(fixture.normalized, JSON.stringify({ ...saved, version: 1 }), { mode: 0o600 });
+  await expectInvalid(fixture);
+  await fs.writeFile(fixture.normalized, JSON.stringify({ ...saved, migrationSha256: '0'.repeat(64) }), { mode: 0o600 });
   await expectInvalid(fixture);
 });
 

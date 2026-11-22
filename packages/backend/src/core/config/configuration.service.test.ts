@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EnvUtils } from '@/modules/env/env.utils';
+import fs from 'node:fs';
 import { ConfigurationService, isValidIpOrCidr, parseTrustedProxyIps } from './configuration.service';
 
 const { errorLog, warnLog } = vi.hoisted(() => ({ errorLog: vi.fn(), warnLog: vi.fn() }));
@@ -33,6 +34,26 @@ describe('configuration diagnostics', () => {
     expect(errorLog).toHaveBeenCalled();
     expect(JSON.stringify(errorLog.mock.calls)).not.toContain(input);
   });
+});
+
+it('keeps the error reporting setting when an unrelated partial save is applied', async () => {
+  const service: ConfigurationService = Object.assign(Object.create(ConfigurationService.prototype), {
+    config: { version: 'fixture', demoMode: false, userSettings: { allowErrorMonitoring: true, guestDashboard: false } },
+  });
+  const read = vi.spyOn(fs.promises, 'readFile').mockResolvedValue(JSON.stringify({ allowErrorMonitoring: true, guestDashboard: false }));
+  const write = vi.spyOn(fs.promises, 'writeFile').mockResolvedValue(undefined);
+  const applyReporting = vi.spyOn(service, 'initSentry').mockResolvedValue(undefined);
+  try {
+    await service.setUserSettings({ guestDashboard: true });
+    expect(applyReporting).not.toHaveBeenCalled();
+    expect(JSON.parse(String(write.mock.calls[0]?.[1]))).toEqual({ allowErrorMonitoring: true, guestDashboard: true });
+    await service.setUserSettings({ allowErrorMonitoring: false });
+    expect(applyReporting).toHaveBeenCalledExactlyOnceWith({ release: 'fixture', allowSentry: false });
+  } finally {
+    read.mockRestore();
+    write.mockRestore();
+    applyReporting.mockRestore();
+  }
 });
 
 describe('isValidIpOrCidr', () => {

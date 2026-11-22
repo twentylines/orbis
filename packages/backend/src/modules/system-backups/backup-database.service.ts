@@ -9,9 +9,17 @@ import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from '@ne
 import type Dockerode from 'dockerode';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { DOCKERODE } from '../docker/docker.module';
+import { backupDatabaseProfileQuery, readBackupDatabaseProfile } from './backup-database-profile';
 import { BackupRequirementError, privateBackupDirectory } from './backup-files';
 import { backupDockerExec, BackupDatabaseLines } from './backup-docker-exec';
-import { backupDatabaseColumns, backupDatabaseLimits, BackupDatabaseRecords, backupDatabaseTables } from './backup-database-records';
+import {
+  backupDatabaseColumns,
+  backupDatabaseLimits,
+  BackupDatabaseRecords,
+  backupDatabaseTables,
+  backupDatabaseOrder,
+  type BackupDatabaseCounts,
+} from './backup-database-records';
 import { restoreStartupRole } from './backup-restore-startup';
 import type { decodeAppRuntimeCapture } from './time-machine-app-runtime-capture';
 
@@ -20,7 +28,7 @@ const failure = () => new BackupRequirementError('The backup database could not 
 const missing = (error: unknown) => (error as { statusCode?: number }).statusCode === 404;
 const identifier = (name: string) => `"${name.replaceAll('"', '""')}"`;
 type Ownership = { version: 1; name: string; nonce: string; image: string };
-export type BackupDatabaseReview = { counts: Record<(typeof backupDatabaseTables)[number], number>; bytes: number; sha256: string };
+export type BackupDatabaseReview = { counts: BackupDatabaseCounts; bytes: number; sha256: string; migrationSha256?: string };
 
 export function backupDatabaseSandbox(image: string, name: string, nonce: string, volumes: string[]): Dockerode.ContainerCreateOptions {
   if (
@@ -299,7 +307,25 @@ export class BackupDatabaseService implements OnModuleInit, OnModuleDestroy {
       );
       const recovery = (await this.readJson(path.join(content, 'recovery.json'), 1024 * 1024)) as { jwtSecret?: unknown };
       if (!recovery || typeof recovery.jwtSecret !== 'string') throw failure();
-      const validator = new BackupDatabaseRecords(recovery.jwtSecret, appRuntime);
+      let profile: unknown;
+      const profileRows = new BackupDatabaseLines({ ...backupDatabaseLimits, rows: 1 }, async (row) => {
+        profile = row;
+      });
+      await run(
+        [
+          'psql',
+          '-XqAt',
+          '--no-password',
+          '--set=ON_ERROR_STOP=1',
+          '--command',
+          `SELECT pg_catalog.row_to_json(o) FROM (${backupDatabaseProfileQuery}) o`,
+        ],
+        16 * 1024,
+        (chunk) => profileRows.write(chunk),
+      );
+      profileRows.finish();
+      const version = readBackupDatabaseProfile(profile);
+      const validator = new BackupDatabaseRecords(recovery.jwtSecret, appRuntime, version);
       let passkeys: unknown;
       try {
         passkeys = await this.readJson(path.join(content, 'data/state/auth/passkeys.json'), 512 * 1024);
@@ -313,7 +339,7 @@ export class BackupDatabaseService implements OnModuleInit, OnModuleDestroy {
       const digest = createHash('sha256');
       let bytes = 0;
       try {
-        for (const table of backupDatabaseTables) {
+        for (const table of backupDatabaseTables(version)) {
           const lines = new BackupDatabaseLines(backupDatabaseLimits, async (value) => {
             signal.throwIfAborted();
             const row = validator.accept(table, value);
@@ -329,7 +355,7 @@ export class BackupDatabaseService implements OnModuleInit, OnModuleDestroy {
             digest.update(serialized);
             progress(bytes);
           });
-          const sql = `SELECT pg_catalog.row_to_json(record) FROM (SELECT ${backupDatabaseColumns(table).map(identifier).join(',')} FROM public.${identifier(table)} ORDER BY ${identifier(table === 'app_store' ? 'slug' : 'id')}) AS record`;
+          const sql = `SELECT pg_catalog.row_to_json(record) FROM (SELECT ${backupDatabaseColumns(table, version).map(identifier).join(',')} FROM public.${identifier(table)} ORDER BY ${backupDatabaseOrder(table).map(identifier).join(',')}) AS record`;
           await run(['psql', '-XqAt', '--no-password', '--set=ON_ERROR_STOP=1', '--command', sql], backupDatabaseLimits.totalBytes, (chunk) =>
             lines.write(chunk),
           );
@@ -337,10 +363,11 @@ export class BackupDatabaseService implements OnModuleInit, OnModuleDestroy {
         }
         const counts = await validator.finish(passkeys, signal);
         await output.sync();
-        const result = { counts, bytes, sha256: digest.digest('hex') };
+        const migrationSha256 = validator.migrationDigest();
+        const result = { counts, bytes, sha256: digest.digest('hex'), ...(migrationSha256 ? { migrationSha256 } : {}) };
         const manifest = await fs.open(path.join(destination, 'records.json'), 'wx', 0o600);
         try {
-          await manifest.writeFile(JSON.stringify({ version: 1, ...result }));
+          await manifest.writeFile(JSON.stringify({ version, ...result }));
           await manifest.sync();
         } finally {
           await manifest.close();

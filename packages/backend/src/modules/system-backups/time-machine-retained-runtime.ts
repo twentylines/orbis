@@ -92,8 +92,10 @@ export function retainedPhaseRuntime(options: {
       });
     },
     discardPreparation: async (signal) => {
-      await runtime.stopWriters(new AbortController().signal);
-      await discardRestorePayload({ journal, connection: bootstrap.connection, signal });
+      if ((await journal.refresh()).phase !== 'discarded') {
+        await runtime.stopWriters(new AbortController().signal);
+        await discardRestorePayload({ journal, connection: bootstrap.connection, signal });
+      }
       await runtime.resumeOriginal();
     },
     stopWriters: (signal) => runtime.stopWriters(signal),

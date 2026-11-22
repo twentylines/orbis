@@ -46,7 +46,8 @@ class SentinelFlowTests(unittest.TestCase):
                 events.append('write-controller')
                 return {'result': 'orbis-installed'}
             new = SimpleNamespace(IMAGES={}, choose_ports=lambda *_: (80, 443), install=install)
-            enable = SimpleNamespace(available=event('helper-preflight'), require_scoped_cleanup=event('image-scope'), enable=event('enable-helper'))
+            enable = SimpleNamespace(available=event('helper-preflight'), require_scoped_cleanup=event('image-scope'),
+                enable=lambda *_args, **kwargs: event('enable-credentials' if kwargs.get('credentials_only') else 'enable-helper')())
             private = SimpleNamespace(private_directory=lambda _: state)
             modules = {'orbis-install-new.py': new, 'orbis-host-service-enable.py': enable, 'install-orbis.py': private}
             terminal = mock.Mock()
@@ -117,6 +118,8 @@ class SentinelFlowTests(unittest.TestCase):
         events = self.fresh(without_host_service=True)
         self.assertIn('activate-sentinel', events)
         self.assertNotIn('enable-helper', events)
+        self.assertIn('enable-credentials', events)
+        self.assertLess(events.index('activate-sentinel'), events.index('enable-credentials'))
 
     def test_both_installer_contracts_and_installed_host_helper_retain_the_adapter(self):
         name = 'scripts/orbis-sentinel-install.py'
@@ -128,7 +131,7 @@ class SentinelFlowTests(unittest.TestCase):
         events = []
         upgrade = SimpleNamespace(SERVICE=SimpleNamespace(installed_manifest=lambda *_: MANIFEST,
             read_channel=lambda *_: {'channel': 'stable', 'revision': 'owned'}),
-            SETUP=SimpleNamespace(SOCKET_FILE=Path('/unused/host.sock')), upgrade=lambda *_: events.append('upgrade-helper'))
+            SETUP=SimpleNamespace(SOCKET_FILE=Path('/unused/host.sock'), installed_credentials_only=lambda *_: False), upgrade=lambda *_: events.append('upgrade-helper'))
         enable = SimpleNamespace(enable=lambda *_: events.append('enable-helper'))
         with mock.patch.object(GUIDE, 'load', side_effect=lambda name, _: upgrade if name == 'orbis-host-service-upgrade.py' else enable), \
                 mock.patch.object(GUIDE.REPLACE.UPDATE, 'verify_release'), mock.patch.object(GUIDE, 'prepare_backup_tools'), \

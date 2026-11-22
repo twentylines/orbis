@@ -188,7 +188,7 @@ export class BackupDirectorySwap {
     return swap;
   }
 
-  static async open(journal: string) {
+  static async open(journal: string, expected?: { id: string; root: string }) {
     await privateBackupDirectory(journal);
     let value: Plan;
     try {
@@ -222,6 +222,7 @@ export class BackupDirectorySwap {
       !['staging', 'prepared', 'promoting', 'rolling-back', 'rolled-back', 'committed'].includes(value.phase)
     )
       throw failed();
+    if (expected && (value.id !== expected.id || value.root !== expected.root)) throw failed();
     const swap = new BackupDirectorySwap(journal, value);
     await swap.checkRoot();
     return swap;

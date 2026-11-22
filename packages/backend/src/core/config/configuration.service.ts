@@ -1,3 +1,4 @@
+import { credentialWriters } from '@/modules/sentinel-recovery/writer-gate';
 import fs from 'node:fs';
 import path from 'node:path';
 import { type UserSettingsBody, settingsSchema } from '@/app.dto';
@@ -10,6 +11,7 @@ import { type } from 'arktype';
 import dotenv from 'dotenv';
 import validator from 'validator';
 import { validationDiagnostic } from '@/common/helpers/validation-diagnostics';
+import { readCliSecret } from '@/common/helpers/permissions-helpers';
 import { LOG_LEVEL_ENUM, type LogLevel, LoggerService } from '../logger/logger.service';
 
 const envSchema = type({
@@ -31,6 +33,9 @@ const envSchema = type({
   LOCAL_DOMAIN: 'string',
   DNS_IP: 'string = "9.9.9.9"',
   RUNTIPI_APP_DATA_PATH: 'string',
+  RUNTIPI_HOST_MEMORY_TOTAL: type('number | string.numeric.parse')
+    .narrow((value) => Number.isSafeInteger(value) && value >= 0)
+    .default(0),
   RUNTIPI_FORWARD_AUTH_URL: 'string',
   DEMO_MODE: 'string',
   GUEST_DASHBOARD: 'string',
@@ -143,6 +148,7 @@ export class ConfigurationService {
         appDir: APP_DIR,
       },
       logLevel,
+      hostMemoryTotal: env.RUNTIPI_HOST_MEMORY_TOTAL,
       version: env.TIPI_VERSION,
       isProduction: NODE_ENV === 'production',
       userSettings: {
@@ -184,6 +190,7 @@ export class ConfigurationService {
       envFilePath: this.envPath,
       internalIp: env.INTERNAL_IP,
       jwtSecret: env.JWT_SECRET,
+      cliSecret: readCliSecret(DATA_DIR),
       __prod__: NODE_ENV === 'production',
     };
   }
@@ -197,41 +204,45 @@ export class ConfigurationService {
   }
 
   public async setUserSettings(settings: UserSettingsBody) {
-    if (this.config.demoMode) {
-      throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
-    }
-
-    try {
-      if (typeof settings.allowErrorMonitoring === 'boolean') {
-        this.initSentry({ release: this.config.version, allowSentry: settings.allowErrorMonitoring });
+    return credentialWriters.run(async () => {
+      if (this.config.demoMode) {
+        throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
       }
 
-      const settingsPath = path.join(DATA_DIR, 'state', 'settings.json');
+      try {
+        if (typeof settings.allowErrorMonitoring === 'boolean') {
+          this.initSentry({ release: this.config.version, allowSentry: settings.allowErrorMonitoring });
+        }
 
-      const fileContent = await fs.promises.readFile(settingsPath, 'utf8');
-      const parsedContent = JSON.parse(fileContent);
-      const currentSettingsResult = settingsSchema.partial()(parsedContent);
-      if (currentSettingsResult instanceof type.errors) {
-        throw currentSettingsResult.summary;
+        const settingsPath = path.join(DATA_DIR, 'state', 'settings.json');
+
+        const fileContent = await fs.promises.readFile(settingsPath, 'utf8');
+        const parsedContent = JSON.parse(fileContent);
+        const currentSettingsResult = settingsSchema.partial()(parsedContent);
+        if (currentSettingsResult instanceof type.errors) {
+          throw currentSettingsResult.summary;
+        }
+        const currentSettings = currentSettingsResult;
+
+        await fs.promises.writeFile(settingsPath, `${JSON.stringify({ ...currentSettings, ...settings }, null, 2)}`, 'utf8');
+        this.config.userSettings = { ...this.config.userSettings, ...settings };
+      } catch {
+        this.logger.error('Failed to set user settings');
+        throw new InternalServerErrorException('Failed to set user settings');
       }
-      const currentSettings = currentSettingsResult;
-
-      await fs.promises.writeFile(settingsPath, `${JSON.stringify({ ...currentSettings, ...settings }, null, 2)}`, 'utf8');
-      this.config.userSettings = { ...this.config.userSettings, ...settings };
-    } catch {
-      this.logger.error('Failed to set user settings');
-      throw new InternalServerErrorException('Failed to set user settings');
-    }
+    });
   }
 
   public async adoptRestoredUserSettingsRuntime(value: unknown) {
-    const parsed = runtimeUserSettingsSchema.assert(structuredClone(value));
-    await this.initSentry({ release: this.config.version, allowSentry: parsed.allowErrorMonitoring });
-    this.config.userSettings = {
-      ...parsed,
-      themeBase: parsed.themeBase ?? 'light',
-      themeColor: parsed.themeColor ?? 'blue',
-    };
+    return credentialWriters.run(async () => {
+      const parsed = runtimeUserSettingsSchema.assert(structuredClone(value));
+      await this.initSentry({ release: this.config.version, allowSentry: parsed.allowErrorMonitoring });
+      this.config.userSettings = {
+        ...parsed,
+        themeBase: parsed.themeBase ?? 'light',
+        themeColor: parsed.themeColor ?? 'blue',
+      };
+    });
   }
 
   public async initSentry(params: { release: string; allowSentry: boolean }) {

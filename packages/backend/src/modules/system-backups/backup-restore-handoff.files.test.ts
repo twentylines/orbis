@@ -13,6 +13,8 @@ import { readTerminalOwnership } from './backup-restore-terminal-record';
 import { pinBackupSource } from './backup-restore-source';
 import { makeReviewedBackupFixture } from './backup-restore-source.fixture';
 import { withRestoreLease } from './backup-restore-lease';
+import { installRequestDirectory } from '../app-lifecycle/install-request-receipt';
+import { createAppUrn } from '@/common/helpers/app-helpers';
 
 const checks = vi.hoisted(() => ({ verify: vi.fn(), writers: vi.fn(), order: [] as string[] }));
 vi.mock('./backup-restore-runtime', async (original) => ({
@@ -320,6 +322,21 @@ it('creates a durable reviewed-source handoff without starting or stopping conta
   for (const h of handles.values()) expect(h.start).not.toHaveBeenCalled();
   assertOriginalUntouched();
   expect(await fs.readFile(path.join(options.directories.data, '.env'))).toEqual(before);
+});
+
+it('refuses restore over a running held destination app before creating or updating Docker containers', async () => {
+  const receipt = installRequestDirectory(options.directories.data, createAppUrn('fixture-app', 'catalogue'));
+  await fs.mkdir(receipt, { recursive: true, mode: 0o700 });
+  await fs.mkdir(path.join(receipt, 'spent-fixture'), { mode: 0o700 });
+  const claim = vi.spyOn(options, 'claimReviewedSource');
+  await expect(prepareRestoreHandoff(options)).rejects.toThrow('unfinished install recovery');
+  expect(create).not.toHaveBeenCalled();
+  expect(claim).not.toHaveBeenCalled();
+  for (const handle of handles.values()) {
+    expect(handle.start).not.toHaveBeenCalled();
+    expect(handle.update).not.toHaveBeenCalled();
+  }
+  await expect(fs.readdir(receipt)).resolves.toEqual(['spent-fixture']);
 });
 it.each(['service', 'configuration', 'protocol', 'compose-mount', 'writable-compose', 'hostname', 'network', 'stopped', 'privileged'] as const)(
   'rejects unsupported controller %s before creating auxiliaries or publishing a journal',

@@ -39,6 +39,21 @@ test('the same server phase reaches the dock and Task Centre without fabricating
   expect(markup).not.toContain('%');
 });
 
+test.each(['starting', 'recovering'] as const)('backup %s reports restoration in both task surfaces', (phase) => {
+  const backup = { ...task, action: 'backup' as const, phase };
+  expect(desktopActivity([backup], new Map(), null, null)?.items[0]?.detail).toBe('Restoring application state');
+  expect(taskCentreRecords({ tasks: [backup] })[0]?.status).toBe('Restoring application state');
+});
+
+test.each([
+  ['preparing', 'Preparing backup'],
+  ['committing', 'Finishing backup'],
+] as const)('backup %s is described as a backup in both task surfaces', (phase, label) => {
+  const backup = { ...task, action: 'backup' as const, phase };
+  expect(desktopActivity([backup], new Map(), null, null)?.items[0]?.detail).toBe(label);
+  expect(taskCentreRecords({ tasks: [backup] })[0]?.status).toBe(label);
+});
+
 test.each(['succeeded', 'failed', 'interrupted', 'unconfirmed', 'queued'] as const)('a retained phase cannot make %s work look active', (status) => {
   expect(taskProgressLabel({ ...task, status })).toBeUndefined();
   const record = taskCentreRecords({ tasks: [{ ...task, status }] })[0];
@@ -51,4 +66,22 @@ test('older task records remain valid while unknown phase payloads are rejected'
   expect(phase).toBe('pulling_images');
   expect(taskRecordSchema(legacy)).not.toBeInstanceOf(type.errors);
   expect(taskRecordSchema({ ...task, phase: 'arbitrary server message' })).toBeInstanceOf(type.errors);
+});
+
+test('data migration reports the same actual stage in the dock and Task Centre', () => {
+  const migrating = taskRecordSchema.assert({ ...task, phase: 'migrating' });
+  expect(taskProgressLabel(migrating)).toBe('Upgrading application data');
+  expect(desktopActivity([migrating], new Map(), null, null)?.items[0]?.detail).toBe('Upgrading application data');
+  expect(taskCentreRecords({ tasks: [migrating] })[0]?.status).toBe('Upgrading application data');
+});
+
+test.each([
+  ['preparing', 'Preparing installation'],
+  ['publishing', 'Installing application'],
+  ['committing', 'Finishing installation'],
+] as const)('installation %s stays consistent in dock and Task Centre', (phase, label) => {
+  const installing = taskRecordSchema.assert({ ...task, action: 'install', phase });
+  expect(taskProgressLabel(installing)).toBe(label);
+  expect(desktopActivity([installing], new Map(), null, null)?.items[0]?.detail).toBe(label);
+  expect(taskCentreRecords({ tasks: [installing] })[0]?.status).toBe(label);
 });

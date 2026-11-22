@@ -1,5 +1,6 @@
 import { coreCaptureRecoveryRequired } from '@/common/backup-maintenance';
 import { Inject, Injectable, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common';
+import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -16,7 +17,7 @@ import { AppLifecycleService } from '../app-lifecycle/app-lifecycle.service';
 import { AppsRepository } from '../apps/apps.repository';
 import { DOCKERODE } from '../docker/docker.module';
 import { BackupRestoreJournal } from './backup-restore-journal';
-import { readRestoreOperation } from './backup-restore-runtime';
+import { BackupRestoreDockerRuntime, readRestoreOperation } from './backup-restore-runtime';
 import { captureRestoreStartupRole, restoreStartupRole, retainedBootstrapStartup, setRetainedBootstrapStartup } from './backup-restore-startup';
 import { BackupRequirementError } from './backup-files';
 import { BackupRestoresService } from './backup-restores.service';
@@ -92,6 +93,7 @@ export class BackupRestoreActivationService implements OnModuleInit, OnModuleDes
         return;
       }
       if (maintenance !== 'idle' && maintenance !== null) return;
+      if (installationMode().phase === 'resume') await this.queue.completeInstallationResume();
       if (restoreStartupRole() === 'ordinary' || releaseRestoreInstallationMode(this.transactionId)) {
         captureRestoreStartupRole('ordinary');
         clearInterval(this.timer);
@@ -117,40 +119,62 @@ export class BackupRestoreActivationService implements OnModuleInit, OnModuleDes
       );
       return;
     }
-    const operation = await readRestoreOperation(journal);
-    const deadline = Date.now() + 15 * 60_000;
-    const pending = [...operation.resumeApps];
-    const failed = () => new BackupRequirementError('Some restored apps could not start. Review restore recovery before continuing.');
-    const run = async () => {
-      while (pending.length) {
-        const selected = pending.shift();
-        if (!selected) return;
-        const app = await this.apps.getAppById(selected.id);
-        if (!app || createAppUrn(app.appName, app.appStoreSlug) !== selected.appUrn) throw failed();
-        const appUrn = validateAppUrn(selected.appUrn);
-        if (!['running', 'starting'].includes(app.status)) await this.lifecycle.startApp({ appUrn });
-        while (true) {
-          if (Date.now() >= deadline) throw failed();
-          const current = await this.apps.getAppById(selected.id);
-          if (!current || current.status === 'stopped' || current.status === 'missing') throw failed();
-          if (current.status === 'running') {
-            const containers = await this.docker.listContainers({
-              all: true,
-              filters: { label: [`com.docker.compose.project=${appUrn.replace(':', '_')}`] },
-            });
-            if (containers.length) {
-              let ready = true;
-              for (const info of containers) {
-                const state = (await this.docker.getContainer(info.Id).inspect()).State;
-                if (!state.Running || state.Restarting || state.Paused || (state.Health && state.Health.Status !== 'healthy')) ready = false;
-              }
-              if (ready) break;
-            }
-          }
-          await delay(500);
-        }
+    const requireStandalone = async () => {
+      try {
+        await fs.lstat(path.join(journal.directory, 'retained-root-request.json'));
+        throw new BackupRequirementError('This historical controller requires protected app activation. Keep the retained restore in maintenance.');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       }
     };
-    await Promise.all(Array.from({ length: Math.min(3, pending.length) }, run));
+    await requireStandalone();
+    const operation = await readRestoreOperation(journal);
+    const runtime = new BackupRestoreDockerRuntime(this.docker, journal, operation);
+    const deadline = Date.now() + 15 * 60_000;
+    const signal = AbortSignal.any([this.bootstrapAbort.signal, AbortSignal.timeout(15 * 60_000)]);
+    const failed = () => new BackupRequirementError('Some restored apps could not start. Review restore recovery before continuing.');
+    // Keep app dispatch sequential. A refusal stops further dispatch and does
+    // not leave independently queued starts behind.
+    for (const selected of operation.resumeApps) {
+      const appUrn = validateAppUrn(selected.appUrn);
+      const readApp = async () => {
+        const app = await this.apps.getAppById(selected.id);
+        if (!app || createAppUrn(app.appName, app.appStoreSlug) !== appUrn) throw failed();
+        return app;
+      };
+      const guardedStart = async <T>(effect: () => T) => {
+        signal.throwIfAborted();
+        await requireStandalone();
+        await readApp();
+        return runtime.candidateAppEffect(os.hostname(), appUrn, () => {
+          signal.throwIfAborted();
+          return effect();
+        });
+      };
+      const app = await readApp();
+      await runtime.candidateAppEffect(os.hostname(), appUrn, () => undefined);
+      if (app.status !== 'running') {
+        await this.lifecycle.resumeRestoredApp(appUrn, operation.id, selected.id, guardedStart);
+      }
+      while (true) {
+        signal.throwIfAborted();
+        if (Date.now() >= deadline) throw failed();
+        const containers = await this.docker.listContainers({
+          all: true,
+          filters: { label: [`com.docker.compose.project=${appUrn.replace(':', '_')}`] },
+        });
+        let ready = containers.length > 0;
+        for (const info of containers) {
+          const state = (await this.docker.getContainer(info.Id).inspect()).State;
+          if (!state.Running || state.Restarting || state.Paused || (state.Health && state.Health.Status !== 'healthy')) ready = false;
+        }
+        if (ready) break;
+        await delay(500, undefined, { signal });
+      }
+      await readApp();
+      await runtime.candidateAppEffect(os.hostname(), appUrn, () =>
+        this.apps.updateAppById(selected.id, { status: 'running', pendingRestart: false }),
+      );
+    }
   }
 }

@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import uuid
+import re
 from pathlib import Path
 
 
@@ -26,6 +27,8 @@ HOST, APPS = REPLACE.HOST, REPLACE.APPS
 UI = REPLACE.load("orbis-install-ui.py", "orbis_new_ui")
 PROXY = REPLACE.load("orbis-proxy-identity.py", "orbis_new_proxy_identity")
 RESET = REPLACE.load("orbis-reset-authority.py", "orbis_new_reset_authority")
+OWNERSHIP = REPLACE.load("orbis-host-ownership-bootstrap.py", "orbis_new_ownership_bootstrap")
+INSTALLER_STORAGE_PROTOCOL = 'orbis.installer.storage.v1'
 SCHEMA = "orbis.new-installation.v2"
 IMAGES = {
     "postgres": "postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24",
@@ -33,6 +36,7 @@ IMAGES = {
     "traefik": "traefik@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d",
 }
 NETWORK = "runtipi_tipi_main_network"
+CORE_NETWORK = "runtipi_tipi_core_network"
 
 
 class PortInUseError(ValueError):
@@ -54,26 +58,35 @@ def server_ip(value=None):
     return str(address)
 
 
-def compose(root, image, endpoint, http, https, reset_binding=None):
+def compose(root, image, endpoint, http, https, reset_binding=None, installer_storage=None):
     if reset_binding is None:
         reset_binding = {"schema": RESET.SCHEMA_V3, "path": str(RESET.external_directory(root))}
     def bind(source, target, readonly=False):
         return {"type": "bind", "source": str(source), "target": target, "read_only": readonly, "bind": {"create_host_path": False}}
     common = {"restart": "unless-stopped", "networks": ["tipi_main_network"]}
     core = {**common, "container_name": "runtipi", "image": image, "env_file": [str(root / ".env")], "environment": {"NODE_ENV": "production"}, "depends_on": {"runtipi-db": {"condition": "service_healthy"}, "runtipi-queue": {"condition": "service_started"}}, "healthcheck": {"test": ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/health"], "interval": "3s", "timeout": "3s", "retries": 60, "start_period": "15s"}}
-    folders = ["media", "state", "repos", "apps", "logs", "traefik", "user-config", "backups"]
+    # The internal bridge has no external gateway. Main remains the only
+    # external route, including on supported Engines before GwPriority existed.
+    core["networks"] = ["tipi_main_network", "tipi_core_network"]
+    folders = ["media", "state", "repos", "apps", "logs", "traefik", "user-config", "backups", ".secrets"]
     core["volumes"] = [bind(root / name, "/data/" + name) for name in folders]
     core["volumes"] += [RESET.compose_mount(root, binding=reset_binding), bind(root / "app-data", "/app-data"), bind(root / "cache", "/cache"), bind(root / ".env", "/data/.env"), bind(root / "docker-compose.yml", "/data/docker-compose.yml", True), bind(endpoint, "/var/run/docker.sock", True)]
-    for source, target in [("/proc/meminfo", "/host/proc/meminfo"), ("/proc/stat", "/host/proc/stat"), ("/proc/uptime", "/host/proc/uptime"), ("/etc/localtime", "/etc/localtime")]:
+    for source, target in [("/proc/meminfo", "/host/proc/meminfo"), ("/proc/stat", "/host/proc/stat"), ("/proc/uptime", "/host/proc/uptime"), ("/proc/cpuinfo", "/host/proc/cpuinfo"), ("/etc/localtime", "/etc/localtime")]:
         if Path(source).is_file():
             core["volumes"].append(bind(source, target, True))
+    if Path("/sys/fs/cgroup").is_dir():
+        core["volumes"].append(bind("/sys/fs/cgroup", "/host/sys/fs/cgroup", True))
     core["labels"] = {"runtipi.managed": "true", "traefik.enable": "true", "traefik.http.services.dashboard.loadbalancer.server.port": "3000", "traefik.http.routers.dashboard.rule": "PathPrefix(`/`)", "traefik.http.routers.dashboard.entrypoints": "web", "traefik.http.routers.dashboard.service": "dashboard", "traefik.http.routers.dashboard-secure.rule": "PathPrefix(`/`)", "traefik.http.routers.dashboard-secure.entrypoints": "websecure", "traefik.http.routers.dashboard-secure.service": "dashboard", "traefik.http.routers.dashboard-secure.tls": "true", "traefik.http.middlewares.runtipi.forwardauth.address": "http://runtipi:3000/api/auth/traefik", "traefik.http.middlewares.runtipi.forwardauth.authRequestHeaders": "Cookie", "traefik.http.middlewares.runtipi.forwardauth.maxResponseBodySize": "8192"}
-    return {"x-orbis-proxy-host-identity": PROXY.declaration(root), "services": {
+    proxy_declaration = (PROXY.declaration(root, installer_storage=installer_storage)
+                         if installer_storage is not None else PROXY.declaration(root))
+    return {"x-orbis-proxy-host-identity": proxy_declaration, "services": {
         "runtipi": core,
-        "runtipi-db": {**common, "container_name": "runtipi-db", "image": IMAGES["postgres"], "stop_grace_period": "1m", "environment": {"POSTGRES_USER": "tipi", "POSTGRES_DB": "tipi", "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD:?}"}, "volumes": [bind(root / "data/postgres", "/var/lib/postgresql/data")], "healthcheck": {"test": ["CMD-SHELL", "pg_isready -U tipi -d tipi"], "interval": "3s", "timeout": "3s", "retries": 60}},
-        "runtipi-queue": {**common, "container_name": "runtipi-queue", "image": IMAGES["rabbitmq"], "environment": {"RABBITMQ_DEFAULT_USER": "tipi", "RABBITMQ_DEFAULT_PASS": "${RABBITMQ_PASSWORD:?}"}, "volumes": [bind(root / "data/rabbitmq", "/var/lib/rabbitmq")]},
-        "runtipi-reverse-proxy": {**common, "container_name": "runtipi-reverse-proxy", "image": IMAGES["traefik"], "depends_on": {"runtipi": {"condition": "service_healthy"}}, "ports": [f"{http}:80", f"{https}:443"], "volumes": [bind(root / "traefik", "/etc/traefik", True), bind(PROXY.shared_path(root), "/shared"), bind(endpoint, "/var/run/docker.sock", True)]},
-    }, "networks": {"tipi_main_network": {"name": NETWORK, "driver": "bridge", "labels": {"orbis.managed": "true"}}}}
+        "runtipi-db": {**common, "networks": ["tipi_core_network"], "container_name": "runtipi-db", "image": IMAGES["postgres"], "stop_grace_period": "1m", "environment": {"POSTGRES_USER": "tipi", "POSTGRES_DB": "tipi", "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD:?}"}, "volumes": [bind(root / "data/postgres", "/var/lib/postgresql/data")], "healthcheck": {"test": ["CMD-SHELL", "pg_isready -U tipi -d tipi"], "interval": "3s", "timeout": "3s", "retries": 60}},
+        "runtipi-queue": {**common, "networks": ["tipi_core_network"], "container_name": "runtipi-queue", "image": IMAGES["rabbitmq"], "environment": {"RABBITMQ_DEFAULT_USER": "tipi", "RABBITMQ_DEFAULT_PASS": "${RABBITMQ_PASSWORD:?}"}, "volumes": [bind(root / "data/rabbitmq", "/var/lib/rabbitmq")]},
+        "runtipi-reverse-proxy": {**common, "container_name": "runtipi-reverse-proxy", "image": IMAGES["traefik"], "depends_on": {"runtipi": {"condition": "service_healthy"}}, "ports": [f"{http}:80", f"{https}:443"], "volumes": [bind(root / "traefik", "/etc/traefik", True), bind(proxy_declaration['mutableIdentity']['source'], "/shared"), bind(endpoint, "/var/run/docker.sock", True)]},
+    }, "networks": {"tipi_main_network": {"name": NETWORK, "driver": "bridge", "labels": {"orbis.managed": "true"}},
+                    "tipi_core_network": {"name": CORE_NETWORK, "driver": "bridge", "internal": True,
+                                          "labels": {"orbis.managed": "true", "io.orbis.root.sha256": hashlib.sha256(str(root).encode()).hexdigest()}}}}
 
 
 def require_empty(root, reader, http, https):
@@ -85,7 +98,7 @@ def require_empty(root, reader, http, https):
         raise ValueError("Choose two different valid HTTP and HTTPS ports")
     if any(row["name"] in APPS.DETECT.CORE_SERVICES for row in reader.containers()):
         raise ValueError("Reserved controller containers already exist on this Docker host")
-    if NETWORK in reader._read(["network", "ls", "--format", "{{.Name}}"] ).splitlines():
+    if {NETWORK, CORE_NETWORK} & set(reader._read(["network", "ls", "--format", "{{.Name}}"] ).splitlines()):
         raise ValueError("The controller network already exists; review the previous installation first")
     published = APPS.DETECT.published_ports(reader, reader.containers(), wanted={http, https})
     if published:
@@ -133,23 +146,40 @@ def choose_ports(root, reader, http, https, ask=None):
 
 def pointer(root, run, reader):
     script = Path(__file__).resolve()
-    APPS.write_journal(root / ".orbis-installation.json", {"schema": "orbis.installer-pointer.v1", "root": str(root), "dockerContext": reader.context, "kind": "new", "journal": str(run / "transaction.json"), "executor": str(script), "executorSha256": hashlib.sha256(script.read_bytes()).hexdigest()})
+    storage = OWNERSHIP.installer_storage(HOST, root, reader.context)
+    marker = {"schema": "orbis.installer-pointer.v1", "root": str(root), "dockerContext": reader.context, "kind": "new", "journal": str(run / "transaction.json"), "executor": str(script), "executorSha256": hashlib.sha256(script.read_bytes()).hexdigest()}
+    if storage is not None:
+        marker.update(schema='orbis.installer-pointer.v2', installerStorage=storage,
+                      executorStorageProtocol=INSTALLER_STORAGE_PROTOCOL)
+    APPS.write_journal(OWNERSHIP.installer_pointer_path(HOST, root, reader.context), marker)
 
 
 def verify_reset(root, record, reader):
     binding = record["resetAuthority"]
-    if binding.get("schema") in {RESET.SCHEMA_V2, RESET.SCHEMA_V3}:
+    if binding.get("schema") in {RESET.SCHEMA_V2, RESET.SCHEMA_V3, RESET.SCHEMA_V4}:
         return RESET.verify(root, binding, daemon=record["daemon"], context=reader.context)
     return RESET.verify(root, binding)
 
 
 def finish(record, reader, journal):
     root = Path(record["root"])
+    storage = OWNERSHIP.verify_installer_storage(HOST, root, record.get('installerStorage'), reader.context)
     if APPS.digest_daemon(reader) != record["daemon"]:
         raise ValueError("The Docker daemon changed during installation")
-    marker = REPLACE.TX.RESTORE.private_json(root / ".orbis-installation.json")
+    if record.get("ownershipBootstrapProtocol") is not None:
+        if type(record["ownershipBootstrapProtocol"]) is not int or record["ownershipBootstrapProtocol"] != 1 or "ownershipBootstrap" not in record:
+            raise ValueError("Initial ownership proof is interrupted; preserve the Root birth receipt for review")
+        OWNERSHIP.verify_reference(HOST, root, reader.context, record["daemon"], record["ownershipBootstrap"])
+    marker = REPLACE.TX.RESTORE.private_json(OWNERSHIP.installer_pointer_path(HOST, root, reader.context))
     if marker.get("journal") != str(journal) or marker.get("dockerContext") != reader.context or marker.get("root") != str(root):
         raise ValueError("The installation marker belongs to another transaction")
+    if storage is not None:
+        if (marker.get('schema') != 'orbis.installer-pointer.v2' or marker.get('kind') != 'new'
+                or marker.get('executorStorageProtocol') != INSTALLER_STORAGE_PROTOCOL):
+            raise ValueError('The installation marker does not support protected storage')
+        OWNERSHIP.verify_installer_storage(HOST, root, marker.get('installerStorage'), reader.context)
+    elif marker.get('schema') == 'orbis.installer-pointer.v2':
+        raise ValueError('A protected installation marker cannot use legacy storage')
     planned = journal.parent / "files" / "docker-compose.yml" if record["stage"] == "prepared" else root / "docker-compose.yml"
     if hashlib.sha256(planned.read_bytes()).hexdigest() != record["files"]["docker-compose.yml"]:
         raise ValueError("The private installation compose source changed")
@@ -157,14 +187,19 @@ def finish(record, reader, journal):
     if dedicated:
         verify_reset(root, record, reader)
     if record["stage"] == "prepared":
+        OWNERSHIP.verify_installer_storage(HOST, root, storage, reader.context)
         planned = journal.parent / "files" / "docker-compose.yml"
+        expected_proxy = (PROXY.declaration(root, installer_storage=storage)
+                          if storage is not None else PROXY.declaration(root))
         if (hashlib.sha256(planned.read_bytes()).hexdigest() != record["files"]["docker-compose.yml"]
-                or json.loads(planned.read_bytes()).get("x-orbis-proxy-host-identity") != PROXY.declaration(root)):
+                or json.loads(planned.read_bytes()).get("x-orbis-proxy-host-identity") != expected_proxy):
             raise ValueError("This installation transaction requires explicit proxy layout review; existing data was preserved")
-        ownership = PROXY.initialize(root)
+        ownership = (PROXY.initialize(root, installer_storage=storage, birth_reference=record['ownershipBootstrap'],
+                                     context=reader.context, daemon_sha256=record['daemon'])
+                     if storage is not None else PROXY.initialize(root))
         record["proxyHostIdentitySha256"] = hashlib.sha256(PROXY.P.canonical(ownership)).hexdigest()
         APPS.write_journal(journal, record)
-        for name in ["media", "state", "repos", "apps", "logs", "traefik/dynamic", "traefik/tls", "user-config", "backups", "app-data", "cache", "data/postgres", "data/rabbitmq"]:
+        for name in ["media", "state", "repos", "apps", "logs", "traefik/dynamic", "traefik/tls", "user-config", "backups", "app-data", "cache", "data/postgres", "data/rabbitmq", ".secrets"]:
             target = root / name
             target.mkdir(mode=0o700, parents=True, exist_ok=True)
             if target.is_symlink() or not target.is_dir():
@@ -206,9 +241,11 @@ def finish(record, reader, journal):
     if dedicated:
         RESET.require_compose(root, json.loads((root / "docker-compose.yml").read_bytes()), record["resetAuthority"])
         verify_reset(root, record, reader)
+    OWNERSHIP.verify_installer_storage(HOST, root, storage, reader.context)
     result = HOST.docker(reader.context, HOST.compose_args(root) + ["up", "--detach", "--pull", "never", "--no-build", "--wait", "--wait-timeout", "240"], root)
     if result.returncode:
         raise RuntimeError(f"Controller startup did not finish. Rerun the installer for {root} to resume; preserve {journal}")
+    OWNERSHIP.verify_installer_storage(HOST, root, storage, reader.context)
     manifest = record["manifest"]
     core = HOST.current_core(root, reader.context)
     if core.get("state") != "running" or core.get("health") != "healthy" or core.get("image") != REPLACE.target_image(manifest):
@@ -234,6 +271,18 @@ def install(root, reader, manifest, state, args, confirm, display=None, ask=None
     require_empty(root, reader, args.http_port, args.https_port)
     address = server_ip(args.server_ip)
     endpoint = REPLACE.Engine(reader).endpoint
+    storage = OWNERSHIP.installer_storage(HOST, root, reader.context)
+    reset_approval = getattr(args, 'approved_reset_plan_sha256', None)
+    if storage is not None:
+        if not OWNERSHIP.K.valid_hash(reset_approval):
+            raise ValueError('This installation needs the separately reviewed reset storage plan digest')
+        reset_plan = RESET.review_external_legacy(root, APPS.digest_daemon(reader), reader.context)
+        if RESET.review_plan_sha256(reset_plan) != reset_approval:
+            raise ValueError('The reset storage approval does not match this installation')
+    elif reset_approval is not None:
+        raise ValueError('Reviewed reset storage requires the protected installation layout')
+    if os.path.lexists(RESET.external_directory(root).parent):
+        raise ValueError('Reset enrollment already exists or is interrupted; preserve it for review')
     run = state / ("new-" + str(uuid.uuid4())); run.mkdir(mode=0o700)
     print(f"\nNew installation: {root}\nServer: {address}\nDashboard ports: {args.http_port} / {args.https_port}\nRelease: {manifest['tag']}\n")
     confirm(root)
@@ -248,24 +297,38 @@ def install(root, reader, manifest, state, args, confirm, display=None, ask=None
                 if result.returncode:
                     raise RuntimeError(f"A required image could not be downloaded. Installation directory is unchanged; logs: {run}")
         UI.retry_download(pull_image, ask)
-    root.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    for parent in [root.parent, *root.parent.parents]:
-        details = parent.lstat()
-        if not stat.S_ISDIR(details.st_mode) or details.st_uid != 0 or stat.S_IMODE(details.st_mode) & 0o022:
-            raise ValueError("The installation parent must be root-owned and not writable by other users")
+    if storage is None:
+        root.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        for parent in [root.parent, *root.parent.parents]:
+            details = parent.lstat()
+            if not stat.S_ISDIR(details.st_mode) or details.st_uid != 0 or stat.S_IMODE(details.st_mode) & 0o022:
+                raise ValueError("The installation parent must be root-owned and not writable by other users")
     with HOST.host_lock(root):
+        OWNERSHIP.verify_installer_storage(HOST, root, storage, reader.context)
         require_empty(root, reader, args.http_port, args.https_port)
         values = {"ROOT_FOLDER_HOST": str(root), "INTERNAL_IP": address, "TIPI_VERSION": "4.10.1", "JWT_SECRET": secrets.token_hex(64), "POSTGRES_PASSWORD": secrets.token_hex(32), "RABBITMQ_USERNAME": "tipi", "RABBITMQ_PASSWORD": secrets.token_hex(32), "RABBITMQ_HOST": "runtipi-queue", "NGINX_PORT": str(args.http_port), "NGINX_PORT_SSL": str(args.https_port), "TZ": "UTC", "LOCAL_DOMAIN": "orbis.lan", "DOMAIN": "orbis.invalid"}
+        try:
+            memory_match = re.search(r"^MemTotal:\s+(\d+)\s+kB$", Path("/proc/meminfo").read_text(), re.MULTILINE)
+            memory_total = int(memory_match[1]) * 1024 if memory_match else 0
+            if 0 < memory_total <= 9007199254740991:
+                values["RUNTIPI_HOST_MEMORY_TOTAL"] = str(memory_total)
+        except OSError:
+            pass
         environment = "".join(f"{key}='{value}'\n" for key, value in values.items())
-        files = {".env": environment.encode(), "VERSION": b"4.10.1\n", "docker-compose.yml": (json.dumps(compose(root, REPLACE.target_image(manifest), endpoint, args.http_port, args.https_port), indent=2) + "\n").encode(), "orbis-compose.yml": HOST.STAGE.staged_content(manifest).encode()}
+        files = {".env": environment.encode(), "VERSION": b"4.10.1\n", "docker-compose.yml": (json.dumps(compose(root, REPLACE.target_image(manifest), endpoint, args.http_port, args.https_port, installer_storage=storage), indent=2) + "\n").encode(), "orbis-compose.yml": HOST.STAGE.staged_content(manifest).encode()}
         folder = run / "files"; folder.mkdir(mode=0o700)
         for name, data in files.items():
             (folder / name).write_bytes(data); (folder / name).chmod(0o600)
-        record = {"schema": SCHEMA, "root": str(root), "dockerContext": reader.context, "daemon": APPS.digest_daemon(reader), "manifest": manifest, "files": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()}, "stage": "prepared"}
+        record = {"schema": SCHEMA, "root": str(root), "dockerContext": reader.context, "daemon": APPS.digest_daemon(reader), "manifest": manifest, "files": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()}, "stage": "prepared", "ownershipBootstrapProtocol": 1}
+        if storage is not None:
+            record['installerStorage'] = storage
         journal = run / "transaction.json"
         APPS.write_journal(journal, record)
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        record["resetAuthority"] = RESET.prepare_external_durable(root, record["daemon"], reader.context)
+        record["ownershipBootstrap"] = OWNERSHIP.prepare_new(HOST, root, reader, manifest)
+        APPS.write_journal(journal, record)
+        record["resetAuthority"] = (RESET.prepare_external_reviewed(root, record['daemon'], reader.context, reset_approval)
+                                    if storage is not None else RESET.prepare_external_durable(root, record["daemon"], reader.context))
         APPS.write_journal(journal, record)
         pointer(root, run, reader)
         with display.step("Starting Orbis and checking its health") if display else contextlib.nullcontext():

@@ -1,4 +1,4 @@
-import { type } from 'arktype';
+import { type, type Type } from 'arktype';
 import {
   frameworkActionIds,
   frameworkComponentIds,
@@ -7,6 +7,11 @@ import {
   frameworkTokenIds,
   frameworkModes,
   frameworkIconRoles,
+  type FrameworkComponentId,
+  type FrameworkIconRole,
+  type FrameworkMode,
+  type FrameworkSoundEventId,
+  type FrameworkTokenId,
 } from './theme-framework-registry.js';
 
 export const frameworkIdSchema = type('string <= 64').and(/^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/);
@@ -110,7 +115,7 @@ export const frameworkNodeSchema = type({ ...nodeBase, kind: "'core'", component
 const tokenValue = type('-1000000 <= number <= 1000000').or(type('string <= 64').and(/^[a-zA-Z0-9#.-]+$/));
 const tokenAssignment = type({ token: type.enumerated(...frameworkTokenIds), value: tokenValue }).onUndeclaredKey('reject');
 const mode = type.enumerated(...frameworkModes);
-export const themeFrameworkDocumentSchema = type({
+export const themeFrameworkDocumentSchema: Type<ThemeFrameworkDocument> = type({
   schema: "'orbis.theme-framework.v1'",
   id: frameworkIdSchema,
   version,
@@ -190,7 +195,38 @@ export const themeFrameworkDocumentSchema = type({
     .array()
     .atMostLength(14),
 }).onUndeclaredKey('reject');
-export type ThemeFrameworkDocument = typeof themeFrameworkDocumentSchema.infer;
+type FrameworkTokenAssignment = { token: FrameworkTokenId; value: string | number };
+export type ThemeFrameworkDocument = {
+  schema: 'orbis.theme-framework.v1';
+  id: string;
+  version: string;
+  name: string;
+  settingsVersion: number;
+  requires: { api: 1; releases: string[] };
+  supportsUiRevisions: number[];
+  components: { id: FrameworkComponentId; variant: string }[];
+  tokens: {
+    colours: { background: string; surface: string; ink: string; muted: string; accent: string; danger: string; focus: string };
+    typography: { family: string; baseSize: number; scale: number };
+    spacing: { unit: number; gap: number; inset: number };
+    shape: { radius: number; borderWidth: number };
+    motion: { duration: number; curve: 'linear' | 'standard' | 'decelerate' };
+  };
+  modes: { mode: FrameworkMode; values: FrameworkTokenAssignment[] }[];
+  tokenRules: { mode: FrameworkMode | 'all'; when: string; values: FrameworkTokenAssignment[] }[];
+  tokenBindings: { token: FrameworkTokenId; setting: string; transform: 'identity' | 'percent'; when?: string | undefined }[];
+  icons: { role: FrameworkIconRole; mode: FrameworkMode | 'all'; asset: string | null; setting?: string | undefined; when?: string | undefined }[];
+  assets: FrameworkAsset[];
+  settings: FrameworkSetting[];
+  conditions: { id: string; all: { setting: string; equals: typeof frameworkValueSchema.infer }[] }[];
+  customisation: {
+    hostControls: 'always';
+    sections: { id: string; label: string; settings: string[]; visibleWhen?: string | undefined }[];
+    presets: { id: string; label: string; values: { key: string; value: typeof frameworkValueSchema.infer }[] }[];
+  };
+  layouts: { viewport: 'phone' | 'tablet' | 'desktop'; columns: number; nodes: FrameworkNode[] }[];
+  sounds: { event: FrameworkSoundEventId; asset: string | null; gain: number }[];
+};
 export type FrameworkSetting = typeof frameworkSettingSchema.infer;
 export type FrameworkNode = typeof frameworkNodeSchema.infer;
 export type FrameworkAsset = typeof frameworkAssetSchema.infer;

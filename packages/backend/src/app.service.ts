@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { Inject, Injectable } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
-import { execFileAsync } from './common/helpers/exec-helpers';
+import { LocalTlsService } from './core/local-tls/local-tls.service';
 import { CacheService, ONE_DAY_IN_SECONDS } from './core/cache/cache.service';
 import { ConfigurationService } from './core/config/configuration.service';
 import { DatabaseService } from './core/database/database.service';
@@ -21,7 +21,7 @@ import { installationMode } from './common/installation-mode';
 import { retainedBootstrapStartup, retainedSettledStartup } from './modules/system-backups/backup-restore-startup';
 import { QueueFactory } from './modules/queue/queue.factory';
 import { backupMaintenanceActive, coreCaptureRecoveryRequired } from './common/backup-maintenance';
-import { restoreStartupRole } from './modules/system-backups/backup-restore-startup';
+import { restoreTerminalStartup, restoreStartupRole } from './modules/system-backups/backup-restore-startup';
 import { ResetService } from './modules/system-reset/reset.service';
 import { controllerOverlayStartup } from './common/controller-overlay-startup';
 
@@ -49,6 +49,7 @@ export class AppService {
     private readonly githubService: GithubService,
     private readonly queueFactory: QueueFactory,
     private readonly reset: ResetService,
+    private readonly localTls: LocalTlsService,
     @Inject(DOCKERODE) private docker: Dockerode,
   ) {}
 
@@ -119,7 +120,13 @@ export class AppService {
         await this.generateTlsCertificates({ localDomain: userSettings.localDomain });
       }
 
-      if (!preserveControllerNetwork && installation.phase !== 'resume' && __prod__ && (buster !== version || version === 'nightly')) {
+      if (
+        !preserveControllerNetwork &&
+        !restoreTerminalStartup() &&
+        installation.phase !== 'resume' &&
+        __prod__ &&
+        (buster !== version || version === 'nightly')
+      ) {
         this.appLifecycleService.restartRunningApps();
       }
 
@@ -127,7 +134,7 @@ export class AppService {
       const statuses = await this.appStatusSyncService.syncAllAppStatuses();
       if ((installation.phase === 'resume' || preserveControllerNetwork) && !statuses.success)
         throw new Error('App status reconciliation failed during installation resume.');
-      await this.queueFactory.completeInstallationResume();
+      if (restoreStartupRole() !== 'candidate') await this.queueFactory.completeInstallationResume();
     } catch (e) {
       this.logger.error(e);
       Sentry.captureException(e, { tags: { source: 'bootstrap' } });
@@ -320,68 +327,8 @@ export class AppService {
    * @param {string} data.domain The domain to generate the certificates for
    */
   public generateTlsCertificates = async (data: { localDomain?: string }) => {
-    if (!data.localDomain) {
-      return;
-    }
-
-    const { dataDir } = this.configuration.get('directories');
-
-    const tlsFolder = path.join(dataDir, 'traefik', 'tls');
-
-    // If the certificate already exists, don't generate it again
-    if (
-      (await this.filesystem.isFile(path.join(tlsFolder, `${data.localDomain}.txt`))) &&
-      (await this.filesystem.isFile(path.join(tlsFolder, 'cert.pem'))) &&
-      (await this.filesystem.isFile(path.join(tlsFolder, 'key.pem')))
-    ) {
-      // Check if the certificate is still valid
-      const { stdout } = await execFileAsync('openssl', ['x509', '-checkend', '86400', '-noout', '-in', `${tlsFolder}/cert.pem`]);
-      if (stdout.includes('Certificate will not expire')) {
-        this.logger.info(`TLS certificate for ${data.localDomain} already exists`);
-        return;
-      }
-
-      this.logger.warn(`TLS certificate for ${data.localDomain} is expired or will expire soon. Regenerating a new one...`);
-    }
-
-    // Empty out the folder
-    const files = await this.filesystem.listFiles(tlsFolder);
-    await Promise.all(
-      files.map(async (file) => {
-        this.logger.info(`Removing file ${file}`);
-        await this.filesystem.removeFile(path.join(tlsFolder, file));
-      }),
-    );
-
-    const subject = `/O=runtipi.io/OU=IT/CN=*.${data.localDomain}/emailAddress=webmaster@${data.localDomain}`;
-    const subjectAltName = `DNS:*.${data.localDomain},DNS:${data.localDomain}`;
-
     try {
-      this.logger.info(`Generating TLS certificate for ${data.localDomain}`);
-      const { stderr } = await execFileAsync('openssl', [
-        'req',
-        '-x509',
-        '-newkey',
-        'rsa:4096',
-        '-keyout',
-        `${dataDir}/traefik/tls/key.pem`,
-        '-out',
-        `${dataDir}/traefik/tls/cert.pem`,
-        '-days',
-        '365',
-        '-subj',
-        subject,
-        '-addext',
-        `subjectAltName = ${subjectAltName}`,
-        '-nodes',
-      ]);
-      if (!(await this.filesystem.isFile(path.join(tlsFolder, 'cert.pem'))) || !(await this.filesystem.isFile(path.join(tlsFolder, 'key.pem')))) {
-        this.logger.error(`Failed to generate TLS certificate for ${data.localDomain}`);
-        this.logger.error(stderr);
-      } else {
-        this.logger.info(`Writing txt file for ${data.localDomain}`);
-      }
-      await this.filesystem.writeTextFile(path.join(tlsFolder, `${data.localDomain}.txt`), '');
+      await this.localTls.ensure(data.localDomain);
     } catch (error) {
       this.logger.error(error);
     }

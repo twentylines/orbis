@@ -1,16 +1,15 @@
 import { TranslatableError } from '@/common/error/translatable-error';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { ConflictException, HttpStatus, Injectable } from '@nestjs/common';
 import type { AppUrn } from '@runtipi/common/types';
 import semver from 'semver';
-import { AppFilesManager } from '../../apps/app-files-manager';
 import { AppsRepository } from '../../apps/apps.repository';
 import { MarketplaceService } from '../../marketplace/marketplace.service';
 import { AppEventsQueue } from '../../queue/entities/app-events';
 import { StatusManagerService } from '../services/status-manager.service';
-import { StartAppHandler } from './start-app.handler';
 import { type HandlerResult, type ILifecycleHandler, generateRequestId } from './base-handler';
+import { AppJobService, type JobEvent } from '../services/app-job.service';
 
 export type UpdateAppParams = {
   performBackup: boolean;
@@ -25,8 +24,7 @@ export class UpdateAppHandler implements ILifecycleHandler<UpdateAppParams> {
     private readonly statusManager: StatusManagerService,
     private readonly config: ConfigurationService,
     private readonly marketplaceService: MarketplaceService,
-    private readonly appFilesManager: AppFilesManager,
-    private readonly startAppHandler: StartAppHandler,
+    private readonly jobs: AppJobService,
   ) {}
 
   async execute(appUrn: AppUrn, params?: UpdateAppParams): Promise<HandlerResult> {
@@ -36,6 +34,7 @@ export class UpdateAppHandler implements ILifecycleHandler<UpdateAppParams> {
     if (!app) {
       throw new TranslatableError('APP_ERROR_APP_NOT_FOUND', { id: appUrn }, HttpStatus.NOT_FOUND);
     }
+    if (app.status !== 'running' && app.status !== 'stopped') throw new ConflictException('Wait for the current app operation to finish.');
 
     const version = this.config.get('version');
 
@@ -44,31 +43,38 @@ export class UpdateAppHandler implements ILifecycleHandler<UpdateAppParams> {
       throw new TranslatableError('APP_UPDATE_ERROR_MIN_TIPI_VERSION', { id: appUrn, minVersion: minTipiVersion });
     }
 
-    await this.statusManager.transitionTo(app.id, appUrn, 'updating');
-    const appStatusBeforeUpdate = app.status;
-
     const requestId = generateRequestId();
+    const event: JobEvent = { command: 'update', appUrn, requestId, form: app.config, performBackup, jobVersion: 1 };
+    await this.jobs.admit(event, app);
+    try {
+      await this.statusManager.transitionTo(app.id, appUrn, 'updating');
+    } catch (error) {
+      await this.jobs.abandon(event);
+      throw error;
+    }
+    const reportFailure = (message: string) => {
+      this.logger.error(`Failed to update app ${appUrn}: ${message}`);
+      this.statusManager.emitEvent({ appUrn, event: 'update_error', error: message });
+    };
 
-    this.appEventsQueue.publish({ command: 'update', appUrn, requestId, form: app.config, performBackup }).then(async (result) => {
-      const { success, message } = result;
-      if (success) {
-        const appInfo = await this.appFilesManager.getInstalledAppInfo(appUrn);
-
-        await this.appRepository.updateAppById(app.id, { version: appInfo?.tipi_version });
-        this.statusManager.emitEvent({ appUrn, event: 'update_success' });
-
-        if (appStatusBeforeUpdate === 'running') {
-          await this.startAppHandler.execute(appUrn);
-        } else {
-          await this.appRepository.updateAppById(app.id, { status: appStatusBeforeUpdate });
-        }
-      } else {
-        this.logger.error(`Failed to update app ${appUrn}: ${message}`);
-        const status = 'statePreserved' in result && result.statePreserved ? appStatusBeforeUpdate : 'stopped';
-        await this.appRepository.updateAppById(app.id, { status });
-        this.statusManager.emitEvent({ appUrn, event: 'update_error', error: message });
-      }
-    });
+    void this.appEventsQueue
+      .publish(event)
+      .then((result) =>
+        this.jobs.withCurrent(event, async () => {
+          const updateStatus = 'updateStatus' in result ? result.updateStatus : undefined;
+          if (result.success) {
+            if (updateStatus || ('alreadyCompleted' in result && result.alreadyCompleted))
+              this.statusManager.emitEvent({ appUrn, event: 'update_success' });
+            else reportFailure('The updated deployment could not be confirmed.');
+            return;
+          }
+          if ('statePreserved' in result && result.statePreserved)
+            await this.appRepository.updateAppById(app.id, { status: updateStatus ?? app.status });
+          if ('cancelled' in result && result.cancelled) return;
+          reportFailure(result.message);
+        }),
+      )
+      .catch(() => reportFailure('The app update outcome could not be confirmed.'));
 
     return { requestId };
   }

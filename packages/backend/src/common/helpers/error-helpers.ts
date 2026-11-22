@@ -1,4 +1,4 @@
-import type { ErrorEvent, EventHint } from '@sentry/core';
+import type { Breadcrumb, ErrorEvent, EventHint } from '@sentry/core';
 import cloneDeep from 'lodash.clonedeep';
 import validator from 'validator';
 
@@ -30,7 +30,45 @@ const shouldIgnoreException = (s: string) => {
   return s && IgnoreErrors.find((pattern) => pattern.test(s));
 };
 
+export function isRecoveryKeyHandoffPath(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const url = value.replace(/^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+/i, '');
+  if (!url.startsWith('/') && !/^https?:\/\//i.test(url)) return false;
+  try {
+    const pathname = decodeURIComponent(new URL(url, 'http://orbis.invalid').pathname);
+    return /^\/(?:api\/)?system\/sentinel\/enrollment\/(?:save-key|confirm-key)\/?$/i.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
+type RecoveryTelemetryMarker = {
+  request?: { url?: unknown };
+  transaction?: unknown;
+  tags?: Record<string, unknown>;
+  contexts?: { trace?: { data?: Record<string, unknown> } };
+  spans?: { description?: unknown; data?: Record<string, unknown> }[];
+};
+
+const hasRecoveryKeyUrl = (data?: Record<string, unknown>) =>
+  ['url', 'url.full', 'url.path', 'http.url', 'http.target'].some((key) => isRecoveryKeyHandoffPath(data?.[key]));
+
+export function isRecoveryKeyHandoffEvent(event: RecoveryTelemetryMarker): boolean {
+  return (
+    isRecoveryKeyHandoffPath(event.request?.url) ||
+    isRecoveryKeyHandoffPath(event.transaction) ||
+    hasRecoveryKeyUrl(event.tags) ||
+    hasRecoveryKeyUrl(event.contexts?.trace?.data) ||
+    (event.spans?.some((span) => isRecoveryKeyHandoffPath(span.description) || hasRecoveryKeyUrl(span.data)) ?? false)
+  );
+}
+
+export function isRecoveryKeyHandoffBreadcrumb(breadcrumb: Pick<Breadcrumb, 'data'>): boolean {
+  return hasRecoveryKeyUrl(breadcrumb.data);
+}
+
 export const cleanseErrorData = (event: ErrorEvent, hint: EventHint) => {
+  if (isRecoveryKeyHandoffEvent(event)) return null;
   const result = cloneDeep(event);
 
   const error = hint && (hint.originalException as Error);
@@ -40,6 +78,7 @@ export const cleanseErrorData = (event: ErrorEvent, hint: EventHint) => {
   }
 
   if (result.breadcrumbs) {
+    result.breadcrumbs = result.breadcrumbs.filter((breadcrumb) => !isRecoveryKeyHandoffBreadcrumb(breadcrumb));
     for (const breadcrumb of result.breadcrumbs) {
       if (breadcrumb.data?.url) {
         breadcrumb.data.url = cleanseUrl(breadcrumb.data.url);

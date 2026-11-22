@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """Root-reviewed legacy installation layout, separate from config authority."""
+import argparse
 import hashlib
 import fcntl
 import importlib.util
 import json
 import os
+import re
 import stat
+import subprocess
+import sys
 from pathlib import Path
 from contextlib import contextmanager
+from contextvars import ContextVar
+from types import SimpleNamespace
 
 _spec = importlib.util.spec_from_file_location('orbis_layout_reset_authority', Path(__file__).with_name('orbis-reset-authority.py'))
 R = importlib.util.module_from_spec(_spec)
@@ -18,25 +24,28 @@ PLAN_SCHEMA = 'orbis.installation-layout-review.v1'
 SCHEMA = 'orbis.installation-layout.v1'
 PURPOSES = {'retained-authority': 'retained-authority', 'capture-fence': 'capture-fence.json',
             'restore-selector': 'restore-selector.json', 'host-lock': 'host.lock',
+            'credential-fence': 'credential-fence.json',
             'proxy-config': 'proxy-config', 'proxy-identity': 'proxy-identity'}
 FILES = frozenset({'docker-compose.yml', 'orbis-compose.yml', 'orbis-host-compose.yml', '.env',
                    'user-config/tipi-compose.yml', 'VERSION'})
 LIMIT = 1024 * 1024
 RECEIPT_LIMIT = 65536
 LayoutError = R.ResetAuthorityError
+ENROLLMENT_DESCRIPTOR = ContextVar('orbis_layout_enrollment_descriptor', default=None)
 
 
 def legacy_path(root, purpose):
     root = Path(root)
     suffixes = {'retained-authority': 'retained-authority', 'capture-fence': 'capture-fence.json',
-                'restore-selector': 'retained-restore.json', 'host-lock': 'host.lock'}
+                'restore-selector': 'retained-restore.json', 'host-lock': 'host.lock',
+                'credential-fence': 'credential-fence.json'}
     if purpose not in suffixes:
         raise LayoutError('Unsupported legacy authority purpose')
     return root.parent / ('.' + root.name + '.orbis-' + suffixes[purpose])
 
 
 def _no_legacy_authority(root):
-    for purpose in ('retained-authority', 'capture-fence', 'restore-selector'):
+    for purpose in ('retained-authority', 'capture-fence', 'restore-selector', 'credential-fence'):
         path = legacy_path(root, purpose)
         try:
             path.lstat()
@@ -130,6 +139,13 @@ def plan_sha256(plan):
     return hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
+def _ownership_bootstrap():
+    spec = importlib.util.spec_from_file_location('orbis_layout_ownership_bootstrap', Path(__file__).with_name('orbis-host-ownership-bootstrap.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def review(root, daemon, context, mountinfo=None):
     """Return a read-only plan. Its digest must be approved separately by root."""
     _operator()
@@ -159,6 +175,14 @@ def prepare(root, daemon, context, approved_plan_sha256, mountinfo=None):
             if _plan(root, daemon, context, ancestry, mountinfo) != plan:
                 raise LayoutError('Installation layout changed during enrollment')
         check()
+        # A new namespace supersedes a fresh-install birth proof. Retire that
+        # proof under this live lock before allocating the namespace, so losing
+        # the later admission mount can never resurrect initial authority.
+        birth = root.parent / ('.' + root.name + '.orbis-main-ownership-bootstrap.json')
+        if any(os.path.lexists(birth.with_name(birth.name + suffix)) for suffix in ('', '.pending', '.retired')):
+            _ownership_bootstrap().retire_for_layout(root, SimpleNamespace(
+                ENROLLMENT_DESCRIPTOR=ENROLLMENT_DESCRIPTOR, _lock_identity=_lock_identity,
+                legacy_path=legacy_path, _no_legacy_authority=_no_legacy_authority), legacy_lock)
         # STATE_ROOT is existing protected service state, never created here.
         with R._control_descriptor(STATE_ROOT) as state:
             R._require_private(os.fstat(state))
@@ -267,16 +291,20 @@ def enrollment_lock(root):
     _no_legacy_authority(root)
     path = legacy_path(root, 'host-lock')
     descriptor = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    token = None
     try:
         info = _lock_identity(os.fstat(descriptor))
         fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if _lock_identity(path.lstat()) != info:
             raise LayoutError('Legacy installation lock changed')
         _no_legacy_authority(root)
+        token = ENROLLMENT_DESCRIPTOR.set(descriptor)
         yield info
         if _lock_identity(path.lstat()) != info or _lock_identity(os.fstat(descriptor)) != info:
             raise LayoutError('Legacy installation lock changed')
     finally:
+        if token is not None:
+            ENROLLMENT_DESCRIPTOR.reset(token)
         os.close(descriptor)
 
 
@@ -362,3 +390,85 @@ def observe_files(root, daemon, context, names, mountinfo=None):
             for descriptor in reversed(opened):
                 os.close(descriptor)
             os.close(rootfd)
+
+
+def _cli_docker_output(context, arguments):
+    result = subprocess.run(['docker', '--context', context, *arguments], cwd='/',
+                            capture_output=True, text=True, check=False, timeout=15)
+    if result.returncode or len(result.stdout.encode()) > 4096:
+        raise LayoutError('The selected local Docker identity could not be inspected')
+    return result.stdout.strip()
+
+
+def _cli_daemon(context):
+    endpoint = json.loads(_cli_docker_output(context, ['context', 'inspect', context,
+                                                     '--format', '{{json .Endpoints.docker.Host}}']))
+    if (type(endpoint) is not str or not endpoint.startswith('unix:///')
+            or any(ord(char) < 32 or ord(char) == 127 for char in endpoint)
+            or not Path(endpoint[7:]).is_socket()):
+        raise LayoutError('Layout review requires the selected local Docker socket')
+    daemon = _cli_docker_output(context, ['info', '--format', '{{.ID}}'])
+    if not 1 <= len(daemon) <= 256 or any(ord(char) < 33 or ord(char) > 126 for char in daemon):
+        raise LayoutError('The selected Docker daemon identity is invalid')
+    return daemon
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Review or adopt protected installation storage without changing the controller.')
+    parser.add_argument('action', choices=('review', 'adopt', 'review-reset'))
+    parser.add_argument('root', type=Path)
+    parser.add_argument('--docker-context', required=True)
+    parser.add_argument('--confirm-root', help='exact installation root required for adoption')
+    parser.add_argument('--approved-plan-sha256', help='separately reviewed layout plan digest required for adoption')
+    args = parser.parse_args(argv)
+    if args.action != 'adopt' and (args.confirm_root is not None or args.approved_plan_sha256 is not None):
+        parser.error('Approval options require adopt')
+    if args.action == 'adopt' and (args.confirm_root is None or args.approved_plan_sha256 is None):
+        parser.error('Adoption requires --confirm-root and --approved-plan-sha256')
+    try:
+        _operator()
+        if sys.platform != 'linux':
+            raise LayoutError('Layout review must run on the Linux Docker host')
+        root = args.root
+        if (not root.is_absolute() or root.resolve(strict=True) != root or not root.is_dir()
+                or len(os.fsencode(root)) > 4096
+                or any(ord(char) < 32 or ord(char) == 127 for char in str(root))):
+            raise LayoutError('Layout review requires the canonical installation directory')
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}', args.docker_context):
+            raise LayoutError('Layout review requires the exact Docker context name')
+        if args.action == 'adopt' and (args.confirm_root != str(root)
+                or not re.fullmatch(r'[a-f0-9]{64}', args.approved_plan_sha256)):
+            raise LayoutError('Adoption requires the exact root and reviewed plan digest')
+        daemon = _cli_daemon(args.docker_context)
+        if args.action == 'review-reset':
+            if read(root, daemon, args.docker_context) is None:
+                raise LayoutError('Reset review requires the separately adopted installation layout')
+            plan = R.review_external_legacy(root, hashlib.sha256(daemon.encode()).hexdigest(), args.docker_context)
+            print(json.dumps({'result': 'reset-review-required', 'planSha256': R.review_plan_sha256(plan), 'plan': plan}, indent=2))
+            return 0
+        proposed = review(root, daemon, args.docker_context)
+        if args.action == 'review':
+            result = {'result': 'review-required', 'planSha256': plan_sha256(proposed), 'plan': proposed}
+        else:
+            if _cli_daemon(args.docker_context) != daemon:
+                raise LayoutError('The Docker daemon changed after layout review')
+            receipt = read(root, daemon, args.docker_context)
+            result_name = 'layout-already-adopted'
+            if receipt is None:
+                receipt = prepare(root, daemon, args.docker_context, args.approved_plan_sha256)
+                result_name = 'layout-adopted'
+            elif receipt['plan'] != proposed or receipt['approvedPlanSha256'] != args.approved_plan_sha256:
+                raise LayoutError('The existing layout does not match the reviewed plan')
+            if _cli_daemon(args.docker_context) != daemon:
+                raise LayoutError('The Docker daemon changed; preserve the allocated layout for review')
+            result = {'result': result_name, 'planSha256': receipt['approvedPlanSha256'],
+                      'namespace': str(namespace(root))}
+        print(json.dumps(result, indent=2))
+        return 0
+    except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
+        print('Installation layout operation refused; preserve existing state and review the selected root, daemon and approval.', file=sys.stderr)
+        return 2
+
+
+if __name__ == '__main__':
+    sys.exit(main())

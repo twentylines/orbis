@@ -5,6 +5,7 @@ import type { Request } from 'express';
 import { SESSION_COOKIE_NAME } from '@/common/constants';
 import { AuthService } from '../auth/auth.service';
 import { PasskeyStore, type PasskeyState } from '../auth/passkey.store';
+import { credentialWriters } from '../sentinel-recovery/writer-gate';
 
 let root: string;
 let store: PasskeyStore;
@@ -113,6 +114,69 @@ it('drains an admitted writer before entry and does not queue rejected work for 
   expect(rejected).not.toHaveBeenCalled();
 });
 
+it('reserves snapshot admission while an unrelated credential writer owns the shared gate', async () => {
+  await seed();
+  const entered = deferred();
+  const finish = deferred();
+  const holder = credentialWriters.run(async () => {
+    entered.resolve();
+    await finish.promise;
+  });
+  await entered.promise;
+  const read = vi.fn(async () => undefined);
+  const snapshot = store.withReadFence(read);
+  const write = vi.fn(mutate);
+  try {
+    await expect(store.change(write)).rejects.toThrow('snapshot');
+    await expect(store.withReadFence(async () => undefined)).rejects.toThrow('snapshot');
+    expect(read).not.toHaveBeenCalled();
+  } finally {
+    finish.resolve();
+    await holder;
+    await snapshot;
+  }
+  expect(read).toHaveBeenCalledOnce();
+  expect(write).not.toHaveBeenCalled();
+  await store.change(write);
+  expect(write).toHaveBeenCalledOnce();
+});
+
+it('drains an admitted outer credential writer that has not reached the passkey queue yet', async () => {
+  await seed();
+  const entered = deferred();
+  const finish = deferred();
+  const prior = credentialWriters.run(async () => {
+    entered.resolve();
+    await finish.promise;
+    await store.change(mutate);
+  });
+  await entered.promise;
+  const snapshot = store.withReadFence(async () => {
+    expect((await store.snapshot()).users[7]?.handle).toBe('synthetic_modified');
+  });
+  const rejected = vi.fn(mutate);
+  try {
+    await expect(store.change(rejected)).rejects.toThrow('snapshot');
+  } finally {
+    finish.resolve();
+    await prior;
+    await snapshot;
+  }
+  expect(rejected).not.toHaveBeenCalled();
+  expect((await store.snapshot()).users[7]?.handle).toBe('synthetic_modified');
+});
+
+it('releases the reserved local fence when shared read admission rejects', async () => {
+  await seed();
+  const read = vi.fn(async () => undefined);
+  const refusal = new Error('synthetic admission refusal');
+  vi.spyOn(credentialWriters, 'read').mockRejectedValueOnce(refusal);
+  await expect(store.withReadFence(read)).rejects.toBe(refusal);
+  expect(read).not.toHaveBeenCalled();
+  await store.change(mutate);
+  expect((await store.snapshot()).users[7]?.handle).toBe('synthetic_modified');
+});
+
 it('keeps the fence until cancelled callback work settles, then preserves its original error', async () => {
   await seed();
   const entered = deferred();
@@ -205,19 +269,20 @@ it('rejects oversized storage before invoking work', async () => {
   expect(work).not.toHaveBeenCalled();
 });
 
-it('detects a retained mutation reference changing the in-memory source without updating disk', async () => {
+it('detaches retained mutation references from the pinned in-memory source', async () => {
   let retained: PasskeyState | undefined;
   await store.change((state) => {
     retained = state;
     state.users[7] = { handle: 'synthetic_original', credentials: [] };
   });
   const bytes = await fs.readFile(file());
-  await expect(
-    store.withReadFence(async () => {
-      if (!retained) throw new Error('Missing synthetic state');
-      mutate(retained);
-    }),
-  ).rejects.toThrow('snapshot');
-  await expect(store.change(mutate)).rejects.toThrow('unavailable');
-  expect(await fs.readFile(file())).toEqual(bytes);
+  await store.withReadFence(async () => {
+    if (!retained) throw new Error('Missing synthetic state');
+    mutate(retained);
+    expect((await store.snapshot()).users[7]?.handle).toBe('synthetic_original');
+    expect(await fs.readFile(file())).toEqual(bytes);
+  });
+  expect((await store.snapshot()).users[7]?.handle).toBe('synthetic_original');
+  await store.change(mutate);
+  expect((await store.snapshot()).users[7]?.handle).toBe('synthetic_modified');
 });

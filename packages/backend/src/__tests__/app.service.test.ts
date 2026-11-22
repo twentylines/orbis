@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppService } from '@/app.service';
+import { LocalTlsService } from '@/core/local-tls/local-tls.service';
 import { APP_DATA_DIR, APP_DIR, DATA_DIR } from '@/common/constants';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
@@ -102,6 +103,21 @@ describe('AppService', () => {
     marketplace.initialize.mockResolvedValue(undefined);
     repoQueue = moduleRef.get(RepoEventsQueue);
     systemQueue = moduleRef.get(SystemEventsQueue);
+  });
+
+  it('delegates TLS renewal without deleting the installed certificate folder', async () => {
+    const tls = mock<LocalTlsService>();
+    Reflect.set(appService, 'localTls', tls);
+    const remove = vi.spyOn(FilesystemService.prototype, 'removeFile');
+    await appService.generateTlsCertificates({ localDomain: 'orbis.lan' });
+    expect(tls.ensure).toHaveBeenCalledExactlyOnceWith('orbis.lan');
+    expect(remove).not.toHaveBeenCalled();
+    const failure = new Error('TLS renewal needs review');
+    tls.ensure.mockRejectedValueOnce(failure);
+    await expect(appService.generateTlsCertificates({ localDomain: 'orbis.lan' })).resolves.toBeUndefined();
+    expect(loggerService.error).toHaveBeenCalledWith(failure);
+    expect(remove).not.toHaveBeenCalled();
+    remove.mockRestore();
   });
 
   describe('core capture presentation', () => {
@@ -396,7 +412,7 @@ describe('AppService', () => {
     try {
       await appService.bootstrap();
       expect(appStatusSyncService.syncAllAppStatuses).toHaveBeenCalledOnce();
-      expect(queueFactory.completeInstallationResume).toHaveBeenCalledOnce();
+      expect(queueFactory.completeInstallationResume).toHaveBeenCalledTimes(role === 'candidate' ? 0 : 1);
       expect(await filesystem.pathExists(path.join(DATA_DIR, 'apps'))).toBe(true);
       expect(await filesystem.pathExists(path.join(APP_DATA_DIR))).toBe(true);
       expect(await filesystem.pathExists(path.join(DATA_DIR, 'media', 'downloads', 'complete'))).toBe(true);

@@ -71,6 +71,7 @@ describe('persistent lifecycle history', () => {
     await service.unconfirmed(first);
     const response = await request(app.getHttpServer()).get('/tasks').set('Authorization', 'Bearer test');
     expect(response.status).toBe(200);
+    expect(response.headers['cache-control']).toBe('private, no-store');
     expect(response.body.tasks).toHaveLength(2);
     expect(response.body.tasks.find((task: { id: string }) => task.id === first.requestId).status).toBe('succeeded');
     expect(await fs.readFile(historyFile(), 'utf8')).not.toContain('excluded-secret');
@@ -85,6 +86,85 @@ describe('persistent lifecycle history', () => {
     await reloaded.start(pending);
     await reloaded.finish(pending, false);
     expect((await reloaded.read()).tasks[0]?.status).toBe('failed');
+  });
+
+  it('persists real progress before notifying clients and retains it as interrupted after restart', async () => {
+    const pending = { ...event(), command: 'update' as const };
+    await service.start(pending);
+    const observed: Promise<string>[] = [];
+    const subscription = service.changesForClient().subscribe(() => observed.push(fs.readFile(historyFile(), 'utf8')));
+    await service.progress(pending, 'pulling_images');
+    subscription.unsubscribe();
+    const stored = observed[0];
+    if (!stored) throw new Error('Task change notification was not delivered');
+    const written = JSON.parse(await stored);
+    expect(written).toMatchObject([{ id: pending.requestId, status: 'running', phase: 'pulling_images' }]);
+    expect(written[0]).not.toHaveProperty('form');
+    const response = await request(app.getHttpServer()).get('/tasks').set('Authorization', 'Bearer test');
+    expect(response.body.tasks[0]).toMatchObject({ id: pending.requestId, phase: 'pulling_images', status: 'running' });
+    const reloaded = new TasksService(config, logger);
+    expect((await reloaded.read()).tasks[0]).toMatchObject({ id: pending.requestId, phase: 'pulling_images', status: 'interrupted' });
+  });
+
+  it('restores confirmed progress after a requester timeout without changing the start or attention revision', async () => {
+    const pending = { ...event(), command: 'update' as const };
+    await service.start(pending);
+    await service.progress(pending, 'pulling_images');
+    const startedAt = (await service.read()).tasks[0]?.startedAt;
+    await service.unconfirmed(pending);
+    const attentionRevision = (await service.read()).tasks[0]?.attentionRevision;
+    const observations: Promise<string>[] = [];
+    const subscription = service.changesForClient().subscribe(() => observations.push(fs.readFile(historyFile(), 'utf8')));
+    await service.progress(pending, 'stopping');
+    subscription.unsubscribe();
+    expect(observations).toHaveLength(1);
+    const observed = observations[0];
+    if (!observed) throw new Error('Confirmed worker progress was not published');
+    expect(JSON.parse(await observed)).toMatchObject([
+      { id: pending.requestId, status: 'running', phase: 'stopping', startedAt, attentionRevision, finishedAt: null },
+    ]);
+    await service.finish(pending, true);
+    await service.progress(pending, 'starting');
+    expect((await service.read()).tasks[0]).toMatchObject({ status: 'succeeded', phase: 'stopping', startedAt });
+  });
+
+  it('does not infer worker liveness from queued, crossed, terminal or restarted records', async () => {
+    const pending = event();
+    await service.enqueue(pending);
+    await service.unconfirmed(pending);
+    await service.progress(pending, 'preparing');
+    expect((await service.read()).tasks[0]).toMatchObject({ status: 'unconfirmed', startedAt: null });
+    expect((await service.read()).tasks[0]).not.toHaveProperty('phase');
+    await service.start(pending);
+    await service.unconfirmed(pending);
+    const before = await fs.readFile(historyFile(), 'utf8');
+    await service.progress({ ...pending, appUrn: 'other:official' as AppUrn }, 'stopping');
+    await service.progress({ ...pending, command: 'restore' }, 'stopping');
+    expect(await fs.readFile(historyFile(), 'utf8')).toBe(before);
+    const reloaded = new TasksService(config, logger);
+    await reloaded.progress(pending, 'starting');
+    expect((await reloaded.read()).tasks[0]?.status).toBe('interrupted');
+    await reloaded.finish(pending, false);
+    await reloaded.progress(pending, 'starting');
+    expect((await reloaded.read()).tasks[0]?.status).toBe('failed');
+  });
+
+  it('ignores late, unknown, invalid and crossed progress instead of creating or reopening work', async () => {
+    const pending = event();
+    await service.start(pending);
+    await service.progress(pending, 'backing_up');
+    const notify = vi.fn();
+    const subscription = service.changesForClient().subscribe(notify);
+    await service.progress({ ...pending, requestId: randomUUID() }, 'preparing');
+    await service.progress({ ...pending, appUrn: 'other:official' as AppUrn }, 'stopping');
+    await service.progress({ ...pending, command: 'restore' }, 'stopping');
+    await service.progress(pending, 'user-supplied-secret' as never);
+    expect(notify).not.toHaveBeenCalled();
+    await service.finish(pending, true);
+    await service.progress(pending, 'starting');
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect((await service.read()).tasks).toMatchObject([{ id: pending.requestId, status: 'succeeded', phase: 'backing_up' }]);
+    subscription.unsubscribe();
   });
 
   it('preserves a detected app name for task history after its container is removed', async () => {

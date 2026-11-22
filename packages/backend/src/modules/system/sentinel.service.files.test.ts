@@ -168,6 +168,102 @@ describe('SentinelService local status', () => {
       expect(await new TestService().read()).toEqual(unavailable);
   });
 
+  it('reads the fixed recovery route on Host even when a direct Sentinel status socket is configured', async () => {
+    process.env.ORBIS_HOST_SOCKET = socketPath;
+    process.env.ORBIS_SENTINEL_SOCKET = '/unused-direct-sentinel.sock';
+    const configured = { state: 'configured', portalUrl: 'https://recovery.example:8443/sentinel/recovery/', unitState: 'active' };
+    let body: unknown = { version: 1, ...configured };
+    await start((req, res) => {
+      expect(req.method).toBe('GET');
+      expect(req.url).toBe('/v1/sentinel/recovery-access');
+      expect(req.headers['content-length']).toBeUndefined();
+      res.end(JSON.stringify(body));
+    });
+    const service = new TestService();
+    expect(await Promise.all([service.readRecoveryAccess(), service.readRecoveryAccess()])).toEqual([configured, configured]);
+    expect(calls).toBe(1);
+    body = { version: 1, state: 'missing', portalUrl: null, unitState: null };
+    expect(await service.readRecoveryAccess()).toEqual({ state: 'missing', portalUrl: null, unitState: null });
+    expect(calls).toBe(2);
+  });
+
+  it('suppresses URLs on old helpers, oversized replies, unsafe URLs and changed socket identity', async () => {
+    process.env.ORBIS_HOST_SOCKET = socketPath;
+    const unknownAccess = { state: 'unavailable', portalUrl: null, unitState: null };
+    const configured = { version: 1, state: 'configured', portalUrl: 'https://recovery.example/sentinel/recovery/', unitState: 'active' };
+    let statusCode = 404;
+    let body: unknown = configured;
+    await start((_req, res) => {
+      res.statusCode = statusCode;
+      res.end(JSON.stringify(body));
+    });
+    const service = new TestService();
+    expect(await service.readRecoveryAccess()).toEqual(unknownAccess);
+    statusCode = 403;
+    expect(await service.readRecoveryAccess()).toEqual(unknownAccess);
+    statusCode = 200;
+    body = { ...configured, enrollment: 'operator-staged' };
+    expect(await service.readRecoveryAccess()).toEqual({
+      state: 'configured',
+      portalUrl: configured.portalUrl,
+      unitState: 'active',
+      enrollment: 'operator-staged',
+    });
+    for (body of [
+      { ...configured, portalUrl: 'https://recovery.example@elsewhere.example/sentinel/recovery/' },
+      { ...configured, portalUrl: 'https://recovery.example/sentinel/recovery/?extra' },
+      { ...configured, portalUrl: 'https://recovery.example:0/sentinel/recovery/' },
+      { ...configured, unitState: 'ready' },
+      { ...configured, enrollment: 'unknown' },
+      { ...configured, enrollment: 'activated', unitState: 'inactive' },
+      { ...configured, extra: true },
+      'x'.repeat(1024),
+    ])
+      expect(await service.readRecoveryAccess()).toEqual(unknownAccess);
+    body = configured;
+    const replaced = new TestService();
+    replaced.replace = true;
+    expect(await replaced.readRecoveryAccess()).toEqual(unknownAccess);
+  });
+
+  it('bounds a recovery helper that accepts the connection and never replies', async () => {
+    process.env.ORBIS_HOST_SOCKET = socketPath;
+    await start(() => {});
+    const started = performance.now();
+    expect(await new TestService().readRecoveryAccess()).toEqual({ state: 'unavailable', portalUrl: null, unitState: null });
+    expect(calls).toBe(1);
+    expect(performance.now() - started).toBeLessThan(3000);
+  });
+
+  it('posts only fixed handoff bindings and rejects extra secret-bearing response fields', async () => {
+    process.env.ORBIS_HOST_SOCKET = socketPath;
+    const binding = {
+      operationId: 'a'.repeat(64),
+      reviewSha256: 'b'.repeat(64),
+      planSha256: 'c'.repeat(64),
+      keyRevision: 'd'.repeat(64),
+      deliveryEpoch: 'e'.repeat(64),
+      handoff: 'A'.repeat(43),
+    };
+    const fakeKey = `orbis-recovery-${'B'.repeat(42)}A`;
+    let result = { recoveryKey: fakeKey };
+    await start(async (request, response) => {
+      expect(request.method).toBe('POST');
+      expect(request.url).toBe('/v1/sentinel/enrollment/save-key');
+      const buffers = [];
+      for await (const chunk of request) buffers.push(chunk);
+      expect(JSON.parse(Buffer.concat(buffers).toString())).toEqual(binding);
+      response.end(JSON.stringify(result));
+    });
+    const service = new TestService();
+    await expect(service.recoveryKeyHandoff('save', binding)).resolves.toEqual({ recoveryKey: fakeKey });
+    await expect(service.recoveryKeyHandoff('save', { ...binding, operation: 'bootstrap-browser-authorize' })).rejects.toThrow(
+      'Invalid recovery handoff.',
+    );
+    result = { ...result, other: 'synthetic extra' } as typeof result;
+    await expect(service.recoveryKeyHandoff('save', binding)).rejects.toThrow('The host could not verify this recovery handoff.');
+  });
+
   it('does not replace invalid explicit Sentinel configuration with the host bridge', async () => {
     process.env.ORBIS_SENTINEL_SOCKET = 'relative';
     process.env.ORBIS_HOST_SOCKET = socketPath;

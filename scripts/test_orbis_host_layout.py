@@ -1,13 +1,14 @@
 import hashlib
 import fcntl
 import importlib.util
+import io
 import json
 import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout, redirect_stderr
 
 spec = importlib.util.spec_from_file_location('host_layout', Path(__file__).with_name('orbis-host-layout.py'))
 L = importlib.util.module_from_spec(spec)
@@ -164,7 +165,7 @@ class LayoutTests(unittest.TestCase):
             with self.assertRaises(L.LayoutError): L.selected_path(self.root, 'host-lock')
 
     def test_legacy_authority_blocks_adoption_and_selected_paths(self):
-        for purpose in ('retained-authority', 'capture-fence', 'restore-selector'):
+        for purpose in ('retained-authority', 'capture-fence', 'restore-selector', 'credential-fence'):
             marker = L.legacy_path(self.root, purpose)
             marker.write_text('preserve')
             with self.assertRaises(L.LayoutError): self.enroll()
@@ -298,6 +299,190 @@ class LayoutTests(unittest.TestCase):
             finally:
                 for descriptor in service.capture_fence_companions: os.close(descriptor)
                 service.capture_fence_companions = []
+
+
+    @contextmanager
+    def cli_port(self, daemon='daemon-a'):
+        review, prepare, read = L.review, L.prepare, L.read
+        options = {'side_effect': daemon} if isinstance(daemon, list) else {'return_value': daemon}
+        with mock.patch.object(L.sys, 'platform', 'linux'), mock.patch.object(L, '_cli_daemon', **options) as observe, \
+             mock.patch.object(L, 'review', side_effect=lambda root, identity, context: review(root, identity, context, self.mount)), \
+             mock.patch.object(L, 'prepare', side_effect=lambda root, identity, context, approval: prepare(root, identity, context, approval, self.mount)), \
+             mock.patch.object(L, 'read', side_effect=lambda root, identity, context: read(root, identity, context, self.mount)):
+            yield observe
+
+    def cli(self, *arguments):
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            code = L.main(list(arguments))
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def adoption_arguments(self, approval=None):
+        return ('adopt', str(self.root), '--docker-context', 'local', '--confirm-root', str(self.root),
+                '--approved-plan-sha256', approval or L.plan_sha256(self.review()))
+
+    def test_cli_review_is_read_only_and_returns_the_exact_plan(self):
+        expected = self.review()
+        with self.cli_port() as observe:
+            code, output, error = self.cli('review', str(self.root), '--docker-context', 'local')
+        self.assertEqual(code, 0, error)
+        self.assertEqual(json.loads(output), {'result': 'review-required', 'planSha256': L.plan_sha256(expected), 'plan': expected})
+        observe.assert_called_once_with('local')
+        self.assertFalse(L.namespace(self.root).exists())
+        self.assertFalse(L.legacy_path(self.root, 'host-lock').exists())
+        self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_cli_reset_review_is_separate_read_only_and_uses_the_installer_daemon_digest(self):
+        self.enroll()
+        receipt = L.namespace(self.root) / 'layout.json'
+        before = (receipt.read_bytes(), receipt.stat().st_ino, set(L.namespace(self.root).iterdir()))
+        review = L.R.review_external_legacy
+        expected = review(self.root, hashlib.sha256(b'daemon-a').hexdigest(), 'local', self.mount)
+        with self.cli_port(), mock.patch.object(L.R, 'review_external_legacy', side_effect=lambda root, daemon, context: review(root, daemon, context, self.mount)):
+            code, output, error = self.cli('review-reset', str(self.root), '--docker-context', 'local')
+        self.assertEqual(code, 0, error)
+        self.assertEqual(json.loads(output), {'result': 'reset-review-required', 'planSha256': L.R.review_plan_sha256(expected), 'plan': expected})
+        self.assertEqual((receipt.read_bytes(), receipt.stat().st_ino, set(L.namespace(self.root).iterdir())), before)
+        self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_cli_reset_review_requires_the_independently_adopted_layout(self):
+        with self.cli_port():
+            code, output, _ = self.cli('review-reset', str(self.root), '--docker-context', 'local')
+        self.assertEqual((code, output), (2, ''))
+        self.assertFalse(L.namespace(self.root).exists())
+
+    def test_cli_adoption_requires_the_separate_exact_approval_and_grants_no_ownership(self):
+        arguments = self.adoption_arguments()
+        with self.cli_port() as observe:
+            code, output, error = self.cli(*arguments)
+        self.assertEqual(code, 0, error)
+        self.assertEqual(json.loads(output), {'result': 'layout-adopted', 'planSha256': arguments[-1], 'namespace': str(L.namespace(self.root))})
+        self.assertEqual(self.read()['approvedPlanSha256'], arguments[-1])
+        self.assertEqual(set(path.name for path in L.namespace(self.root).iterdir()), {'layout.json'})
+        self.assertEqual(observe.call_count, 3)
+        self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_cli_wrong_or_stale_approval_allocates_nothing(self):
+        approved = L.plan_sha256(self.review())
+        for approval in ('0' * 64, approved):
+            with self.subTest(approval=approval == approved):
+                if approval == approved: self.root.chmod(0o750)
+                with self.cli_port():
+                    code, output, _ = self.cli(*self.adoption_arguments(approval))
+                self.assertEqual((code, output), (2, ''))
+                self.assertFalse(L.namespace(self.root).exists())
+                self.assertFalse(L.legacy_path(self.root, 'host-lock').exists())
+
+    def test_cli_daemon_change_before_adoption_allocates_nothing(self):
+        arguments = self.adoption_arguments()
+        with self.cli_port(['daemon-a', 'daemon-b']):
+            code, output, _ = self.cli(*arguments)
+        self.assertEqual((code, output), (2, ''))
+        self.assertFalse(L.namespace(self.root).exists())
+
+    def test_cli_exact_adoption_replay_is_read_only(self):
+        arguments = self.adoption_arguments()
+        with self.cli_port():
+            self.assertEqual(self.cli(*arguments)[0], 0)
+        receipt = L.namespace(self.root) / 'layout.json'
+        before = (receipt.read_bytes(), receipt.stat().st_ino, receipt.stat().st_mtime_ns)
+        with self.cli_port():
+            code, output, error = self.cli(*arguments)
+        self.assertEqual(code, 0, error)
+        self.assertEqual(json.loads(output)['result'], 'layout-already-adopted')
+        self.assertEqual((receipt.read_bytes(), receipt.stat().st_ino, receipt.stat().st_mtime_ns), before)
+
+    def test_cli_existing_layout_cannot_be_rebound_to_another_approval(self):
+        self.enroll()
+        receipt = L.namespace(self.root) / 'layout.json'
+        before = receipt.read_bytes()
+        with self.cli_port():
+            self.assertEqual(self.cli(*self.adoption_arguments('0' * 64))[0], 2)
+        self.assertEqual(receipt.read_bytes(), before)
+
+    def test_cli_daemon_change_after_adoption_preserves_the_receipt_for_review(self):
+        arguments = self.adoption_arguments()
+        with self.cli_port(['daemon-a', 'daemon-a', 'daemon-b']):
+            code, output, _ = self.cli(*arguments)
+        self.assertEqual((code, output), (2, ''))
+        self.assertEqual(self.read()['approvedPlanSha256'], arguments[-1])
+        self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_cli_invalid_root_context_confirmation_and_digest_never_observe_docker(self):
+        alias = self.base / 'alias'
+        alias.symlink_to(self.root, target_is_directory=True)
+        cases = [
+            ('review', str(alias), '--docker-context', 'local'),
+            ('review', 'relative', '--docker-context', 'local'),
+            ('review', str(self.root), '--docker-context', '-foreign'),
+            (*self.adoption_arguments(), '--confirm-root', str(self.base)),
+            (*self.adoption_arguments(), '--approved-plan-sha256', 'invalid'),
+        ]
+        with self.cli_port() as observe:
+            for arguments in cases:
+                with self.subTest(arguments=arguments[:2]):
+                    try:
+                        code, output, _ = self.cli(*arguments)
+                    except SystemExit as error:
+                        self.assertEqual(error.code, 2)
+                    else:
+                        self.assertEqual((code, output), (2, ''))
+            observe.assert_not_called()
+
+    def test_cli_review_cannot_take_approval_and_adopt_cannot_infer_it(self):
+        with self.cli_port() as observe:
+            for arguments in [
+                ('review', str(self.root), '--docker-context', 'local', '--approved-plan-sha256', '0' * 64),
+                ('adopt', str(self.root), '--docker-context', 'local'),
+            ]:
+                with self.assertRaises(SystemExit) as error:
+                    self.cli(*arguments)
+                self.assertEqual(error.exception.code, 2)
+            observe.assert_not_called()
+
+    def test_cli_requires_the_root_operator_on_the_linux_host(self):
+        with self.cli_port() as observe, mock.patch.object(L, '_operator', side_effect=L.LayoutError('not the operator')):
+            self.assertEqual(self.cli('review', str(self.root), '--docker-context', 'local')[0], 2)
+            observe.assert_not_called()
+        with self.cli_port() as observe, mock.patch.object(L.sys, 'platform', 'darwin'):
+            self.assertEqual(self.cli('review', str(self.root), '--docker-context', 'local')[0], 2)
+            observe.assert_not_called()
+
+    def test_cli_docker_observer_requires_a_local_socket_and_bounded_daemon_identity(self):
+        with mock.patch.object(L, '_cli_docker_output', side_effect=['"unix:///run/docker.sock"', 'daemon-a']) as read, \
+             mock.patch.object(Path, 'is_socket', return_value=True):
+            self.assertEqual(L._cli_daemon('local'), 'daemon-a')
+        self.assertEqual(read.call_args_list[0].args, ('local', ['context', 'inspect', 'local', '--format', '{{json .Endpoints.docker.Host}}']))
+        self.assertEqual(read.call_args_list[1].args, ('local', ['info', '--format', '{{.ID}}']))
+        for endpoint in ('tcp://example.invalid:2375', 'ssh://example.invalid', 'unix://relative', 'unix:///run/bad\n.sock'):
+            with self.subTest(endpoint=endpoint), mock.patch.object(L, '_cli_docker_output', return_value=json.dumps(endpoint)) as read:
+                with self.assertRaises(L.LayoutError): L._cli_daemon('local')
+                self.assertEqual(read.call_count, 1)
+        with mock.patch.object(L, '_cli_docker_output', return_value='"unix:///run/docker.sock"'), \
+             mock.patch.object(Path, 'is_socket', return_value=False):
+            with self.assertRaises(L.LayoutError): L._cli_daemon('local')
+        for identity in ('', 'x' * 257, 'not a daemon', 'daemon\nother'):
+            with self.subTest(identity=len(identity)), mock.patch.object(L, '_cli_docker_output', side_effect=['"unix:///run/docker.sock"', identity]), \
+                 mock.patch.object(Path, 'is_socket', return_value=True):
+                with self.assertRaises(L.LayoutError): L._cli_daemon('local')
+
+    def test_cli_docker_command_is_read_only_bounded_and_does_not_echo_diagnostics(self):
+        with mock.patch.object(L.subprocess, 'run', return_value=mock.Mock(returncode=0, stdout='daemon-a\n')) as run:
+            self.assertEqual(L._cli_docker_output('local', ['info', '--format', '{{.ID}}']), 'daemon-a')
+        self.assertEqual(run.call_args.args[0], ['docker', '--context', 'local', 'info', '--format', '{{.ID}}'])
+        self.assertEqual(run.call_args.kwargs, {'cwd': '/', 'capture_output': True, 'text': True, 'check': False, 'timeout': 15})
+        for result in (mock.Mock(returncode=1, stdout='private diagnostic'), mock.Mock(returncode=0, stdout='x' * 4097)):
+            with mock.patch.object(L.subprocess, 'run', return_value=result):
+                with self.assertRaises(L.LayoutError) as error: L._cli_docker_output('local', ['info'])
+                self.assertNotIn('private diagnostic', str(error.exception))
+
+    def test_importing_layout_for_the_host_never_dispatches_the_cli(self):
+        entry = importlib.util.spec_from_file_location('layout_import_fixture', Path(L.__file__))
+        module = importlib.util.module_from_spec(entry)
+        with mock.patch.object(L.subprocess, 'run', side_effect=AssertionError('no command during import')) as run:
+            entry.loader.exec_module(module)
+        run.assert_not_called()
+        self.assertTrue(callable(module.main))
 
 
 if __name__ == '__main__':

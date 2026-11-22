@@ -1,14 +1,122 @@
+import { commitOrdinaryAppUpdate, readCurrentOrdinaryUpdateCommit, type OrdinaryUpdateResult } from './app-update-commit';
+import { commitExistingAppBaseline, readExistingAppBaseline } from './app-existing-baseline';
+import type { ExistingBaselineBinding } from './app-existing-baseline-schema';
+import type { ExistingAppBaseline } from '../docker/app-existing-storage';
+import { commitFreshInstall, readFreshInstallCommit, readCurrentFreshInstallCommit, type FreshInstallResult } from './app-fresh-commit';
 import { extractAppUrn } from '@/common/helpers/app-helpers';
 import { DATABASE, type Database } from '@/core/database/database.module';
-import { app } from '@/core/database/drizzle/schema';
-import type { AppStatus, NewApp } from '@/core/database/drizzle/types';
+import { app, appMigration } from '@/core/database/drizzle/schema';
+import type { App, AppStatus, NewApp } from '@/core/database/drizzle/types';
 import { Inject, Injectable } from '@nestjs/common';
 import type { AppUrn } from '@runtipi/common/types';
 import { and, asc, eq, ne, notInArray } from 'drizzle-orm';
+import { commitFreshInstallBaseline, readFreshInstallBaseline } from './app-fresh-baseline';
+import type { AppUpdateStage } from '../docker/app-update-stage';
+import type { AppMigrationLedger } from './app-migration-ledger';
+import type { MigrationJournalState } from '../backups/app-migration-journal';
+import { settleMigrationRollback, readMigrationRollback } from './app-migration-rollback';
+import { commitAppMigration, readAppMigrationCommit } from './app-migration-commit';
+
+export type InstallAppReservation = Pick<App, 'id' | 'createdAt' | 'appName' | 'appStoreSlug'> & Partial<Pick<App, 'version'>>;
+
+const installReservationFilter = (reservation: InstallAppReservation) =>
+  and(
+    eq(app.id, reservation.id),
+    eq(app.createdAt, reservation.createdAt),
+    eq(app.appName, reservation.appName),
+    eq(app.appStoreSlug, reservation.appStoreSlug),
+    eq(app.status, 'installing'),
+    reservation.version === undefined ? undefined : eq(app.version, reservation.version),
+  );
 
 @Injectable()
 export class AppsRepository {
   constructor(@Inject(DATABASE) private db: Database) {}
+
+  public commitOrdinaryAppUpdate(stage: AppUpdateStage, result: OrdinaryUpdateResult) {
+    return commitOrdinaryAppUpdate(this.db, stage, result);
+  }
+  public readCurrentOrdinaryUpdateCommit(result: OrdinaryUpdateResult) {
+    return readCurrentOrdinaryUpdateCommit(this.db, result);
+  }
+  public commitExistingAppBaseline(stage: AppUpdateStage, proof: ExistingAppBaseline) {
+    return commitExistingAppBaseline(this.db, stage, proof);
+  }
+  public readExistingAppBaseline(binding: ExistingBaselineBinding) {
+    return readExistingAppBaseline(this.db, binding);
+  }
+  public commitFreshInstall(stage: AppUpdateStage, result: FreshInstallResult) {
+    return commitFreshInstall(this.db, stage, result);
+  }
+  public readCurrentFreshInstallCommit(result: FreshInstallResult) {
+    return readCurrentFreshInstallCommit(this.db, result);
+  }
+  public readFreshInstallCommit(result: FreshInstallResult) {
+    return readFreshInstallCommit(this.db, result);
+  }
+  public commitFreshInstallBaseline(stage: AppUpdateStage) {
+    return commitFreshInstallBaseline(this.db, stage);
+  }
+  public readFreshInstallBaseline(stage: AppUpdateStage) {
+    return readFreshInstallBaseline(this.db, stage);
+  }
+
+  public commitMigration(state: Readonly<MigrationJournalState>, status: 'running' | 'stopped', pendingRestart?: boolean) {
+    return commitAppMigration(this.db, state, status, pendingRestart);
+  }
+
+  public readMigrationCommit(state: Readonly<MigrationJournalState>) {
+    return readAppMigrationCommit(this.db, state);
+  }
+
+  public settleMigrationRollback(state: Readonly<MigrationJournalState>, status: 'running' | 'stopped', pendingRestart?: true) {
+    return settleMigrationRollback(this.db, state, status, pendingRestart);
+  }
+
+  public readMigrationRollback(state: Readonly<MigrationJournalState>, status: 'running' | 'stopped') {
+    return readMigrationRollback(this.db, state, status);
+  }
+
+  public async deleteInstallReservation(reservation: InstallAppReservation) {
+    const rows = await this.db.delete(app).where(installReservationFilter(reservation)).returning({ id: app.id });
+    return rows.length === 1;
+  }
+
+  public async finishInstallReservation(reservation: InstallAppReservation, status: 'running' | 'stopped') {
+    const rows = await this.db
+      .update(app)
+      .set({ status, updatedAt: Math.floor(Date.now() / 1000) })
+      .where(installReservationFilter(reservation))
+      .returning({ id: app.id });
+    return rows.length === 1;
+  }
+
+  public async getMigrationLedger(appId: number) {
+    const rows = await this.db
+      .select({ baselined: app.migrationsBaselined, migrationId: appMigration.migrationId })
+      .from(app)
+      .leftJoin(appMigration, eq(app.id, appMigration.appId))
+      .where(eq(app.id, appId))
+      .orderBy(asc(appMigration.migrationId));
+    if (!rows[0]) throw new Error('Application migration ledger is unavailable');
+    return { baselined: rows[0].baselined, migrationIds: rows.flatMap(({ migrationId }) => (migrationId === null ? [] : [migrationId])) };
+  }
+
+  public async replaceMigrationLedger(appId: number, ledger: AppMigrationLedger, data: Partial<NewApp> = {}) {
+    return this.db.transaction(async (transaction) => {
+      const [updated] = await transaction
+        .update(app)
+        .set({ ...data, migrationsBaselined: ledger.baselined, updatedAt: Math.floor(Date.now() / 1000) })
+        .where(eq(app.id, appId))
+        .returning();
+      if (!updated) throw new Error('Application migration ledger is unavailable');
+      await transaction.delete(appMigration).where(eq(appMigration.appId, appId));
+      if (ledger.migrationIds.length) {
+        await transaction.insert(appMigration).values(ledger.migrationIds.map((migrationId) => ({ appId, migrationId })));
+      }
+      return updated;
+    });
+  }
 
   /**
    * Given an app id, return the app

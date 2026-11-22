@@ -8,6 +8,7 @@ import { EnvUtils } from '@/modules/env/env.utils';
 import dotenv from 'dotenv';
 import { DATA_DIR } from '../constants';
 import { type } from 'arktype';
+import { getCliSecret } from './permissions-helpers';
 import { validationDiagnostic } from './validation-diagnostics';
 
 const OLD_DEFAULT_REPO_URL = 'https://github.com/meienberger/runtipi-appstore';
@@ -61,6 +62,7 @@ const getArchitecture = () => {
 };
 
 export const generateSystemEnvFile = async (options: { readOnly?: boolean } = {}): Promise<Map<string, string>> => {
+  if (!options.readOnly) await getCliSecret(DATA_DIR);
   const logger = new LoggerService('backend', path.join(path.join(DATA_DIR, 'logs')), process.env.LOG_LEVEL as LogLevel);
   logger.info('Generating system env file');
 

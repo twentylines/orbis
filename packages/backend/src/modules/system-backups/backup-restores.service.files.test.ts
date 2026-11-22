@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
+import { Readable } from 'node:stream';
 import type Dockerode from 'dockerode';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { BackupRestoresService, restorePredatesCompletedReset } from './backup-restores.service';
@@ -22,6 +23,8 @@ import * as operationStatus from '@/common/restoration-root-status';
 import { TimeMachineStore } from './time-machine-store';
 import type { Request } from 'express';
 import { ResetState } from '../system-reset/reset-state';
+import { resetSafetyTarHeader } from './reset-safety-tar';
+import { verifyStandaloneWorkerCapability } from './backup-restore-worker-capability';
 
 // This service suite uses real journals and maintenance locks; Docker, authentication and reviewed-source handoff are declared boundaries.
 const boundary = vi.hoisted(() => ({
@@ -33,6 +36,7 @@ const boundary = vi.hoisted(() => ({
   operation: vi.fn(),
   resume: vi.fn(),
   stageRetained: vi.fn(),
+  rootImageExpectations: vi.fn(),
   rootReview: vi.fn(),
   rootCreate: vi.fn(),
   rootBegin: vi.fn(),
@@ -55,6 +59,7 @@ vi.mock('./time-machine-restore-admission', async (original) => ({
   readRetainedRestoreReceipt: boundary.receiptRead,
 }));
 vi.mock('./time-machine-retained-context', () => ({ verifyRetainedRootWorker: boundary.rootWorker }));
+vi.mock('./time-machine-retained-images', () => ({ readRootBoundImageExpectations: boundary.rootImageExpectations }));
 vi.mock('./time-machine-retained-stage', () => ({ stageRetainedRuntime: boundary.stageRetained }));
 vi.mock('./backup-restore-terminal-cleanup', () => ({ cleanupSettledRestoreAuxiliaries: boundary.cleanup }));
 vi.mock('./backup-restore-handoff', () => ({ prepareRestoreHandoff: boundary.handoff, discardUnstartedRestoreHandoff: boundary.discard }));
@@ -67,6 +72,11 @@ vi.mock('./backup-restore-runtime', async (original) => ({
   readRestoreOperation: boundary.operation,
   BackupRestoreDockerRuntime: class {
     verifyWorker = boundary.verify;
+    async inspectVerifiedWorker(id: string, options: unknown) {
+      await boundary.verify(id, options);
+      if (worker.State.Paused) throw new Error('Worker paused');
+      return structuredClone(worker);
+    }
     resumeOriginal = boundary.resume;
   },
 }));
@@ -79,14 +89,18 @@ let host: { status: ReturnType<typeof vi.fn> };
 let runtime: { plan: ReturnType<typeof vi.fn> };
 let imports: { claimReviewedSource: ReturnType<typeof vi.fn>; claimRetainedSource: ReturnType<typeof vi.fn> };
 let logger: { warn: ReturnType<typeof vi.fn> };
-let docker: { getContainer: ReturnType<typeof vi.fn> };
+let docker: { getContainer: ReturnType<typeof vi.fn>; getImage: ReturnType<typeof vi.fn> };
 let controller: Dockerode.ContainerInspectInfo;
 let worker: Dockerode.ContainerInspectInfo;
 let start: ReturnType<typeof vi.fn>;
 let restart: ReturnType<typeof vi.fn>;
+let archive: ReturnType<typeof vi.fn>;
 const credentials = { password: 'fixture-password', totpCode: '123456' };
 const controllerId = '1'.repeat(64);
 const workerId = '3'.repeat(64);
+const imageId = `sha256:${'a'.repeat(64)}`;
+const capabilityFile = 'restore-install-hold-capability.json';
+const capability = Buffer.from('{"schema":"orbis.restore-install-hold-effect.v1","version":1,"policy":"verified-live-store-before-app-resume.v1"}');
 async function journal() {
   const value = await BackupRestoreJournal.create(path.join(root, 'backups', 'restores'), {
     id: randomUUID(),
@@ -98,6 +112,7 @@ async function journal() {
     roots: ['state'],
   });
   worker.Config.Labels = { 'io.orbis.restore': value.state.id, 'io.orbis.restore.nonce': value.state.nonce, 'io.orbis.restore.role': 'worker' };
+  worker.Config.Cmd = ['/app/restore-worker.mjs', value.state.id];
   return value;
 }
 beforeEach(async () => {
@@ -133,7 +148,7 @@ beforeEach(async () => {
   restart = vi.fn().mockResolvedValue(undefined);
   controller = {
     Id: controllerId,
-    Image: `sha256:${'a'.repeat(64)}`,
+    Image: imageId,
     Config: { Env: [], Labels: {} },
     HostConfig: { NetworkMode: 'fixture', RestartPolicy: { Name: 'no' } },
     NetworkSettings: { Networks: {} },
@@ -142,11 +157,18 @@ beforeEach(async () => {
   } as unknown as Dockerode.ContainerInspectInfo;
   worker = {
     Id: workerId,
-    Config: { Labels: {} },
+    Image: imageId,
+    Config: { Labels: {}, WorkingDir: '/app', Entrypoint: ['node'] },
+    HostConfig: { ReadonlyRootfs: true, RestartPolicy: { Name: 'no', MaximumRetryCount: 0 } },
+    Mounts: [],
     State: { Running: false, Restarting: false, Paused: false, StartedAt: '0001-01-01T00:00:00Z' },
     RestartCount: 0,
   } as unknown as Dockerode.ContainerInspectInfo;
+  archive = vi.fn(async () =>
+    Readable.from([resetSafetyTarHeader(capabilityFile, capability.length), capability, Buffer.alloc(512 - capability.length + 1024)]),
+  );
   docker = {
+    getImage: vi.fn(() => ({ inspect: async () => ({ Id: imageId }) })),
     getContainer: vi.fn((id: string) => ({
       inspect: vi.fn(async () => {
         if (id === '2'.repeat(64)) throw Object.assign(new Error('absent'), { statusCode: 404 });
@@ -154,6 +176,7 @@ beforeEach(async () => {
       }),
       start,
       restart,
+      getArchive: archive,
     })),
   };
   service = new BackupRestoresService(
@@ -175,7 +198,7 @@ beforeEach(async () => {
     docker as never,
   );
   boundary.cleanup.mockResolvedValue(undefined);
-  boundary.bootstrap.mockResolvedValue({ identity: {} });
+  boundary.bootstrap.mockResolvedValue({ identity: { image: imageId } });
   boundary.verify.mockResolvedValue(workerId);
   boundary.operation.mockResolvedValue({});
   boundary.resume.mockResolvedValue(undefined);
@@ -256,10 +279,32 @@ it('rejects a retained manifest paired with the wrong protected authority versio
 });
 
 it.each([
-  [3, 1, false],
-  [4, 2, true],
-  [6, 4, true],
-] as const)('claims v%i runtime with the matching protected authority and proxy policy', async (format, version, preserveLiveProxy) => {
+  ['orbis.time-machine-runtime.v3', 1],
+  ['orbis.time-machine-runtime.v4', 2],
+] as const)('refuses retained direct activation before preparing or claiming %s', async (schema, version) => {
+  const pointId = randomUUID();
+  const binding = { pointId, reviewId: randomUUID(), archiveSha256: 'a'.repeat(64), manifestSha256: 'b'.repeat(64), machineId: 'c'.repeat(64) };
+  const admit = vi.fn();
+  await expect(
+    service.prepareRetained({
+      importId: randomUUID(),
+      ownerId: 7,
+      binding,
+      admitted: {
+        manifest: { schema, pointId, legacy: { manifestSha256: binding.manifestSha256, cipherSha256: binding.archiveSha256 } },
+        controllerAuthority: { metadata: { version } },
+      } as never,
+      expectedRuntimeManifestSha256: 'd'.repeat(64),
+      admit,
+    }),
+  ).rejects.toThrow('protected app activation');
+  expect(admit).not.toHaveBeenCalled();
+  expect(boundary.handoff).not.toHaveBeenCalled();
+  expect(backupMaintenanceActive()).toBe(false);
+});
+
+it('claims a v6 runtime with the matching protected authority and proxy policy', async () => {
+  const [format, version, preserveLiveProxy] = [6, 4, true] as const;
   const pointId = randomUUID();
   const importId = randomUUID();
   const binding = { pointId, reviewId: randomUUID(), archiveSha256: 'a'.repeat(64), manifestSha256: 'b'.repeat(64), machineId: 'c'.repeat(64) };
@@ -302,13 +347,13 @@ it('reviews, binds and starts only the protected retained transaction after acco
   const publication = { schema: 'fixture-publication' };
   const admitted = {
     manifest: {
-      schema: 'orbis.time-machine-runtime.v3',
+      schema: 'orbis.time-machine-runtime.v6',
       pointId,
       legacy: { manifestSha256: binding.manifestSha256, cipherSha256: binding.archiveSha256 },
     },
     controllerAuthority: {
       metadata: {
-        version: 1,
+        version: 4,
         publication,
         platform: { os: 'linux', architecture: 'arm64' },
         archive: {
@@ -382,13 +427,13 @@ it('preserves the journal and maintenance hold if root begin loses its reply', a
   const publication = { schema: 'fixture-publication' };
   const admitted = {
     manifest: {
-      schema: 'orbis.time-machine-runtime.v3',
+      schema: 'orbis.time-machine-runtime.v6',
       pointId,
       legacy: { manifestSha256: binding.manifestSha256, cipherSha256: binding.archiveSha256 },
     },
     controllerAuthority: {
       metadata: {
-        version: 1,
+        version: 4,
         publication,
         platform: { os: 'linux', architecture: 'arm64' },
         archive: {
@@ -694,6 +739,45 @@ it('continues terminal settlement after an accepted recovery without a process r
   }
 });
 
+it('preserves the durable commit and refuses to recover an unsupported historical candidate', async () => {
+  const active = await journal();
+  const pointId = randomUUID();
+  const binding = { pointId, reviewId: randomUUID(), archiveSha256: 'a'.repeat(64), manifestSha256: 'b'.repeat(64), machineId: 'c'.repeat(64) };
+  boundary.receiptRead.mockResolvedValue({ ownerId: 7, binding });
+  boundary.admissionRead.mockResolvedValue({ sha256: 'd'.repeat(64) });
+  boundary.rootStatus.mockResolvedValue({
+    pointId,
+    state: 'activating',
+    decision: 'commit',
+    admissionSha256: 'd'.repeat(64),
+    binding: { nonce: active.state.nonce, sourceBinding: { runtimeManifestSha256: 'e'.repeat(64) }, target: {} },
+  });
+  boundary.rootImageExpectations.mockResolvedValue({ expectedManifest: { schema: 'orbis.time-machine-runtime.v4' } });
+  await fs.writeFile(path.join(active.directory, 'retained-root-request.json'), '{}', { mode: 0o600 });
+  const journalFile = path.join(active.directory, 'restore.json');
+  const before = await fs.readFile(journalFile);
+  try {
+    await expect(
+      service.recoverRetainedRoot({
+        restoreId: active.state.id,
+        pointId,
+        ownerId: 7,
+        binding,
+        verifyAccount: vi.fn().mockResolvedValue(undefined),
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toThrow('protected app activation');
+    expect(boundary.rootImageExpectations).toHaveBeenCalledOnce();
+    expect(boundary.rootLaunch).not.toHaveBeenCalled();
+    expect(boundary.rootRevoke).not.toHaveBeenCalled();
+    expect(await fs.readFile(journalFile)).toEqual(before);
+    expect(backupMaintenanceActive()).toBe(true);
+  } finally {
+    const pending = Reflect.get(service, 'pending') as { release: () => void } | undefined;
+    pending?.release();
+  }
+});
+
 it('cleans an unbegun handoff only after root revokes its exact request and authenticates the admission', async () => {
   const active = await journal();
   const pointId = randomUUID();
@@ -840,6 +924,70 @@ it('does not start a paused or unverifiable worker', async () => {
   await service.launch(value.state.id);
   expect(start).not.toHaveBeenCalled();
   expect(backupMaintenanceActive()).toBe(true);
+});
+
+it('refuses the stopped pinned worker on launch and preserves its journal and bootstrap', async () => {
+  const value = await journal();
+  const files = ['restore.json', 'bootstrap.json'];
+  await fs.writeFile(path.join(value.directory, 'bootstrap.json'), 'protected fixture', { mode: 0o600 });
+  const before = await Promise.all(files.map((file) => fs.readFile(path.join(value.directory, file))));
+  archive.mockRejectedValue(Object.assign(new Error('capability absent'), { statusCode: 404 }));
+  boundary.verify.mockImplementation(() =>
+    verifyStandaloneWorkerCapability(docker as unknown as Dockerode, worker, { ...value.state, image: imageId }),
+  );
+  await service.launch(value.state.id);
+  expect(start).not.toHaveBeenCalled();
+  expect(restart).not.toHaveBeenCalled();
+  expect(boundary.discard).not.toHaveBeenCalled();
+  expect(await Promise.all(files.map((file) => fs.readFile(path.join(value.directory, file))))).toEqual(before);
+  expect((await service.status()).job).toMatchObject({ status: 'recovery-required', canRecover: false, check: 'worker-install-hold-capability' });
+  expect(backupMaintenanceActive()).toBe(true);
+});
+
+it('preserves an inert old worker and its journal if bootstrap was interrupted', async () => {
+  const value = await journal();
+  const file = path.join(value.directory, 'restore.json');
+  const before = await fs.readFile(file);
+  boundary.bootstrap.mockRejectedValue(Object.assign(new Error('bootstrap absent'), { code: 'ENOENT' }));
+  archive.mockRejectedValue(Object.assign(new Error('capability absent'), { statusCode: 404 }));
+  await expect(service.recover(value.state.id, 7, credentials)).rejects.toThrow('lacks verified app install recovery protection');
+  expect(boundary.discard).not.toHaveBeenCalled();
+  expect(await fs.readFile(file)).toEqual(before);
+  expect((await service.status()).job).toMatchObject({ status: 'recovery-required', check: 'worker-install-hold-capability' });
+  expect(backupMaintenanceActive()).toBe(true);
+});
+
+it.each(['running', 'restarting'] as const)('retains recovery hold for an incompatible %s worker even if it reports settlement', async (state) => {
+  const value = await journal();
+  worker.State.StartedAt = '2026-01-01T00:00:00Z';
+  if (state === 'running') {
+    worker.State.Running = true;
+    archive.mockRejectedValue(Object.assign(new Error('capability absent'), { statusCode: 404 }));
+  } else {
+    worker.State.Restarting = true;
+    worker.HostConfig.RestartPolicy = { Name: 'unless-stopped', MaximumRetryCount: 0 };
+  }
+  await outcome(value, 'running');
+  expect((await service.status()).job).toMatchObject({ status: 'recovery-required', canCancel: false, canRecover: false });
+  await expect(service.recover(value.state.id, 7, credentials)).rejects.toThrow('lacks verified app install recovery protection');
+  await expect(service.cancel(value.state.id, 7, credentials)).rejects.toThrow('lacks verified app install recovery protection');
+  await fs.writeFile(path.join(value.directory, 'restore.json'), JSON.stringify({ ...value.state, phase: 'rolled-back', decision: 'rollback' }), {
+    mode: 0o600,
+  });
+  await outcome(value, 'rolled-back');
+  worker.State.Running = false;
+  worker.State.Restarting = false;
+  await service.launch(value.state.id);
+  expect((await service.status()).job).toMatchObject({
+    status: 'recovery-required',
+    canRecover: false,
+    check: 'worker-install-hold-capability',
+  });
+  expect(backupMaintenanceActive()).toBe(true);
+  expect(start).not.toHaveBeenCalled();
+  expect(restart).not.toHaveBeenCalled();
+  expect(boundary.discard).not.toHaveBeenCalled();
+  await expect(fs.stat(path.join(value.directory, 'cancel.json'))).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
 it('checks terminal auxiliaries before admitting another restore plan and exposes a safe refusal', async () => {
@@ -989,7 +1137,7 @@ it('requires fresh authentication before any settled recovery inspection or laun
   expect(docker.getContainer).not.toHaveBeenCalled();
   expect(start).not.toHaveBeenCalled();
 });
-it('admits original normal bootstrap while rollback health recovery is still awaiting its worker outcome', async () => {
+it('admits original health startup with app mutations held until rollback recovery settles', async () => {
   const value = await journal();
   await rollback(value);
   await outcome(value, 'recovery-required');
@@ -999,7 +1147,7 @@ it('admits original normal bootstrap while rollback health recovery is still awa
   ).toBe('ordinary');
   expect(onHeld).not.toHaveBeenCalled();
   await service.prepareStartup();
-  expect(backupMaintenanceActive()).toBe(false);
+  expect(backupMaintenanceActive()).toBe(true);
   expect((await service.status()).job?.status).toBe('recovery-required');
 });
 it('reports a completed journal without an outcome as review-only rather than offering a no-op retry', async () => {

@@ -124,7 +124,11 @@ export function MonitorPerformance({
           <header className="monitor-resource-heading">
             <div>
               <h2 id="telemetry-memory-title">Memory</h2>
-              <p>{total === null ? 'Host memory capacity not reported' : `${statusBytes(total)} total system memory`}</p>
+              <p>
+                {total === null
+                  ? 'Memory capacity not reported'
+                  : `${statusBytes(total)} ${sample?.memory.scope === 'host-proc' ? 'total system memory' : sample?.memory.scope === 'cgroup' ? 'LXC memory limit' : sample?.memory.scope === 'containers' ? 'capacity · estimated from Docker containers' : 'runtime memory'}`}
+              </p>
             </div>
             <span className="monitor-sample-label">{resourceDelayed ? 'Last reported' : 'Every second'}</span>
           </header>
@@ -144,7 +148,7 @@ export function MonitorPerformance({
               <dd>{statusBytes(available)}</dd>
             </div>
             <div>
-              <dt>Installed capacity</dt>
+              <dt>{sample?.memory.scope === 'host-proc' ? 'Installed capacity' : 'Reported capacity'}</dt>
               <dd>{statusBytes(total)}</dd>
             </div>
             <div>
@@ -157,7 +161,21 @@ export function MonitorPerformance({
             </div>
           </dl>
           {historyControls}
-          <MetricChart history={history} field="memory" label="Host memory utilisation" color="var(--desktop-accent)" loading={loading} />
+          <MetricChart
+            history={history}
+            field="memory"
+            label={
+              sample?.memory.scope === 'cgroup'
+                ? 'LXC memory utilisation'
+                : sample?.memory.scope === 'containers'
+                  ? 'Estimated container memory utilisation'
+                  : sample?.memory.scope === 'runtime'
+                    ? 'Core memory utilisation'
+                    : 'Host memory utilisation'
+            }
+            color="var(--desktop-accent)"
+            loading={loading}
+          />
         </section>
       ) : null}
       {resource === 'network' ? (

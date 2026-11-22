@@ -7,6 +7,7 @@ import unittest
 import socket
 import threading
 import time
+from contextlib import contextmanager
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
 
@@ -86,6 +87,8 @@ class HistoricalAppDriverTests(unittest.TestCase):
         self.runtime.image = lambda _: copy.deepcopy(self.values[0][1])
         self.runtime.inspect = lambda identifier: self.base.engine.inspect(identifier)
         self.runtime.engine = self.engine
+        self.runtime.live_install_state = self.live_install_state
+        self.runtime.mount_id = lambda _: 1
         self.runtime.restore_app_statuses = mock.Mock()
         self.runtime.bounded_output = self.output
         self.original_bindings = self.capture.APP.observe_bindings(self.original)
@@ -118,7 +121,12 @@ class HistoricalAppDriverTests(unittest.TestCase):
             return ('\n'.join(sorted(self.base.engine.objects))).encode()
         raise AssertionError('unexpected fixture observation')
 
-    def engine(self, method, route, body=None, *, allow_missing=False, **_):
+    @contextmanager
+    def live_install_state(self, _record, *, starting):
+        with self.runtime.a.protected_directory(self.base.state, private=False) as state:
+            yield (state,)
+
+    def engine(self, method, route, body=None, *, allow_missing=False, before_request=None, **_):
         parsed = urlparse(route)
         value = parsed.path.split('/')[2]
         if method == 'GET':
@@ -129,7 +137,9 @@ class HistoricalAppDriverTests(unittest.TestCase):
             identifier = self.base.engine.create(parse_qs(parsed.query)['name'][0], body)
             return self.runtime.P.canonical({'Id': identifier, 'Warnings': []})
         if method == 'POST' and parsed.path.endswith('/start'):
-            self.base.engine.start(value)
+            self.assertIsNotNone(before_request)
+            before_request()
+            self.base.engine.start(value, None)
             raw = self.base.engine.objects[value]; raw['State']['Health'] = {'Status': 'healthy'}
             for endpoint in raw['NetworkSettings']['Networks'].values():
                 for requested, observed in (('IPv4Address', 'IPAddress'), ('IPv6Address', 'GlobalIPv6Address')):
@@ -157,6 +167,20 @@ class HistoricalAppDriverTests(unittest.TestCase):
             self.assertIn('MODE=running-old', raw['Config']['Env'])
             self.assertNotIn('MODE=saved-new', raw['Config']['Env'])
         self.assertEqual(self.driver().verify(), result)
+
+    def test_hold_after_precommit_refuses_prepared_plan_with_no_container_changes(self):
+        driver = self.driver()
+        driver.probe()
+        driver.precommit()
+        self.record['decision'] = 'commit'
+        receipt = self.base.make_receipt() / 'unfinished'
+        receipt.touch(mode=0o600)
+        before = len(self.base.engine.events)
+        with self.assertRaisesRegex(ValueError, 'unfinished install recovery'):
+            self.driver().activate()
+        self.assertEqual(len(self.base.engine.events), before)
+        self.assertEqual(set(self.base.engine.objects), {item['Id'] for item in self.destinations})
+        self.assertTrue(receipt.is_file())
 
     def test_probe_binds_only_root_verified_incoming_paths_and_removes_every_probe(self):
         driver = self.driver(); driver.probe()

@@ -797,14 +797,20 @@ class CoreCleanTargetBootstrap:
                 require(value.get('migrationIntentSha256') == sha(raw['migration-intent.json']))
         report = values['result.json']
         structure = report.get('structure')
+        expected_ledger = record['request']['expectedMigrationLedger']
+        validate_ledger(expected_ledger, self.approved['graph'])
+        schema = SUPERVISOR.structure_history_schema(self.approved['graph'])
+        require(schema is not None and schema == SUPERVISOR.structure_history_schema(expected_ledger))
+        tables = SUPERVISOR.structure_row_tables(schema)
+        expected_rows = {table: 0 for table in tables}
+        expected_rows['__drizzle_migrations'] = len(expected_ledger)
         require(isinstance(structure, dict) and set(structure) == {'schema', 'sha256', 'major', 'catalogSha256', 'rows', 'authenticationVerified', 'restoreAuthority'}
-                and structure['schema'] == 'orbis.core-database-structure.v1' and type(structure['major']) is int and structure['major'] == self.structure_major()
+                and structure['schema'] == schema and type(structure['major']) is int and structure['major'] == self.structure_major()
                 and isinstance(structure['sha256'], str) and HEX.fullmatch(structure['sha256'])
                 and structure['catalogSha256'] == bound['expectedCatalogSha256']
                 and structure['authenticationVerified'] is False and structure['restoreAuthority'] is False
                 and isinstance(structure['rows'], dict) and all(type(value) is int for value in structure['rows'].values())
-                and structure['rows'] == {'user': 0, 'link': 0, 'app_store': 0, 'app': 0,
-                                         'orbis_reset_receipt': 0, '__drizzle_migrations': len(record['request']['expectedMigrationLedger'])}
+                and structure['rows'] == expected_rows
                 and report.get('applicationTablesEmpty') is True and report.get('ledgerCommitAcknowledged') is True
                 and report.get('sanitationCommitAcknowledged') is True and report.get('serverQuiescenceProved') is False)
         before, after = values['migration-intent.json'].get('serverBeforeSeconds'), values['migration-completion.json'].get('serverAfterSeconds')

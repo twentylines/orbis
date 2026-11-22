@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
@@ -14,10 +15,12 @@ import { AppFilesManager } from '@/modules/apps/app-files-manager';
 import { AppHelpers } from '@/modules/apps/app.helpers';
 import { AppsRepository } from '@/modules/apps/apps.repository';
 import { BackupManager } from '@/modules/backups/backup.manager';
+import { beginAppImagePinUpdate } from '@/modules/docker/app-image-pins';
 import { DockerService } from '@/modules/docker/docker.service';
 import { EnvUtils } from '@/modules/env/env.utils';
 import { MarketplaceService } from '@/modules/marketplace/marketplace.service';
 import { SubnetManagerService } from '@/modules/network/subnet-manager.service';
+import { createMockApp } from '@/tests/helpers/app-mocks';
 import type { ModuleRef } from '@nestjs/core';
 import { convertLegacyToYaml } from '@runtipi/common/schemas';
 import type { AppUrn } from '@runtipi/common/types';
@@ -51,9 +54,10 @@ describe('Restored app permissions across lifecycle commands on real files', () 
   const source = convertLegacyToYaml({ schemaVersion: 2, services: [{ name: 'demo', image: 'example.com/demo:1', isMain: true, internalPort: 80 }] });
 
   beforeEach(async () => {
-    root = await fs.mkdtemp('/tmp/orbis-lifecycle-permissions-');
+    root = await fs.mkdtemp(path.join(tmpdir(), 'orbis-lifecycle-permissions-'));
     data = path.join(root, 'app-data/store/demo');
     const app = path.join(root, 'data/apps/store/demo');
+    const catalogue = path.join(root, 'catalogue/demo');
     await fs.mkdir(path.join(data, 'private'), { recursive: true, mode: 0o700 });
     await fs.chmod(path.join(data, 'private'), 0o700);
     for (const [name, mode] of [
@@ -68,16 +72,25 @@ describe('Restored app permissions across lifecycle commands on real files', () 
     const configuration = mock<ConfigurationService>();
     configuration.getConfig.mockReturnValue({ directories: { dataDir: path.join(root, 'data'), appDataDir: path.join(root, 'app-data') } } as never);
     configuration.get.mockReturnValue('arm64' as never);
-    const files = new AppFilesManager(configuration, new FilesystemService(logger), logger);
+    const filesystem = new FilesystemService(logger);
+    // Keep the real file operations inside this isolated host fixture.
+    vi.spyOn(filesystem, 'getSafeFilePath').mockImplementation((filePath) => {
+      const relative = path.relative(root, filePath);
+      if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('Path is outside the fixture');
+      return path.resolve(root, relative);
+    });
+    const files = new AppFilesManager(configuration, filesystem, logger);
     vi.spyOn(files, 'getSourceDockerComposeYaml').mockResolvedValue({ path: path.join(app, 'docker-compose.yml'), content: source });
-    const copyApp = async () => {
-      await fs.mkdir(app, { recursive: true });
-      await fs.writeFile(path.join(app, 'config.json'), JSON.stringify(config));
+    const copyApp = async (destination: string) => {
+      await fs.mkdir(destination, { recursive: true });
+      await fs.writeFile(path.join(destination, 'config.json'), JSON.stringify(config));
     };
-    await copyApp();
+    await copyApp(app);
+    await copyApp(catalogue);
     const marketplace = mock<MarketplaceService>();
-    marketplace.getSourceDockerComposeYaml.mockResolvedValue({ path: '/unused/source.yml', content: source });
-    marketplace.copyAppFromRepoToInstalled.mockImplementation(copyApp);
+    marketplace.getSourceDockerComposeYaml.mockResolvedValue({ path: path.join(catalogue, 'source.yml'), content: source });
+    marketplace.copyAppFromRepoToInstalled.mockImplementation(async () => copyApp(app));
+    marketplace.stageAppUpdate.mockImplementation(async (_urn, destination) => copyApp(destination));
     marketplace.copyDataDir.mockImplementation(async () => {
       await fs.writeFile(path.join(data, 'template'), 'initial app template', { mode: 0o600 });
     });
@@ -85,10 +98,25 @@ describe('Restored app permissions across lifecycle commands on real files', () 
     helpers.generateEnvFile.mockImplementation(async () => {
       await fs.writeFile(path.join(data, 'app.env'), 'GENERATED=yes\n');
     });
+    helpers.renderAppEnv.mockResolvedValue('GENERATED=yes\n');
     const subnet = mock<SubnetManagerService>();
-    subnet.allocateSubnet.mockResolvedValue('10.21.0.0/24' as never);
+    subnet.allocateSubnet.mockResolvedValue('10.21.0.0/24');
+    subnet.planUpdateSubnet.mockResolvedValue('10.21.0.0/24');
     dockerService = mock<DockerService>();
     dockerService.composeApp.mockResolvedValue({ success: true, stdout: '', stderr: '' });
+    dockerService.beginStagedAppUpdate.mockImplementation(async () => ({
+      transaction: await beginAppImagePinUpdate(path.join(root, 'update-transactions'), urn, app, path.join(data, 'app.env'), true),
+      retained: false,
+    }));
+    const plan = mock<Awaited<ReturnType<DockerService['prepareStagedAppUpdate']>>>();
+    plan.pull.mockResolvedValue({ activationSha256: '6'.repeat(64), imageIds: { demo: `sha256:${'4'.repeat(64)}` } });
+    plan.isCurrent.mockResolvedValue(true);
+    plan.release.mockResolvedValue(undefined);
+    dockerService.prepareStagedAppUpdate.mockResolvedValue(plan);
+    const repository = mock<AppsRepository>();
+    const installed = createMockApp({ status: 'updating', subnet: '10.21.0.0/24' });
+    repository.getAppByUrn.mockResolvedValue(installed);
+    repository.updateAppById.mockImplementation(async (_id, patch) => ({ ...installed, ...patch }));
     const services = new Map<unknown, unknown>([
       [AppFilesManager, files],
       [LoggerService, logger],
@@ -97,12 +125,13 @@ describe('Restored app permissions across lifecycle commands on real files', () 
       [AppHelpers, helpers],
       [SubnetManagerService, subnet],
       [DockerService, dockerService],
-      [AppsRepository, mock<AppsRepository>()],
+      [AppsRepository, repository],
       [BackupManager, mock<BackupManager>()],
       [EnvUtils, { envStringToMap: () => new Map() }],
     ]);
     moduleRef = { get: (token: unknown) => services.get(token) } as ModuleRef;
     docker = mock<Dockerode>();
+    vi.mocked(docker.listContainers).mockResolvedValue([]);
     vi.mocked(docker.pruneContainers).mockResolvedValue({ ContainersDeleted: [], SpaceReclaimed: 0 });
   });
 
@@ -131,12 +160,16 @@ describe('Restored app permissions across lifecycle commands on real files', () 
     it(`${Command.name} preserves restored private modes, owners, contents and timestamps`, async () => {
       const before = await protectedFiles();
       const command = Command === UpdateAppCommand ? new UpdateAppCommand(moduleRef, docker, false) : new Command(moduleRef, docker);
-      expect((await command.execute(urn, {})).success).toBe(true);
+      const result = await command.execute(urn, {});
+      expect(result.success, result.message).toBe(true);
+      if (Command === UpdateAppCommand) await expect(fs.readFile(path.join(data, 'app.env'), 'utf8')).resolves.toBe('GENERATED=yes\n');
       expect(await protectedFiles()).toEqual(before);
     });
   }
 
   it('prepares installation templates before startup without broadening secrets created by the app', async () => {
+    const repository = moduleRef.get(AppsRepository);
+    vi.mocked(repository.getAppByUrn).mockResolvedValueOnce(createMockApp({ status: 'installing' }));
     dockerService.composeApp.mockImplementation(async (_urn, command) => {
       if (command.startsWith('up ')) {
         expect((await fs.stat(path.join(data, 'template'))).mode & 0o777).toBe(0o777);
@@ -144,7 +177,8 @@ describe('Restored app permissions across lifecycle commands on real files', () 
       }
       return { success: true, stdout: '', stderr: '' };
     });
-    expect((await new InstallAppCommand(moduleRef, docker).execute(urn, {})).success).toBe(true);
+    const result = await new InstallAppCommand(moduleRef, docker).execute(urn, {});
+    expect(result.success, result.message).toBe(true);
     expect((await fs.stat(path.join(data, 'runtime-created.key'))).mode & 0o777).toBe(0o600);
   });
 

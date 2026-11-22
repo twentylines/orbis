@@ -1,0 +1,42 @@
+.app-job-progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  margin-block: 1rem;
+  border-radius: 1.25rem;
+  background: var(--tblr-bg-surface-secondary);
+  color: var(--tblr-body-color);
+}
+.app-job-copy {
+  display: grid;
+  gap: 0.35rem;
+  min-width: min(100%, 12rem);
+  flex: 1 1 15rem;
+}
+.app-job-copy > span,
+.app-job-copy > small {
+  color: var(--tblr-secondary-color);
+}
+.app-job-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 100%;
+}
+.app-job-control > button.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  white-space: normal;
+}
+.app-job-control > [role="alert"] {
+  flex-basis: 100%;
+  max-width: 34rem;
+  overflow-wrap: break-word;
+}

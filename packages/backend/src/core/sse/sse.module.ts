@@ -4,9 +4,10 @@ import { Module } from '@nestjs/common';
 import { SSEController } from './sse.controller';
 import { SSEService } from './sse.service';
 import { MonitoringActivityModule } from '../monitoring/monitoring-activity.module';
+import { TasksModule } from '@/modules/tasks/tasks.module';
 
 @Module({
-  imports: [DockerModule, DesktopPreferencesModule, MonitoringActivityModule],
+  imports: [DockerModule, DesktopPreferencesModule, MonitoringActivityModule, TasksModule],
   controllers: [SSEController],
   providers: [SSEService],
   exports: [SSEService],

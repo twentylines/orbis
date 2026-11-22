@@ -155,7 +155,7 @@ export class HostTelemetryService {
       this.pending = this.fetch()
         .catch(() => unavailable())
         .then((result) => {
-          this.cached = { expiresAt: result.available && !result.stale ? startedAt + 9000 : Date.now() + 2000, result };
+          this.cached = { expiresAt: result.available && !result.stale ? startedAt + 800 : Date.now() + 2000, result };
           return result;
         })
         .finally(() => {

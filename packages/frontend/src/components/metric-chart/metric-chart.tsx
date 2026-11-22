@@ -36,7 +36,21 @@ export function MetricChart({
                     identity: point.cpuScope,
                     source: point.cpuScope === 'host-proc' ? 'Host CPU' : point.cpuScope === 'runtime' ? 'Core CPU' : 'CPU source changed',
                   }
-                : {}),
+                : field === 'memory'
+                  ? {
+                      identity: point.memoryScope ?? 'host-proc',
+                      source:
+                        point.memoryScope === 'cgroup'
+                          ? 'LXC memory'
+                          : point.memoryScope === 'containers'
+                            ? 'Docker estimate'
+                            : point.memoryScope === 'runtime'
+                              ? 'Core memory'
+                              : point.memoryScope === 'mixed'
+                                ? 'Memory source changed'
+                                : 'Host memory',
+                    }
+                  : {}),
             })),
           }
         : undefined,

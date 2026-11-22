@@ -1,11 +1,11 @@
+import { AppJobService } from '../services/app-job.service';
 import { TranslatableError } from '@/common/error/translatable-error';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
-import { AppFilesManager } from '@/modules/apps/app-files-manager';
 import { AppsRepository } from '@/modules/apps/apps.repository';
 import { MarketplaceService } from '@/modules/marketplace/marketplace.service';
 import { type AppEvent, AppEventsQueue } from '@/modules/queue/entities/app-events';
-import { createMockApp, createMockAppInfo } from '@/tests/helpers/app-mocks';
+import { createMockApp } from '@/tests/helpers/app-mocks';
 import { Test } from '@nestjs/testing';
 import type { AppUrn } from '@runtipi/common/types';
 import { fromPartial } from '@total-typescript/shoehorn';
@@ -53,10 +53,14 @@ const createFixture = async (maxBackups: number | null, status: 'running' | 'sto
   const statusManager = mock<StatusManagerService>();
   const config = mock<ConfigurationService>();
   const marketplaceService = mock<MarketplaceService>();
-  const appFilesManager = mock<AppFilesManager>();
   const startAppHandler = mock<StartAppHandler>();
   const updateConfigHandler = mock<UpdateConfigHandler>();
   const logger = mock<LoggerService>();
+  const jobs = mock<AppJobService>();
+  jobs.withCurrent.mockImplementation(async (_event, apply) => {
+    await apply();
+    return true;
+  });
   appRepository.getAppByUrn.mockResolvedValue(original);
   appRepository.updateAppById.mockImplementation(async (_id, patch) => {
     stored = { ...stored, ...patch };
@@ -67,18 +71,21 @@ const createFixture = async (maxBackups: number | null, status: 'running' | 'sto
   });
   config.get.calledWith('version').mockReturnValue('4.0.0');
   marketplaceService.getAppUpdateInfo.mockResolvedValue(fromPartial({ minTipiVersion: '3.0.0' }));
-  appFilesManager.getInstalledAppInfo.mockResolvedValue(createMockAppInfo({ tipi_version: 2 }));
-  appEventsQueue.publish.mockResolvedValue({ success: true, message: 'updated' });
+  const confirmWorkerCommit = () => {
+    stored = { ...stored, version: 2, status, ...(status === 'running' ? { pendingRestart: false } : {}) };
+    return { success: true, message: 'updated', updateStatus: status };
+  };
+  appEventsQueue.publish.mockImplementation(async () => confirmWorkerCommit());
   const moduleRef = await Test.createTestingModule({
     providers: [
       UpdateAppHandler,
+      { provide: AppJobService, useValue: jobs },
       { provide: LoggerService, useValue: logger },
       { provide: AppsRepository, useValue: appRepository },
       { provide: AppEventsQueue, useValue: appEventsQueue },
       { provide: StatusManagerService, useValue: statusManager },
       { provide: ConfigurationService, useValue: config },
       { provide: MarketplaceService, useValue: marketplaceService },
-      { provide: AppFilesManager, useValue: appFilesManager },
       { provide: StartAppHandler, useValue: startAppHandler },
       { provide: UpdateConfigHandler, useValue: updateConfigHandler },
     ],
@@ -95,10 +102,24 @@ const createFixture = async (maxBackups: number | null, status: 'running' | 'sto
     marketplaceService,
     startAppHandler,
     updateConfigHandler,
+    confirmWorkerCommit,
   };
 };
 
 describe('UpdateAppHandler settings preservation', () => {
+  it('acknowledges a completed replay without inventing runtime or queuing another start', async () => {
+    const fixture = await createFixture(null, 'running');
+    fixture.appEventsQueue.publish.mockImplementation(async () => {
+      fixture.confirmWorkerCommit();
+      return { success: true, message: 'Already completed', alreadyCompleted: true };
+    });
+    await fixture.handler.execute(appUrn);
+    await vi.waitFor(() => expect(fixture.statusManager.emitEvent).toHaveBeenCalledExactlyOnceWith({ appUrn, event: 'update_success' }));
+    expect(fixture.appRepository.updateAppById).toHaveBeenCalledExactlyOnceWith(12, { status: 'updating' });
+    expect(fixture.startAppHandler.execute).not.toHaveBeenCalled();
+    expect(fixture.getStored()).toEqual({ ...fixture.original, version: 2, status: 'running', pendingRestart: false });
+  });
+
   it.each([null, 0, 9])('keeps raw config and operational settings when stored retention is %s', async (maxBackups) => {
     const fixture = await createFixture(maxBackups);
 
@@ -106,6 +127,7 @@ describe('UpdateAppHandler settings preservation', () => {
     await vi.waitFor(() => expect(fixture.getStored().status).toBe('stopped'));
 
     expect(fixture.appEventsQueue.publish).toHaveBeenCalledExactlyOnceWith({
+      jobVersion: 1,
       command: 'update',
       appUrn,
       requestId: result.requestId,
@@ -115,44 +137,44 @@ describe('UpdateAppHandler settings preservation', () => {
     const event = fixture.appEventsQueue.publish.mock.calls[0]?.[0] as AppEvent | undefined;
     expect(event?.form).toBe(fixture.rawConfig);
     expect(fixture.updateConfigHandler.execute).not.toHaveBeenCalled();
-    expect(fixture.appRepository.updateAppById.mock.calls).toEqual([
-      [12, { status: 'updating' }],
-      [12, { version: 2 }],
-      [12, { status: 'stopped' }],
-    ]);
+    expect(fixture.appRepository.updateAppById.mock.calls).toEqual([[12, { status: 'updating' }]]);
     expect(fixture.getStored()).toEqual({ ...fixture.original, version: 2 });
     expect(fixture.getStored().config).toEqual(fixture.rawConfig);
     expect(fixture.statusManager.emitEvent).toHaveBeenCalledExactlyOnceWith({ appUrn, event: 'update_success' });
     expect(fixture.startAppHandler.execute).not.toHaveBeenCalled();
   });
 
-  it('restarts a previously running app after recording the version without rewriting its settings', async () => {
+  it('emits success only after the worker commit and never queues a second start', async () => {
     const fixture = await createFixture(null, 'running');
-    fixture.startAppHandler.execute.mockImplementation(async () => {
-      expect(fixture.getStored().version).toBe(2);
-      return { requestId: 'start-request' };
-    });
+    let finish!: () => void;
+    fixture.appEventsQueue.publish.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve(fixture.confirmWorkerCommit());
+        }),
+    );
 
     await fixture.handler.execute(appUrn);
-    await vi.waitFor(() => expect(fixture.startAppHandler.execute).toHaveBeenCalledExactlyOnceWith(appUrn));
+    expect(fixture.getStored()).toMatchObject({ version: 1, status: 'updating' });
+    expect(fixture.statusManager.emitEvent).not.toHaveBeenCalled();
+    finish();
+    await vi.waitFor(() => expect(fixture.statusManager.emitEvent).toHaveBeenCalledExactlyOnceWith({ appUrn, event: 'update_success' }));
 
     expect(fixture.updateConfigHandler.execute).not.toHaveBeenCalled();
-    expect(fixture.getStored()).toEqual({ ...fixture.original, version: 2, status: 'updating' });
-    expect(fixture.appRepository.updateAppById.mock.calls).toEqual([
-      [12, { status: 'updating' }],
-      [12, { version: 2 }],
-    ]);
+    expect(fixture.startAppHandler.execute).not.toHaveBeenCalled();
+    expect(fixture.getStored()).toEqual({ ...fixture.original, version: 2, status: 'running', pendingRestart: false });
+    expect(fixture.appRepository.updateAppById).toHaveBeenCalledExactlyOnceWith(12, { status: 'updating' });
     expect(fixture.appEventsQueue.publish.mock.calls[0]?.[0]).toMatchObject({ performBackup: false });
   });
 
-  it('keeps the stored version and settings and reports failure when post-copy environment generation fails', async () => {
+  it('reports an unresolved worker failure without making up a stopped deployment', async () => {
     const fixture = await createFixture(9, 'running');
     fixture.appEventsQueue.publish.mockResolvedValue({ success: false, message: 'NEW_REQUIRED must be configured' });
 
     await fixture.handler.execute(appUrn, { performBackup: true });
-    await vi.waitFor(() => expect(fixture.getStored().status).toBe('stopped'));
+    await vi.waitFor(() => expect(fixture.statusManager.emitEvent).toHaveBeenCalled());
 
-    expect(fixture.getStored()).toEqual({ ...fixture.original, status: 'stopped' });
+    expect(fixture.getStored()).toEqual({ ...fixture.original, status: 'updating' });
     expect(fixture.updateConfigHandler.execute).not.toHaveBeenCalled();
     expect(fixture.startAppHandler.execute).not.toHaveBeenCalled();
     expect(fixture.statusManager.emitEvent).toHaveBeenCalledExactlyOnceWith({
@@ -160,10 +182,31 @@ describe('UpdateAppHandler settings preservation', () => {
       event: 'update_error',
       error: 'NEW_REQUIRED must be configured',
     });
-    expect(fixture.appRepository.updateAppById.mock.calls).toEqual([
-      [12, { status: 'updating' }],
-      [12, { status: 'stopped' }],
-    ]);
+    expect(fixture.appRepository.updateAppById).toHaveBeenCalledExactlyOnceWith(12, { status: 'updating' });
+  });
+
+  it('uses the observed preserved runtime even if the previous app row was stale', async () => {
+    const fixture = await createFixture(null, 'running');
+    fixture.appEventsQueue.publish.mockResolvedValue({ success: false, message: 'Pull failed', statePreserved: true, updateStatus: 'stopped' });
+    await fixture.handler.execute(appUrn);
+    await vi.waitFor(() => expect(fixture.getStored().status).toBe('stopped'));
+    expect(fixture.getStored().version).toBe(1);
+    expect(fixture.startAppHandler.execute).not.toHaveBeenCalled();
+  });
+
+  it('keeps an unconfirmed queue reply in review rather than replaying activation', async () => {
+    const fixture = await createFixture(null, 'running');
+    fixture.appEventsQueue.publish.mockRejectedValue(new Error('Reply lost'));
+    await fixture.handler.execute(appUrn);
+    await vi.waitFor(() =>
+      expect(fixture.statusManager.emitEvent).toHaveBeenCalledExactlyOnceWith({
+        appUrn,
+        event: 'update_error',
+        error: 'The app update outcome could not be confirmed.',
+      }),
+    );
+    expect(fixture.getStored().status).toBe('updating');
+    expect(fixture.startAppHandler.execute).not.toHaveBeenCalled();
   });
 
   it('keeps the previous status, version and settings when a failed backup restored the original containers', async () => {

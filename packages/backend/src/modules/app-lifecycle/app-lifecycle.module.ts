@@ -24,11 +24,14 @@ import { UpdateAppHandler } from './handlers/update-app.handler';
 import { BackupAppHandler } from './handlers/backup-app.handler';
 import { RestoreAppHandler } from './handlers/restore-app.handler';
 import { TasksModule } from '../tasks/tasks.module';
+import { InstallRecoveryReviewService } from './services/install-recovery-review.service';
+import { AppJobService } from './services/app-job.service';
 
 @Module({
   imports: [QueueModule, AppsModule, AppStoreModule, EnvModule, DockerModule, MarketplaceModule, BackupManagerModule, SSEModule, TasksModule],
   providers: [
     AppLifecycleService,
+    AppJobService,
     AppLifecycleCommandFactory,
     AppStatusSyncService,
     StatusManagerService,
@@ -37,6 +40,7 @@ import { TasksModule } from '../tasks/tasks.module';
     StopAppHandler,
     RestartAppHandler,
     InstallAppHandler,
+    InstallRecoveryReviewService,
     UninstallAppHandler,
     ResetAppHandler,
     UpdateConfigHandler,

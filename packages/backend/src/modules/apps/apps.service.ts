@@ -73,6 +73,11 @@ export class AppsService {
     return this.populateAppInfo(apps);
   }
 
+  /** Runtime custody depends on the installed row, including while its metadata is moving. No catalogue fallback. */
+  public getInstalledApp(appUrn: AppUrn) {
+    return this.appsRepository.getAppByUrn(appUrn);
+  }
+
   public async getApp(appUrn: AppUrn) {
     const app = await this.appsRepository.getAppByUrn(appUrn);
     const updateInfo = await this.marketplaceService.getAppUpdateInfo(appUrn).catch((_) => {

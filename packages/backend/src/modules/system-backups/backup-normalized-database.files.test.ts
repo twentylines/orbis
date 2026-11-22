@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { backupDatabaseTables, type BackupDatabaseTable } from './backup-database-records';
+import { backupDatabaseTables, backupMigrationDigest, type BackupDatabaseTable } from './backup-database-records';
 import { readNormalizedBackupDatabase } from './backup-normalized-database';
 import type { BackupDatabaseReview } from './backup-database.service';
 
@@ -119,7 +119,7 @@ function encode(entries: Entry[]) {
 
 function review(bytes: Buffer, entries: Entry[]): BackupDatabaseReview {
   const counts = Object.fromEntries(
-    backupDatabaseTables.map((table) => [table, entries.filter((entry) => entry.table === table).length]),
+    backupDatabaseTables(1).map((table) => [table, entries.filter((entry) => entry.table === table).length]),
   ) as BackupDatabaseReview['counts'];
   return { counts, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
 }
@@ -151,7 +151,7 @@ it('reads every table in declared order from a private directory and 0600 file, 
     }),
   ).resolves.toEqual({ counts: { user: 1, app_store: 1, app: 1, link: 1 }, bytes: bytes.length });
   expect(accepted).toEqual(entries);
-  expect(accepted.map(({ table }) => table)).toEqual(backupDatabaseTables);
+  expect(accepted.map(({ table }) => table)).toEqual(backupDatabaseTables(1));
 });
 
 it.each([
@@ -319,4 +319,27 @@ it('reuses database record validation for encrypted TOTP and passkey state', asy
   const invalidBytes = encode(invalidTotp);
   await save(invalidBytes);
   await expect(readNormalizedBackupDatabase(source(review(invalidBytes, invalidTotp), passkeys), new AbortController().signal)).rejects.toThrow();
+});
+
+it.each(['valid', 'wrong-digest', 'dangling', 'duplicate', 'unbaselined'] as const)('validates version 2 migration state (%s)', async (kind) => {
+  const entries = databaseRows();
+  const application = entries.find(({ table }) => table === 'app');
+  if (!application) throw new Error('Fixture application missing');
+  application.row.migrations_baselined = kind !== 'unbaselined';
+  const row = { app_id: kind === 'dangling' ? 2 : 1, migration_id: '001-schema' };
+  entries.push({ table: 'app_migration', row });
+  if (kind === 'duplicate') entries.push({ table: 'app_migration', row });
+  const bytes = encode(entries);
+  await save(bytes);
+  const reviewed = review(bytes, entries);
+  const attempt = readNormalizedBackupDatabase(
+    source({
+      ...reviewed,
+      counts: { ...reviewed.counts, app_migration: kind === 'duplicate' ? 2 : 1 },
+      migrationSha256: kind === 'wrong-digest' ? '0'.repeat(64) : backupMigrationDigest(new Map([[1, true]]), new Map([[1, ['001-schema']]])),
+    }),
+    AbortSignal.timeout(5_000),
+  );
+  if (kind === 'valid') await expect(attempt).resolves.toMatchObject({ counts: { app_migration: 1 } });
+  else await expect(attempt).rejects.toThrow();
 });

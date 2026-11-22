@@ -13,12 +13,16 @@ export const taskActionSchema = type.enumerated(
   'restore',
   'update',
 );
-export const taskStatusSchema = type.enumerated('queued', 'running', 'succeeded', 'failed', 'interrupted', 'unconfirmed');
+export const taskStatusSchema = type.enumerated('queued', 'running', 'cancelling', 'cancelled', 'succeeded', 'failed', 'interrupted', 'unconfirmed');
 export const taskPhaseSchema = type.enumerated(
   'preparing',
   'pulling_images',
   'stopping',
   'backing_up',
+  'copying',
+  'archiving',
+  'saving',
+  'migrating',
   'publishing',
   'starting',
   'verifying',
@@ -39,6 +43,7 @@ export const taskRecordSchema = type({
   startedAt: timestamp.or('null'),
   finishedAt: timestamp.or('null'),
   attentionRevision: type('number.integer >= 0 & number <= 2147483647').optional(),
+  cancellable: 'boolean?',
 });
 
 export const taskHistorySchema = type({

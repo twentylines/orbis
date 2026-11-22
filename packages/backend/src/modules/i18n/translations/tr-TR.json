@@ -402,7 +402,7 @@
   "DELETE_BACKUP_MODAL_SUBTITLE": "Bu işlem geri alınamaz",
   "DELETE_BACKUP_MODAL_SUBMIT": "Sil",
   "GUEST_DASHBOARD": "Misafir kontrol paneli",
-  "GUEST_DASHBOARD_DOWNLOAD_CERTIFICATE_TOOLTIP": "Uygulamalara güvenli bir şekilde erişmek için kendinden imzalı (self-signed) sertifikayı indirin",
+  "GUEST_DASHBOARD_DOWNLOAD_CERTIFICATE_TOOLTIP": "Uygulamalara güvenli erişim için kendinden imzalı sertifikayı indirin",
   "GUEST_DASHBOARD_NO_APPS": "Gösterilecek uygulama yok",
   "GUEST_DASHBOARD_NO_APPS_SUBTITLE": "Yöneticinizden misafir kontrol paneline uygulamalar eklemesini isteyin veya uygulamalarınızı görmek için giriş yapın.",
   "HEADER_APPS": "Uygulamalarım",
@@ -498,7 +498,7 @@
   "SETTINGS_GENERAL_ALLOW_ERROR_MONITORING_HINT": "Hata izleme özelliği, hataları takip etmek ve Runtipi'yi geliştirmek için kullanılır. Runtipi'yi geliştirmemize yardımcı olmak için bu seçeneği etkin tutun.",
   "SETTINGS_GENERAL_APPS_REPO": "Uygulama deposu (repo) URL'si",
   "SETTINGS_GENERAL_APPS_REPO_HINT": "Uygulamalar deposunun URL'si.",
-  "SETTINGS_GENERAL_DOWNLOAD_CERTIFICATE": "Sertifikayı indir",
+  "SETTINGS_GENERAL_DOWNLOAD_CERTIFICATE": "Sertifikayı İndir",
   "SETTINGS_GENERAL_GUEST_DASHBOARD": "Misafir kontrol panelini etkinleştir",
   "SETTINGS_GENERAL_GUEST_DASHBOARD_HINT": "Bu, kimliği doğrulanmamış kullanıcıların sınırlı bir kontrol panelini görmesini ve sisteminizde çalışan uygulamalara kolayca erişmesini sağlar.",
   "SETTINGS_GENERAL_INTERNAL_IP": "İç IP (Internal IP)",
@@ -661,5 +661,14 @@
   "MULTI_SERVICE_BACK_TO_FORM": "Forma Geri Dön",
   "MULTI_SERVICE_UNSAVED_CHANGES_CONFIRM": "Kaydedilmemiş değişiklikleriniz var. Kaydetmeden ayrılmak istediğinizden emin misiniz?",
   "MULTI_SERVICE_YAML_UPDATE_SUCCESS": "Servis yapılandırması başarıyla güncellendi",
-  "MULTI_SERVICE_YAML_REFERENCE": "Dinamik Compose Referansı"
+  "MULTI_SERVICE_YAML_REFERENCE": "Dinamik Compose Referansı",
+  "APP_JOB_CANCEL": "Cancel operation",
+  "APP_JOB_CANCELLING": "Cancelling…",
+  "APP_JOB_CANCEL_ERROR": "Cancellation could not be confirmed. Refresh the operation before trying again.",
+  "APP_JOB_PROGRESS": "Application operation",
+  "APP_JOB_ELAPSED": "Elapsed",
+  "APP_JOB_FINISHING": "Finishing or recovering the application. Cancellation is unavailable.",
+  "APP_JOB_UNAVAILABLE": "Operation status is unavailable. Check Task Centre before retrying.",
+  "APP_JOB_STALE": "Showing the last reported state. Reconnecting…",
+  "DASHBOARD_MEMORY_ESTIMATED": "tahmini"
 }

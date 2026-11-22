@@ -92,6 +92,22 @@ it('rolls back only after root grants rollback and never retries an interrupted 
   expect(await fs.readFile(path.join(test.data, 'value'), 'utf8')).toBe('old');
   await expect(test.run('rollback', 'rollback')).resolves.toBe('rolled-back');
 });
+it('replays a discarded rollback through app resume before acknowledging Root', async () => {
+  const test = await fixture();
+  await fs.writeFile(
+    path.join(test.journal.directory, 'restore.json'),
+    JSON.stringify({
+      ...test.journal.state,
+      phase: 'discarded',
+      decision: 'rollback',
+    }),
+  );
+  vi.mocked(test.runtime.discardPreparation).mockRejectedValueOnce(new Error('resume held'));
+  await expect(test.run('rollback', 'rollback')).rejects.toThrow('resume held');
+  await expect(test.run('rollback', 'rollback')).resolves.toBe('rolled-back');
+  expect(test.runtime.discardPreparation).toHaveBeenCalledTimes(2);
+});
+
 it('leaves commit pending if root activation cannot be confirmed and never rolls back after root commit', async () => {
   const test = await fixture();
   await test.run('promote', 'none');

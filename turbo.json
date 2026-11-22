@@ -13,9 +13,10 @@
       "outputs": ["dist/"]
     },
     "tsc": {
-      "dependsOn": ["^tsc"],
+      "dependsOn": ["^build", "^tsc"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": ["dist/"]
+      "outputs": [],
+      "cache": false
     },
     "dev": {
       "dependsOn": ["build"],

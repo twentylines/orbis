@@ -37,14 +37,13 @@ export type AppContextDto = {
         supported_architectures: Array<'amd64' | 'arm64'>;
         urn: string;
         catalog_format?: 'orbis' | 'umbrel';
-        catalog_revision?: string;
-        gallery?: Array<string>;
-        release_notes?: string;
         compatibility?: {
-            supported: boolean;
             reasons: Array<string>;
             requires_auth: boolean;
+            supported: boolean;
         };
+        gallery?: Array<string>;
+        release_notes?: string;
     }>;
     updatesAvailable: number;
     user: {
@@ -80,6 +79,7 @@ export type AppContextDto = {
         experimental_insecureCookie?: boolean;
         themeBase?: string;
         themeColor?: string;
+        trustedProxyIps?: string;
     };
     version: {
         body: string;
@@ -117,87 +117,79 @@ export type UserSettingsBody = {
     themeBase?: string;
     themeColor?: string;
     timeZone?: string;
+    trustedProxyIps?: string;
 };
 
 export type AcknowledgeWelcomeBody = {
     allowErrorMonitoring: boolean;
 };
 
-export type LoadDto = {
-    cpuLoad: number;
-    diskSize: number;
-    diskUsed: number;
-    memoryTotal: number;
-    percentUsed: number;
-    percentUsedMemory: number;
+export type GetAppConfigDto = {
+    config: string | null;
 };
 
-export type LoginBody = {
-    password: string;
-    username: string;
-    redirectUrl?: string;
+export type UpdateAppConfigBodyDto = {
+    config: string;
 };
 
-export type LoginDto = {
-    success: boolean;
-    redirectUrl?: string;
-    totpSessionId?: string;
-};
-
-export type VerifyTotpBody = {
-    totpCode: string;
-    totpSessionId: string;
-    redirectUrl?: string;
-};
-
-export type RegisterBody = {
-    password: string;
-    username: string;
-    redirectUrl?: string;
-};
-
-export type RegisterDto = {
+export type AppConfigSuccessDto = {
     success: boolean;
 };
 
-export type ForwardAuthBody = {
-    redirectUrl: string;
+export type TemplateDiffDto = {
+    hasChanges: boolean;
+    localVersion: number;
+    templateVersion: number;
+    current?: string;
+    template?: string;
 };
 
-export type ChangeUsernameBody = {
-    newUsername: string;
-    password: string;
+export type AppJobDto = {
+    job: {
+        appUrn: string;
+        cancellable: boolean;
+        command: 'backup' | 'update';
+        message: string;
+        /**
+         * a UUID
+         */
+        requestId: string | '00000000-0000-0000-0000-000000000000' | 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+        startedAt: number;
+        status: 'cancelled' | 'cancelling' | 'failed' | 'interrupted' | 'queued' | 'running' | 'succeeded' | 'unconfirmed';
+        updatedAt: number;
+        phase?: 'archiving' | 'backing_up' | 'committing' | 'copying' | 'migrating' | 'preparing' | 'publishing' | 'pulling_images' | 'recovering' | 'saving' | 'starting' | 'stopping' | 'verifying';
+    } | null;
 };
 
-export type ChangePasswordBody = {
-    currentPassword: string;
-    newPassword: string;
+export type AppFormBody = {
+    domain?: string;
+    enableAuth?: boolean;
+    exposed?: boolean;
+    exposedLocal?: boolean;
+    forcePull?: boolean;
+    isVisibleOnGuestDashboard?: boolean;
+    localSubdomain?: string;
+    maxBackups?: number;
+    openPort?: boolean;
+    port?: number;
+    skipEnv?: boolean;
+    skipPull?: boolean;
+    skipRun?: boolean;
 };
 
-export type GetTotpUriBody = {
-    password: string;
+export type LifecycleRequestDto = {
+    /**
+     * a UUID
+     */
+    requestId: string | '00000000-0000-0000-0000-000000000000' | 'ffffffff-ffff-ffff-ffff-ffffffffffff';
 };
 
-export type GetTotpUriDto = {
-    key: string;
-    uri: string;
+export type UninstallAppBody = {
+    removeBackups: boolean;
 };
 
-export type SetupTotpBody = {
-    code: string;
-};
-
-export type DisableTotpBody = {
-    password: string;
-};
-
-export type ResetPasswordBody = {
-    newPassword: string;
-};
-
-export type ResetPasswordDto = {
-    email: string;
-    success: boolean;
+export type UpdateAppBody = {
+    performBackup: boolean;
 };
 
 export type MyAppsDto = {
@@ -264,21 +256,21 @@ export type MyAppsDto = {
             updated_at: number;
             urn: string;
             version: string;
+            catalog_format?: 'orbis' | 'umbrel';
+            catalog_revision?: string;
+            compatibility?: {
+                reasons: Array<string>;
+                requires_auth: boolean;
+                supported: boolean;
+            };
+            gallery?: Array<string>;
             gid?: number;
             min_tipi_version?: string;
             port?: number;
+            release_notes?: string;
             uid?: number;
             url_suffix?: string;
             website?: string;
-            catalog_format?: 'orbis' | 'umbrel';
-            catalog_revision?: string;
-            gallery?: Array<string>;
-            release_notes?: string;
-            compatibility?: {
-                supported: boolean;
-                reasons: Array<string>;
-                requires_auth: boolean;
-            };
         };
         metadata: {
             latestVersion: number;
@@ -352,21 +344,21 @@ export type GuestAppsDto = {
             updated_at: number;
             urn: string;
             version: string;
+            catalog_format?: 'orbis' | 'umbrel';
+            catalog_revision?: string;
+            compatibility?: {
+                reasons: Array<string>;
+                requires_auth: boolean;
+                supported: boolean;
+            };
+            gallery?: Array<string>;
             gid?: number;
             min_tipi_version?: string;
             port?: number;
+            release_notes?: string;
             uid?: number;
             url_suffix?: string;
             website?: string;
-            catalog_format?: 'orbis' | 'umbrel';
-            catalog_revision?: string;
-            gallery?: Array<string>;
-            release_notes?: string;
-            compatibility?: {
-                supported: boolean;
-                reasons: Array<string>;
-                requires_auth: boolean;
-            };
         };
         metadata: {
             latestVersion: number;
@@ -425,21 +417,21 @@ export type GetAppDto = {
         updated_at: number;
         urn: string;
         version: string;
+        catalog_format?: 'orbis' | 'umbrel';
+        catalog_revision?: string;
+        compatibility?: {
+            reasons: Array<string>;
+            requires_auth: boolean;
+            supported: boolean;
+        };
+        gallery?: Array<string>;
         gid?: number;
         min_tipi_version?: string;
         port?: number;
+        release_notes?: string;
         uid?: number;
         url_suffix?: string;
         website?: string;
-        catalog_format?: 'orbis' | 'umbrel';
-        catalog_revision?: string;
-        gallery?: Array<string>;
-        release_notes?: string;
-        compatibility?: {
-            supported: boolean;
-            reasons: Array<string>;
-            requires_auth: boolean;
-        };
     };
     metadata: {
         latestVersion: number;
@@ -482,94 +474,72 @@ export type GetConfigDiffDto = {
     new: string | null;
 };
 
-export type SearchAppsDto = {
-    data: Array<{
-        available: boolean;
-        categories: Array<'ai' | 'automation' | 'books' | 'data' | 'development' | 'featured' | 'finance' | 'gaming' | 'media' | 'music' | 'network' | 'photography' | 'security' | 'social' | 'utilities'>;
-        created_at: number;
-        deprecated: boolean;
-        id: string;
-        name: string;
-        short_desc: string;
-        supported_architectures: Array<'amd64' | 'arm64'>;
-        urn: string;
-        catalog_format?: 'orbis' | 'umbrel';
-        catalog_revision?: string;
-        gallery?: Array<string>;
-        release_notes?: string;
-        compatibility?: {
-            supported: boolean;
-            reasons: Array<string>;
-            requires_auth: boolean;
-        };
-    }>;
-    total: number;
-    nextCursor?: string | null;
+export type LoginBody = {
+    password: string;
+    username: string;
+    redirectUrl?: string;
 };
 
-export type PullDto = {
+export type LoginDto = {
+    success: boolean;
+    redirectUrl?: string;
+    totpSessionId?: string;
+};
+
+export type VerifyTotpBody = {
+    totpCode: string;
+    totpSessionId: string;
+    redirectUrl?: string;
+};
+
+export type RegisterBody = {
+    password: string;
+    username: string;
+    redirectUrl?: string;
+};
+
+export type RegisterDto = {
     success: boolean;
 };
 
-export type CreateAppStoreBodyDto = {
-    name: string;
-    url: string;
+export type ForwardAuthBody = {
+    redirectUrl: string;
 };
 
-export type AppStoreDto = {
-    enabled: boolean;
-    name: string;
-    slug: string;
-    url: string;
+export type ChangeUsernameBody = {
+    newUsername: string;
+    password: string;
 };
 
-export type AllAppStoresDto = {
-    appStores: Array<{
-        enabled: boolean;
-        name: string;
-        slug: string;
-        url: string;
-    }>;
+export type ChangePasswordBody = {
+    currentPassword: string;
+    newPassword: string;
 };
 
-export type UpdateAppStoreBodyDto = {
-    enabled?: boolean;
-    name?: string;
+export type GetTotpUriBody = {
+    password: string;
 };
 
-export type UpdateAppStoreDto = {
+export type GetTotpUriDto = {
+    key: string;
+    uri: string;
+};
+
+export type SetupTotpBody = {
+    code: string;
+};
+
+export type DisableTotpBody = {
+    password: string;
+};
+
+export type ResetPasswordBody = {
+    newPassword: string;
+};
+
+export type ResetPasswordDto = {
+    email: string;
     success: boolean;
-};
-
-export type AppFormBody = {
-    domain?: string;
-    enableAuth?: boolean;
-    exposed?: boolean;
-    exposedLocal?: boolean;
-    forcePull?: boolean;
-    isVisibleOnGuestDashboard?: boolean;
-    localSubdomain?: string;
-    maxBackups?: number;
-    openPort?: boolean;
-    port?: number;
-    skipEnv?: boolean;
-    skipPull?: boolean;
-    skipRun?: boolean;
-};
-
-export type LifecycleRequestDto = {
-    /**
-     * a UUID
-     */
-    requestId: string | '00000000-0000-0000-0000-000000000000' | 'ffffffff-ffff-ffff-ffff-ffffffffffff';
-};
-
-export type UninstallAppBody = {
-    removeBackups: boolean;
-};
-
-export type UpdateAppBody = {
-    performBackup: boolean;
 };
 
 export type BackupRequestDto = {
@@ -598,49 +568,6 @@ export type DeleteAppBackupBodyDto = {
     filename: string;
 };
 
-export type LinksDto = {
-    editCapabilities?: Array<'guest-visibility-patch.v1'>;
-    links: Array<{
-        description: string | null;
-        iconUrl: string | '' | null;
-        id: number;
-        isVisibleOnGuestDashboard: boolean;
-        title: string;
-        url: string;
-        userId: number;
-    }>;
-};
-
-export type LinkBodyDto = {
-    title: string;
-    url: string;
-    description?: string;
-    iconUrl?: string | '';
-    isVisibleOnGuestDashboard?: boolean;
-};
-
-export type EditLinkBodyDto = {
-    title: string;
-    url: string;
-    description?: string;
-    iconUrl?: string | '';
-    isVisibleOnGuestDashboard?: boolean;
-} | {
-    isVisibleOnGuestDashboard: boolean;
-};
-
-export type GetUserConfigDto = {
-    appEnv: string | null;
-    dockerCompose: string | null;
-    isEnabled: boolean;
-    sourceCompose: string | null;
-};
-
-export type UpdateUserConfigDto = {
-    appEnv: string;
-    dockerCompose: string;
-};
-
 export type CreateCustomAppDto = {
     config: {
         services: {
@@ -663,6 +590,7 @@ export type CreateCustomAppDto = {
         };
         'x-runtipi': {
             schema_version: 1 | 2;
+            migrations?: unknown;
             overrides?: Array<{
                 architecture: 'amd64' | 'arm64';
                 services: {
@@ -721,6 +649,7 @@ export type UpdateCustomAppDto = {
         };
         'x-runtipi': {
             schema_version: 1 | 2;
+            migrations?: unknown;
             overrides?: Array<{
                 architecture: 'amd64' | 'arm64';
                 services: {
@@ -754,24 +683,283 @@ export type UpdateAppMetadataDto = {
     data: string;
 };
 
-export type GetAppConfigDto = {
-    config: string | null;
+export type DesktopPreferencesDto = {
+    density: 'comfortable' | 'compact';
+    preset: 'amber' | 'blush' | 'burgundy' | 'forest' | 'frost' | 'graphite' | 'ocean' | 'orange' | 'rose' | 'stone';
+    serverName: string;
+    appLaunch?: {
+        apps?: {
+            [key: string]: {
+                bounds?: {
+                    height: number;
+                    width: number;
+                    x: number;
+                    y: number;
+                };
+                mode?: 'tab' | 'window';
+            };
+        };
+        mode?: 'tab' | 'window';
+    };
+    appearance?: {
+        accent?: string | null;
+        chromeBlur?: number | null;
+        chromeOpacity?: number | null;
+        darkMaterial?: {
+            chromeBlur?: number | null;
+            chromeOpacity?: number | null;
+            glassBlur?: number | null;
+            glassTint?: number | null;
+            materialMode?: 'custom' | 'default';
+            surfaceOpacity?: number | null;
+            transparency?: 'glass' | 'solid' | 'system';
+        } | null;
+        dockAutoHide?: boolean;
+        dockPins?: Array<string>;
+        dockPlacement?: 'bottom' | 'left' | 'right';
+        dockSize?: 'comfortable' | 'compact' | 'large';
+        glassBlur?: number | null;
+        glassTint?: number | null;
+        lightMaterial?: {
+            chromeBlur?: number | null;
+            chromeOpacity?: number | null;
+            glassBlur?: number | null;
+            glassTint?: number | null;
+            materialMode?: 'custom' | 'default';
+            surfaceOpacity?: number | null;
+            transparency?: 'glass' | 'solid' | 'system';
+        } | null;
+        lowEffects?: boolean;
+        materialMode?: 'custom' | 'default';
+        motion?: 'reduced' | 'system';
+        oledDark?: boolean;
+        surfaceOpacity?: number | null;
+        textScale?: number;
+        themeColour?: string | null;
+        timeFormat?: '12h' | '24h';
+        transparency?: 'glass' | 'solid' | 'system';
+        wallpaperBlur?: number;
+        wallpaperColours?: boolean;
+        wallpaperDim?: number;
+        wallpaperFit?: 'contain' | 'cover';
+        wallpaperImage?: string | null;
+        wallpaperUnsplash?: string | null;
+        wallpaperX?: number;
+        wallpaperY?: number;
+    };
+    hiddenStoreRecommendationCategories?: Array<'ai' | 'automation' | 'development' | 'finance' | 'gaming' | 'media' | 'utilities'>;
+    mode?: 'dark' | 'light' | 'system';
+    showLogicalProcessors?: boolean;
+    showStoreRecommendations?: boolean;
+    toolbarOrder?: Array<'battery' | 'connection' | 'logout' | 'mode' | 'search' | 'tasks'>;
+    wallpaper?: 'canopy' | 'sandstone' | 'tidal';
+    wallpaperMode?: 'custom' | 'theme';
+    wallpaperPreset?: 'amber' | 'blush' | 'burgundy' | 'forest' | 'frost' | 'graphite' | 'ocean' | 'orange' | 'rose' | 'stone';
+    windows?: {
+        'app-store'?: {
+            bounds: {
+                height: number;
+                width: number;
+                x: number;
+                y: number;
+            };
+            mode: 'floating' | 'focused' | 'left' | 'maximized' | 'right';
+            restoreMode?: 'floating' | 'focused' | 'left' | 'right';
+        };
+        apps?: {
+            bounds: {
+                height: number;
+                width: number;
+                x: number;
+                y: number;
+            };
+            mode: 'floating' | 'focused' | 'left' | 'maximized' | 'right';
+            restoreMode?: 'floating' | 'focused' | 'left' | 'right';
+        };
+        monitor?: {
+            bounds: {
+                height: number;
+                width: number;
+                x: number;
+                y: number;
+            };
+            mode: 'floating' | 'focused' | 'left' | 'maximized' | 'right';
+            restoreMode?: 'floating' | 'focused' | 'left' | 'right';
+        };
+        settings?: {
+            bounds: {
+                height: number;
+                width: number;
+                x: number;
+                y: number;
+            };
+            mode: 'floating' | 'focused' | 'left' | 'maximized' | 'right';
+            restoreMode?: 'floating' | 'focused' | 'left' | 'right';
+        };
+        tasks?: {
+            bounds: {
+                height: number;
+                width: number;
+                x: number;
+                y: number;
+            };
+            mode: 'floating' | 'focused' | 'left' | 'maximized' | 'right';
+            restoreMode?: 'floating' | 'focused' | 'left' | 'right';
+        };
+        updates?: {
+            bounds: {
+                height: number;
+                width: number;
+                x: number;
+                y: number;
+            };
+            mode: 'floating' | 'focused' | 'left' | 'maximized' | 'right';
+            restoreMode?: 'floating' | 'focused' | 'left' | 'right';
+        };
+    };
+    workspace?: {
+        hidden?: Array<'activity' | 'applications' | 'attention' | 'storage'>;
+        order?: Array<'activity' | 'applications' | 'attention' | 'storage'>;
+        wide?: Array<'activity' | 'applications' | 'attention' | 'storage'>;
+        layout?: {
+            appView: 'cards' | 'icons';
+            version: 1;
+            widgets: {
+                [key: string]: {
+                    columns: 2 | 3 | 4;
+                    height: number;
+                };
+            };
+        };
+        pinnedApps?: Array<string>;
+        showAllApps?: boolean;
+    };
 };
 
-export type UpdateAppConfigBodyDto = {
-    config: string;
+export type UninstallDockerAppDto = {
+    name: string;
+    reviewId: string;
 };
 
-export type AppConfigSuccessDto = {
+export type LinksDto = {
+    links: Array<{
+        description: string | null;
+        iconUrl: string | '' | null;
+        id: number;
+        isVisibleOnGuestDashboard: boolean;
+        title: string;
+        url: string;
+        userId: number;
+    }>;
+    editCapabilities?: Array<'guest-visibility-patch.v1'>;
+};
+
+export type LinkBodyDto = {
+    title: string;
+    url: string;
+    description?: string;
+    iconUrl?: string | '';
+    isVisibleOnGuestDashboard?: boolean;
+};
+
+export type EditLinkBodyDto = {
+    description?: string;
+    iconUrl?: string | '';
+    isVisibleOnGuestDashboard?: boolean;
+    title?: string;
+    url?: string;
+};
+
+export type SearchAppsDto = {
+    data: Array<{
+        available: boolean;
+        categories: Array<'ai' | 'automation' | 'books' | 'data' | 'development' | 'featured' | 'finance' | 'gaming' | 'media' | 'music' | 'network' | 'photography' | 'security' | 'social' | 'utilities'>;
+        created_at: number;
+        deprecated: boolean;
+        id: string;
+        name: string;
+        short_desc: string;
+        supported_architectures: Array<'amd64' | 'arm64'>;
+        urn: string;
+        catalog_format?: 'orbis' | 'umbrel';
+        compatibility?: {
+            reasons: Array<string>;
+            requires_auth: boolean;
+            supported: boolean;
+        };
+        gallery?: Array<string>;
+        release_notes?: string;
+    }>;
+    total: number;
+    nextCursor?: string | null;
+};
+
+export type PullDto = {
     success: boolean;
 };
 
-export type TemplateDiffDto = {
-    hasChanges: boolean;
-    localVersion: number;
-    templateVersion: number;
-    current?: string;
-    template?: string;
+export type CreateAppStoreBodyDto = {
+    name: string;
+    url: string;
+};
+
+export type AppStoreDto = {
+    enabled: boolean;
+    name: string;
+    slug: string;
+    url: string;
+};
+
+export type AllAppStoresDto = {
+    appStores: Array<{
+        enabled: boolean;
+        name: string;
+        slug: string;
+        url: string;
+    }>;
+};
+
+export type UpdateAppStoreBodyDto = {
+    enabled?: boolean;
+    name?: string;
+};
+
+export type UpdateAppStoreDto = {
+    success: boolean;
+};
+
+export type LoadDto = {
+    cpuLoad: number;
+    diskSize: number;
+    diskUsed: number;
+    memorySource: 'cgroup' | 'containers' | 'host' | 'runtime';
+    memoryTotal: number;
+    percentUsed: number;
+    percentUsedMemory: number;
+};
+
+export type InstallThemeDto = {
+    id: string;
+    version?: string;
+};
+
+export type SelectThemeDto = {
+    selected: {
+        id: string;
+        version: string;
+    } | null;
+};
+
+export type GetUserConfigDto = {
+    appEnv: string | null;
+    dockerCompose: string | null;
+    isEnabled: boolean;
+    sourceCompose: string | null;
+};
+
+export type UpdateUserConfigDto = {
+    appEnv: string;
+    dockerCompose: string;
 };
 
 export type UserContextData = {
@@ -822,407 +1010,240 @@ export type AcknowledgeWelcomeResponses = {
     200: unknown;
 };
 
-export type SystemLoadData = {
+export type CheckData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/system/load';
+    url: '/api/health';
 };
 
-export type SystemLoadResponses = {
-    default: LoadDto;
-};
-
-export type SystemLoadResponse = SystemLoadResponses[keyof SystemLoadResponses];
-
-export type DownloadLocalCertificateData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/system/certificate';
-};
-
-export type DownloadLocalCertificateResponses = {
-    200: unknown;
-};
-
-export type GetTranslationData = {
-    body?: never;
-    path: {
-        ns: string;
-        lng: string;
+export type CheckErrors = {
+    /**
+     * The Health Check is not successful
+     */
+    503: {
+        status?: string;
+        info?: {
+            [key: string]: {
+                status: string;
+                [key: string]: unknown;
+            };
+        };
+        error?: {
+            [key: string]: {
+                status: string;
+                [key: string]: unknown;
+            };
+        };
+        details?: {
+            [key: string]: {
+                status: string;
+                [key: string]: unknown;
+            };
+        };
     };
-    query?: never;
-    url: '/api/i18n/locales/{ns}/{lng}.json';
 };
 
-export type GetTranslationResponses = {
-    200: unknown;
-};
+export type CheckError = CheckErrors[keyof CheckErrors];
 
-export type LoginData = {
-    body: LoginBody;
-    path?: never;
-    query?: never;
-    url: '/api/auth/login';
-};
-
-export type LoginResponses = {
-    default: LoginDto;
-};
-
-export type LoginResponse = LoginResponses[keyof LoginResponses];
-
-export type VerifyTotpData = {
-    body: VerifyTotpBody;
-    path?: never;
-    query?: never;
-    url: '/api/auth/verify-totp';
-};
-
-export type VerifyTotpResponses = {
-    default: LoginDto;
-};
-
-export type VerifyTotpResponse = VerifyTotpResponses[keyof VerifyTotpResponses];
-
-export type RegisterData = {
-    body: RegisterBody;
-    path?: never;
-    query?: never;
-    url: '/api/auth/register';
-};
-
-export type RegisterResponses = {
-    default: RegisterDto;
-};
-
-export type RegisterResponse = RegisterResponses[keyof RegisterResponses];
-
-export type LogoutData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/auth/logout';
-};
-
-export type LogoutResponses = {
-    201: unknown;
-};
-
-export type ForwardAuthData = {
-    body: ForwardAuthBody;
-    path?: never;
-    query?: never;
-    url: '/api/auth/forward-auth';
-};
-
-export type ForwardAuthResponses = {
-    201: unknown;
-};
-
-export type ChangeUsernameData = {
-    body: ChangeUsernameBody;
-    path?: never;
-    query?: never;
-    url: '/api/auth/username';
-};
-
-export type ChangeUsernameResponses = {
-    200: unknown;
-};
-
-export type ChangePasswordData = {
-    body: ChangePasswordBody;
-    path?: never;
-    query?: never;
-    url: '/api/auth/password';
-};
-
-export type ChangePasswordResponses = {
-    200: unknown;
-};
-
-export type GetTotpUriData = {
-    body: GetTotpUriBody;
-    path?: never;
-    query?: never;
-    url: '/api/auth/totp/get-uri';
-};
-
-export type GetTotpUriResponses = {
-    default: GetTotpUriDto;
-};
-
-export type GetTotpUriResponse = GetTotpUriResponses[keyof GetTotpUriResponses];
-
-export type SetupTotpData = {
-    body: SetupTotpBody;
-    path?: never;
-    query?: never;
-    url: '/api/auth/totp/setup';
-};
-
-export type SetupTotpResponses = {
-    200: unknown;
-};
-
-export type DisableTotpData = {
-    body: DisableTotpBody;
-    path?: never;
-    query?: never;
-    url: '/api/auth/totp/disable';
-};
-
-export type DisableTotpResponses = {
-    200: unknown;
-};
-
-export type ResetPasswordData = {
-    body: ResetPasswordBody;
-    path?: never;
-    query?: never;
-    url: '/api/auth/reset-password';
-};
-
-export type ResetPasswordResponses = {
-    default: ResetPasswordDto;
-};
-
-export type ResetPasswordResponse = ResetPasswordResponses[keyof ResetPasswordResponses];
-
-export type TraefikData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/auth/traefik';
-};
-
-export type TraefikResponses = {
-    200: unknown;
-};
-
-export type GetInstalledAppsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/apps/installed';
-};
-
-export type GetInstalledAppsResponses = {
-    default: MyAppsDto;
-};
-
-export type GetInstalledAppsResponse = GetInstalledAppsResponses[keyof GetInstalledAppsResponses];
-
-export type GetGuestAppsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/apps/guest';
-};
-
-export type GetGuestAppsResponses = {
-    default: GuestAppsDto;
-};
-
-export type GetGuestAppsResponse = GetGuestAppsResponses[keyof GetGuestAppsResponses];
-
-export type GetRandomPortData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/apps/random-port';
-};
-
-export type GetRandomPortResponses = {
-    default: GetRandomPortDto;
-};
-
-export type GetRandomPortResponse = GetRandomPortResponses[keyof GetRandomPortResponses];
-
-export type GetAppData = {
-    body?: never;
-    path: {
-        urn: string;
+export type CheckResponses = {
+    /**
+     * The Health Check is successful
+     */
+    200: {
+        status?: string;
+        info?: {
+            [key: string]: {
+                status: string;
+                [key: string]: unknown;
+            };
+        };
+        error?: {
+            [key: string]: {
+                status: string;
+                [key: string]: unknown;
+            };
+        };
+        details?: {
+            [key: string]: {
+                status: string;
+                [key: string]: unknown;
+            };
+        };
     };
-    query?: never;
-    url: '/api/apps/{urn}';
 };
 
-export type GetAppResponses = {
-    default: GetAppDto;
-};
+export type CheckResponse = CheckResponses[keyof CheckResponses];
 
-export type GetAppResponse = GetAppResponses[keyof GetAppResponses];
-
-export type GetAppComposeDiffData = {
+export type InstallationStatusData = {
     body?: never;
-    path: {
-        urn: string;
-    };
+    path?: never;
     query?: never;
-    url: '/api/apps/{urn}/compose-diff';
+    url: '/api/installation/status';
 };
 
-export type GetAppComposeDiffResponses = {
-    default: GetComposeDiffDto;
-};
-
-export type GetAppComposeDiffResponse = GetAppComposeDiffResponses[keyof GetAppComposeDiffResponses];
-
-export type GetAppConfigDiffData = {
-    body?: never;
-    path: {
-        urn: string;
-    };
-    query?: never;
-    url: '/api/apps/{urn}/config-diff';
-};
-
-export type GetAppConfigDiffResponses = {
-    default: GetConfigDiffDto;
-};
-
-export type GetAppConfigDiffResponse = GetAppConfigDiffResponses[keyof GetAppConfigDiffResponses];
-
-export type IgnoreAppVersionData = {
-    body?: never;
-    path: {
-        urn: string;
-    };
-    query?: never;
-    url: '/api/apps/{urn}/ignore-version';
-};
-
-export type IgnoreAppVersionResponses = {
+export type InstallationStatusResponses = {
     200: unknown;
 };
 
-export type UnignoreAppVersionData = {
+export type BrowserPresencePresenceData = {
     body?: never;
-    path: {
-        urn: string;
-    };
+    path?: never;
     query?: never;
-    url: '/api/apps/{urn}/unignore-version';
+    url: '/api/monitoring/presence';
 };
 
-export type UnignoreAppVersionResponses = {
+export type BrowserPresencePresenceResponses = {
+    204: void;
+};
+
+export type BrowserPresencePresenceResponse = BrowserPresencePresenceResponses[keyof BrowserPresencePresenceResponses];
+
+export type AppEventsData = {
+    body?: never;
+    path?: never;
+    query: {
+        client: string;
+    };
+    url: '/api/sse/app';
+};
+
+export type AppEventsResponses = {
     200: unknown;
 };
 
-export type SearchAppsData = {
+export type AppLogsEventsData = {
+    body?: never;
+    path?: never;
+    query: {
+        appUrn: string;
+        maxLines?: number | string;
+    };
+    url: '/api/sse/app-logs';
+};
+
+export type AppLogsEventsResponses = {
+    200: unknown;
+};
+
+export type RuntipiLogsEventsData = {
     body?: never;
     path?: never;
     query?: {
-        category?: 'ai' | 'automation' | 'books' | 'data' | 'development' | 'featured' | 'finance' | 'gaming' | 'media' | 'music' | 'network' | 'photography' | 'security' | 'social' | 'utilities';
-        cursor?: string;
-        pageSize?: number | string;
-        search?: string;
-        storeId?: string;
+        maxLines?: number | string;
     };
-    url: '/api/marketplace/apps/search';
+    url: '/api/sse/runtipi-logs';
 };
 
-export type SearchAppsResponses = {
-    default: SearchAppsDto;
+export type RuntipiLogsEventsResponses = {
+    200: unknown;
 };
 
-export type SearchAppsResponse = SearchAppsResponses[keyof SearchAppsResponses];
-
-export type GetImageData = {
+export type GetEditableAppConfigData = {
     body?: never;
     path: {
         urn: string;
     };
     query?: never;
-    url: '/api/marketplace/apps/{urn}/image';
+    url: '/api/apps/{urn}/config';
 };
 
-export type GetImageResponses = {
-    200: unknown;
+export type GetEditableAppConfigResponses = {
+    default: GetAppConfigDto;
 };
 
-export type PullAppStoresData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/marketplace/pull';
-};
+export type GetEditableAppConfigResponse = GetEditableAppConfigResponses[keyof GetEditableAppConfigResponses];
 
-export type PullAppStoresResponses = {
-    default: PullDto;
-};
-
-export type PullAppStoresResponse = PullAppStoresResponses[keyof PullAppStoresResponses];
-
-export type CreateAppStoreData = {
-    body: CreateAppStoreBodyDto;
-    path?: never;
-    query?: never;
-    url: '/api/marketplace/create';
-};
-
-export type CreateAppStoreResponses = {
-    default: AppStoreDto;
-};
-
-export type CreateAppStoreResponse = CreateAppStoreResponses[keyof CreateAppStoreResponses];
-
-export type GetAllAppStoresData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/marketplace/all';
-};
-
-export type GetAllAppStoresResponses = {
-    default: AllAppStoresDto;
-};
-
-export type GetAllAppStoresResponse = GetAllAppStoresResponses[keyof GetAllAppStoresResponses];
-
-export type GetEnabledAppStoresData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/marketplace/enabled';
-};
-
-export type GetEnabledAppStoresResponses = {
-    default: AllAppStoresDto;
-};
-
-export type GetEnabledAppStoresResponse = GetEnabledAppStoresResponses[keyof GetEnabledAppStoresResponses];
-
-export type DeleteAppStoreData = {
-    body?: never;
+export type UpdateEditableAppConfigData = {
+    body: UpdateAppConfigBodyDto;
     path: {
-        id: string;
+        urn: string;
     };
     query?: never;
-    url: '/api/marketplace/{id}';
+    url: '/api/apps/{urn}/config';
 };
 
-export type DeleteAppStoreResponses = {
-    200: unknown;
+export type UpdateEditableAppConfigResponses = {
+    default: AppConfigSuccessDto;
 };
 
-export type UpdateAppStoreData = {
-    body: UpdateAppStoreBodyDto;
+export type UpdateEditableAppConfigResponse = UpdateEditableAppConfigResponses[keyof UpdateEditableAppConfigResponses];
+
+export type GetTemplateDiffData = {
+    body?: never;
     path: {
-        id: string;
+        urn: string;
     };
     query?: never;
-    url: '/api/marketplace/{id}';
+    url: '/api/apps/{urn}/template/diff';
 };
 
-export type UpdateAppStoreResponses = {
-    default: UpdateAppStoreDto;
+export type GetTemplateDiffResponses = {
+    default: TemplateDiffDto;
 };
 
-export type UpdateAppStoreResponse = UpdateAppStoreResponses[keyof UpdateAppStoreResponses];
+export type GetTemplateDiffResponse = GetTemplateDiffResponses[keyof GetTemplateDiffResponses];
+
+export type SyncWithTemplateData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/apps/{urn}/template/sync';
+};
+
+export type SyncWithTemplateResponses = {
+    default: AppConfigSuccessDto;
+};
+
+export type SyncWithTemplateResponse = SyncWithTemplateResponses[keyof SyncWithTemplateResponses];
+
+export type GetAppJobData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: {
+        requestId?: string;
+    };
+    url: '/api/app-lifecycle/{urn}/job';
+};
+
+export type GetAppJobResponses = {
+    default: AppJobDto;
+};
+
+export type GetAppJobResponse = GetAppJobResponses[keyof GetAppJobResponses];
+
+export type CancelAppJobData = {
+    body?: never;
+    path: {
+        urn: string;
+        requestId: string;
+    };
+    query?: never;
+    url: '/api/app-lifecycle/{urn}/jobs/{requestId}/cancel';
+};
+
+export type CancelAppJobResponses = {
+    default: AppJobDto;
+};
+
+export type CancelAppJobResponse = CancelAppJobResponses[keyof CancelAppJobResponses];
+
+export type AppLifecycleReviewInterruptedInstallData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/app-lifecycle/{urn}/install-recovery';
+};
+
+export type AppLifecycleReviewInterruptedInstallResponses = {
+    200: unknown;
+};
 
 export type InstallAppData = {
     body: AppFormBody;
@@ -1388,6 +1409,392 @@ export type RestartAllAppsResponses = {
     201: unknown;
 };
 
+export type AppEmbeddingCheckData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/apps/{urn}/embedding-compatibility';
+};
+
+export type AppEmbeddingCheckResponses = {
+    200: unknown;
+};
+
+export type GetInstalledAppsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/apps/installed';
+};
+
+export type GetInstalledAppsResponses = {
+    default: MyAppsDto;
+};
+
+export type GetInstalledAppsResponse = GetInstalledAppsResponses[keyof GetInstalledAppsResponses];
+
+export type GetGuestAppsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/apps/guest';
+};
+
+export type GetGuestAppsResponses = {
+    default: GuestAppsDto;
+};
+
+export type GetGuestAppsResponse = GetGuestAppsResponses[keyof GetGuestAppsResponses];
+
+export type GetRandomPortData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/apps/random-port';
+};
+
+export type GetRandomPortResponses = {
+    default: GetRandomPortDto;
+};
+
+export type GetRandomPortResponse = GetRandomPortResponses[keyof GetRandomPortResponses];
+
+export type GetAppData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/apps/{urn}';
+};
+
+export type GetAppResponses = {
+    default: GetAppDto;
+};
+
+export type GetAppResponse = GetAppResponses[keyof GetAppResponses];
+
+export type GetAppComposeDiffData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/apps/{urn}/compose-diff';
+};
+
+export type GetAppComposeDiffResponses = {
+    default: GetComposeDiffDto;
+};
+
+export type GetAppComposeDiffResponse = GetAppComposeDiffResponses[keyof GetAppComposeDiffResponses];
+
+export type GetAppConfigDiffData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/apps/{urn}/config-diff';
+};
+
+export type GetAppConfigDiffResponses = {
+    default: GetConfigDiffDto;
+};
+
+export type GetAppConfigDiffResponse = GetAppConfigDiffResponses[keyof GetAppConfigDiffResponses];
+
+export type IgnoreAppVersionData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/apps/{urn}/ignore-version';
+};
+
+export type IgnoreAppVersionResponses = {
+    200: unknown;
+};
+
+export type UnignoreAppVersionData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/apps/{urn}/unignore-version';
+};
+
+export type UnignoreAppVersionResponses = {
+    200: unknown;
+};
+
+export type AccountSecurityReadData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/account-security';
+};
+
+export type AccountSecurityReadResponses = {
+    200: unknown;
+};
+
+export type AccountSecurityUpdateData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/account-security';
+};
+
+export type AccountSecurityUpdateResponses = {
+    200: unknown;
+};
+
+export type LoginData = {
+    body: LoginBody;
+    path?: never;
+    query?: never;
+    url: '/api/auth/login';
+};
+
+export type LoginResponses = {
+    default: LoginDto;
+};
+
+export type LoginResponse = LoginResponses[keyof LoginResponses];
+
+export type AuthPasskeyAvailabilityData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/passkeys/availability';
+};
+
+export type AuthPasskeyAvailabilityResponses = {
+    200: unknown;
+};
+
+export type AuthListPasskeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/passkeys';
+};
+
+export type AuthListPasskeysResponses = {
+    200: unknown;
+};
+
+export type AuthReadPasskeyPolicyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/passkeys/policy';
+};
+
+export type AuthReadPasskeyPolicyResponses = {
+    200: unknown;
+};
+
+export type AuthUpdatePasskeyPolicyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/passkeys/policy';
+};
+
+export type AuthUpdatePasskeyPolicyResponses = {
+    200: unknown;
+};
+
+export type AuthRegisterPasskeyOptionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/passkeys/register/options';
+};
+
+export type AuthRegisterPasskeyOptionsResponses = {
+    201: unknown;
+};
+
+export type AuthRegisterPasskeyVerifyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/passkeys/register/verify';
+};
+
+export type AuthRegisterPasskeyVerifyResponses = {
+    201: unknown;
+};
+
+export type AuthRemovePasskeyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/passkeys/remove';
+};
+
+export type AuthRemovePasskeyResponses = {
+    201: unknown;
+};
+
+export type AuthPasskeyLoginOptionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/passkeys/login/options';
+};
+
+export type AuthPasskeyLoginOptionsResponses = {
+    201: unknown;
+};
+
+export type AuthPasskeyLoginVerifyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/passkeys/login/verify';
+};
+
+export type AuthPasskeyLoginVerifyResponses = {
+    201: unknown;
+};
+
+export type VerifyTotpData = {
+    body: VerifyTotpBody;
+    path?: never;
+    query?: never;
+    url: '/api/auth/verify-totp';
+};
+
+export type VerifyTotpResponses = {
+    default: LoginDto;
+};
+
+export type VerifyTotpResponse = VerifyTotpResponses[keyof VerifyTotpResponses];
+
+export type RegisterData = {
+    body: RegisterBody;
+    path?: never;
+    query?: never;
+    url: '/api/auth/register';
+};
+
+export type RegisterResponses = {
+    default: RegisterDto;
+};
+
+export type RegisterResponse = RegisterResponses[keyof RegisterResponses];
+
+export type LogoutData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/logout';
+};
+
+export type LogoutResponses = {
+    201: unknown;
+};
+
+export type ForwardAuthData = {
+    body: ForwardAuthBody;
+    path?: never;
+    query?: never;
+    url: '/api/auth/forward-auth';
+};
+
+export type ForwardAuthResponses = {
+    201: unknown;
+};
+
+export type ChangeUsernameData = {
+    body: ChangeUsernameBody;
+    path?: never;
+    query?: never;
+    url: '/api/auth/username';
+};
+
+export type ChangeUsernameResponses = {
+    200: unknown;
+};
+
+export type ChangePasswordData = {
+    body: ChangePasswordBody;
+    path?: never;
+    query?: never;
+    url: '/api/auth/password';
+};
+
+export type ChangePasswordResponses = {
+    200: unknown;
+};
+
+export type GetTotpUriData = {
+    body: GetTotpUriBody;
+    path?: never;
+    query?: never;
+    url: '/api/auth/totp/get-uri';
+};
+
+export type GetTotpUriResponses = {
+    default: GetTotpUriDto;
+};
+
+export type GetTotpUriResponse = GetTotpUriResponses[keyof GetTotpUriResponses];
+
+export type SetupTotpData = {
+    body: SetupTotpBody;
+    path?: never;
+    query?: never;
+    url: '/api/auth/totp/setup';
+};
+
+export type SetupTotpResponses = {
+    200: unknown;
+};
+
+export type DisableTotpData = {
+    body: DisableTotpBody;
+    path?: never;
+    query?: never;
+    url: '/api/auth/totp/disable';
+};
+
+export type DisableTotpResponses = {
+    200: unknown;
+};
+
+export type ResetPasswordData = {
+    body: ResetPasswordBody;
+    path?: never;
+    query?: never;
+    url: '/api/auth/reset-password';
+};
+
+export type ResetPasswordResponses = {
+    default: ResetPasswordDto;
+};
+
+export type ResetPasswordResponse = ResetPasswordResponses[keyof ResetPasswordResponses];
+
+export type TraefikData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/traefik';
+};
+
+export type TraefikResponses = {
+    200: unknown;
+};
+
 export type BackupAppData = {
     body?: never;
     path: {
@@ -1484,218 +1891,273 @@ export type UploadBackupResponses = {
     201: unknown;
 };
 
-export type AppEventsData = {
+export type ClusterPairingAccessData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/sse/app';
+    url: '/api/cluster/pairing/access';
 };
 
-export type AppEventsResponses = {
+export type ClusterPairingAccessResponses = {
     200: unknown;
 };
 
-export type AppLogsEventsData = {
+export type ClusterPairingConnectData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/sse/app-logs';
+    url: '/api/cluster/pairing/connect';
 };
 
-export type AppLogsEventsResponses = {
+export type ClusterPairingConnectResponses = {
     200: unknown;
 };
 
-export type RuntipiLogsEventsData = {
+export type ClusterPairingCompleteData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/sse/runtipi-logs';
+    url: '/api/cluster/pairing/complete';
 };
 
-export type RuntipiLogsEventsResponses = {
+export type ClusterPairingCompleteResponses = {
     200: unknown;
 };
 
-export type GetGuestLinksData = {
+export type ClusterPairingChallengeData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/links/guest';
+    url: '/api/cluster/pairing/challenge';
 };
 
-export type GetGuestLinksResponses = {
-    default: LinksDto;
+export type ClusterPairingChallengeResponses = {
+    200: unknown;
 };
 
-export type GetGuestLinksResponse = GetGuestLinksResponses[keyof GetGuestLinksResponses];
-
-export type GetLinksData = {
+export type ClusterPairingAuthorizeData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/links';
+    url: '/api/cluster/pairing/authorize';
 };
 
-export type GetLinksResponses = {
-    default: LinksDto;
+export type ClusterPairingAuthorizeResponses = {
+    200: unknown;
 };
 
-export type GetLinksResponse = GetLinksResponses[keyof GetLinksResponses];
-
-export type CreateLinkData = {
-    body: LinkBodyDto;
+export type ClusterSyncStatusData = {
+    body?: never;
     path?: never;
     query?: never;
-    url: '/api/links';
+    url: '/api/cluster/settings-sync';
 };
 
-export type CreateLinkResponses = {
+export type ClusterSyncStatusResponses = {
+    200: unknown;
+};
+
+export type ClusterSyncReceivingData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/cluster/settings-sync/receiving';
+};
+
+export type ClusterSyncReceivingResponses = {
+    200: unknown;
+};
+
+export type ClusterSyncSaveData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/cluster/settings-sync/plans/{id}';
+};
+
+export type ClusterSyncSaveResponses = {
+    200: unknown;
+};
+
+export type ClusterSyncAutomaticData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/cluster/settings-sync/plans/{id}/automatic';
+};
+
+export type ClusterSyncAutomaticResponses = {
+    200: unknown;
+};
+
+export type ClusterSyncRunData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/cluster/settings-sync/plans/{id}/run';
+};
+
+export type ClusterSyncRunResponses = {
     201: unknown;
 };
 
-export type DeleteLinkData = {
-    body?: never;
-    path: {
-        id: number;
-    };
-    query?: never;
-    url: '/api/links/{id}';
-};
-
-export type DeleteLinkResponses = {
-    200: unknown;
-};
-
-export type EditLinkData = {
-    body: EditLinkBodyDto;
-    path: {
-        id: number;
-    };
-    query?: never;
-    url: '/api/links/{id}';
-};
-
-export type EditLinkResponses = {
-    200: unknown;
-};
-
-export type CheckData = {
+export type ClusterSyncPeerData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/health';
+    url: '/api/cluster/settings-sync/peer';
 };
 
-export type CheckErrors = {
-    /**
-     * The Health Check is not successful
-     */
-    503: {
-        status?: string;
-        info?: {
-            [key: string]: {
-                status: string;
-                [key: string]: unknown;
-            };
-        };
-        error?: {
-            [key: string]: {
-                status: string;
-                [key: string]: unknown;
-            };
-        };
-        details?: {
-            [key: string]: {
-                status: string;
-                [key: string]: unknown;
-            };
-        };
-    };
-};
-
-export type CheckError = CheckErrors[keyof CheckErrors];
-
-export type CheckResponses = {
-    /**
-     * The Health Check is successful
-     */
-    200: {
-        status?: string;
-        info?: {
-            [key: string]: {
-                status: string;
-                [key: string]: unknown;
-            };
-        };
-        error?: {
-            [key: string]: {
-                status: string;
-                [key: string]: unknown;
-            };
-        };
-        details?: {
-            [key: string]: {
-                status: string;
-                [key: string]: unknown;
-            };
-        };
-    };
-};
-
-export type CheckResponse = CheckResponses[keyof CheckResponses];
-
-export type GetUserConfigData = {
-    body?: never;
-    path: {
-        urn: string;
-    };
-    query?: never;
-    url: '/api/user-config/{urn}';
-};
-
-export type GetUserConfigResponses = {
-    default: GetUserConfigDto;
-};
-
-export type GetUserConfigResponse = GetUserConfigResponses[keyof GetUserConfigResponses];
-
-export type UpdateUserConfigData = {
-    body: UpdateUserConfigDto;
-    path: {
-        urn: string;
-    };
-    query?: never;
-    url: '/api/user-config/{urn}';
-};
-
-export type UpdateUserConfigResponses = {
-    200: unknown;
-};
-
-export type EnableUserConfigData = {
-    body?: never;
-    path: {
-        urn: string;
-    };
-    query?: never;
-    url: '/api/user-config/{urn}/enable';
-};
-
-export type EnableUserConfigResponses = {
+export type ClusterSyncPeerResponses = {
     201: unknown;
 };
 
-export type DisableUserConfigData = {
+export type ClusterDescribeData = {
     body?: never;
-    path: {
-        urn: string;
-    };
+    path?: never;
     query?: never;
-    url: '/api/user-config/{urn}/disable';
+    url: '/api/cluster';
 };
 
-export type DisableUserConfigResponses = {
+export type ClusterDescribeResponses = {
+    200: unknown;
+};
+
+export type ClusterRenameData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/cluster';
+};
+
+export type ClusterRenameResponses = {
+    200: unknown;
+};
+
+export type ClusterCreateData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/cluster/create';
+};
+
+export type ClusterCreateResponses = {
+    201: unknown;
+};
+
+export type ClusterInviteData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/cluster/invite';
+};
+
+export type ClusterInviteResponses = {
+    201: unknown;
+};
+
+export type ClusterPairData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/cluster/pair';
+};
+
+export type ClusterPairResponses = {
+    201: unknown;
+};
+
+export type ClusterAcceptData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/cluster/accept';
+};
+
+export type ClusterAcceptResponses = {
+    201: unknown;
+};
+
+export type ClusterPeerData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/cluster/peer';
+};
+
+export type ClusterPeerResponses = {
+    201: unknown;
+};
+
+export type ClusterLeaveData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/cluster/membership';
+};
+
+export type ClusterLeaveResponses = {
+    200: unknown;
+};
+
+export type ClusterRemoveData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query: {
+        forget: string;
+    };
+    url: '/api/cluster/servers/{id}';
+};
+
+export type ClusterRemoveResponses = {
+    200: unknown;
+};
+
+export type ClusterReadData = {
+    body?: never;
+    path: {
+        id: string;
+        resource: string;
+    };
+    query?: never;
+    url: '/api/cluster/servers/{id}/read/{resource}';
+};
+
+export type ClusterReadResponses = {
+    200: unknown;
+};
+
+export type ClusterIconData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/cluster/servers/{id}/icon';
+};
+
+export type ClusterIconResponses = {
+    200: unknown;
+};
+
+export type ClusterCommandData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/cluster/servers/{id}/command';
+};
+
+export type ClusterCommandResponses = {
     201: unknown;
 };
 
@@ -1755,66 +2217,6 @@ export type UpdateAppMetadataData = {
 export type UpdateAppMetadataResponses = {
     default: unknown;
 };
-
-export type GetEditableAppConfigData = {
-    body?: never;
-    path: {
-        urn: string;
-    };
-    query?: never;
-    url: '/api/apps/{urn}/config';
-};
-
-export type GetEditableAppConfigResponses = {
-    default: GetAppConfigDto;
-};
-
-export type GetEditableAppConfigResponse = GetEditableAppConfigResponses[keyof GetEditableAppConfigResponses];
-
-export type UpdateEditableAppConfigData = {
-    body: UpdateAppConfigBodyDto;
-    path: {
-        urn: string;
-    };
-    query?: never;
-    url: '/api/apps/{urn}/config';
-};
-
-export type UpdateEditableAppConfigResponses = {
-    default: AppConfigSuccessDto;
-};
-
-export type UpdateEditableAppConfigResponse = UpdateEditableAppConfigResponses[keyof UpdateEditableAppConfigResponses];
-
-export type GetTemplateDiffData = {
-    body?: never;
-    path: {
-        urn: string;
-    };
-    query?: never;
-    url: '/api/apps/{urn}/template/diff';
-};
-
-export type GetTemplateDiffResponses = {
-    default: TemplateDiffDto;
-};
-
-export type GetTemplateDiffResponse = GetTemplateDiffResponses[keyof GetTemplateDiffResponses];
-
-export type SyncWithTemplateData = {
-    body?: never;
-    path: {
-        urn: string;
-    };
-    query?: never;
-    url: '/api/apps/{urn}/template/sync';
-};
-
-export type SyncWithTemplateResponses = {
-    default: AppConfigSuccessDto;
-};
-
-export type SyncWithTemplateResponse = SyncWithTemplateResponses[keyof SyncWithTemplateResponses];
 
 export type SeedDatabaseData = {
     body?: never;
@@ -1890,5 +2292,2511 @@ export type UninstallAllAppsData = {
 };
 
 export type UninstallAllAppsResponses = {
+    201: unknown;
+};
+
+export type DesktopPreferencesWallpaperInfoData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/desktop-preferences/wallpaper/info';
+};
+
+export type DesktopPreferencesWallpaperInfoResponses = {
+    200: unknown;
+};
+
+export type DesktopPreferencesDeleteWallpaperData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/desktop-preferences/wallpaper';
+};
+
+export type DesktopPreferencesDeleteWallpaperResponses = {
+    200: unknown;
+};
+
+export type DesktopPreferencesWallpaperData = {
+    body?: never;
+    path?: never;
+    query: {
+        version: string;
+    };
+    url: '/api/desktop-preferences/wallpaper';
+};
+
+export type DesktopPreferencesWallpaperResponses = {
+    200: unknown;
+};
+
+export type DesktopPreferencesUploadWallpaperData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/desktop-preferences/wallpaper';
+};
+
+export type DesktopPreferencesUploadWallpaperResponses = {
+    201: unknown;
+};
+
+export type DesktopPreferencesOnboardingData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/desktop-preferences/onboarding';
+};
+
+export type DesktopPreferencesOnboardingResponses = {
+    default: {
+        complete: boolean;
+    };
+};
+
+export type DesktopPreferencesOnboardingResponse = DesktopPreferencesOnboardingResponses[keyof DesktopPreferencesOnboardingResponses];
+
+export type DesktopPreferencesCompleteOnboardingData = {
+    body?: never;
+    headers: {
+        'x-orbis-reset-generation': string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/desktop-preferences/onboarding';
+};
+
+export type DesktopPreferencesCompleteOnboardingResponses = {
+    201: {
+        complete: boolean;
+    };
+};
+
+export type DesktopPreferencesCompleteOnboardingResponse = DesktopPreferencesCompleteOnboardingResponses[keyof DesktopPreferencesCompleteOnboardingResponses];
+
+export type DesktopPreferencesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/desktop-preferences';
+};
+
+export type DesktopPreferencesGetResponses = {
+    default: DesktopPreferencesDto;
+};
+
+export type DesktopPreferencesGetResponse = DesktopPreferencesGetResponses[keyof DesktopPreferencesGetResponses];
+
+export type DesktopPreferencesPutData = {
+    body: DesktopPreferencesDto;
+    headers: {
+        'x-orbis-reset-generation': string;
+        'x-orbis-unsplash-selection': string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/desktop-preferences';
+};
+
+export type DesktopPreferencesPutResponses = {
+    default: DesktopPreferencesDto;
+};
+
+export type DesktopPreferencesPutResponse = DesktopPreferencesPutResponses[keyof DesktopPreferencesPutResponses];
+
+export type DockerAppsListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/docker-apps';
+};
+
+export type DockerAppsListResponses = {
+    200: unknown;
+};
+
+export type DockerAppsReviewData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/docker-apps/{id}/uninstall';
+};
+
+export type DockerAppsReviewResponses = {
+    200: unknown;
+};
+
+export type DockerAppsUninstallData = {
+    body: UninstallDockerAppDto;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/docker-apps/{id}/uninstall';
+};
+
+export type DockerAppsUninstallResponses = {
+    201: unknown;
+};
+
+export type HostTransferListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/transfers';
+};
+
+export type HostTransferListResponses = {
+    200: unknown;
+};
+
+export type HostTransferCertificateFingerprintData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/transfers/certificates/fingerprint';
+};
+
+export type HostTransferCertificateFingerprintResponses = {
+    200: unknown;
+};
+
+export type HostTransferOfferData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/transfers/offers';
+};
+
+export type HostTransferOfferResponses = {
+    201: unknown;
+};
+
+export type HostTransferApproveData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/transfers/offers/{id}/approve';
+};
+
+export type HostTransferApproveResponses = {
+    200: unknown;
+};
+
+export type HostTransferCancelOfferData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/transfers/offers/{id}/cancel';
+};
+
+export type HostTransferCancelOfferResponses = {
+    200: unknown;
+};
+
+export type HostTransferCreateImportData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/transfers/imports';
+};
+
+export type HostTransferCreateImportResponses = {
+    201: unknown;
+};
+
+export type HostTransferStartData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/transfers/imports/{id}/start';
+};
+
+export type HostTransferStartResponses = {
+    202: unknown;
+};
+
+export type HostTransferCancelImportData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/transfers/imports/{id}/cancel';
+};
+
+export type HostTransferCancelImportResponses = {
+    200: unknown;
+};
+
+export type HostTransferClaimData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/transfers/peer/claim';
+};
+
+export type HostTransferClaimResponses = {
+    200: unknown;
+};
+
+export type HostTransferStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/transfers/peer/status';
+};
+
+export type HostTransferStatusResponses = {
+    200: unknown;
+};
+
+export type HostTransferFileData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/transfers/peer/file';
+};
+
+export type HostTransferFileResponses = {
+    200: unknown;
+};
+
+export type ReceiverRequestListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/transfers/requests';
+};
+
+export type ReceiverRequestListResponses = {
+    200: unknown;
+};
+
+export type ReceiverRequestCreateData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/transfers/requests';
+};
+
+export type ReceiverRequestCreateResponses = {
+    201: unknown;
+};
+
+export type ReceiverRequestApproveData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/transfers/requests/incoming/{id}/approve';
+};
+
+export type ReceiverRequestApproveResponses = {
+    202: unknown;
+};
+
+export type ReceiverRequestRejectData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/transfers/requests/incoming/{id}/reject';
+};
+
+export type ReceiverRequestRejectResponses = {
+    200: unknown;
+};
+
+export type ReceiverRequestCancelIncomingData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/transfers/requests/incoming/{id}/cancel';
+};
+
+export type ReceiverRequestCancelIncomingResponses = {
+    200: unknown;
+};
+
+export type ReceiverRequestStartData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/transfers/requests/outgoing/{id}/start';
+};
+
+export type ReceiverRequestStartResponses = {
+    202: unknown;
+};
+
+export type ReceiverRequestCancelOutgoingData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/transfers/requests/outgoing/{id}/cancel';
+};
+
+export type ReceiverRequestCancelOutgoingResponses = {
+    200: unknown;
+};
+
+export type ReceiverRequestPeerCreateData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/transfers/peer/request';
+};
+
+export type ReceiverRequestPeerCreateResponses = {
+    200: unknown;
+};
+
+export type ReceiverRequestPeerStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/transfers/peer/request-status';
+};
+
+export type ReceiverRequestPeerStatusResponses = {
+    200: unknown;
+};
+
+export type ReceiverRequestPeerCancelData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/transfers/peer/request-cancel';
+};
+
+export type ReceiverRequestPeerCancelResponses = {
+    200: unknown;
+};
+
+export type ReceiverRequestPeerFileData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/transfers/peer/request-file';
+};
+
+export type ReceiverRequestPeerFileResponses = {
+    200: unknown;
+};
+
+export type AutomaticUpdatesReadData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/automatic';
+};
+
+export type AutomaticUpdatesReadResponses = {
+    200: unknown;
+};
+
+export type AutomaticUpdatesUpdateData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/automatic';
+};
+
+export type AutomaticUpdatesUpdateResponses = {
+    200: unknown;
+};
+
+export type AutomaticUpdatesReadSystemData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/automatic/system';
+};
+
+export type AutomaticUpdatesReadSystemResponses = {
+    200: unknown;
+};
+
+export type AutomaticUpdatesUpdateSystemData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/automatic/system';
+};
+
+export type AutomaticUpdatesUpdateSystemResponses = {
+    200: unknown;
+};
+
+export type AutomaticUpdatesReadAppData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/host-updates/automatic/apps/{urn}';
+};
+
+export type AutomaticUpdatesReadAppResponses = {
+    200: unknown;
+};
+
+export type AutomaticUpdatesUpdateAppData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/host-updates/automatic/apps/{urn}';
+};
+
+export type AutomaticUpdatesUpdateAppResponses = {
+    200: unknown;
+};
+
+export type HostUpdatesChangeChannelData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/channel';
+};
+
+export type HostUpdatesChangeChannelResponses = {
+    200: unknown;
+};
+
+export type HostUpdatesStableChannelPlanData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/channel/stable/plan';
+};
+
+export type HostUpdatesStableChannelPlanResponses = {
+    200: unknown;
+};
+
+export type HostUpdatesStableChannelApplyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/channel/stable/apply';
+};
+
+export type HostUpdatesStableChannelApplyResponses = {
+    202: unknown;
+};
+
+export type HostUpdatesDowngradePlanData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/downgrade/plan';
+};
+
+export type HostUpdatesDowngradePlanResponses = {
+    200: unknown;
+};
+
+export type HostUpdatesDowngradeApplyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/downgrade/apply';
+};
+
+export type HostUpdatesDowngradeApplyResponses = {
+    202: unknown;
+};
+
+export type HostUpdatesReleaseCompatibilityData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/release-compatibility';
+};
+
+export type HostUpdatesReleaseCompatibilityResponses = {
+    200: unknown;
+};
+
+export type HostUpdatesStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/status';
+};
+
+export type HostUpdatesStatusResponses = {
+    200: unknown;
+};
+
+export type HostUpdatesPackagesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/packages';
+};
+
+export type HostUpdatesPackagesResponses = {
+    200: unknown;
+};
+
+export type HostUpdatesSmartToolsPlanData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/drives/tools/plan';
+};
+
+export type HostUpdatesSmartToolsPlanResponses = {
+    200: unknown;
+};
+
+export type HostUpdatesSmartToolsApplyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/drives/tools/apply';
+};
+
+export type HostUpdatesSmartToolsApplyResponses = {
+    202: unknown;
+};
+
+export type HostUpdatesDriveTestData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/drives/test';
+};
+
+export type HostUpdatesDriveTestResponses = {
+    202: unknown;
+};
+
+export type HostUpdatesRestartStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/restart';
+};
+
+export type HostUpdatesRestartStatusResponses = {
+    200: unknown;
+};
+
+export type HostUpdatesRestartPlanData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/restart/plan';
+};
+
+export type HostUpdatesRestartPlanResponses = {
+    200: unknown;
+};
+
+export type HostUpdatesRestartApplyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/restart/apply';
+};
+
+export type HostUpdatesRestartApplyResponses = {
+    202: unknown;
+};
+
+export type HostUpdatesPackageChangelogData = {
+    body?: never;
+    path?: never;
+    query: {
+        name: string;
+    };
+    url: '/api/host-updates/packages/changelog';
+};
+
+export type HostUpdatesPackageChangelogResponses = {
+    200: unknown;
+};
+
+export type HostUpdatesPackageJobData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/packages/job';
+};
+
+export type HostUpdatesPackageJobResponses = {
+    200: unknown;
+};
+
+export type HostUpdatesPackageRefreshData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/packages/refresh';
+};
+
+export type HostUpdatesPackageRefreshResponses = {
+    202: unknown;
+};
+
+export type HostUpdatesPackagePlanData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/packages/plan';
+};
+
+export type HostUpdatesPackagePlanResponses = {
+    200: unknown;
+};
+
+export type HostUpdatesPackageApplyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/packages/apply';
+};
+
+export type HostUpdatesPackageApplyResponses = {
+    202: unknown;
+};
+
+export type HostUpdatesPlanData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/plan';
+};
+
+export type HostUpdatesPlanResponses = {
+    200: unknown;
+};
+
+export type HostUpdatesApplyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/apply';
+};
+
+export type HostUpdatesApplyResponses = {
+    202: unknown;
+};
+
+export type HostUpdatesRecoverData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host-updates/recover';
+};
+
+export type HostUpdatesRecoverResponses = {
+    202: unknown;
+};
+
+export type GetTranslationData = {
+    body?: never;
+    path: {
+        ns: string;
+        lng: string;
+    };
+    query?: never;
+    url: '/api/i18n/locales/{ns}/{lng}.json';
+};
+
+export type GetTranslationResponses = {
+    200: unknown;
+};
+
+export type GetGuestLinksData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/links/guest';
+};
+
+export type GetGuestLinksResponses = {
+    default: LinksDto;
+};
+
+export type GetGuestLinksResponse = GetGuestLinksResponses[keyof GetGuestLinksResponses];
+
+export type GetLinksData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/links';
+};
+
+export type GetLinksResponses = {
+    default: LinksDto;
+};
+
+export type GetLinksResponse = GetLinksResponses[keyof GetLinksResponses];
+
+export type CreateLinkData = {
+    body: LinkBodyDto;
+    path?: never;
+    query?: never;
+    url: '/api/links';
+};
+
+export type CreateLinkResponses = {
+    201: unknown;
+};
+
+export type DeleteLinkData = {
+    body?: never;
+    path: {
+        id: number;
+    };
+    query?: never;
+    url: '/api/links/{id}';
+};
+
+export type DeleteLinkResponses = {
+    200: unknown;
+};
+
+export type EditLinkData = {
+    body: EditLinkBodyDto;
+    path: {
+        id: number;
+    };
+    query?: never;
+    url: '/api/links/{id}';
+};
+
+export type EditLinkResponses = {
+    200: unknown;
+};
+
+export type SearchAppsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        category?: 'ai' | 'automation' | 'books' | 'data' | 'development' | 'featured' | 'finance' | 'gaming' | 'media' | 'music' | 'network' | 'photography' | 'security' | 'social' | 'utilities';
+        cursor?: string;
+        pageSize?: number | string;
+        search?: string;
+        storeId?: string;
+    };
+    url: '/api/marketplace/apps/search';
+};
+
+export type SearchAppsResponses = {
+    default: SearchAppsDto;
+};
+
+export type SearchAppsResponse = SearchAppsResponses[keyof SearchAppsResponses];
+
+export type GetImageData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/marketplace/apps/{urn}/image';
+};
+
+export type GetImageResponses = {
+    200: unknown;
+};
+
+export type PullAppStoresData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/marketplace/pull';
+};
+
+export type PullAppStoresResponses = {
+    default: PullDto;
+};
+
+export type PullAppStoresResponse = PullAppStoresResponses[keyof PullAppStoresResponses];
+
+export type CreateAppStoreData = {
+    body: CreateAppStoreBodyDto;
+    path?: never;
+    query?: never;
+    url: '/api/marketplace/create';
+};
+
+export type CreateAppStoreResponses = {
+    default: AppStoreDto;
+};
+
+export type CreateAppStoreResponse = CreateAppStoreResponses[keyof CreateAppStoreResponses];
+
+export type GetAllAppStoresData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/marketplace/all';
+};
+
+export type GetAllAppStoresResponses = {
+    default: AllAppStoresDto;
+};
+
+export type GetAllAppStoresResponse = GetAllAppStoresResponses[keyof GetAllAppStoresResponses];
+
+export type GetEnabledAppStoresData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/marketplace/enabled';
+};
+
+export type GetEnabledAppStoresResponses = {
+    default: AllAppStoresDto;
+};
+
+export type GetEnabledAppStoresResponse = GetEnabledAppStoresResponses[keyof GetEnabledAppStoresResponses];
+
+export type DeleteAppStoreData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/marketplace/{id}';
+};
+
+export type DeleteAppStoreResponses = {
+    200: unknown;
+};
+
+export type UpdateAppStoreData = {
+    body: UpdateAppStoreBodyDto;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/marketplace/{id}';
+};
+
+export type UpdateAppStoreResponses = {
+    default: UpdateAppStoreDto;
+};
+
+export type UpdateAppStoreResponse = UpdateAppStoreResponses[keyof UpdateAppStoreResponses];
+
+export type NearbyDiscoveryStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/nearby-discovery';
+};
+
+export type NearbyDiscoveryStatusResponses = {
+    200: unknown;
+};
+
+export type NearbyDiscoveryInterfacesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/nearby-discovery/interfaces';
+};
+
+export type NearbyDiscoveryInterfacesResponses = {
+    200: unknown;
+};
+
+export type NearbyDiscoveryScanData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/nearby-discovery/scan';
+};
+
+export type NearbyDiscoveryScanResponses = {
+    201: unknown;
+};
+
+export type NearbyDiscoveryAdvertiseData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/nearby-discovery/advertise';
+};
+
+export type NearbyDiscoveryAdvertiseResponses = {
+    201: unknown;
+};
+
+export type NearbyDiscoveryDisableData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/nearby-discovery/disable';
+};
+
+export type NearbyDiscoveryDisableResponses = {
+    201: unknown;
+};
+
+export type NearbyDiscoveryPolicyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/nearby-discovery/policy';
+};
+
+export type NearbyDiscoveryPolicyResponses = {
+    201: unknown;
+};
+
+export type BackupImportsListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/imports';
+};
+
+export type BackupImportsListResponses = {
+    200: unknown;
+};
+
+export type BackupImportsCreateData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/imports';
+};
+
+export type BackupImportsCreateResponses = {
+    201: unknown;
+};
+
+export type BackupImportsReceiveData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/imports/{id}/file';
+};
+
+export type BackupImportsReceiveResponses = {
+    200: unknown;
+};
+
+export type BackupImportsReviewData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/imports/{id}/review';
+};
+
+export type BackupImportsReviewResponses = {
+    202: unknown;
+};
+
+export type BackupImportsCancelData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/imports/{id}/cancel';
+};
+
+export type BackupImportsCancelResponses = {
+    200: unknown;
+};
+
+export type BackupImportsRemoveData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/imports/{id}';
+};
+
+export type BackupImportsRemoveResponses = {
+    200: unknown;
+};
+
+export type BackupRestoresStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/restores';
+};
+
+export type BackupRestoresStatusResponses = {
+    200: unknown;
+};
+
+export type BackupRestoresPrepareData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/restores';
+};
+
+export type BackupRestoresPrepareResponses = {
+    202: unknown;
+};
+
+export type BackupRestoresCancelData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/restores/{id}/cancel';
+};
+
+export type BackupRestoresCancelResponses = {
+    202: unknown;
+};
+
+export type BackupRestoresReuseData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/restores/{id}/reuse';
+};
+
+export type BackupRestoresReuseResponses = {
+    201: unknown;
+};
+
+export type BackupRestoresRecoverData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/restores/{id}/recover';
+};
+
+export type BackupRestoresRecoverResponses = {
+    202: unknown;
+};
+
+export type SettingsBackupApplyStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/settings-bundles/restores';
+};
+
+export type SettingsBackupApplyStatusResponses = {
+    200: unknown;
+};
+
+export type SettingsBackupApplyBeginData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/settings-bundles/imports/{id}/restore';
+};
+
+export type SettingsBackupApplyBeginResponses = {
+    202: unknown;
+};
+
+export type SettingsBackupApplyRollbackData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/settings-bundles/restores/{id}/rollback';
+};
+
+export type SettingsBackupApplyRollbackResponses = {
+    200: unknown;
+};
+
+export type SettingsBackupImportsListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/settings-bundles/imports';
+};
+
+export type SettingsBackupImportsListResponses = {
+    200: unknown;
+};
+
+export type SettingsBackupImportsCreateData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/settings-bundles/imports';
+};
+
+export type SettingsBackupImportsCreateResponses = {
+    201: unknown;
+};
+
+export type SettingsBackupImportsUploadData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/settings-bundles/imports/{id}/file';
+};
+
+export type SettingsBackupImportsUploadResponses = {
+    200: unknown;
+};
+
+export type SettingsBackupImportsReviewData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/settings-bundles/imports/{id}/review';
+};
+
+export type SettingsBackupImportsReviewResponses = {
+    202: unknown;
+};
+
+export type SettingsBackupImportsRemoveData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/settings-bundles/imports/{id}/remove';
+};
+
+export type SettingsBackupImportsRemoveResponses = {
+    200: unknown;
+};
+
+export type SettingsBackupsListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/settings-bundles';
+};
+
+export type SettingsBackupsListResponses = {
+    200: unknown;
+};
+
+export type SettingsBackupsCreateData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/settings-bundles';
+};
+
+export type SettingsBackupsCreateResponses = {
+    202: unknown;
+};
+
+export type SettingsBackupsDownloadInfoData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/settings-bundles/{id}/download-info';
+};
+
+export type SettingsBackupsDownloadInfoResponses = {
+    200: unknown;
+};
+
+export type SettingsBackupsDownloadSessionData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/settings-bundles/{id}/download';
+};
+
+export type SettingsBackupsDownloadSessionResponses = {
+    200: unknown;
+};
+
+export type SettingsBackupsDownloadData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/settings-bundles/{id}/download';
+};
+
+export type SettingsBackupsDownloadResponses = {
+    200: unknown;
+};
+
+export type SettingsBackupsRemoveData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/settings-bundles/{id}/remove';
+};
+
+export type SettingsBackupsRemoveResponses = {
+    200: unknown;
+};
+
+export type SystemBackupsListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups';
+};
+
+export type SystemBackupsListResponses = {
+    200: unknown;
+};
+
+export type SystemBackupsSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/settings';
+};
+
+export type SystemBackupsSettingsResponses = {
+    200: unknown;
+};
+
+export type SystemBackupsUpdateSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/settings';
+};
+
+export type SystemBackupsUpdateSettingsResponses = {
+    200: unknown;
+};
+
+export type SystemBackupsImportSavedData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/{id}/import';
+};
+
+export type SystemBackupsImportSavedResponses = {
+    202: unknown;
+};
+
+export type SystemBackupsStartData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/export';
+};
+
+export type SystemBackupsStartResponses = {
+    202: unknown;
+};
+
+export type SystemBackupsCancelData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/{id}/cancel';
+};
+
+export type SystemBackupsCancelResponses = {
+    200: unknown;
+};
+
+export type SystemBackupsRecoverData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/{id}/recover';
+};
+
+export type SystemBackupsRecoverResponses = {
+    200: unknown;
+};
+
+export type SystemBackupsDownloadData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/{id}/download';
+};
+
+export type SystemBackupsDownloadResponses = {
+    200: unknown;
+};
+
+export type SystemBackupsRemoveData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/{id}';
+};
+
+export type SystemBackupsRemoveResponses = {
+    200: unknown;
+};
+
+export type TimeMachineCoreInspectionPrepareData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/core-inspections';
+};
+
+export type TimeMachineCoreInspectionPrepareResponses = {
+    202: unknown;
+};
+
+export type TimeMachineCoreInspectionStatusData = {
+    body?: never;
+    path: {
+        id: string;
+        requestId: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/core-inspections/{requestId}';
+};
+
+export type TimeMachineCoreInspectionStatusResponses = {
+    200: unknown;
+};
+
+export type TimeMachineCoreInspectionApproveData = {
+    body?: never;
+    path: {
+        id: string;
+        requestId: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/core-inspections/{requestId}/approve';
+};
+
+export type TimeMachineCoreInspectionApproveResponses = {
+    202: unknown;
+};
+
+export type TimeMachineCorePreparationPrepareData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/core-preparations';
+};
+
+export type TimeMachineCorePreparationPrepareResponses = {
+    202: unknown;
+};
+
+export type TimeMachineCorePreparationStatusData = {
+    body?: never;
+    path: {
+        id: string;
+        requestId: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/core-preparations/{requestId}';
+};
+
+export type TimeMachineCorePreparationStatusResponses = {
+    200: unknown;
+};
+
+export type TimeMachineCorePreparationApproveData = {
+    body?: never;
+    path: {
+        id: string;
+        requestId: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/core-preparations/{requestId}/approve';
+};
+
+export type TimeMachineCorePreparationApproveResponses = {
+    202: unknown;
+};
+
+export type TimeMachineCorePreparationTargetData = {
+    body?: never;
+    path: {
+        id: string;
+        requestId: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/core-preparations/{requestId}/target';
+};
+
+export type TimeMachineCorePreparationTargetResponses = {
+    202: unknown;
+};
+
+export type TimeMachineCoreReconciliationPrepareData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/core-reconciliations';
+};
+
+export type TimeMachineCoreReconciliationPrepareResponses = {
+    202: unknown;
+};
+
+export type TimeMachineCoreReconciliationStatusData = {
+    body?: never;
+    path: {
+        id: string;
+        requestId: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/core-reconciliations/{requestId}';
+};
+
+export type TimeMachineCoreReconciliationStatusResponses = {
+    200: unknown;
+};
+
+export type TimeMachineCoreReconciliationReviewData = {
+    body?: never;
+    path: {
+        id: string;
+        requestId: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/core-reconciliations/{requestId}/reviews';
+};
+
+export type TimeMachineCoreReconciliationReviewResponses = {
+    200: unknown;
+};
+
+export type TimeMachineCoreReconciliationReviewStatusData = {
+    body?: never;
+    path: {
+        id: string;
+        requestId: string;
+        reviewRequestId: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/core-reconciliations/{requestId}/reviews/{reviewRequestId}';
+};
+
+export type TimeMachineCoreReconciliationReviewStatusResponses = {
+    200: unknown;
+};
+
+export type CoreCaptureRecoveryStatusData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/recovery/{id}';
+};
+
+export type CoreCaptureRecoveryStatusResponses = {
+    200: unknown;
+};
+
+export type CoreCaptureRecoveryContinueData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/recovery/{id}/continue';
+};
+
+export type CoreCaptureRecoveryContinueResponses = {
+    202: unknown;
+};
+
+export type TimeMachineCapabilitiesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/time-machine/capabilities';
+};
+
+export type TimeMachineCapabilitiesResponses = {
+    200: unknown;
+};
+
+export type TimeMachineStorageData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/time-machine/storage';
+};
+
+export type TimeMachineStorageResponses = {
+    200: unknown;
+};
+
+export type TimeMachinePreferencesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/time-machine/preferences';
+};
+
+export type TimeMachinePreferencesResponses = {
+    200: unknown;
+};
+
+export type TimeMachineUpdatePreferencesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/time-machine/preferences';
+};
+
+export type TimeMachineUpdatePreferencesResponses = {
+    200: unknown;
+};
+
+export type TimeMachineActivityData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/time-machine/activity';
+};
+
+export type TimeMachineActivityResponses = {
+    200: unknown;
+};
+
+export type TimeMachineListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/time-machine/points';
+};
+
+export type TimeMachineListResponses = {
+    200: unknown;
+};
+
+export type TimeMachineInspectData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}';
+};
+
+export type TimeMachineInspectResponses = {
+    200: unknown;
+};
+
+export type TimeMachineAppIconsData = {
+    body?: never;
+    path: {
+        id: string;
+        identity: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/icons/{identity}';
+};
+
+export type TimeMachineAppIconsResponses = {
+    200: unknown;
+};
+
+export type TimeMachineWallpaperData = {
+    body?: never;
+    path: {
+        id: string;
+        identity: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/assets/{identity}';
+};
+
+export type TimeMachineWallpaperResponses = {
+    200: unknown;
+};
+
+export type TimeMachineCaptureData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/time-machine/captures';
+};
+
+export type TimeMachineCaptureResponses = {
+    202: unknown;
+};
+
+export type TimeMachineCaptureCoreData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/time-machine/core-captures';
+};
+
+export type TimeMachineCaptureCoreResponses = {
+    202: unknown;
+};
+
+export type TimeMachineCaptureReviewData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/time-machine/capture-review';
+};
+
+export type TimeMachineCaptureReviewResponses = {
+    200: unknown;
+};
+
+export type TimeMachineOnboardingCaptureData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/time-machine/onboarding-captures';
+};
+
+export type TimeMachineOnboardingCaptureResponses = {
+    202: unknown;
+};
+
+export type TimeMachineOnboardingCaptureStatusData = {
+    body?: never;
+    path: {
+        attemptId: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/onboarding-captures/{attemptId}';
+};
+
+export type TimeMachineOnboardingCaptureStatusResponses = {
+    200: unknown;
+};
+
+export type TimeMachineCancelData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/cancel';
+};
+
+export type TimeMachineCancelResponses = {
+    202: unknown;
+};
+
+export type TimeMachineRemoveData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/remove';
+};
+
+export type TimeMachineRemoveResponses = {
+    200: unknown;
+};
+
+export type TimeMachineReviewStatusData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/restore-review';
+};
+
+export type TimeMachineReviewStatusResponses = {
+    200: unknown;
+};
+
+export type TimeMachineReviewData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/restore-review';
+};
+
+export type TimeMachineReviewResponses = {
+    202: unknown;
+};
+
+export type TimeMachineAdmissionStatusData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/restore-admission';
+};
+
+export type TimeMachineAdmissionStatusResponses = {
+    200: unknown;
+};
+
+export type TimeMachineAuthOptionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/restore-auth/options';
+};
+
+export type TimeMachineAuthOptionsResponses = {
+    200: unknown;
+};
+
+export type TimeMachineAuthVerifyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/restore-auth/verify';
+};
+
+export type TimeMachineAuthVerifyResponses = {
+    200: unknown;
+};
+
+export type TimeMachineRecoverData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/recover';
+};
+
+export type TimeMachineRecoverResponses = {
+    202: unknown;
+};
+
+export type TimeMachineActivateData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/time-machine/points/{id}/activate';
+};
+
+export type TimeMachineActivateResponses = {
+    202: unknown;
+};
+
+export type ResetOptionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-reset/passkey-options';
+};
+
+export type ResetOptionsResponses = {
+    201: unknown;
+};
+
+export type ResetBeginData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-reset';
+};
+
+export type ResetBeginResponses = {
+    202: unknown;
+};
+
+export type ResetRecoverData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-reset/recover';
+};
+
+export type ResetRecoverResponses = {
+    202: unknown;
+};
+
+export type ExchangeRatesReadData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/exchange-rates';
+};
+
+export type ExchangeRatesReadResponses = {
+    200: unknown;
+};
+
+export type SystemLoadData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/load';
+};
+
+export type SystemLoadResponses = {
+    default: LoadDto;
+};
+
+export type SystemLoadResponse = SystemLoadResponses[keyof SystemLoadResponses];
+
+export type SystemTelemetryData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/telemetry';
+};
+
+export type SystemTelemetryResponses = {
+    200: unknown;
+};
+
+export type SystemHostTelemetryData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/host-telemetry';
+};
+
+export type SystemHostTelemetryResponses = {
+    200: unknown;
+};
+
+export type SystemContainerTelemetryData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/containers';
+};
+
+export type SystemContainerTelemetryResponses = {
+    200: unknown;
+};
+
+export type SystemHostProcessesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/host-processes';
+};
+
+export type SystemHostProcessesResponses = {
+    200: unknown;
+};
+
+export type SystemHostSensorsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/host-sensors';
+};
+
+export type SystemHostSensorsResponses = {
+    200: unknown;
+};
+
+export type SystemDriveHealthData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/drives';
+};
+
+export type SystemDriveHealthResponses = {
+    200: unknown;
+};
+
+export type SystemHostDeviceHistoryData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/host-history';
+};
+
+export type SystemHostDeviceHistoryResponses = {
+    200: unknown;
+};
+
+export type SystemMetricHistoryData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/history';
+};
+
+export type SystemMetricHistoryResponses = {
+    200: unknown;
+};
+
+export type SystemBuildData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/build';
+};
+
+export type SystemBuildResponses = {
+    200: unknown;
+};
+
+export type SystemInstalledSoftwareVersionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/installed-software';
+};
+
+export type SystemInstalledSoftwareVersionsResponses = {
+    200: unknown;
+};
+
+export type SystemSentinelStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/sentinel';
+};
+
+export type SystemSentinelStatusResponses = {
+    200: unknown;
+};
+
+export type SystemSentinelUpdateProgressData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/sentinel/update-progress';
+};
+
+export type SystemSentinelUpdateProgressResponses = {
+    200: unknown;
+};
+
+export type SystemSentinelRecoveryAccessData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/sentinel/recovery-access';
+};
+
+export type SystemSentinelRecoveryAccessResponses = {
+    200: unknown;
+};
+
+export type SystemSaveSentinelEmergencyKeyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/sentinel/enrollment/save-key';
+};
+
+export type SystemSaveSentinelEmergencyKeyResponses = {
+    200: unknown;
+};
+
+export type SystemConfirmSentinelEmergencyKeyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/sentinel/enrollment/confirm-key';
+};
+
+export type SystemConfirmSentinelEmergencyKeyResponses = {
+    200: unknown;
+};
+
+export type SystemReviewControllerHandoffData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/sentinel/controller-handoff/plan';
+};
+
+export type SystemReviewControllerHandoffResponses = {
+    200: unknown;
+};
+
+export type SystemApplyControllerHandoffData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/sentinel/controller-handoff/apply';
+};
+
+export type SystemApplyControllerHandoffResponses = {
+    202: unknown;
+};
+
+export type SystemControllerHandoffStatusData = {
+    body?: never;
+    path: {
+        planId: string;
+    };
+    query?: never;
+    url: '/api/system/sentinel/controller-handoff/{planId}/status';
+};
+
+export type SystemControllerHandoffStatusResponses = {
+    200: unknown;
+};
+
+export type SystemSentinelReleaseCatalogData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/sentinel-releases';
+};
+
+export type SystemSentinelReleaseCatalogResponses = {
+    200: unknown;
+};
+
+export type SystemOrbisReleaseChannelsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/orbis-release-channels';
+};
+
+export type SystemOrbisReleaseChannelsResponses = {
+    200: unknown;
+};
+
+export type SystemLatestOrbisReleaseData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/orbis-release';
+};
+
+export type SystemLatestOrbisReleaseResponses = {
+    200: unknown;
+};
+
+export type SystemPublishedOrbisReleasesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/orbis-releases';
+};
+
+export type SystemPublishedOrbisReleasesResponses = {
+    200: unknown;
+};
+
+export type SystemOrbisReleaseHistoryData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/orbis-release-history';
+};
+
+export type SystemOrbisReleaseHistoryResponses = {
+    200: unknown;
+};
+
+export type DownloadLocalCertificateData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/certificate';
+};
+
+export type DownloadLocalCertificateResponses = {
+    200: unknown;
+};
+
+export type TasksAttentionData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tasks/attention';
+};
+
+export type TasksAttentionResponses = {
+    200: unknown;
+};
+
+export type TasksAcknowledgeData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tasks/attention';
+};
+
+export type TasksAcknowledgeResponses = {
+    201: unknown;
+};
+
+export type TasksGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tasks';
+};
+
+export type TasksGetResponses = {
+    200: unknown;
+};
+
+export type ThemeFrameworkCatalogueReadData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/theme-framework/catalogue';
+};
+
+export type ThemeFrameworkCatalogueReadResponses = {
+    200: unknown;
+};
+
+export type ThemePacksSnapshotData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/theme-packs';
+};
+
+export type ThemePacksSnapshotResponses = {
+    200: unknown;
+};
+
+export type ThemePacksInstallData = {
+    body: InstallThemeDto;
+    path?: never;
+    query?: never;
+    url: '/api/theme-packs/install';
+};
+
+export type ThemePacksInstallResponses = {
+    201: unknown;
+};
+
+export type ThemePacksSelectData = {
+    body: SelectThemeDto;
+    path?: never;
+    query?: never;
+    url: '/api/theme-packs/selection';
+};
+
+export type ThemePacksSelectResponses = {
+    200: unknown;
+};
+
+export type ThemePacksUpdateData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/theme-packs/{id}/update';
+};
+
+export type ThemePacksUpdateResponses = {
+    201: unknown;
+};
+
+export type ThemePacksRollbackData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/theme-packs/{id}/rollback';
+};
+
+export type ThemePacksRollbackResponses = {
+    201: unknown;
+};
+
+export type ThemePacksRemoveData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/theme-packs/{id}';
+};
+
+export type ThemePacksRemoveResponses = {
+    200: unknown;
+};
+
+export type ThemePacksAssetData = {
+    body?: never;
+    path: {
+        id: string;
+        version: string;
+        hash: string;
+    };
+    query?: never;
+    url: '/api/theme-packs/{id}/{version}/assets/{hash}';
+};
+
+export type ThemePacksAssetResponses = {
+    200: unknown;
+};
+
+export type ThemeSettingsSnapshotData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/theme-settings';
+};
+
+export type ThemeSettingsSnapshotResponses = {
+    200: unknown;
+};
+
+export type ThemeSettingsUpdateData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/theme-settings';
+};
+
+export type ThemeSettingsUpdateResponses = {
+    200: unknown;
+};
+
+export type ThemeSettingsMigrateData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/theme-settings/migrate';
+};
+
+export type ThemeSettingsMigrateResponses = {
+    200: unknown;
+};
+
+export type CapsulesListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/capsules';
+};
+
+export type CapsulesListResponses = {
+    200: unknown;
+};
+
+export type CapsulesStartData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/capsules/points/{id}/export';
+};
+
+export type CapsulesStartResponses = {
+    202: unknown;
+};
+
+export type CapsulesCreateData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system-backups/capsules/imports';
+};
+
+export type CapsulesCreateResponses = {
+    201: unknown;
+};
+
+export type CapsulesUploadData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/capsules/imports/{id}/file';
+};
+
+export type CapsulesUploadResponses = {
+    200: unknown;
+};
+
+export type CapsulesReviewData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/capsules/imports/{id}/review';
+};
+
+export type CapsulesReviewResponses = {
+    202: unknown;
+};
+
+export type CapsulesDownloadData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/capsules/{id}/download';
+};
+
+export type CapsulesDownloadResponses = {
+    200: unknown;
+};
+
+export type CapsulesCoreEnrollmentData = {
+    body?: never;
+    path: {
+        id: string;
+        action: string;
+    };
+    query?: never;
+    url: '/api/system-backups/capsules/imports/{id}/core-enrollment/{action}';
+};
+
+export type CapsulesCoreEnrollmentResponses = {
+    200: unknown;
+};
+
+export type CapsulesCoreInspectionData = {
+    body?: never;
+    path: {
+        id: string;
+        action: string;
+    };
+    query?: never;
+    url: '/api/system-backups/capsules/imports/{id}/core-inspection/{action}';
+};
+
+export type CapsulesCoreInspectionResponses = {
+    200: unknown;
+};
+
+export type CapsulesRemoveData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/system-backups/capsules/{id}/remove';
+};
+
+export type CapsulesRemoveResponses = {
+    200: unknown;
+};
+
+export type GetUserConfigData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/user-config/{urn}';
+};
+
+export type GetUserConfigResponses = {
+    default: GetUserConfigDto;
+};
+
+export type GetUserConfigResponse = GetUserConfigResponses[keyof GetUserConfigResponses];
+
+export type UpdateUserConfigData = {
+    body: UpdateUserConfigDto;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/user-config/{urn}';
+};
+
+export type UpdateUserConfigResponses = {
+    200: unknown;
+};
+
+export type EnableUserConfigData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/user-config/{urn}/enable';
+};
+
+export type EnableUserConfigResponses = {
+    201: unknown;
+};
+
+export type DisableUserConfigData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/user-config/{urn}/disable';
+};
+
+export type DisableUserConfigResponses = {
     201: unknown;
 };

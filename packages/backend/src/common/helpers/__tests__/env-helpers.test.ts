@@ -8,7 +8,8 @@ import { generateSystemEnvFile } from '../env-helpers';
 const logger = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }));
 vi.mock('node:fs', async () => {
   const { fsMock } = await import('@/tests/__mocks__/fs');
-  return fsMock;
+  const { constants } = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return { ...fsMock, constants };
 });
 vi.mock('@/core/logger/logger.service', async (load) => {
   const actual = await load<typeof import('@/core/logger/logger.service')>();
@@ -33,7 +34,8 @@ const envFile = path.join(DATA_DIR, '.env');
 const settingsFile = path.join(DATA_DIR, 'state', 'settings.json');
 const seedFile = path.join(DATA_DIR, 'state', 'seed');
 let originalProcessEnv: NodeJS.ProcessEnv;
-beforeEach(() => {
+beforeEach(async () => {
+  await fs.promises.chmod(DATA_DIR, 0o755);
   originalProcessEnv = { ...process.env };
   vi.clearAllMocks();
   for (const key of keys) vi.stubEnv(key, '');
