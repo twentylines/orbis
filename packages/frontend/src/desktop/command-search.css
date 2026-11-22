@@ -346,6 +346,18 @@ body:has(.orbis-theme) .desktop-search-surface .desktop-search-input #orbis-comm
   align-items: center;
   padding-inline-end: 16px;
 }
+/* Lifecycle controls have their own row; the settings gear stays beside the app title. */
+.desktop-search-app-commands {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 16px 12px;
+}
 .desktop-search-result-control .orbis-switch {
   margin: 0;
   padding: 0;

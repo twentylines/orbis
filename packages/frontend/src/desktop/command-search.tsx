@@ -46,6 +46,7 @@ import { lazy, Suspense } from 'react';
 import { appSearchIntent, availableAppCommands, searchPalettePresets } from './search-intent';
 import { SearchPalette } from './command-search-palette';
 import type { SearchAppAction } from './command-search-app-action';
+import { SearchAppCommandControls } from './command-search-app-controls';
 const SearchAppActionDialog = lazy(() => import('./command-search-app-action'));
 
 type SearchResult = SearchAction & {
@@ -56,11 +57,12 @@ type SearchResult = SearchAction & {
   settingId?: string;
   actionLabel?: string;
   managePath?: string;
-  appAction?: SearchAppAction;
+  commands?: SearchAppAction[];
 };
 const searchScopes = [
   ['all', 'All'],
   ['apps', 'Apps'],
+  ['actions', 'Actions'],
   ['settings', 'Settings'],
   ['monitor', 'Monitor'],
   ['store', 'Store'],
@@ -461,25 +463,25 @@ export function CommandSearch() {
       detail: destinationDetails[label] ?? '',
       icon: <Icon size={22} aria-hidden="true" />,
     }));
-  const installedResults: SearchResult[] = (installed.data?.installed ?? [])
+  const matchedApps = (installed.data?.installed ?? [])
     .filter(({ info }) => info.available && appMatch(info.name, `${info.short_desc} ${info.urn}`) > 0)
-    .sort((a, b) => match(b.info.name, b.info.short_desc) - match(a.info.name, a.info.short_desc))
-    .slice(0, query || scope === 'apps' ? 24 : 6)
-    .map(({ info, app, metadata }) => {
-      const launchUrl = primaryAppAddress(appDestinations({ info, app, metadata }, userSettings, window.location.hostname), window.location.origin);
-      return {
-        id: info.urn,
-        path: appPath(info.urn),
-        managePath: appPath(info.urn),
-        label: info.name,
-        detail: info.short_desc,
-        icon: <AppLogo urn={info.urn} size={32} alt="" />,
-        launch:
-          launchUrl && intent?.action !== 'manage'
-            ? { urn: info.urn, name: info.name, categories: info.categories, launchUrl, manageUrl: appPath(info.urn) }
-            : undefined,
-      };
-    });
+    .sort((a, b) => appMatch(b.info.name, b.info.short_desc) - appMatch(a.info.name, a.info.short_desc))
+    .slice(0, query || scope === 'apps' ? 24 : 6);
+  const installedResults: SearchResult[] = matchedApps.map(({ info, app, metadata }) => {
+    const launchUrl = primaryAppAddress(appDestinations({ info, app, metadata }, userSettings, window.location.hostname), window.location.origin);
+    return {
+      id: info.urn,
+      path: appPath(info.urn),
+      managePath: appPath(info.urn),
+      label: info.name,
+      detail: info.short_desc,
+      icon: <AppLogo urn={info.urn} size={32} alt="" />,
+      launch:
+        launchUrl && intent?.action !== 'manage'
+          ? { urn: info.urn, name: info.name, categories: info.categories, launchUrl, manageUrl: appPath(info.urn) }
+          : undefined,
+    };
+  });
   const storeResults: SearchResult[] =
     query && !utilityQuery && debounced === query
       ? (catalogue.data?.data ?? [])
@@ -502,39 +504,31 @@ export function CommandSearch() {
     icon: <IconSettings size={22} aria-hidden="true" />,
   }));
   const actionResults: SearchResult[] =
-    query && user.operator && (scope === 'all' || scope === 'apps')
-      ? (installed.data?.installed ?? [])
-          .filter(({ info }) => info.available && appMatch(info.name, `${info.short_desc} ${info.urn}`) > 0)
-          .flatMap(({ info, app }) =>
-            availableAppCommands(app.status)
-              .filter((action) => !intent || intent.action === action)
-              .map((action) => ({
-                id: `${action}:${info.urn}`,
-                path: appPath(info.urn),
-                managePath: appPath(info.urn),
-                label: `${action[0]?.toUpperCase()}${action.slice(1)} ${info.name}`,
-                detail: 'App action · Confirmation required',
-                icon: <AppLogo urn={info.urn} size={32} alt="" />,
-                appAction: { action, urn: info.urn, name: info.name },
-              })),
-          )
+    query && user.operator && (intent?.query ?? query).trim()
+      ? matchedApps.flatMap(({ info, app }, index) => {
+          const commands = availableAppCommands(app.status);
+          const result = installedResults[index];
+          if (!result || !commands.length || appMatch(info.name, info.urn) <= 0) return [];
+          return [{ ...result, commands: commands.map((action) => ({ action, urn: info.urn, name: info.name })) }];
+        })
       : [];
   const destinationGroup = { name: query ? 'Pages and tools' : scope === 'all' ? 'Quick destinations' : 'Pages and tools', items: sections };
   const settingsGroup = { name: 'Settings', items: settingResults };
+  const appGroup = { name: 'Installed apps', items: scope === 'all' || scope === 'apps' ? installedResults : [] };
   const groups = [
-    { name: 'Actions', items: actionResults },
+    ...(query ? [appGroup] : []),
     ...(sections.some((section) => section.label.toLocaleLowerCase() === needle)
       ? [destinationGroup, settingsGroup]
       : [settingsGroup, destinationGroup]),
-    { name: 'Installed apps', items: scope === 'all' || scope === 'apps' ? installedResults : [] },
+    ...(query ? [] : [appGroup]),
+    { name: 'Actions', items: scope === 'actions' ? actionResults : [] },
     { name: 'App Store', items: scope === 'all' || scope === 'store' ? storeResults : [] },
   ];
   const firstResult = defaultSearchResult(groups.flatMap((group) => group.items));
-  const activateResult = (result: SearchResult) => {
-    if (result.appAction) {
-      pendingAppAction.current = result.appAction;
-      close();
-    } else activateSearchResult(result, openApp, close);
+  const activateResult = (result: SearchResult) => activateSearchResult(result, openApp, close);
+  const requestAppCommand = (request: SearchAppAction) => {
+    pendingAppAction.current = request;
+    close();
   };
   const searchingStore = scope === 'all' || scope === 'store';
   const loadingStore = searchingStore && !utilityQuery && query.length > 0 && (debounced !== query || catalogue.isPending);
@@ -625,7 +619,10 @@ export function CommandSearch() {
                       value={search}
                       type="search"
                       autoComplete="off"
-                      onChange={(event) => setSearch(event.target.value)}
+                      onChange={(event) => {
+                        setSearch(event.target.value);
+                        if (!event.target.value.trim() && scope === 'actions') setScope('all');
+                      }}
                       placeholder={suggestion ?? undefined}
                       aria-label="Search Orbis"
                       aria-controls="desktop-search-results"
@@ -657,19 +654,21 @@ export function CommandSearch() {
                   <div className="desktop-search-discovery">
                     <SelectionGroup as="fieldset" aria-label="Search in">
                       <legend className="visually-hidden">Search in</legend>
-                      {searchScopes.map(([value, label]) => (
-                        <button
-                          type="button"
-                          key={value}
-                          aria-pressed={scope === value}
-                          onClick={() => {
-                            setScope(value);
-                            input.current?.focus({ preventScroll: true });
-                          }}
-                        >
-                          {label}
-                        </button>
-                      ))}
+                      {searchScopes
+                        .filter(([value]) => value !== 'actions' || (query && (actionResults.length > 0 || scope === 'actions')))
+                        .map(([value, label]) => (
+                          <button
+                            type="button"
+                            key={value}
+                            aria-pressed={scope === value}
+                            onClick={() => {
+                              setScope(value);
+                              input.current?.focus({ preventScroll: true });
+                            }}
+                          >
+                            {label}
+                          </button>
+                        ))}
                     </SelectionGroup>
                   </div>
                   <div id="desktop-search-results" className="desktop-search-results" aria-busy={loadingStore || installed.isPending}>
@@ -751,6 +750,13 @@ export function CommandSearch() {
                                         {result.actionLabel}
                                       </button>
                                     </div>
+                                  ) : null}
+                                  {result.commands ? (
+                                    <SearchAppCommandControls
+                                      commands={result.commands}
+                                      onCommand={requestAppCommand}
+                                      onKeyDown={handleResultKeyDown}
+                                    />
                                   ) : null}
                                   {result.settingId ? <SearchSettingChoices settingId={result.settingId} onKeyDown={handleResultKeyDown} /> : null}
                                   {feedback ? (

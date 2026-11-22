@@ -1,4 +1,8 @@
 import { expect, mock, test } from 'bun:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { SearchAppCommandControls } from './command-search-app-controls';
+import type { SearchAppAction } from './command-search-app-action';
 import { activateSearchResult, defaultSearchResult } from './command-search-actions';
 import { toolbarActionIds } from './workspace-layout';
 
@@ -86,4 +90,33 @@ test('the toolbar supplies mode, tasks, battery, search, address and logoff to i
   const positions = controls.map((control) => bar.indexOf(control));
   expect(positions.every((position) => position >= 0)).toBe(true);
   expect(positions).toEqual([...positions].sort((a, b) => a - b));
+});
+
+test('queried running apps group lifecycle controls once with readable names and no mutation on render', () => {
+  const onCommand = mock();
+  const commands: SearchAppAction[] = [
+    { action: 'restart', urn: 'beszel:main', name: 'Beszel' },
+    { action: 'stop', urn: 'beszel:main', name: 'Beszel' },
+  ];
+  const html = renderToStaticMarkup(createElement(SearchAppCommandControls, { commands, onCommand, onKeyDown: () => {} }));
+  expect(html).toContain('>Beszel actions</legend>');
+  expect(html).toContain('aria-label="Restart Beszel"');
+  expect(html).toContain('aria-label="Stop Beszel"');
+  expect(html.match(/<button/g)).toHaveLength(2);
+  expect(html).not.toContain('aria-label="Start Beszel"');
+  expect(onCommand).not.toHaveBeenCalled();
+});
+
+test('a queried stopped app offers Start without unavailable Stop or Restart controls', () => {
+  const html = renderToStaticMarkup(
+    createElement(SearchAppCommandControls, {
+      commands: [{ action: 'start', urn: 'beszel:main', name: 'Beszel' }],
+      onCommand: () => {},
+      onKeyDown: () => {},
+    }),
+  );
+  expect(html.match(/<button/g)).toHaveLength(1);
+  expect(html).toContain('aria-label="Start Beszel"');
+  expect(html).not.toContain('aria-label="Stop Beszel"');
+  expect(html).not.toContain('aria-label="Restart Beszel"');
 });
