@@ -5,9 +5,11 @@ import { type Plugin, defineConfig } from 'vitest/config';
 export default defineConfig({
   plugins: [swc.vite(), viteTsconfigPaths() as unknown] as Plugin[],
   test: {
-    setupFiles: ['./src/tests/vite.setup.ts'],
+    setupFiles: ['./src/tests/integration/vite.setup.ts'],
     include: ['src/**/integration/**/*.test.ts'],
     reporters: ['default'],
+    testTimeout: 20000,
+    hookTimeout: 20000,
   },
   resolve: {},
 });

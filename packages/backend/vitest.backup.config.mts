@@ -12,6 +12,7 @@ export default defineConfig({
       'src/common/helpers/__tests__/spawn-processes.files.test.ts',
       'src/modules/apps/__tests__/app-data-permissions.files.test.ts',
       'src/modules/apps/__tests__/app-migrations.files.test.ts',
+      'src/modules/app-stores/__tests__/*.files.test.ts',
       'src/modules/auth/*.files.test.ts',
       'src/modules/auth/__tests__/passkey.controller.test.ts',
       'src/modules/auth/__tests__/passkey.service.test.ts',

@@ -16,6 +16,7 @@ export default defineConfig({
       '**/common/helpers/__tests__/spawn-processes.files.test.ts',
       '**/apps/__tests__/app-data-permissions.files.test.ts',
       '**/apps/__tests__/app-migrations.files.test.ts',
+      '**/app-stores/__tests__/*.files.test.ts',
       '**/.internal/**',
       '**/auth/*.files.test.ts',
       '**/auth/__tests__/passkey.controller.test.ts',

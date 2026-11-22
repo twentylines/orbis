@@ -1,136 +1,143 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`App lifecycle > install app > should not delete an existing app-data folder even if the app is reinstalled 1`] = `
+exports[`Retained-storage app lifecycle > install app > should not delete an existing app-data folder even if the app is reinstalled 1`] = `
 "/
+├─ app/
 ├─ app-data/
 │  └─ test/
 │     └─ test2/
+│        ├─ data/
+│        │  └─ test.txt
 │        ├─ app.env
-│        └─ data/
-│           └─ test.txt
+│        └─ retained-data
 └─ data/
-   ├─ .env
    ├─ apps/
    │  └─ test/
    │     └─ test2/
-   │        ├─ config.json
    │        ├─ data/
+   │        ├─ metadata/
+   │        │  └─ description.md
+   │        ├─ config.json
    │        ├─ docker-compose.generated.yml
-   │        ├─ docker-compose.json
-   │        └─ metadata/
-   │           └─ description.md
+   │        └─ docker-compose.json
    ├─ backups/
    ├─ repos/
    │  └─ test/
    │     └─ apps/
    │        └─ test2/
-   │           ├─ config.json
    │           ├─ data/
-   │           ├─ docker-compose.json
-   │           └─ metadata/
-   │              └─ description.md
-   └─ state/
-      └─ seed"
+   │           ├─ metadata/
+   │           │  └─ description.md
+   │           ├─ config.json
+   │           └─ docker-compose.json
+   ├─ state/
+   │  └─ seed
+   └─ .env"
 `;
 
-exports[`App lifecycle > install app > should successfully install app and create expected directory structure 1`] = `
+exports[`Retained-storage app lifecycle > install app > should successfully install app and create expected directory structure 1`] = `
 "/
+├─ app/
 ├─ app-data/
 │  └─ test/
 │     └─ test/
+│        ├─ data/
 │        ├─ app.env
-│        └─ data/
+│        └─ retained-data
 └─ data/
-   ├─ .env
    ├─ apps/
    │  └─ test/
    │     └─ test/
-   │        ├─ config.json
    │        ├─ data/
+   │        ├─ metadata/
+   │        │  └─ description.md
+   │        ├─ config.json
    │        ├─ docker-compose.generated.yml
-   │        ├─ docker-compose.json
-   │        └─ metadata/
-   │           └─ description.md
+   │        └─ docker-compose.json
    ├─ backups/
    ├─ repos/
    │  └─ test/
    │     └─ apps/
    │        └─ test/
-   │           ├─ config.json
    │           ├─ data/
-   │           ├─ docker-compose.json
-   │           └─ metadata/
-   │              └─ description.md
-   └─ state/
-      └─ seed"
+   │           ├─ metadata/
+   │           │  └─ description.md
+   │           ├─ config.json
+   │           └─ docker-compose.json
+   ├─ state/
+   │  └─ seed
+   └─ .env"
 `;
 
-exports[`App lifecycle > update all apps > should update multiple apps that have newer versions available 1`] = `
+exports[`Retained-storage app lifecycle > update all apps > should update multiple apps that have newer versions available 1`] = `
 "/
+├─ app/
 ├─ app-data/
 │  └─ test/
 │     ├─ app1/
+│     │  ├─ data/
 │     │  ├─ app.env
-│     │  └─ data/
+│     │  └─ retained-data
 │     ├─ app2/
+│     │  ├─ data/
 │     │  ├─ app.env
-│     │  └─ data/
+│     │  └─ retained-data
 │     └─ app3/
+│        ├─ data/
 │        ├─ app.env
-│        └─ data/
-├─ data/
-│  ├─ .env
-│  ├─ apps/
-│  │  └─ test/
-│  │     ├─ app1/
-│  │     │  ├─ config.json
-│  │     │  ├─ data/
-│  │     │  ├─ docker-compose.generated.yml
-│  │     │  ├─ docker-compose.json
-│  │     │  └─ metadata/
-│  │     │     └─ description.md
-│  │     ├─ app2/
-│  │     │  ├─ config.json
-│  │     │  ├─ data/
-│  │     │  ├─ docker-compose.generated.yml
-│  │     │  ├─ docker-compose.json
-│  │     │  └─ metadata/
-│  │     │     └─ description.md
-│  │     └─ app3/
-│  │        ├─ config.json
-│  │        ├─ data/
-│  │        ├─ docker-compose.generated.yml
-│  │        ├─ docker-compose.json
-│  │        └─ metadata/
-│  │           └─ description.md
-│  ├─ backups/
-│  │  └─ test/
-│  │     ├─ app1/
-│  │     │  └─ app1-test-TIMESTAMP.tar.gz
-│  │     └─ app3/
-│  │        └─ app3-test-TIMESTAMP.tar.gz
-│  ├─ repos/
-│  │  └─ test/
-│  │     └─ apps/
-│  │        ├─ app1/
-│  │        │  ├─ config.json
-│  │        │  ├─ data/
-│  │        │  ├─ docker-compose.json
-│  │        │  └─ metadata/
-│  │        │     └─ description.md
-│  │        ├─ app2/
-│  │        │  ├─ config.json
-│  │        │  ├─ data/
-│  │        │  ├─ docker-compose.json
-│  │        │  └─ metadata/
-│  │        │     └─ description.md
-│  │        └─ app3/
-│  │           ├─ config.json
-│  │           ├─ data/
-│  │           ├─ docker-compose.json
-│  │           └─ metadata/
-│  │              └─ description.md
-│  └─ state/
-│     └─ seed
-└─ tmp/"
+│        └─ retained-data
+└─ data/
+   ├─ apps/
+   │  └─ test/
+   │     ├─ app1/
+   │     │  ├─ data/
+   │     │  ├─ metadata/
+   │     │  │  └─ description.md
+   │     │  ├─ config.json
+   │     │  ├─ docker-compose.generated.yml
+   │     │  └─ docker-compose.json
+   │     ├─ app2/
+   │     │  ├─ data/
+   │     │  ├─ metadata/
+   │     │  │  └─ description.md
+   │     │  ├─ config.json
+   │     │  ├─ docker-compose.generated.yml
+   │     │  └─ docker-compose.json
+   │     └─ app3/
+   │        ├─ data/
+   │        ├─ metadata/
+   │        │  └─ description.md
+   │        ├─ config.json
+   │        ├─ docker-compose.generated.yml
+   │        └─ docker-compose.json
+   ├─ backups/
+   │  └─ test/
+   │     ├─ app1/
+   │     │  └─ app1-test-TIMESTAMP.tar.gz
+   │     └─ app3/
+   │        └─ app3-test-TIMESTAMP.tar.gz
+   ├─ repos/
+   │  └─ test/
+   │     └─ apps/
+   │        ├─ app1/
+   │        │  ├─ data/
+   │        │  ├─ metadata/
+   │        │  │  └─ description.md
+   │        │  ├─ config.json
+   │        │  └─ docker-compose.json
+   │        ├─ app2/
+   │        │  ├─ data/
+   │        │  ├─ metadata/
+   │        │  │  └─ description.md
+   │        │  ├─ config.json
+   │        │  └─ docker-compose.json
+   │        └─ app3/
+   │           ├─ data/
+   │           ├─ metadata/
+   │           │  └─ description.md
+   │           ├─ config.json
+   │           └─ docker-compose.json
+   ├─ state/
+   │  └─ seed
+   └─ .env"
 `;

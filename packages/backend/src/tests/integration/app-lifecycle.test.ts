@@ -1,5 +1,10 @@
 import fs from 'node:fs';
 import realFs from 'node:fs/promises';
+import { randomUUID, createHash } from 'node:crypto';
+import { Volume } from 'memfs';
+import { parse as parseYaml } from 'yaml';
+import { AppJobService } from '@/modules/app-lifecycle/services/app-job.service';
+import type { StagedAppImageUpdate } from '@/modules/docker/app-image-pins';
 import os from 'node:os';
 import path from 'node:path';
 import { APP_DATA_DIR, APP_DIR, DATA_DIR } from '@/common/constants';
@@ -33,11 +38,10 @@ import { Test } from '@nestjs/testing';
 import { fromPartial } from '@total-typescript/shoehorn';
 import { eq } from 'drizzle-orm';
 import type Dockerode from 'dockerode';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import waitFor from 'wait-for-expect';
-import type { FsMock } from '../__mocks__/fs';
-import { createAppInStore } from '../utils/create-app-in-store';
+import { createAppInStore as createCatalogueApp } from '../utils/create-app-in-store';
 import { type TestDatabase, cleanTestData, createTestDatabase } from '../utils/create-test-database';
 import { APP_ASYNC_MUTEX } from '@/utils/mutex/mutex.module';
 import { AsyncMutex } from '@/utils/mutex/async-mutex';
@@ -55,41 +59,52 @@ import { AppValidationService } from '@/modules/app-lifecycle/services/app-valid
 import { BackupAppHandler } from '@/modules/app-lifecycle/handlers/backup-app.handler';
 import { RestoreAppHandler } from '@/modules/app-lifecycle/handlers/restore-app.handler';
 
-vi.mock('@/common/helpers/exec-helpers', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/common/helpers/exec-helpers')>();
-  const copyMetadata = async (source: string, destination: string): Promise<void> => {
-    const metadata = await fs.promises.lstat(source);
-    if (metadata.isDirectory()) {
-      for (const name of await fs.promises.readdir(source)) await copyMetadata(path.join(source, name), path.join(destination, name));
-    }
-    await fs.promises.chown(destination, metadata.uid, metadata.gid);
-    await fs.promises.chmod(destination, metadata.mode & 0o7777);
-    await fs.promises.utimes(destination, metadata.atime, metadata.mtime);
-  };
-  return {
-    ...original,
-    spawnAsync: async (...args: Parameters<typeof original.spawnAsync>) => {
-      const [command, parameters] = args;
-      if (command === 'cp' && parameters.includes('--attributes-only')) {
-        expect(parameters).toContain('--preserve=mode,ownership,timestamps');
-        const source = parameters.at(-2);
-        const destination = parameters.at(-1);
-        if (!source || !destination) throw new Error('Missing fixture metadata paths');
-        await copyMetadata(path.resolve(source), destination);
-        return { stdout: '', stderr: '' };
-      }
-      if (command === 'touch' && parameters[0] === '-r') {
-        const source = parameters[1];
-        const destination = parameters.at(-1);
-        if (!source || !destination) throw new Error('Missing fixture timestamp paths');
-        const metadata = await fs.promises.lstat(source);
-        await fs.promises.utimes(destination, metadata.atime, metadata.mtime);
-        return { stdout: '', stderr: '' };
-      }
-      return original.spawnAsync(...args);
-    },
-  };
+// Real receipt and package files share a private fixture root. Docker is the
+// external engine boundary; queue delivery and PostgreSQL remain real.
+const fixturePaths = await vi.hoisted(async () => {
+  const files = await import('node:fs/promises');
+  const paths = await import('node:path');
+  const system = await import('node:os');
+  const root = await files.mkdtemp(paths.join(await files.realpath(system.tmpdir()), 'orbis-lifecycle-integration-'));
+  return { root, app: paths.join(root, 'app'), data: paths.join(root, 'data'), appData: paths.join(root, 'app-data') };
 });
+vi.mock('@/common/constants', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/common/constants')>()),
+  APP_DIR: fixturePaths.app,
+  DATA_DIR: fixturePaths.data,
+  APP_DATA_DIR: fixturePaths.appData,
+}));
+
+// This suite covers an existing, unbaselined data tree. Clean Host-backed
+// creation and migration baselines have separate real-file/Engine tests.
+const createAppInStore: typeof createCatalogueApp = async (...args) => {
+  const info = await createCatalogueApp(...args);
+  const data = path.join(APP_DATA_DIR, args[0], info.id);
+  await realFs.mkdir(data, { recursive: true });
+  await realFs.writeFile(path.join(data, 'retained-data'), 'retained integration fixture');
+  return info;
+};
+async function snapshotTree() {
+  const entries: Record<string, string | null> = {};
+  async function capture(directory: string, selected: string) {
+    entries[selected] = null;
+    for (const name of (await realFs.readdir(directory)).sort()) {
+      if (selected === '/data/state' && ['orbis-install-requests', 'orbis-app-jobs'].includes(name)) continue;
+      const file = path.join(directory, name);
+      const relative = path.posix.join(selected, name);
+      const info = await realFs.lstat(file);
+      if (info.isDirectory()) await capture(file, relative);
+      else entries[relative] = '';
+    }
+  }
+  for (const [directory, selected] of [
+    [APP_DIR, '/app'],
+    [APP_DATA_DIR, '/app-data'],
+    [DATA_DIR, '/data'],
+  ] as const)
+    await capture(directory, selected);
+  return Volume.fromJSON(entries).toTree();
+}
 
 vi.mock('rabbitmq-client', async (importOriginal) => {
   const original = await importOriginal<typeof import('rabbitmq-client')>();
@@ -99,7 +114,7 @@ vi.mock('rabbitmq-client', async (importOriginal) => {
       constructor(options?: ConstructorParameters<typeof original.Connection>[0]) {
         super(
           process.env.ORBIS_TEST_QUEUE_PORT && typeof options === 'object'
-            ? { ...options, port: Number(process.env.ORBIS_TEST_QUEUE_PORT) }
+            ? { ...options, hostname: process.env.ORBIS_TEST_QUEUE_HOST ?? options.hostname, port: Number(process.env.ORBIS_TEST_QUEUE_PORT) }
             : options,
         );
       }
@@ -110,7 +125,7 @@ vi.mock('rabbitmq-client', async (importOriginal) => {
 let db: TestDatabase;
 const DB_NAME = 'applifecycletest';
 
-describe('App lifecycle', () => {
+describe('Retained-storage app lifecycle', () => {
   let appLifecycleService: AppLifecycleService;
   let marketplaceService: MarketplaceService;
   let appsRepository: AppsRepository;
@@ -125,7 +140,7 @@ describe('App lifecycle', () => {
   const docker = mock<Dockerode>();
   const containerStates = new Map<string, { running: boolean; resumed: number }>();
   const loggerService = mock<LoggerService>();
-  const archiveService = mock<ArchiveService>();
+  let archiveService: ReturnType<typeof mock<ArchiveService>>;
   const reposHelpers = mock<ReposHelpers>();
   reposHelpers.pullRepo.mockResolvedValue({ success: true, message: '' });
 
@@ -139,16 +154,19 @@ describe('App lifecycle', () => {
     appDir: APP_DIR,
     appDataDir: APP_DATA_DIR,
   });
-  configurationService.get.calledWith('userSettings').mockReturnValue(fromPartial({ eventsTimeout: 1, maxBackups: 1 }));
+  configurationService.get.calledWith('userSettings').mockReturnValue(fromPartial({ eventsTimeout: 10, maxBackups: 1 }));
   configurationService.get.calledWith('demoMode').mockReturnValue(false);
   dockerService.composeApp.mockResolvedValue({ success: true, stdout: '', stderr: '' });
 
-  const queueFactory = new QueueFactory(loggerService, configurationService);
-  const appEventsQueue = queueFactory.createQueue({
-    queueName: 'app-events-queue',
-    workers: 1,
-    eventSchema: appEventSchema,
-  });
+  let queueFactory: QueueFactory;
+  let appEventsQueue: AppEventsQueue;
+  async function settle(request: Promise<{ requestId: string }>, status: 'succeeded' | 'failed' = 'succeeded') {
+    const result = await request;
+    await waitFor(async () => {
+      expect((await tasksService.read()).tasks.find((task) => task.id === result.requestId)?.status).toBe(status);
+    });
+    return result;
+  }
 
   beforeAll(async () => {
     db = await createTestDatabase(DB_NAME);
@@ -164,17 +182,56 @@ describe('App lifecycle', () => {
     await waitFor(async () => {
       expect((await tasksService.read()).tasks.every((task) => ['succeeded', 'failed', 'interrupted'].includes(task.status))).toBe(true);
     });
+    await queueFactory.onModuleDestroy();
     await realFs.rm(taskDirectory, { recursive: true, force: true });
+    await realFs.rm(fixturePaths.root, { recursive: true, force: true });
+  });
+
+  afterEach(async (context) => {
+    if (context.task.result?.state === 'fail') {
+      const messages = loggerService.error.mock.calls.map((args) =>
+        args.map((value) => (value instanceof Error ? value.message : typeof value === 'string' ? value : '[details]')).join(' '),
+      );
+      process.stderr.write(messages.join('\n') + '\n');
+    }
+    await waitFor(async () => {
+      expect((await tasksService.read()).tasks.every((task) => ['succeeded', 'failed', 'interrupted'].includes(task.status))).toBe(true);
+    });
+    await queueFactory.onModuleDestroy();
+    vi.restoreAllMocks();
   });
 
   beforeEach(async () => {
+    loggerService.error.mockClear();
+    const realArchive = new ArchiveService(loggerService);
+    archiveService = mock<ArchiveService>();
+    archiveService.createTarGz.mockImplementation(realArchive.createTarGz);
+    archiveService.extractTarGz.mockImplementation(realArchive.extractTarGz);
+    archiveService.listTarGz.mockImplementation(realArchive.listTarGz);
+    archiveService.readTarConfig.mockImplementation(realArchive.readTarConfig);
+    dockerService.prepareAppUninstallCleanup.mockImplementation(async (appUrn) => async () => {
+      for (const directory of [appFilesManager.getAppPaths(appUrn).appInstalledDir, appFilesManager.getAppPaths(appUrn).appDataDir])
+        await expect(realFs.lstat(directory)).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+    queueFactory = new QueueFactory(loggerService, configurationService);
+    appEventsQueue = await queueFactory.createQueue({ queueName: `app-events-${randomUUID()}`, workers: 1, eventSchema: appEventSchema });
+    for (const directory of [APP_DIR, APP_DATA_DIR, DATA_DIR]) {
+      await realFs.rm(directory, { recursive: true, force: true });
+      await realFs.mkdir(directory, { recursive: true });
+    }
+    await realFs.mkdir(path.join(DATA_DIR, 'state'));
+    await realFs.mkdir(path.join(DATA_DIR, 'backups'));
+    await realFs.writeFile(path.join(DATA_DIR, '.env'), 'ROOT_FOLDER_HOST=/opt/runtipi');
+    await realFs.writeFile(path.join(DATA_DIR, 'state', 'seed'), 'seed');
     await cleanTestData(db);
     containerStates.clear();
     dockerService.composeApp.mockImplementation(async (urn, command) => {
       const project = urn.replace(':', '_');
       if (command.startsWith('up ')) {
         containerStates.set(project, { running: true, resumed: containerStates.get(project)?.resumed ?? 0 });
-      } else if (command === 'stop' || command.startsWith('down ')) {
+      } else if (command.startsWith('down ')) {
+        containerStates.delete(project);
+      } else if (command === 'stop') {
         const state = containerStates.get(project);
         if (state) state.running = false;
       }
@@ -194,12 +251,84 @@ describe('App lifecycle', () => {
       const state = containerStates.get(id);
       if (!state) throw new Error('Unknown fixture container');
       const container = mock<Dockerode.Container>({ id });
-      container.inspect.mockImplementation(async () => fromPartial({ State: { Running: state.running, Paused: false, Restarting: false } }));
+      const appUrn = id.replace('_', ':');
+      container.inspect.mockImplementation(async () =>
+        fromPartial({
+          Id: id,
+          Image: `sha256:${createHash('sha256').update(id).digest('hex')}`,
+          Config: {
+            Labels: {
+              'com.docker.compose.project': id,
+              'com.docker.compose.service': id.split('_')[0],
+              'runtipi.managed': 'true',
+              'runtipi.appurn': appUrn,
+            },
+          },
+          State: { Running: state.running, Paused: false, Restarting: false, Dead: false },
+        }),
+      );
+      container.stop.mockImplementation(async () => {
+        state.running = false;
+      });
+      container.unpause.mockResolvedValue(undefined);
       container.start.mockImplementation(async () => {
         state.running = true;
         state.resumed++;
       });
       return container;
+    });
+    const staged = new Map<string, { transaction: StagedAppImageUpdate; appUrn: string; environment: string; services: string[] }>();
+    dockerService.beginStagedAppUpdate.mockImplementation(async (appUrn) => {
+      const app = appFilesManager.getAppPaths(appUrn);
+      const workspace = await realFs.mkdtemp(path.join(fixturePaths.root, 'engine-stage-'));
+      const targetDirectory = path.join(workspace, 'target');
+      const original = path.join(workspace, 'original');
+      await realFs.cp(app.appInstalledDir, original, { recursive: true });
+      const entry = {
+        transaction: mock<StagedAppImageUpdate>({ id: randomUUID(), targetDirectory }),
+        appUrn,
+        environment: '',
+        services: [] as string[],
+      };
+      const transaction = entry.transaction;
+      transaction.stageTarget.mockImplementation(async (compose, environment) => {
+        entry.environment = environment;
+        entry.services = Object.keys(parseYaml(compose).services);
+        await realFs.writeFile(path.join(targetDirectory, 'docker-compose.generated.yml'), compose);
+      });
+      transaction.publishTarget.mockImplementation(async () => {
+        await realFs.rm(app.appInstalledDir, { recursive: true });
+        await realFs.cp(targetDirectory, app.appInstalledDir, { recursive: true });
+        await realFs.writeFile(path.join(app.appDataDir, 'app.env'), entry.environment);
+      });
+      transaction.restoreMetadata.mockImplementation(async () => {
+        await realFs.rm(app.appInstalledDir, { recursive: true, force: true });
+        await realFs.cp(original, app.appInstalledDir, { recursive: true });
+      });
+      transaction.commit.mockImplementation(async (commit) => {
+        await commit();
+        await realFs.rm(workspace, { recursive: true });
+      });
+      staged.set(transaction.id, entry);
+      return { transaction, retained: false };
+    });
+    dockerService.prepareStagedAppUpdate.mockImplementation(async (appUrn, id) => {
+      const selected = staged.get(id);
+      if (!selected || selected.appUrn !== appUrn) throw new Error('Unknown fixture stage');
+      const project = appUrn.replace(':', '_');
+      const plan = mock<Awaited<ReturnType<DockerService['prepareStagedAppUpdate']>>>();
+      plan.isCurrent.mockResolvedValue(true);
+      plan.release.mockResolvedValue(undefined);
+      plan.pull.mockImplementation(async () => ({
+        activationSha256: createHash('sha256').update(id).digest('hex'),
+        imageIds: Object.fromEntries(selected.services.map((name) => [name, `sha256:${createHash('sha256').update(project).digest('hex')}`])),
+      }));
+      plan.activate.mockImplementation(async () => {
+        const state = containerStates.get(project);
+        if (!state) throw new Error('Missing fixture deployment');
+        state.running = true;
+      });
+      return plan;
     });
     docker.pruneContainers.mockRejectedValue(null);
     docker.pruneNetworks.mockRejectedValue(null);
@@ -213,7 +342,7 @@ describe('App lifecycle', () => {
         AppStoreRepository,
         FilesystemService,
         BackupManager,
-        QueueFactory,
+        { provide: QueueFactory, useValue: queueFactory },
         AppLifecycleCommandFactory,
         AppFilesManager,
         AppsRepository,
@@ -232,6 +361,7 @@ describe('App lifecycle', () => {
         AppStatusSyncService,
         StatusManagerService,
         AppValidationService,
+        AppJobService,
         BackupAppHandler,
         RestoreAppHandler,
         {
@@ -292,25 +422,14 @@ describe('App lifecycle', () => {
     backupManager = moduleRef.get(BackupManager);
 
     databaseService.db = db;
+    const safePath = filesystemService.getSafeFilePath.bind(filesystemService);
+    vi.spyOn(filesystemService, 'getSafeFilePath').mockImplementation((name) => {
+      if (name === fixturePaths.root || name.startsWith(fixturePaths.root + path.sep)) return name;
+      return safePath(name);
+    });
 
-    archiveService.createTarGz.mockImplementation(async (_sourceDir, destinationFile) => {
-      await fs.promises.mkdir(path.dirname(destinationFile), { recursive: true });
-      await fs.promises.writeFile(destinationFile, 'archive');
-      return { stdout: '', stderr: '' };
-    });
-    archiveService.extractTarGz.mockResolvedValue({ stdout: '', stderr: '' });
-    archiveService.listTarGz.mockImplementation(async (archive) => {
-      if ((await fs.promises.readFile(archive, 'utf8')) !== 'archive') {
-        throw new Error('Invalid fixture archive');
-      }
-      return [
-        { path: './app-data/', type: 'd' },
-        { path: './app/', type: 'd' },
-      ];
-    });
     vi.spyOn(filesystemService, 'createTempDirectory').mockImplementation(async (prefix) => {
-      await fs.promises.mkdir('/tmp', { recursive: true });
-      return fs.promises.mkdtemp(path.join('/tmp', `${path.basename(prefix)}-`));
+      return fs.promises.mkdtemp(path.join(fixturePaths.root, `${path.basename(prefix)}-`));
     });
 
     configurationService.getConfig.mockReturnValue(
@@ -336,7 +455,7 @@ describe('App lifecycle', () => {
       const appInfo = await createAppInStore('test', { id: 'test' });
 
       // act
-      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} });
+      await settle(appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -344,7 +463,7 @@ describe('App lifecycle', () => {
       });
 
       // assert
-      expect((fs as unknown as FsMock).tree()).toMatchSnapshot();
+      expect(await snapshotTree()).toMatchSnapshot();
     });
 
     it('should not delete an existing app-data folder even if the app is reinstalled', async () => {
@@ -354,7 +473,7 @@ describe('App lifecycle', () => {
       await fs.promises.mkdir(`${APP_DATA_DIR}/test/test2/data`, { recursive: true });
       await fs.promises.writeFile(`${APP_DATA_DIR}/test/test2/data/test.txt`, 'test');
 
-      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} });
+      await settle(appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -362,31 +481,21 @@ describe('App lifecycle', () => {
       });
 
       // assert
-      expect((fs as unknown as FsMock).tree()).toMatchSnapshot();
+      expect(await snapshotTree()).toMatchSnapshot();
     });
   });
 
   describe('restore app', () => {
     const prepare = async (status: 'running' | 'stopped') => {
       const info = await createAppInStore('test', { id: `restore-${status}`, tipi_version: 1 });
-      await appLifecycleService.installApp({ appUrn: info.urn, form: {}, skipRun: true });
+      await settle(appLifecycleService.installApp({ appUrn: info.urn, form: {}, skipRun: true }));
       await waitFor(async () => expect((await appsRepository.getAppByUrn(info.urn))?.status).toBe('stopped'));
       const { appDataDir, appInstalledDir } = appFilesManager.getAppPaths(info.urn);
       const overrides = path.join(DATA_DIR, 'user-config', 'test', info.id);
       await fs.promises.mkdir(overrides, { recursive: true });
       await fs.promises.writeFile(path.join(overrides, 'app.env'), 'CUSTOM=backup\n');
       await fs.promises.writeFile(path.join(appDataDir, 'data', 'record'), 'backup data');
-      const savedTree = path.join('/tmp', `restore-fixture-${info.id}`);
-      archiveService.createTarGz.mockImplementation(async (source, destination) => {
-        expect(await filesystemService.copyDirectory(source, savedTree)).toBe(true);
-        await fs.promises.writeFile(destination, 'archive');
-        return { stdout: '', stderr: '' };
-      });
-      archiveService.extractTarGz.mockImplementation(async (_archive, destination) => {
-        expect(await filesystemService.copyDirectory(savedTree, destination)).toBe(true);
-        return { stdout: '', stderr: '' };
-      });
-      await appLifecycleService.backupApp({ appUrn: info.urn });
+      await settle(appLifecycleService.backupApp({ appUrn: info.urn }));
       await waitFor(async () => {
         expect((await appsRepository.getAppByUrn(info.urn))?.status).toBe('stopped');
         expect(await backupManager.listBackupsByAppId(info.urn)).toHaveLength(1);
@@ -405,14 +514,15 @@ describe('App lifecycle', () => {
         await appLifecycleService.startApp({ appUrn: info.urn });
         await waitFor(async () => expect((await appsRepository.getAppByUrn(info.urn))?.status).toBe('running'));
       }
-      return { info, backup, appDataDir, overrides };
+      const backupBody = await fs.promises.readFile(await backupManager.getBackupPath(info.urn, backup.id));
+      return { info, backup, appDataDir, overrides, backupBody };
     };
 
     it.each(['stopped', 'running'] as const)(
       'restores the saved files and database version, then preserves the previous %s state',
       async (status) => {
-        const { info, backup, appDataDir, overrides } = await prepare(status);
-        await appLifecycleService.restoreApp({ appUrn: info.urn, filename: backup.id });
+        const { info, backup, appDataDir, overrides, backupBody } = await prepare(status);
+        await settle(appLifecycleService.restoreApp({ appUrn: info.urn, filename: backup.id }));
         await waitFor(async () => {
           const app = await appsRepository.getAppByUrn(info.urn);
           expect(app?.status).toBe(status);
@@ -422,14 +532,14 @@ describe('App lifecycle', () => {
         expect(await fs.promises.readFile(path.join(appDataDir, 'data', 'record'), 'utf8')).toBe('backup data');
         expect(await fs.promises.readFile(path.join(overrides, 'app.env'), 'utf8')).toBe('CUSTOM=backup\n');
         expect(await backupManager.hasPendingRestore(info.urn)).toBe(false);
-        expect(await fs.promises.readFile(await backupManager.getBackupPath(info.urn, backup.id), 'utf8')).toBe('archive');
+        expect(await fs.promises.readFile(await backupManager.getBackupPath(info.urn, backup.id))).toEqual(backupBody);
       },
     );
 
     it('retains newer live files and database version after extraction fails', async () => {
       const { info, backup, appDataDir, overrides } = await prepare('stopped');
       archiveService.extractTarGz.mockResolvedValueOnce({ stdout: '', stderr: 'No space left on device' });
-      await appLifecycleService.restoreApp({ appUrn: info.urn, filename: backup.id });
+      await settle(appLifecycleService.restoreApp({ appUrn: info.urn, filename: backup.id }), 'failed');
       await waitFor(async () => expect((await appsRepository.getAppByUrn(info.urn))?.status).toBe('stopped'));
       expect((await appsRepository.getAppByUrn(info.urn))?.version).toBe(2);
       expect((await appFilesManager.getInstalledAppInfo(info.urn))?.tipi_version).toBe(2);
@@ -442,7 +552,7 @@ describe('App lifecycle', () => {
   describe('update app', () => {
     it('preserves the installed version and data when backup validation fails', async () => {
       const appInfo = await createAppInStore('test', { id: 'rejected-backup', tipi_version: 1 });
-      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} });
+      await settle(appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} }));
       await waitFor(async () => {
         expect((await appsRepository.getAppByUrn(appInfo.urn))?.status).toBe('running');
       });
@@ -451,7 +561,7 @@ describe('App lifecycle', () => {
       await createAppInStore('test', { id: appInfo.id, tipi_version: 2 });
       archiveService.listTarGz.mockRejectedValueOnce(new Error('Archive validation failed'));
 
-      await appLifecycleService.updateApp({ appUrn: appInfo.urn, performBackup: true });
+      await settle(appLifecycleService.updateApp({ appUrn: appInfo.urn, performBackup: true }), 'failed');
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -468,7 +578,7 @@ describe('App lifecycle', () => {
       // arrange
       const appInfo = await createAppInStore('test', { tipi_version: 1 });
 
-      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} });
+      await settle(appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -482,7 +592,7 @@ describe('App lifecycle', () => {
       await fs.promises.writeFile(`${APP_DATA_DIR}/test/${appInfo.id}/data/preserved.txt`, 'data to preserve');
 
       // act
-      await appLifecycleService.updateApp({ appUrn: appInfo.urn, performBackup: false });
+      await settle(appLifecycleService.updateApp({ appUrn: appInfo.urn, performBackup: false }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -500,7 +610,7 @@ describe('App lifecycle', () => {
     it('should keep only the configured number of backups when updating with backups enabled', async () => {
       const appInfo = await createAppInStore('test', { id: 'backup-retention-test', tipi_version: 1 });
 
-      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} });
+      await settle(appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -509,7 +619,7 @@ describe('App lifecycle', () => {
       });
 
       await createAppInStore('test', { id: appInfo.id, tipi_version: 2 });
-      await appLifecycleService.updateApp({ appUrn: appInfo.urn, performBackup: true });
+      await settle(appLifecycleService.updateApp({ appUrn: appInfo.urn, performBackup: true }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -518,7 +628,7 @@ describe('App lifecycle', () => {
       });
 
       await createAppInStore('test', { id: appInfo.id, tipi_version: 3 });
-      await appLifecycleService.updateApp({ appUrn: appInfo.urn, performBackup: true });
+      await settle(appLifecycleService.updateApp({ appUrn: appInfo.urn, performBackup: true }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -540,9 +650,9 @@ describe('App lifecycle', () => {
       const app2Info = await createAppInStore('test', { id: 'app2', tipi_version: 2 });
       const app3Info = await createAppInStore('test', { id: 'app3', tipi_version: 3 });
 
-      await appLifecycleService.installApp({ appUrn: app1Info.urn, form: {} });
-      await appLifecycleService.installApp({ appUrn: app2Info.urn, form: {} });
-      await appLifecycleService.installApp({ appUrn: app3Info.urn, form: {} });
+      await settle(appLifecycleService.installApp({ appUrn: app1Info.urn, form: {} }));
+      await settle(appLifecycleService.installApp({ appUrn: app2Info.urn, form: {} }));
+      await settle(appLifecycleService.installApp({ appUrn: app3Info.urn, form: {} }));
 
       await waitFor(async () => {
         const app1 = await appsRepository.getAppByUrn(app1Info.urn);
@@ -584,9 +694,10 @@ describe('App lifecycle', () => {
       expect(app2?.status).toBe('running');
       expect(app3?.status).toBe('running');
 
-      const tree = (fs as unknown as FsMock)
-        .tree()
-        .replace(/-\d+(?:-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?\.tar\.gz/g, '-TIMESTAMP.tar.gz');
+      const tree = (await snapshotTree()).replace(
+        /-\d+(?:-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?\.tar\.gz/g,
+        '-TIMESTAMP.tar.gz',
+      );
 
       expect(tree).toMatchSnapshot();
     });
@@ -597,7 +708,7 @@ describe('App lifecycle', () => {
       // arrange
       const appInfo = await createAppInStore('test', { id: 'subnet-test' });
 
-      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} });
+      await settle(appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -656,7 +767,7 @@ describe('App lifecycle', () => {
       await fs.promises.writeFile(`${DATA_DIR}/repos/test/apps/arch-test/docker-compose.json`, JSON.stringify(composeJson));
 
       // act
-      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} });
+      await settle(appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -675,7 +786,7 @@ describe('App lifecycle', () => {
       // arrange
       const appInfo = await createAppInStore('test', { id: 'stop-test' });
 
-      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} });
+      await settle(appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -698,7 +809,7 @@ describe('App lifecycle', () => {
       // arrange
       const appInfo = await createAppInStore('test', { id: 'start-test' });
 
-      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} });
+      await settle(appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -728,7 +839,7 @@ describe('App lifecycle', () => {
       // arrange
       const appInfo = await createAppInStore('test', { id: 'restart-test' });
 
-      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} });
+      await settle(appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -751,7 +862,7 @@ describe('App lifecycle', () => {
       // arrange
       const appInfo = await createAppInStore('test', { id: 'uninstall-test' });
 
-      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} });
+      await settle(appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -772,7 +883,7 @@ describe('App lifecycle', () => {
       // arrange
       const appInfo = await createAppInStore('test', { id: 'uninstall-backup-test' });
 
-      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} });
+      await settle(appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -795,7 +906,7 @@ describe('App lifecycle', () => {
       // arrange
       const appInfo = await createAppInStore('test', { id: 'reset-test' });
 
-      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} });
+      await settle(appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -825,7 +936,7 @@ describe('App lifecycle', () => {
       // arrange
       const appInfo = await createAppInStore('test', { id: 'reset-stopped-test' });
 
-      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} });
+      await settle(appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -864,7 +975,7 @@ describe('App lifecycle', () => {
       // arrange
       const appInfo = await createAppInStore('test', { id: 'config-test' });
 
-      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} });
+      await settle(appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
@@ -883,7 +994,7 @@ describe('App lifecycle', () => {
       // arrange
       const appInfo = await createAppInStore('test', { id: 'config-restart-test' });
 
-      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: { TEST_FIELD: 'old-value' } });
+      await settle(appLifecycleService.installApp({ appUrn: appInfo.urn, form: { TEST_FIELD: 'old-value' } }));
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
