@@ -96,6 +96,7 @@ async function bootstrap() {
   const app = await verifierDiagnostics.run('app', () =>
     NestFactory.create<NestExpressApplication>(AppModule, {
       abortOnError: !verifierDiagnostics.active,
+      forceCloseConnections: true,
       logger: [process.env.LOG_LEVEL as LogLevel, 'error', 'warn', 'fatal'],
     }),
   );
