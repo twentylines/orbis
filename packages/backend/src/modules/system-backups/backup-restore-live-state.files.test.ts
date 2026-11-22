@@ -355,10 +355,16 @@ it('pins state and receipt directories through actual Engine request constructio
   const f = await fixture();
   await files.mkdir(f.receipt, { recursive: true, mode: 0o700 });
   const pinned = new Map<string, number>();
+  const directories = new Map([f.state, f.receipt].map((name) => [name, fs.statSync(name, { bigint: true })]));
   const open = fs.openSync.bind(fs);
   vi.spyOn(fs, 'openSync').mockImplementation((name, flags, mode) => {
     const fd = open(name, flags, mode);
-    if (name === f.state || name === f.receipt) pinned.set(name, fd);
+    const actual = fs.fstatSync(fd, { bigint: true });
+    // Linux opens children through pinned /proc/self/fd parents, so match the
+    // actual directory identity rather than the spelling of the open path.
+    for (const [directory, expected] of directories) {
+      if (actual.dev === expected.dev && actual.ino === expected.ino) pinned.set(directory, fd);
+    }
     return fd;
   });
   f.onRequest.mockImplementation(({ path: request }) => {

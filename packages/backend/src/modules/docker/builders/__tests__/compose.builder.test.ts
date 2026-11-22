@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import yaml from 'yaml';
 import { DockerComposeBuilder } from '../compose.builder';
 import { createAppUrn } from '@/common/helpers/app-helpers';
@@ -13,6 +13,8 @@ describe('DockerComposeBuilder', () => {
   beforeEach(() => {
     composeBuilder = new DockerComposeBuilder();
   });
+
+  afterEach(() => vi.unstubAllEnvs());
 
   describe('Variable interpolation', () => {
     it('should replace {{RUNTIPI_APP_ID}} in label values', () => {
@@ -186,6 +188,25 @@ services:
   });
 
   describe('Network configuration', () => {
+    it.each([undefined, '', 'orbis_test_main'])('keeps external network and proxy routing together for override %j', (override) => {
+      vi.stubEnv('RUNTIPI_DOCKER_NETWORK', override);
+      const input: DynamicComposeSchemaYaml = {
+        'x-runtipi': { schema_version: 2 },
+        services: {
+          web: { image: 'nginx:alpine', 'x-runtipi': { is_main: true, internal_port: 80 } },
+          db: { image: 'postgres:alpine' },
+        },
+      };
+      const generated = yaml.parse(composeBuilder.getDockerCompose(input, { exposed: true, exposedLocal: true, enableAuth: true }, urn, subnet));
+      const selected = override || 'runtipi_tipi_main_network';
+      expect(generated.networks.tipi_main_network).toEqual({ name: selected, external: true });
+      expect(generated.services.web.labels['traefik.docker.network']).toBe(selected);
+      expect(generated.services.web.labels['traefik.http.routers.nginx-store-id.middlewares']).toBe('runtipi');
+      expect(generated.services.web.labels['traefik.http.routers.nginx-store-id-local.middlewares']).toBe('runtipi');
+      expect(generated.services.db.networks).not.toHaveProperty('tipi_main_network');
+      expect(input.networks).toBeUndefined();
+    });
+
     it('should add app-specific network for multi-service apps', () => {
       const doc = `x-runtipi:
   schema-version: 2
