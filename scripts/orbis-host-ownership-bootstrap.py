@@ -432,7 +432,7 @@ class BootstrapService:
             admitted()
 
     def request(self, connection, operation, data, *, peer_module):
-        if not self.service.lock.acquire(blocking=False):
+        if not C.acquire_request_lock(self.service.lock):
             fail()
         try:
             with self.service.HOST.credential_fence_lock(self.service.root, self.service.context) as guard:

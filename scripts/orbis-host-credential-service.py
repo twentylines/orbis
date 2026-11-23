@@ -21,6 +21,7 @@ from types import ModuleType
 OWNER = 0
 CONFIG_NAME = 'credential-admission.json'
 PROTOCOL = 1
+REQUEST_LOCK_TIMEOUT = 20
 RUNTIME_FILES = frozenset({'__init__.py', 'writer_broker.py', 'writer_control.py', 'writer_journal.py',
                            'recovery_sessions.py', 'recovery_config.py'})
 _HASH = re.compile(r'[a-f0-9]{64}\Z')
@@ -32,6 +33,13 @@ _DATA_KEY = object()
 
 def fail():
     return ValueError(ERROR)
+
+
+def acquire_request_lock(lock):
+    # Short read-only supervision shares this lock with credential admission.
+    # Wait within the RPC budget, then perform every live authority check under
+    # the acquired lock. This never retries a dispatch or bypasses a durable hold.
+    return lock.acquire(timeout=REQUEST_LOCK_TIMEOUT)
 
 
 def pairs(items):
@@ -383,7 +391,7 @@ class CredentialService:
         return body
 
     def request(self, connection, operation, data, *, peer_module):
-        if not self.service.lock.acquire(blocking=False):
+        if not acquire_request_lock(self.service.lock):
             raise fail()
         try:
             self.verify()

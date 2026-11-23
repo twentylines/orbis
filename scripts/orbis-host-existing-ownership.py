@@ -702,7 +702,7 @@ class ExistingService(B.BootstrapService):
         admitted(); yield guard, admitted; admitted()
 
     def request(self, connection, operation, data, *, peer_module):
-        if not self.service.lock.acquire(blocking=False): fail()
+        if not C.acquire_request_lock(self.service.lock): fail()
         try:
             with self.service.HOST.credential_fence_lock(self.service.root, self.service.context) as guard:
                 with peer_module.admit_existing(self.service, connection, host=self.service.HOST,

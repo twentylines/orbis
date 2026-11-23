@@ -25,6 +25,69 @@ SPEC.loader.exec_module(C)
 
 
 class ChangeProtocolTests(unittest.TestCase):
+    def test_short_lock_contention_waits_and_grants_exclusive_access(self):
+        lock = threading.Lock()
+        lock.acquire()
+        waiting = threading.Event()
+        released = threading.Event()
+        class QueuedLock:
+            def acquire(inner, *, timeout):
+                self.assertEqual(timeout, C.REQUEST_LOCK_TIMEOUT)
+                waiting.set()
+                return lock.acquire(timeout=timeout)
+        def finish_observation():
+            if waiting.wait(1):
+                lock.release()
+                released.set()
+        worker = threading.Thread(target=finish_observation)
+        worker.start()
+        acquired = False
+        try:
+            acquired = C.acquire_request_lock(QueuedLock())
+            self.assertTrue(acquired)
+            self.assertTrue(released.wait(1))
+            self.assertTrue(lock.locked())
+        finally:
+            if acquired: lock.release()
+            worker.join(2)
+        self.assertFalse(worker.is_alive())
+        self.assertFalse(lock.locked())
+
+    def test_lock_wait_is_bounded_and_never_dispatches_after_refusal(self):
+        service = C.CredentialService.__new__(C.CredentialService)
+        lock = mock.Mock()
+        lock.acquire.return_value = False
+        service.service = SimpleNamespace(lock=lock)
+        service.verify = mock.Mock()
+        service.dispatch = mock.Mock()
+        with self.assertRaises(ValueError):
+            service.request(object(), 'change-admission', {}, peer_module=object())
+        lock.acquire.assert_called_once_with(timeout=20)
+        lock.release.assert_not_called()
+        service.verify.assert_not_called()
+        service.dispatch.assert_not_called()
+
+    def test_real_lock_still_refuses_when_its_bounded_wait_expires(self):
+        lock = threading.Lock()
+        lock.acquire()
+        try:
+            with mock.patch.object(C, 'REQUEST_LOCK_TIMEOUT', 0.01):
+                self.assertFalse(C.acquire_request_lock(lock))
+            self.assertTrue(lock.locked())
+        finally:
+            lock.release()
+
+    def test_admission_is_rechecked_after_acquisition_and_failed_check_releases_lock(self):
+        service = C.CredentialService.__new__(C.CredentialService)
+        service.service = SimpleNamespace(lock=threading.Lock())
+        service.verify = mock.Mock(side_effect=ValueError('fixture admission changed'))
+        service.dispatch = mock.Mock()
+        with self.assertRaises(ValueError):
+            service.request(object(), 'change-admission', {}, peer_module=object())
+        service.verify.assert_called_once_with()
+        service.dispatch.assert_not_called()
+        self.assertFalse(service.service.lock.locked())
+
     def test_existing_positive_admission_keeps_prepared_identity_for_both_modes(self):
         service = C.CredentialService.__new__(C.CredentialService)
         service.service = SimpleNamespace(lock=threading.Lock(), HOST=object())
