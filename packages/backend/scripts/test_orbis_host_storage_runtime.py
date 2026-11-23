@@ -58,6 +58,10 @@ class RuntimeBoundaries(unittest.TestCase):
             'markers': ['missing-file', 'missing-module'], 'missingPackages': ['argon2']})
         self.assertNotIn('sensitive-value', json.dumps(R.startup_signals(body, {'argon2'})))
 
+    def test_minified_source_lines_cannot_hide_the_final_startup_failure(self):
+        body = b'x' * (512 * 1024) + b'\nParseError: private detail\n'
+        self.assertEqual(R.startup_signals(body, set()), {'markers': ['schema-parse'], 'missingPackages': []})
+
     def test_official_repository_aliases_preserve_the_exact_digest(self):
         digest = 'sha256:' + 'a' * 64
         expected = 'docker.io/library/postgres@' + digest

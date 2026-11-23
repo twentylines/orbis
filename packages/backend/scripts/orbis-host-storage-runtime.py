@@ -67,7 +67,10 @@ def canonical_reference(value):
 
 def startup_signals(body, packages):
     """Select known failure markers; never return messages, paths or log lines."""
-    text = body[:256 * 1024].decode('utf-8', errors='replace')
+    # Node can print a very long minified source line before its actual error.
+    # Keep both bounded ends so that line cannot hide the final failure marker.
+    text = (body[:128 * 1024] + b'\n' + body[-128 * 1024:]).decode('utf-8', errors='replace')
+    text = '\n'.join(line for line in text.splitlines() if len(line) <= 4096)
     markers = {
         'missing-module': ('ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND', 'Cannot find package', 'Cannot find module'),
         'native-module': ('ERR_DLOPEN_FAILED', 'invalid ELF header'),
@@ -83,6 +86,9 @@ def startup_signals(body, packages):
         'server-configuration': ('Invalid server configuration',),
         'settings-configuration': ('Invalid settings.json file',),
         'dependency-injection': ("Nest can't resolve dependencies",),
+        'schema-parse': ('ParseError:',),
+        'bundled-commonjs-wrapper': ('Expected CommonJS module to have a function wrapper',),
+        'database-query': ('DrizzleQueryError:', 'QueryFailedError:'),
     }
     missing = set()
     for value in re.findall(r"Cannot find (?:package|module) ['\"]([^'\"\r\n]{1,200})['\"]", text):
