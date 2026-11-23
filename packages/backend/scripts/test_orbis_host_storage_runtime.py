@@ -120,6 +120,19 @@ class RuntimeBoundaries(unittest.TestCase):
             self.assertEqual(runtime.identifiers('container'), {'a' * 64})
             self.assertIn('--all', docker.call_args.args)
 
+    def test_failed_probe_retains_only_bounded_diagnostics_and_never_passes(self):
+        runtime = self.runtime()
+        runtime.owned['a' * 64] = ('runtipi', 'sha256:' + 'b' * 64, R.IMAGE + '@sha256:' + 'c' * 64)
+        state = {'State': {'Status': 'running', 'Health': {'Status': 'healthy'}}}
+        child = {'case': 'positive', 'passed': False, 'failedPhase': 'host-transport',
+                 'diagnostic': {'hostStatus': 409, 'metadataVerified': False, 'privatePath': '/private/location'}}
+        result = subprocess.CompletedProcess([], 1, json.dumps(child).encode(), b'')
+        with patch.object(runtime, 'inspect', return_value=state), patch.object(runtime, 'docker', return_value=result):
+            with self.assertRaisesRegex(R.Refused, 'core-storage-probe-failed'):
+                runtime.probe_core('positive')
+        self.assertEqual(runtime.results, [{'case': 'positive', 'passed': False, 'phase': 'host-transport',
+                                           'diagnostic': {'hostStatus': 409, 'metadataVerified': False}}])
+
     def test_cleanup_has_no_authority_before_initial_inventory(self):
         runtime = self.runtime()
         with patch.object(runtime, 'docker') as docker:

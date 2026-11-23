@@ -158,8 +158,8 @@ class Runtime:
         self.results = []
         self.failure_role = None
 
-    def docker(self, *arguments, timeout=60):
-        return run(['docker', '--context', 'default', *arguments], self.source, timeout=timeout)
+    def docker(self, *arguments, timeout=60, accepted=(0,)):
+        return run(['docker', '--context', 'default', *arguments], self.source, timeout=timeout, accepted=accepted)
 
     def identifiers(self, kind):
         arguments = ['ls', '--quiet', '--no-trunc']
@@ -305,9 +305,19 @@ class Runtime:
     def probe_core(self, mode):
         before = self.inspect(self.core_id())
         require(before['State']['Status'] == 'running' and before['State'].get('Health', {}).get('Status') == 'healthy', 'candidate-health-lost')
-        result = self.docker('exec', self.core_id(), 'node', '/opt/orbis-test-probe/probe.mjs', mode, timeout=90)
+        result = self.docker('exec', self.core_id(), 'node', '/opt/orbis-test-probe/probe.mjs', mode, timeout=90, accepted=(0, 1))
         require(len(result.stdout) <= 16384 and not result.stderr, 'invalid-probe-output')
         record = json.loads(result.stdout)
+        if result.returncode != 0:
+            phases = ('preconditions', 'host-transport', 'witness-open', 'witness-use', 'witness-close')
+            diagnostic = record.get('diagnostic', {})
+            safe = {key: value for key, value in diagnostic.items()
+                    if (key == 'hostStatus' and type(value) is int and 100 <= value <= 599)
+                    or (key in ('metadataVerified', 'directoryMatches', 'engineSocketMatches') and type(value) is bool)}
+            self.results.append({'case': mode, 'passed': False,
+                                 'phase': record.get('failedPhase') if record.get('failedPhase') in phases else 'unknown',
+                                 'diagnostic': safe})
+            raise Refused('core-storage-probe-failed')
         require(record.get('case') == mode and record.get('passed') is True, 'core-storage-probe-failed')
         if mode == 'positive':
             require(record.get('observation', {}).get('controllerId') == self.core_id(), 'probe-controller-mismatch')
