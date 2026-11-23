@@ -1,3 +1,4 @@
+import { AppValidationService } from '../services/app-validation.service';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { AppFilesManager } from '@/modules/apps/app-files-manager';
@@ -53,6 +54,7 @@ const fixture = ({
   const tasks = mock<TasksService>();
   const apps = mock<AppsRepository>();
   const config = mock<ConfigurationService>();
+  const validation = mock<AppValidationService>();
   const allocator = mock<SubnetManagerService>();
   const docker = mock<Dockerode>();
   const transaction = mock<StagedAppImageUpdate>({ id: 'owned-transaction', targetDirectory: '/data/owned-stage/target' });
@@ -178,12 +180,14 @@ const fixture = ({
     [ConfigurationService, config],
     [SubnetManagerService, allocator],
     [TasksService, tasks],
+    [AppValidationService, validation],
   ]);
   const moduleRef = { get: (token: unknown) => services.get(token) } as ModuleRef;
   return {
     command: new UpdateAppCommand(moduleRef, docker, performBackup),
     moduleRef,
     tasks,
+    validation,
     docker,
     dockerService,
     transaction,
@@ -395,7 +399,8 @@ describe('staged app update', () => {
     ]);
     expect(f.transaction.stageTarget).toHaveBeenCalledExactlyOnceWith(expect.stringContaining(targetImage), 'TEST_SETTING=synthetic-only');
     expect(f.transaction.stageTarget.mock.lastCall?.[0]).toContain('10.128.23.0/24');
-    expect(f.helpers.renderAppEnv.mock.lastCall?.[2]).toBe(form);
+    expect(f.helpers.renderAppEnv.mock.lastCall?.[2]).toMatchObject(form);
+    expect(f.helpers.renderAppEnv.mock.lastCall?.[2]).not.toBe(form);
     expect(form).toEqual(before);
     expect(f.dockerService.prepareStagedAppUpdate).toHaveBeenCalledExactlyOnceWith(appUrn, 'owned-transaction', f.docker);
     expect(f.transaction.recordPulledImages).toHaveBeenCalledExactlyOnceWith(binding);
@@ -552,5 +557,40 @@ describe('staged app update', () => {
     f.transaction.restoreMetadata.mockRejectedValueOnce(new Error(expectedRecovery));
     expect(await f.command.execute(appUrn, {})).toEqual({ success: false, message: expectedRecovery });
     expect(f.containers[0]?.container.start).not.toHaveBeenCalled();
+  });
+});
+
+describe('target app settings', () => {
+  it('validates before pulling or stopping the current app', async () => {
+    const f = fixture();
+    f.validation.validateUpdateConfigSettings.mockRejectedValue(new Error('Target settings are not compatible.'));
+    expect(await f.command.execute(appUrn, {})).toMatchObject({ success: false, statePreserved: true });
+    expect(f.helpers.renderAppEnv).not.toHaveBeenCalled();
+    expect(f.plan.pull).not.toHaveBeenCalled();
+    expect(f.containers[0]?.container.stop).not.toHaveBeenCalled();
+    expect(f.transaction.publishTarget).not.toHaveBeenCalled();
+    expect(f.apps.updateAppById).not.toHaveBeenCalled();
+  });
+
+  it('uses and saves the target exposure settings without changing the saved request', async () => {
+    const f = fixture();
+    f.files.getInstalledAppInfo.mockResolvedValue(createMockAppInfo({ tipi_version: 2, exposable: false, port: 8090 }));
+    const validator = new AppValidationService(f.apps, mock<ConfigurationService>(), mock<LoggerService>());
+    f.validation.validateUpdateConfigSettings.mockImplementation((...args) => validator.validateUpdateConfigSettings(...args));
+    const form = { exposed: true, exposedLocal: true, enableAuth: true, domain: 'example.test', openPort: false, EXTRA: 'keep' };
+    const original = structuredClone(form);
+    expect((await f.command.execute(appUrn, form)).success).toBe(true);
+    const rendered = f.helpers.renderAppEnv.mock.lastCall?.[2];
+    expect(rendered).toMatchObject({ exposed: false, exposedLocal: false, enableAuth: false, EXTRA: 'keep' });
+    expect(rendered?.domain).toBeUndefined();
+    expect(f.current()).toMatchObject({
+      exposed: false,
+      exposedLocal: false,
+      enableAuth: false,
+      domain: null,
+      port: 8090,
+      config: { exposed: false, exposedLocal: false, enableAuth: false, EXTRA: 'keep' },
+    });
+    expect(form).toEqual(original);
   });
 });

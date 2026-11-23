@@ -607,6 +607,36 @@ describe('Retained-storage app lifecycle', () => {
       expect(dataFileExists).toBe(true);
     });
 
+    it('persists target exposure settings and version together against actual PostgreSQL', async () => {
+      const info = await createAppInStore('test', { id: 'target-settings', tipi_version: 1, exposable: true });
+      await settle(appLifecycleService.installApp({ appUrn: info.urn, form: { exposed: true, enableAuth: true, domain: 'app.example.test' } }));
+      expect(await appsRepository.getAppByUrn(info.urn)).toMatchObject({ version: 1, exposed: true });
+      await createAppInStore('test', { id: info.id, tipi_version: 2, exposable: false, port: 8090 });
+      await settle(appLifecycleService.updateApp({ appUrn: info.urn, performBackup: false }));
+      const saved = await appsRepository.getAppByUrn(info.urn);
+      expect(saved).toMatchObject({
+        version: 2,
+        status: 'running',
+        exposed: false,
+        exposedLocal: false,
+        enableAuth: false,
+        domain: null,
+        config: { exposed: false, enableAuth: false },
+      });
+      expect(saved?.config.domain).toBeUndefined();
+      expect((await appFilesManager.getAppEnv(info.urn)).content).toContain('APP_EXPOSED=false');
+    });
+
+    it('preserves the old PostgreSQL settings and version when target validation fails', async () => {
+      const info = await createAppInStore('test', { id: 'invalid-target-settings', tipi_version: 1, exposable: true });
+      await settle(appLifecycleService.installApp({ appUrn: info.urn, form: { exposed: false } }));
+      const before = await appsRepository.getAppByUrn(info.urn);
+      await createAppInStore('test', { id: info.id, tipi_version: 2, exposable: true, force_expose: true });
+      await settle(appLifecycleService.updateApp({ appUrn: info.urn, performBackup: false }), 'failed');
+      expect(await appsRepository.getAppByUrn(info.urn)).toMatchObject({ version: 1, status: 'running', config: before?.config });
+      expect((await appFilesManager.getInstalledAppInfo(info.urn))?.tipi_version).toBe(1);
+    });
+
     it('should keep only the configured number of backups when updating with backups enabled', async () => {
       const appInfo = await createAppInStore('test', { id: 'backup-retention-test', tipi_version: 1 });
 

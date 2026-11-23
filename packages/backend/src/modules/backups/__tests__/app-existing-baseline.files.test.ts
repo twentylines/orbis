@@ -1,3 +1,7 @@
+import { appUpdateSettings } from '../../apps/app-update-settings';
+import { appFormSchema } from '../../app-lifecycle/dto/app-lifecycle.dto';
+import { AppValidationService } from '../../app-lifecycle/services/app-validation.service';
+import type { AppInfo } from '@runtipi/common/schemas';
 import type { ModuleRef } from '@nestjs/core';
 import { AppFilesManager } from '../../apps/app-files-manager';
 import { DockerService } from '../../docker/docker.service';
@@ -58,6 +62,7 @@ async function fixture(options: { stopped?: boolean; named?: boolean; ids?: stri
   await fs.mkdir(path.join(stage.targetDirectory, 'migrations'), { mode: 0o750 });
   await fs.writeFile(path.join(stage.targetDirectory, 'migrations/002-new.yml'), 'pending script metadata', { mode: 0o640 });
   await stage.stageTarget('services: {}', 'NEW=true');
+  await stage.recordUpdateSettings(appUpdateSettings({} as AppInfo, {}, appFormSchema.assert({})));
   await stage.recordPulledImages({ activationSha256: 'd'.repeat(64), imageIds: { web: imageId } });
   const original = {
     Id: id,
@@ -248,6 +253,7 @@ it.each(['intent', 'confirmed'] as const)(
       [AppsRepository, f.repository],
       [AppFilesManager, files],
       [DockerService, f.service],
+      [AppValidationService, { validateUpdateConfigSettings: async () => {} }],
     ]);
     await resumeExistingAppBaseline({
       moduleRef: { get: (token: unknown) => services.get(token) } as ModuleRef,
@@ -290,4 +296,17 @@ it('keeps an unacknowledged baseline intent held after restart without retrying 
   ).rejects.toThrow();
   expect((await stage.read()).context).toBeNull();
   expect(f.sql.queries.some((query) => query.startsWith('update'))).toBe(false);
+});
+
+it('retains the target settings across reopening and refuses a different settings payload', async () => {
+  await fixture();
+  const saved = (await stage.read()).updateSettings;
+  expect(saved?.values.config).toMatchObject({ openPort: true, skipEnv: false });
+  const input = stage.input;
+  await stage.close();
+  stage = await AppUpdateStage.open(input);
+  expect((await stage.read()).updateSettings).toEqual(saved);
+  if (!saved) throw new Error('Missing saved target settings');
+  await expect(stage.recordUpdateSettings({ ...saved, sourceSha256: 'f'.repeat(64) })).rejects.toThrow();
+  expect((await stage.read()).updateSettings).toEqual(saved);
 });

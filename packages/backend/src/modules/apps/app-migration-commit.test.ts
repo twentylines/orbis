@@ -1,3 +1,6 @@
+import { appUpdateSettings } from './app-update-settings';
+import { createMockAppInfo } from '@/tests/helpers/app-mocks';
+import { appFormSchema } from '../app-lifecycle/dto/app-lifecycle.dto';
 import { randomUUID } from 'node:crypto';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import type { Client } from 'pg';
@@ -119,6 +122,7 @@ beforeEach(() => {
       if (text.startsWith('update "app"')) {
         expect(snapshot).toBeDefined();
         for (const match of (text.split(' where ')[0] ?? '').matchAll(/"([^"]+)" = \$(\d+)/g)) current[match[1] ?? ''] = params[Number(match[2]) - 1];
+        if (typeof current.config === 'string') current.config = JSON.parse(current.config);
         return rows([current], text.split(' returning ')[1] ?? '');
       }
       if (text.startsWith('delete from "app_migration"')) {
@@ -242,4 +246,32 @@ it('does not infer a clean baseline from an empty database history', async () =>
   ledger = [];
   await expect(commitAppMigration(database, state, 'running')).rejects.toThrow();
   expect(queries).toEqual([]);
+});
+
+it('atomically saves target settings with the migration ledger and acknowledges the exact current values', async () => {
+  const original = { exposed: true, domain: 'example.test' };
+  current.config = original;
+  state.operation.settings = appUpdateSettings(
+    createMockAppInfo({ port: 8090 }),
+    original,
+    appFormSchema.assert({ exposed: false, EXTRA: 'target' }),
+  );
+  await commitAppMigration(database, state, 'running', false);
+  expect(current).toMatchObject({ version: 5, exposed: false, domain: null, port: 8090 });
+  expect(await readAppMigrationCommit(database, state)).toBeDefined();
+  current.config = { EXTRA: 'newer-setting' };
+  await expect(readAppMigrationCommit(database, state)).rejects.toThrow();
+  await expect(commitAppMigration(database, state, 'running', false)).rejects.toThrow();
+  expect(queries.filter((query) => query.startsWith('update'))).toHaveLength(1);
+});
+
+it('does not overwrite changed source settings while committing a migration', async () => {
+  const original = { EXTRA: 'old-setting' };
+  state.operation.settings = appUpdateSettings(createMockAppInfo({ port: 8090 }), original, appFormSchema.assert({ EXTRA: 'target' }));
+  current.config = { EXTRA: 'newer-setting' };
+  const before = structuredClone(current);
+  await expect(commitAppMigration(database, state, 'running', false)).rejects.toThrow();
+  expect(current).toEqual(before);
+  expect(receipts).toEqual([]);
+  expect(queries.some((query) => query.startsWith('update'))).toBe(false);
 });

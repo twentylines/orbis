@@ -1,3 +1,6 @@
+import { appUpdateSettings } from '../../apps/app-update-settings';
+import { appFormSchema } from '../dto/app-lifecycle.dto';
+import { AppValidationService } from '../services/app-validation.service';
 import type { ModuleRef } from '@nestjs/core';
 import type Dockerode from 'dockerode';
 import type { AppUrn } from '@runtipi/common/types';
@@ -61,6 +64,10 @@ export async function resumeExistingAppBaseline(input: {
       files.getAppMigrationIds(input.appUrn, target.target),
     ]);
     if (!info) throw recovery();
+    const targetForm = appFormSchema.assert(structuredClone(input.form));
+    await input.moduleRef.get(AppValidationService, { strict: false }).validateUpdateConfigSettings(input.appUrn, info, targetForm, app.id);
+    const settings = appUpdateSettings(info, input.form, targetForm);
+    if (!state.updateSettings || JSON.stringify(state.updateSettings) !== JSON.stringify(settings)) throw recovery();
     await verifyExistingAppBaseline(proof, input.stage);
     await input.stage.recordContext({
       appId: app.id,
@@ -68,6 +75,7 @@ export async function resumeExistingAppBaseline(input: {
       fromVersion: app.version,
       toVersion: info.tipi_version,
       requestInputSha256: binding.requestInputSha256,
+      settings,
       authoritySha256: binding.authoritySha256,
       previousLedger,
       targetMigrationIds,

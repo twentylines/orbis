@@ -1,3 +1,4 @@
+import { AppValidationService } from '../app-lifecycle/services/app-validation.service';
 import { createHash, randomUUID } from 'node:crypto';
 import { AppUpdateStage } from './app-update-stage';
 import fs from 'node:fs/promises';
@@ -391,6 +392,7 @@ describe('retained update with actual metadata, pin validation and normal start'
     );
     docker.pruneContainers.mockResolvedValue({ ContainersDeleted: [], SpaceReclaimed: 0 });
     const services = new Map<unknown, unknown>([
+      [AppValidationService, { validateUpdateConfigSettings: async () => {} }],
       [LoggerService, mock<LoggerService>()],
       [AppFilesManager, files],
       [DockerService, service],
@@ -477,11 +479,14 @@ describe('retained update with actual metadata, pin validation and normal start'
     if (failure === 'override-after-stop' || failure === 'retag-after-pull') {
       expect(updated).toMatchObject({ success: true, updateStatus: 'running' });
       expect(await fs.readFile(userEnv, 'utf8')).toBe(failure === 'override-after-stop' ? 'SETTING=late-edit' : 'SETTING=kept');
-      expect(repository.updateAppById).toHaveBeenLastCalledWith(1, {
-        version: 2,
-        status: 'running',
-        pendingRestart: failure === 'override-after-stop',
-      });
+      expect(repository.updateAppById).toHaveBeenLastCalledWith(
+        1,
+        expect.objectContaining({
+          version: 2,
+          status: 'running',
+          pendingRestart: failure === 'override-after-stop',
+        }),
+      );
       expect(readEffectiveAppCompose).toHaveBeenCalledOnce();
       expect(prepareFrozenUpdateInvocation).toHaveBeenCalledTimes(2);
       expect(docker.getImage).toHaveBeenCalledExactlyOnceWith(manifest);

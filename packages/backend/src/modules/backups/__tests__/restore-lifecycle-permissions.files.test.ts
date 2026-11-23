@@ -1,3 +1,5 @@
+import { AppValidationService } from '../../app-lifecycle/services/app-validation.service';
+import { appSettingsBinding } from '../../apps/app-settings-binding';
 import fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -118,6 +120,7 @@ describe('Restored app permissions across lifecycle commands on real files', () 
     repository.getAppByUrn.mockResolvedValue(installed);
     repository.updateAppById.mockImplementation(async (_id, patch) => ({ ...installed, ...patch }));
     const services = new Map<unknown, unknown>([
+      [AppValidationService, { validateUpdateConfigSettings: async () => {} }],
       [AppFilesManager, files],
       [LoggerService, logger],
       [ConfigurationService, configuration],
@@ -159,7 +162,22 @@ describe('Restored app permissions across lifecycle commands on real files', () 
   for (const Command of [StartAppCommand, StopAppCommand, RestartAppCommand, GenerateAppEnvCommand, UpdateAppCommand]) {
     it(`${Command.name} preserves restored private modes, owners, contents and timestamps`, async () => {
       const before = await protectedFiles();
-      const command = Command === UpdateAppCommand ? new UpdateAppCommand(moduleRef, docker, false) : new Command(moduleRef, docker);
+      let binding: string | undefined;
+      if (Command === GenerateAppEnvCommand) {
+        const repository = moduleRef.get(AppsRepository);
+        const current = await repository.getAppByUrn(urn);
+        if (!current) throw new Error('Missing application fixture');
+        const stopped = { ...current, status: 'stopped' as const };
+        vi.mocked(repository.getAppByUrn).mockResolvedValue(stopped);
+        vi.mocked(repository.updateSettingsIfCurrent).mockImplementation(async (_app, patch) => ({ ...stopped, ...patch }));
+        binding = appSettingsBinding(stopped);
+      }
+      const command =
+        Command === UpdateAppCommand
+          ? new UpdateAppCommand(moduleRef, docker, false)
+          : Command === GenerateAppEnvCommand
+            ? new GenerateAppEnvCommand(moduleRef, docker, binding)
+            : new Command(moduleRef, docker);
       const result = await command.execute(urn, {});
       expect(result.success, result.message).toBe(true);
       if (Command === UpdateAppCommand) await expect(fs.readFile(path.join(data, 'app.env'), 'utf8')).resolves.toBe('GENERATED=yes\n');

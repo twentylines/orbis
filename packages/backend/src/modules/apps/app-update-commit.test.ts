@@ -1,3 +1,6 @@
+import { appUpdateSettings, appUpdateInputHash } from './app-update-settings';
+import { createMockAppInfo } from '@/tests/helpers/app-mocks';
+import { appFormSchema } from '../app-lifecycle/dto/app-lifecycle.dto';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { freshInstallSql } from '@/tests/helpers/fresh-install-sql';
 import { migrationHash } from '../backups/app-migration-journal';
@@ -155,4 +158,32 @@ it('requires persisted commit intent and actual stage identity before SQL writes
   await expect(commitOrdinaryAppUpdate(sql.database, stage, result)).rejects.toThrow();
   await expect(ordinaryUpdateResultBinding({ read: async () => state } as never)).rejects.toThrow();
   expect(sql.queries).toEqual([]);
+});
+
+it('commits normalized settings with the ordinary version and keeps them in its acknowledgement', async () => {
+  if (!state.context) throw new Error('Missing context');
+  const original = { exposed: true, domain: 'example.test' };
+  sql.row().config = original;
+  const form = appFormSchema.assert({ exposed: false, EXTRA: 'keep' });
+  state.context.requestInputSha256 = appUpdateInputHash(original);
+  state.context.settings = appUpdateSettings(createMockAppInfo({ port: 8090 }), original, form);
+  const result = await ordinaryUpdateResultBinding(stage);
+  expect(await commitOrdinaryAppUpdate(sql.database, stage, result)).toBe(true);
+  expect(sql.row()).toMatchObject({ version: 2, exposed: false, domain: null, port: 8090 });
+  expect(await readCurrentOrdinaryUpdateCommit(sql.database, result)).toBe(true);
+  sql.row().config = { EXTRA: 'newer-setting' };
+  await expect(readCurrentOrdinaryUpdateCommit(sql.database, result)).rejects.toThrow();
+  expect(sql.queries.filter((query) => query.startsWith('update'))).toHaveLength(1);
+});
+
+it('refuses a changed source config before writing ordinary target settings', async () => {
+  if (!state.context) throw new Error('Missing context');
+  const original = { EXTRA: 'old-setting' };
+  state.context.requestInputSha256 = appUpdateInputHash(original);
+  state.context.settings = appUpdateSettings(createMockAppInfo({ port: 8090 }), original, appFormSchema.assert({ EXTRA: 'target' }));
+  sql.row().config = { EXTRA: 'newer-setting' };
+  const result = await ordinaryUpdateResultBinding(stage);
+  await expect(commitOrdinaryAppUpdate(sql.database, stage, result)).rejects.toThrow();
+  expect(sql.queries.some((query) => query.startsWith('update'))).toBe(false);
+  expect(sql.receipts()).toEqual([]);
 });

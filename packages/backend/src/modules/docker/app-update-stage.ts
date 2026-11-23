@@ -1,3 +1,4 @@
+import { appUpdateSettingsSchema, type AppUpdateSettings } from '../apps/app-update-settings';
 import { retainOrdinaryUpdateResult } from '../app-lifecycle/update-result';
 import { ordinaryUpdateResultBinding } from '../apps/app-update-commit';
 import { assertPackageLinks, portablePackageLink } from '../app-stores/app-package-links';
@@ -69,6 +70,7 @@ const contextSchema = type({
   fromVersion: '0 <= number.integer <= 2147483647',
   toVersion: '0 <= number.integer <= 2147483647',
   requestInputSha256: hash,
+  'settings?': appUpdateSettingsSchema,
   authoritySha256: hash,
   previousLedger: appMigrationLedgerSchema,
   targetMigrationIds: migrationId
@@ -91,6 +93,7 @@ const contextSchema = type({
   .onUndeclaredKey('reject')
   .narrow(
     (value) =>
+      (value.settings === undefined || (value.purpose === undefined && value.settings.sourceSha256 === value.requestInputSha256)) &&
       new Set(value.originalContainers.map(({ id }) => id)).size === value.originalContainers.length &&
       (value.purpose === 'fresh-install'
         ? value.originalContainers.length === 0 &&
@@ -190,6 +193,7 @@ const stateSchema = type({
   targetIdentity: identity.or('null'),
   pulledImages: pulled.or('null'),
   context: contextSchema.or('null'),
+  'updateSettings?': appUpdateSettingsSchema,
   'ordinaryCommit?': type({ pendingRestart: type('boolean').or('null') }).onUndeclaredKey('reject'),
   'rollback?': rollbackSchema,
   'freshPreparation?': freshPreparationSchema,
@@ -224,6 +228,11 @@ const transitions: Record<AppUpdateStageState['phase'], readonly AppUpdateStageS
 
 function validate(raw: unknown) {
   const state = stateSchema.assert(raw);
+  if (
+    state.updateSettings &&
+    (state.freshPreparation || state.freshInstall || (state.context && !equal(state.context.settings, state.updateSettings)))
+  )
+    throw failed();
   for (const tree of [state.baseline, ...(state.prepared ? [state.prepared] : [])]) {
     assertPackageLinks(tree.entries);
     if (
@@ -637,6 +646,16 @@ export class AppUpdateStage implements StagedAppImageUpdate {
       imagePins: this.state.retainedPinsSha256 ? path.join(this.paths.staging, 'retained-pins.json') : undefined,
     };
   }
+  async recordUpdateSettings(input: AppUpdateSettings) {
+    return this.exclusive(async () => {
+      await this.check();
+      await this.positions();
+      if (this.state.phase !== 'target-ready' || this.state.context || this.state.existingBaseline) throw failed();
+      const settings = appUpdateSettingsSchema.assert(input);
+      if (this.state.updateSettings && !equal(this.state.updateSettings, settings)) throw failed();
+      await this.save({ updateSettings: settings });
+    });
+  }
   async recordExistingBaseline(proof: ExistingAppBaseline) {
     return this.exclusive(async () => {
       await this.check();
@@ -872,6 +891,7 @@ export class AppUpdateStage implements StagedAppImageUpdate {
       await this.positions();
       if (this.state.phase !== 'target-ready' || !this.state.pulledImages) throw failed();
       const context = structuredClone(contextSchema.assert(input));
+      if (this.state.updateSettings && !equal(context.settings, this.state.updateSettings)) throw failed();
       if (this.state.context) {
         if (!equal(this.state.context, context)) throw failed();
         return;
@@ -1087,6 +1107,7 @@ export class AppUpdateStage implements StagedAppImageUpdate {
       operation.createdAt !== context.appCreatedAt ||
       operation.fromVersion !== context.fromVersion ||
       operation.toVersion !== context.toVersion ||
+      !equal(operation.settings, context.settings) ||
       !equal(operation.previousLedger, context.previousLedger) ||
       !equal(
         operation.images.map(({ migrationId }) => migrationId),

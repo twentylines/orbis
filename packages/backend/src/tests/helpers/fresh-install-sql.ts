@@ -70,6 +70,7 @@ export function freshInstallSql() {
         if (![...predicate.matchAll(/"app"\."([^"]+)" = \$(\d+)/g)].every((match) => row[match[1] ?? ''] === params[Number(match[2]) - 1]))
           return { rows: [] };
         for (const match of (sql.split(' where ')[0] ?? '').matchAll(/"([^"]+)" = \$(\d+)/g)) row[match[1] ?? ''] = params[Number(match[2]) - 1];
+        if (typeof row.config === 'string') row.config = JSON.parse(row.config);
         return rows([row], sql.split(' returning ')[1] ?? '');
       }
       if (sql.startsWith('insert into "app_migration_commit"')) {

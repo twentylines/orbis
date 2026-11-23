@@ -1,3 +1,4 @@
+import { AppValidationService } from '../../app-lifecycle/services/app-validation.service';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -336,6 +337,7 @@ it('runs the real request factory and update command through the actual V2 file 
   } as unknown as Dockerode;
   let capturedRequest: string | undefined;
   const services = new Map<unknown, unknown>([
+    [AppValidationService, { validateUpdateConfigSettings: async () => {} }],
     [LoggerService, { error: vi.fn(), debug: vi.fn() }],
     [ConfigurationService, { get: () => 'amd64' }],
     [

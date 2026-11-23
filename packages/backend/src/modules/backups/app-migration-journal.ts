@@ -1,3 +1,4 @@
+import { appUpdateSettingsSchema } from '../apps/app-update-settings';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -34,6 +35,7 @@ export const migrationOperationSchema = type({
   createdAt: '0 <= number.integer <= 2147483647',
   fromVersion: '0 <= number.integer <= 2147483647',
   toVersion: '0 <= number.integer <= 2147483647',
+  'settings?': appUpdateSettingsSchema,
   previousLedger: appMigrationLedgerSchema,
   images: pinSchema.array().atLeastLength(1).atMostLength(300),
   originalContainers: originalSchema.array().atMostLength(256),

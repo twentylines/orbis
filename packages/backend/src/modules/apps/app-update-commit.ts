@@ -1,3 +1,4 @@
+import { appUpdateSettingsSchema, matchesAppUpdateSettings } from './app-update-settings';
 import { type } from 'arktype';
 import { and, asc, eq } from 'drizzle-orm';
 import type { Database } from '@/core/database/database.module';
@@ -21,6 +22,7 @@ const resultSchema = type({
   status: "'running' | 'stopped'",
   pendingRestart: type('boolean').or('null'),
   requestInputSha256: hash,
+  'settings?': appUpdateSettingsSchema,
   proofSha256: hash,
   ledger: appMigrationLedgerSchema,
   ledgerSha256: hash,
@@ -37,6 +39,7 @@ export function verifyOrdinaryUpdateResult(raw: unknown): OrdinaryUpdateResult {
     !same(result.ledger.migrationIds, [...result.ledger.migrationIds].sort()) ||
     result.ledgerSha256 !== migrationHash(result.ledger) ||
     (result.status === 'stopped') !== (result.pendingRestart === null) ||
+    (result.settings !== undefined && result.settings.sourceSha256 !== result.requestInputSha256) ||
     operationSha256 !== migrationHash(body)
   )
     throw ordinaryUpdateFailure();
@@ -76,6 +79,7 @@ export async function ordinaryUpdateResultBinding(stage: AppUpdateStage): Promis
     status: context.updateStatus,
     pendingRestart: state.ordinaryCommit.pendingRestart,
     requestInputSha256: context.requestInputSha256,
+    ...(context.settings ? { settings: context.settings } : {}),
     proofSha256: migrationHash({
       context,
       baseline: state.baseline,
@@ -117,6 +121,7 @@ async function lockedApp(database: Database, result: OrdinaryUpdateResult, commi
     current.version !== (committed ? result.version : result.fromVersion) ||
     current.status !== (committed ? result.status : 'updating') ||
     current.migrationsBaselined !== result.ledger.baselined ||
+    (result.settings !== undefined && !matchesAppUpdateSettings(current, result.settings, committed)) ||
     (committed && result.pendingRestart !== null && current.pendingRestart !== result.pendingRestart)
   )
     throw ordinaryUpdateFailure();
@@ -172,6 +177,7 @@ export async function commitOrdinaryAppUpdate(database: Database, stage: AppUpda
       const updated = await transaction
         .update(app)
         .set({
+          ...result.settings?.values,
           version: result.version,
           status: result.status,
           updatedAt: now,

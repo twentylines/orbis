@@ -1,3 +1,4 @@
+import { AppValidationService } from '../../app-lifecycle/services/app-validation.service';
 import { freshInstallSql } from '@/tests/helpers/fresh-install-sql';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -980,6 +981,7 @@ it.each([
   });
   const source = convertLegacyToYaml({ schemaVersion: 2, services: [{ name: 'web', image: 'nginx:latest', isMain: true, internalPort: 80 }] });
   const services = new Map<unknown, unknown>([
+    [AppValidationService, { validateUpdateConfigSettings: async () => {} }],
     [
       AppFilesManager,
       {

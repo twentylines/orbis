@@ -3,7 +3,9 @@ import { ArchiveService } from '@/core/archive/archive.service';
 import { AppUpdateMigrations } from '@/modules/docker/app-update-migrations';
 import { verifyAppUpdateRuntime } from './app-update-runtime';
 import { ConfigurationService } from '@/core/config/configuration.service';
-import { createHash } from 'node:crypto';
+import { appUpdateInputHash, appUpdateSettings } from '../../apps/app-update-settings';
+import { appFormSchema } from '../dto/app-lifecycle.dto';
+import { AppValidationService } from '../services/app-validation.service';
 import { AppFilesManager } from '@/modules/apps/app-files-manager';
 import { AppHelpers } from '@/modules/apps/app.helpers';
 import { AppsRepository } from '@/modules/apps/apps.repository';
@@ -27,15 +29,7 @@ import { AppLifecycleCommand } from './command';
 type RuntimeStatus = 'running' | 'stopped';
 const inspectionError = () => new Error('The current app containers could not be verified for update.');
 const recovery = () => new Error('App update requires explicit recovery. Its metadata and any new app writes were preserved.');
-export function requestInputHash(form: AppEventFormInput) {
-  const bytes = JSON.stringify(form, (_key, value) =>
-    value !== null && typeof value === 'object' && !Array.isArray(value)
-      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
-      : value,
-  );
-  if (Buffer.byteLength(bytes) > 2 * 1024 * 1024) throw inspectionError();
-  return createHash('sha256').update(bytes).digest('hex');
-}
+export const requestInputHash = appUpdateInputHash;
 
 async function captureRuntime(docker: Dockerode, appUrn: AppUrn) {
   const project = appUrn.replace(':', '_');
@@ -105,11 +99,15 @@ export class UpdateAppCommand extends AppLifecycleCommand {
       const target = dynamicComposeSchemaYaml(targetSource.content);
       if (!targetInfo || target instanceof type.errors) throw new Error('The target app package is invalid.');
 
-      const environment = await appHelpers.renderAppEnv(appUrn, targetInfo, form);
+      const targetForm = appFormSchema.assert(structuredClone(form));
+      await this.moduleRef.get(AppValidationService, { strict: false }).validateUpdateConfigSettings(appUrn, targetInfo, targetForm, installed.id);
+      const settings = appUpdateSettings(targetInfo, form, targetForm);
+      const environment = await appHelpers.renderAppEnv(appUrn, targetInfo, targetForm);
       const architecture = config.get('architecture');
       const builder = new DockerComposeBuilder();
       const subnet = await subnetManager.planUpdateSubnet(appUrn, installed.subnet);
-      await update.stageTarget(builder.getDockerCompose(target, form, appUrn, subnet, architecture), environment);
+      await update.stageTarget(builder.getDockerCompose(target, targetForm, appUrn, subnet, architecture), environment);
+      if (update instanceof AppUpdateStage) await update.recordUpdateSettings(settings);
       const targetMigrationIds = await appFilesManager.getAppMigrationIds(appUrn, update.targetDirectory);
       let adoptExistingBaseline = false;
       let previousLedger = { baselined: false, migrationIds: [] as string[] };
@@ -183,6 +181,7 @@ export class UpdateAppCommand extends AppLifecycleCommand {
           fromVersion: installed.version,
           toVersion: targetInfo.tipi_version,
           requestInputSha256: requestInputHash(form),
+          settings,
           authoritySha256: plan.inputsSha256,
           previousLedger,
           targetMigrationIds,
@@ -275,6 +274,7 @@ export class UpdateAppCommand extends AppLifecycleCommand {
           }
           if (retained) await dockerService.retireAppImagePinsAfterUpdate(appUrn, update.id);
           const updated = await repository.updateAppById(installed.id, {
+            ...settings.values,
             version: targetInfo.tipi_version,
             status: updateStatus,
             ...(updateStatus === 'running' ? { pendingRestart: inputsChanged } : {}),

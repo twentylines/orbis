@@ -1,3 +1,4 @@
+import { matchesAppUpdateSettings } from './app-update-settings';
 import { type } from 'arktype';
 import { and, asc, eq } from 'drizzle-orm';
 import type { Database } from '@/core/database/database.module';
@@ -77,12 +78,50 @@ export function verifyAppMigrationCommitReceipt(raw: unknown, state: Readonly<Mi
 /** An absent receipt is never permission to restore or rerun an uncertain operation. */
 export async function readAppMigrationCommit(database: Database, state: Readonly<MigrationJournalState>) {
   try {
-    const { binding } = appMigrationCommitBinding(state);
+    const { binding, operation, ledger } = appMigrationCommitBinding(state);
+    if (operation.settings)
+      return database.transaction(
+        async (transaction) => {
+          const [receipt] = await transaction.select().from(appMigrationCommit).where(eq(appMigrationCommit.requestId, binding.requestId));
+          if (!receipt) return undefined;
+          await verifyCommittedSettings(transaction as unknown as Database, operation, ledger, state.targetWritesPossible);
+          return verifyAppMigrationCommitReceipt(receipt, state);
+        },
+        { isolationLevel: 'serializable' },
+      );
     const [receipt] = await database.select().from(appMigrationCommit).where(eq(appMigrationCommit.requestId, binding.requestId));
     return receipt ? verifyAppMigrationCommitReceipt(receipt, state) : undefined;
   } catch {
     throw migrationFailure();
   }
+}
+
+async function verifyCommittedSettings(
+  database: Database,
+  operation: ReturnType<typeof appMigrationCommitBinding>['operation'],
+  ledger: ReturnType<typeof appMigrationCommitBinding>['ledger'],
+  running: boolean,
+) {
+  if (!operation.settings) return;
+  const [current] = await database.select().from(app).where(eq(app.id, operation.appId)).for('update');
+  const [name, store] = operation.appUrn.split(':');
+  if (
+    !current ||
+    current.createdAt !== operation.createdAt ||
+    current.appName !== name ||
+    current.appStoreSlug !== store ||
+    current.version !== operation.toVersion ||
+    current.status !== (running ? 'running' : 'stopped') ||
+    !current.migrationsBaselined ||
+    !matchesAppUpdateSettings(current, operation.settings, true)
+  )
+    throw migrationFailure();
+  const rows = await database
+    .select({ migrationId: appMigration.migrationId })
+    .from(appMigration)
+    .where(eq(appMigration.appId, operation.appId))
+    .orderBy(asc(appMigration.migrationId));
+  if (JSON.stringify(rows.map(({ migrationId }) => migrationId)) !== JSON.stringify(ledger.migrationIds)) throw migrationFailure();
 }
 
 /** Version, complete ledger and request-bound receipt commit in the same serializable transaction. */
@@ -104,13 +143,19 @@ export async function commitAppMigration(
     return await database.transaction(
       async (transaction) => {
         const prior = await transaction.select().from(appMigrationCommit).where(eq(appMigrationCommit.requestId, binding.requestId));
-        if (prior[0]) return { ...verifyAppMigrationCommitReceipt(prior[0], state), replayed: true };
+        if (prior[0]) {
+          await verifyCommittedSettings(transaction as unknown as Database, operation, ledger, state.targetWritesPossible);
+          return { ...verifyAppMigrationCommitReceipt(prior[0], state), replayed: true };
+        }
         // A confirmed private acknowledgement cannot be used to recreate a missing SQL receipt after a database rollback.
         if (state.phase === 'committed' || state.commitReceiptSha256 !== null) throw migrationFailure();
         const [current] = await transaction.select().from(app).where(eq(app.id, operation.appId)).for('update');
         // A concurrent first transaction may have committed while this one waited for the app lock.
         const replay = await transaction.select().from(appMigrationCommit).where(eq(appMigrationCommit.requestId, binding.requestId));
-        if (replay[0]) return { ...verifyAppMigrationCommitReceipt(replay[0], state), replayed: true };
+        if (replay[0]) {
+          await verifyCommittedSettings(transaction as unknown as Database, operation, ledger, state.targetWritesPossible);
+          return { ...verifyAppMigrationCommitReceipt(replay[0], state), replayed: true };
+        }
         const [name, store] = operation.appUrn.split(':');
         if (
           !current ||
@@ -119,7 +164,8 @@ export async function commitAppMigration(
           current.appStoreSlug !== store ||
           current.version !== operation.fromVersion ||
           current.status !== 'updating' ||
-          current.migrationsBaselined !== operation.previousLedger.baselined
+          current.migrationsBaselined !== operation.previousLedger.baselined ||
+          (operation.settings !== undefined && !matchesAppUpdateSettings(current, operation.settings, false))
         )
           throw migrationFailure();
         const previous = await transaction
@@ -135,6 +181,7 @@ export async function commitAppMigration(
         const updated = await transaction
           .update(app)
           .set({
+            ...operation.settings?.values,
             version: operation.toVersion,
             status,
             ...(pendingRestart === undefined ? {} : { pendingRestart }),
