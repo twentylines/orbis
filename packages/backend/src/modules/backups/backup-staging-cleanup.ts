@@ -13,7 +13,7 @@ import { type } from 'arktype';
 const recordSchema = type({
   version: '1',
   appUrn: arkAppUrn,
-  kind: "'snapshot' | 'restore' | 'partial'",
+  kind: "'snapshot' | 'restore' | 'partial' | 'upload'",
   target: 'string',
   dev: '/^(0|[1-9][0-9]{0,19})$/',
   ino: '/^(0|[1-9][0-9]{0,19})$/',
@@ -48,6 +48,20 @@ export class BackupStagingCleanup {
       this.logger.warn('Private backup staging could not be removed. Retained staging needs another cleanup check.');
     } catch {
       // A logging failure cannot replace the backup or restore outcome either.
+    }
+  }
+
+  async closeReadOnly(handle: FileHandle) {
+    try {
+      await handle.close();
+    } catch {
+      // Validation and sync failures belong to the caller. Never retry an
+      // uncertain descriptor or replace the operation's result with cleanup.
+      try {
+        this.logger.warn('A read-only backup handle could not be closed.');
+      } catch {
+        // Logging must preserve the operation's result too.
+      }
     }
   }
 
@@ -120,7 +134,10 @@ export class BackupStagingCleanup {
     if (target.length > 4096 || path.resolve(target) !== target) throw new Error('Invalid disposable backup path');
     const { appName, appStoreId } = extractAppUrn(appUrn);
     const name = path.basename(target);
-    if (kind === 'partial') {
+    if (kind === 'upload') {
+      if (path.dirname(target) !== path.join(this.dataDir(), 'backups', appStoreId, appName) || !/^\.orbis-upload-[A-Za-z0-9]{6}$/.test(name))
+        throw new Error('Invalid upload backup staging path');
+    } else if (kind === 'partial') {
       const parent = path.join(this.dataDir(), 'backups', appStoreId, appName);
       const prefix = `.${appName}-${appStoreId}-`;
       const suffix = name.slice(prefix.length);
@@ -203,7 +220,10 @@ export class BackupStagingCleanup {
   async dispose(appUrn: AppUrn, kind: Kind, selected: string) {
     try {
       // Resolve only the system temporary alias, never a symlink inside staging.
-      const target = kind === 'partial' ? selected : path.join(await fs.promises.realpath(tmpdir()), path.relative(path.resolve(tmpdir()), selected));
+      const target =
+        kind === 'snapshot' || kind === 'restore'
+          ? path.join(await fs.promises.realpath(tmpdir()), path.relative(path.resolve(tmpdir()), selected))
+          : selected;
       await this.allowed(appUrn, kind, target);
       const entry = await fs.promises.lstat(target, { bigint: true }).catch((error) => {
         if (absent(error)) return null;

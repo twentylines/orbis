@@ -576,7 +576,7 @@ export class BackupManager implements OnModuleInit {
           if ((await copy.stat()).size !== before.size) throw new Error('The uploaded backup copy is incomplete');
           await copy.sync();
         } finally {
-          await copy.close();
+          await this.stagingCleanup.closeReadOnly(copy);
         }
         signal?.throwIfAborted();
         await fs.promises.link(publishedSource, backupPath);
@@ -586,7 +586,7 @@ export class BackupManager implements OnModuleInit {
       try {
         await parent.sync();
       } finally {
-        await parent.close();
+        await this.stagingCleanup.closeReadOnly(parent);
       }
       signal?.throwIfAborted();
       this.logger.info(`Backup uploaded successfully: ${sanitizedFilename}`);
@@ -599,11 +599,8 @@ export class BackupManager implements OnModuleInit {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new ConflictException('A backup with this filename already exists');
       throw error;
     } finally {
-      try {
-        await file.close();
-      } finally {
-        if (sibling) await fs.promises.rm(sibling, { recursive: true, force: true });
-      }
+      await this.stagingCleanup.closeReadOnly(file);
+      if (sibling) await this.stagingCleanup.dispose(appUrn, 'upload', sibling);
     }
   }
 }

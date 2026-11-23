@@ -31,7 +31,14 @@ afterEach(async () => {
   await fs.promises.rm(root, { recursive: true, force: true });
 });
 
-async function stage(kind: 'snapshot' | 'restore' | 'partial' = 'snapshot', parent = root) {
+async function stage(kind: 'snapshot' | 'restore' | 'partial' | 'upload' = 'snapshot', parent = root) {
+  if (kind === 'upload') {
+    const backupDir = path.join(data, 'backups/store/demo');
+    await fs.promises.mkdir(backupDir, { recursive: true });
+    const directory = await fs.promises.mkdtemp(path.join(backupDir, '.orbis-upload-'));
+    await fs.promises.writeFile(path.join(directory, 'fixture'), 'private staged fixture');
+    return directory;
+  }
   if (kind === 'partial') {
     const file = path.join(data, 'backups/store/demo', `.demo-store-${Date.now()}-${randomUUID()}.partial`);
     await fs.promises.mkdir(path.dirname(file), { recursive: true });
@@ -43,7 +50,7 @@ async function stage(kind: 'snapshot' | 'restore' | 'partial' = 'snapshot', pare
   return directory;
 }
 
-async function retain(target: string, kind: 'snapshot' | 'restore' | 'partial' = 'snapshot') {
+async function retain(target: string, kind: 'snapshot' | 'restore' | 'partial' | 'upload' = 'snapshot') {
   const failure = vi.spyOn(fs.promises, 'rm').mockRejectedValueOnce(new Error('Fixture storage unavailable'));
   await cleanup.dispose(urn, kind, target);
   failure.mockRestore();
@@ -56,13 +63,16 @@ async function retain(target: string, kind: 'snapshot' | 'restore' | 'partial' =
   return file;
 }
 
-it.each(['snapshot', 'restore', 'partial'] as const)('retries an explicitly disposable %s after a failed removal in a new instance', async (kind) => {
-  const target = await stage(kind);
-  await retain(target, kind);
-  await new BackupStagingCleanup(() => data, logger).recover();
-  expect(fs.existsSync(target)).toBe(false);
-  expect(await fs.promises.readdir(records)).toEqual([]);
-});
+it.each(['snapshot', 'restore', 'partial', 'upload'] as const)(
+  'retries an explicitly disposable %s after a failed removal in a new instance',
+  async (kind) => {
+    const target = await stage(kind);
+    await retain(target, kind);
+    await new BackupStagingCleanup(() => data, logger).recover();
+    expect(fs.existsSync(target)).toBe(false);
+    expect(await fs.promises.readdir(records)).toEqual([]);
+  },
+);
 
 it('removes normal staging without creating a cleanup journal', async () => {
   const target = await stage();
@@ -274,3 +284,43 @@ it.skipIf(process.platform !== 'linux')(
     expect(await fs.promises.readdir(records)).toEqual([]);
   },
 );
+
+it.each(['hold', 'resume', 'capture', 'preparation'] as const)('preserves a recorded upload sibling during %s', async (mode) => {
+  const target = await stage('upload');
+  await retain(target, 'upload');
+  if (mode === 'capture') vi.mocked(maintenance.coreCaptureRecoveryRequired).mockReturnValue(true);
+  else if (mode === 'preparation') vi.mocked(maintenance.corePreparationRecoveryHeld).mockReturnValue(true);
+  else vi.mocked(installation.installationMode).mockReturnValue({ phase: mode, transactionId: randomUUID() });
+  await cleanup.recover();
+  expect(fs.existsSync(target)).toBe(true);
+  expect(await fs.promises.readdir(records)).toHaveLength(1);
+});
+
+it.each(['directory', 'symlink'] as const)('preserves a replacement %s at an upload sibling target', async (kind) => {
+  const target = await stage('upload');
+  await retain(target, 'upload');
+  const original = path.join(root, 'original-upload');
+  await fs.promises.rename(target, original);
+  if (kind === 'directory') {
+    await fs.promises.mkdir(target, { mode: 0o700 });
+    await fs.promises.writeFile(path.join(target, 'fixture'), 'replacement');
+  } else await fs.promises.symlink(original, target);
+  await cleanup.recover();
+  expect(await fs.promises.readFile(path.join(original, 'fixture'), 'utf8')).toBe('private staged fixture');
+  expect(await fs.promises.readFile(path.join(target, 'fixture'), 'utf8')).toBe(kind === 'directory' ? 'replacement' : 'private staged fixture');
+  expect(await fs.promises.readdir(records)).toHaveLength(1);
+});
+
+it.each(['other-app', 'temporary', 'wrong-name', 'permissive'] as const)('does not dispose an upload sibling with %s scope', async (fault) => {
+  const original = await stage('upload');
+  let target = original;
+  if (fault !== 'permissive') {
+    const parent = fault === 'other-app' ? path.join(data, 'backups/store/other') : fault === 'temporary' ? root : path.dirname(original);
+    await fs.promises.mkdir(parent, { recursive: true });
+    target = path.join(parent, fault === 'wrong-name' ? '.orbis-upload-archive' : path.basename(original));
+    await fs.promises.rename(original, target);
+  } else await fs.promises.chmod(target, 0o755);
+  await cleanup.dispose(urn, 'upload', target);
+  expect(await fs.promises.readFile(path.join(target, 'fixture'), 'utf8')).toBe('private staged fixture');
+  expect(fs.existsSync(records)).toBe(false);
+});

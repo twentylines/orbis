@@ -24,6 +24,8 @@ describe('Streamed backup uploads with real files and archives', () => {
   let manager: BackupManager;
   let backups: string;
   let incoming: string;
+  let logger: LoggerService;
+  let newManager: () => BackupManager;
   const config = {
     id: 'demo',
     available: true,
@@ -55,7 +57,7 @@ describe('Streamed backup uploads with real files and archives', () => {
     root = await fs.promises.mkdtemp(path.join(tmpdir(), 'orbis-upload-files-'));
     backups = path.join(root, 'data/backups/store/demo');
     storage = new BackupUploadStorage(path.join(root, 'data/backups'));
-    const logger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as LoggerService;
+    logger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as LoggerService;
     const filesystem = new FilesystemService(logger);
     const originalSafePath = filesystem.getSafeFilePath.bind(filesystem);
     vi.spyOn(filesystem, 'getSafeFilePath').mockImplementation((file) => {
@@ -76,7 +78,8 @@ describe('Streamed backup uploads with real files and archives', () => {
       replaceMigrationLedger: vi.fn(),
     } as unknown as AppsRepository;
     const configuration = { get: () => ({ dataDir: path.join(root, 'data') }) } as unknown as ConfigurationService;
-    manager = new BackupManager(archive, logger, configuration, filesystem, apps, repository);
+    newManager = () => new BackupManager(archive, logger, configuration, filesystem, apps, repository);
+    manager = newManager();
     const source = path.join(root, 'source');
     for (const directory of ['app-data', 'app', 'user-config']) await fs.promises.mkdir(path.join(source, directory), { recursive: true });
     await fs.promises.writeFile(path.join(source, 'app/config.json'), JSON.stringify(config));
@@ -218,6 +221,153 @@ describe('Streamed backup uploads with real files and archives', () => {
     expect(await manager.listBackupsByAppId(appUrn)).toEqual([]);
     expect(await fs.promises.readdir(backups)).toEqual(['.uploads']);
     expect(await fs.promises.readdir(path.join(backups, '.uploads'))).toEqual([]);
+  });
+
+  const crossDevice = () => {
+    const link = fs.promises.link.bind(fs.promises);
+    vi.spyOn(fs.promises, 'link').mockImplementation((source, target) => {
+      if (String(source).includes('/.uploads/')) return Promise.reject(Object.assign(new Error('Cross-device link'), { code: 'EXDEV' }));
+      return link(source, target);
+    });
+  };
+
+  const failClose = (matches: (file: string) => boolean, syncFailure = false) => {
+    const open = fs.promises.open.bind(fs.promises);
+    const closed = vi.fn();
+    vi.spyOn(fs.promises, 'open').mockImplementation(async (...args) => {
+      const handle = await open(...args);
+      if (matches(String(args[0]))) {
+        const close = handle.close.bind(handle);
+        vi.spyOn(handle, 'close').mockImplementation(async () => {
+          await close();
+          closed();
+          throw new Error('Read-only close failed');
+        });
+        if (syncFailure) vi.spyOn(handle, 'sync').mockRejectedValue(new Error('Persistence failed'));
+      }
+      return handle;
+    });
+    return closed;
+  };
+
+  const failSiblingCleanup = () => {
+    const remove = fs.promises.rm.bind(fs.promises);
+    return vi.spyOn(fs.promises, 'rm').mockImplementation((target, options) => {
+      if (/\.orbis-upload-[A-Za-z0-9]{6}$/.test(String(target))) return Promise.reject(new Error('Sibling cleanup failed'));
+      return remove(target, options);
+    });
+  };
+
+  it.each(['source', 'copy', 'directory'] as const)('keeps a completed upload successful after the read-only %s close fails', async (role) => {
+    const file = await uploaded();
+    if (role === 'copy') crossDevice();
+    const closed = failClose((name) =>
+      role === 'source' ? name === file.path : role === 'directory' ? name === backups : /\.orbis-upload-[A-Za-z0-9]{6}\/backup.tar.gz$/.test(name),
+    );
+    await expect(publish(file)).resolves.toBeUndefined();
+    expect(closed).toHaveBeenCalledOnce();
+    expect(await fs.promises.readFile(path.join(backups, 'legacy.tar.gz'))).toEqual(await fs.promises.readFile(incoming));
+    expect(await archive.listTarGz(path.join(backups, 'legacy.tar.gz'))).not.toHaveLength(0);
+  });
+
+  it('preserves the validation error even when source closing and warning both fail', async () => {
+    await fs.promises.writeFile(incoming, 'invalid archive');
+    const file = await uploaded();
+    const closed = failClose((name) => name === file.path);
+    vi.spyOn(logger, 'warn').mockImplementation((...args) => {
+      if (args[0] === 'A read-only backup handle could not be closed.') throw new Error('Warning failed');
+    });
+    await expect(publish(file)).rejects.toThrow('not a valid backup');
+    expect(closed).toHaveBeenCalledOnce();
+    expect(await manager.listBackupsByAppId(appUrn)).toEqual([]);
+  });
+
+  it.each(['source', 'copy', 'directory'] as const)('does not hide a real %s persistence failure behind its close failure', async (role) => {
+    const file = await uploaded();
+    if (role === 'copy') crossDevice();
+    const closed = failClose(
+      (name) =>
+        role === 'source' ? name === file.path : role === 'directory' ? name === backups : /\.orbis-upload-[A-Za-z0-9]{6}\/backup.tar.gz$/.test(name),
+      true,
+    );
+    await expect(publish(file)).rejects.toThrow('Persistence failed');
+    expect(closed).toHaveBeenCalledOnce();
+    expect(await manager.listBackupsByAppId(appUrn)).toEqual([]);
+    expect(await fs.promises.readdir(backups)).toEqual(['.uploads']);
+  });
+
+  it('retains a completed cross-device upload and retries only its failed sibling cleanup in a new manager', async () => {
+    crossDevice();
+    const remove = failSiblingCleanup();
+    await expect(publish(await uploaded())).resolves.toBeUndefined();
+    const target = path.join(backups, 'legacy.tar.gz');
+    const before = await fs.promises.readFile(target);
+    expect(before).toEqual(await fs.promises.readFile(incoming));
+    expect(await archive.listTarGz(target)).not.toHaveLength(0);
+    const records = path.join(root, 'data/state/backup-staging-cleanup');
+    const names = await fs.promises.readdir(records);
+    expect(names).toHaveLength(1);
+    const record = JSON.parse(await fs.promises.readFile(path.join(records, names[0] ?? 'missing'), 'utf8'));
+    expect(record.kind).toBe('upload');
+    expect(path.dirname(record.target)).toBe(backups);
+    expect(await fs.promises.readFile(path.join(record.target, 'backup.tar.gz'))).toEqual(before);
+    remove.mockRestore();
+    await newManager().onModuleInit();
+    expect(fs.existsSync(record.target)).toBe(false);
+    expect(await fs.promises.readdir(records)).toEqual([]);
+    expect(await fs.promises.readFile(target)).toEqual(before);
+  });
+
+  it('preserves a failed cross-device copy when sibling cleanup also fails without publishing partial bytes', async () => {
+    crossDevice();
+    vi.spyOn(fs.promises, 'copyFile').mockImplementation(async (_source, target) => {
+      await fs.promises.writeFile(target, 'partial copy', { mode: 0o600 });
+      throw new Error('Copy storage full');
+    });
+    const remove = failSiblingCleanup();
+    await expect(publish(await uploaded())).rejects.toThrow('Copy storage full');
+    expect(await manager.listBackupsByAppId(appUrn)).toEqual([]);
+    const records = path.join(root, 'data/state/backup-staging-cleanup');
+    expect(await fs.promises.readdir(records)).toHaveLength(1);
+    remove.mockRestore();
+    await newManager().onModuleInit();
+    expect(await fs.promises.readdir(records)).toEqual([]);
+    expect(await fs.promises.readdir(backups)).toEqual(['.uploads']);
+  });
+
+  it('preserves an incomplete-copy validation error when the read-only copy close fails', async () => {
+    const file = await uploaded();
+    crossDevice();
+    vi.spyOn(fs.promises, 'copyFile').mockImplementation(async (_source, target) => {
+      await fs.promises.writeFile(target, 'incomplete copy', { mode: 0o600 });
+    });
+    const closed = failClose((name) => /\.orbis-upload-[A-Za-z0-9]{6}\/backup.tar.gz$/.test(name));
+    await expect(publish(file)).rejects.toThrow('copy is incomplete');
+    expect(closed).toHaveBeenCalledOnce();
+    expect(await manager.listBackupsByAppId(appUrn)).toEqual([]);
+    expect(await fs.promises.readdir(backups)).toEqual(['.uploads']);
+  });
+
+  it('keeps cancellation and removes only its new publication when sibling cleanup and input close fail', async () => {
+    const file = await uploaded();
+    const cancelled = new AbortController();
+    const link = fs.promises.link.bind(fs.promises);
+    vi.spyOn(fs.promises, 'link').mockImplementation(async (source, target) => {
+      if (String(source).includes('/.uploads/')) throw Object.assign(new Error('Cross-device link'), { code: 'EXDEV' });
+      await link(source, target);
+      cancelled.abort(new Error('Cancelled during publication'));
+    });
+    const closed = failClose((name) => name === file.path);
+    const remove = failSiblingCleanup();
+    await expect(publish(file, 'cancelled.tar.gz', cancelled.signal)).rejects.toThrow('Cancelled during publication');
+    expect(closed).toHaveBeenCalledOnce();
+    expect(await manager.listBackupsByAppId(appUrn)).toEqual([]);
+    const records = path.join(root, 'data/state/backup-staging-cleanup');
+    expect(await fs.promises.readdir(records)).toHaveLength(1);
+    remove.mockRestore();
+    await newManager().onModuleInit();
+    expect(await fs.promises.readdir(records)).toEqual([]);
+    expect(await fs.promises.readdir(backups)).toEqual(['.uploads']);
   });
 
   it('removes a partial receive when its client disconnects', async () => {
