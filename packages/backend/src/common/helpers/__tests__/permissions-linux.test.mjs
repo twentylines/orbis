@@ -4,12 +4,12 @@ import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { getCliSecret } from '../permissions-helpers.ts';
 
 const canChangeUid = process.platform === 'linux' && process.getuid?.() === 0;
 const checkout = fileURLToPath(new URL('../../../../../../', import.meta.url));
-const helper = new URL('../permissions-helpers.ts', import.meta.url).href;
+const helperSource = fs.readFileSync(new URL('../permissions-helpers.ts', import.meta.url));
 const serviceUid = 65534;
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 
@@ -25,6 +25,8 @@ function fixture(t) {
   assert.equal(stat.isDirectory(), true);
   assert.equal(stat.mode & 0o022, 0);
   const root = fs.mkdtempSync(path.join(parent, 'case-'));
+  fs.writeFileSync(path.join(root, 'permissions-helpers.ts'), helperSource, { mode: 0o644 });
+  fs.chmodSync(path.join(root, 'permissions-helpers.ts'), 0o644);
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return root;
 }
@@ -33,7 +35,7 @@ function asService(code, root, ...args) {
   const result = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', code, root, ...args], {
     uid: serviceUid,
     gid: serviceUid,
-    cwd: path.dirname(root),
+    cwd: root,
     encoding: 'utf8',
     timeout: 20_000,
   });
@@ -52,7 +54,10 @@ test('another UID keeps shared access while the CLI key stays private during per
   for (const directory of directories) {
     fs.mkdirSync(directory, { mode: 0o777 });
     fs.chmodSync(directory, 0o777);
-    for (let index = 0; index < 128; index++) fs.writeFileSync(path.join(directory, String(index)), 'shared fixture');
+    for (let index = 0; index < 128; index++) {
+      fs.writeFileSync(path.join(directory, String(index)), 'shared fixture', { mode: 0o644 });
+      fs.chmodSync(path.join(directory, String(index)), 0o644);
+    }
   }
   const original = hash(await getCliSecret(root));
   const access = () =>
@@ -139,7 +144,7 @@ test('a service UID creates and persists its private key', { skip: !canChangeUid
     `
     import assert from 'node:assert/strict';
     import fs from 'node:fs';
-    import { getCliSecret } from ${JSON.stringify(helper)};
+    import { getCliSecret } from ${JSON.stringify(pathToFileURL(path.join(root, 'permissions-helpers.ts')).href)};
     const root = process.argv[1];
     const key = await getCliSecret(root);
     assert.equal(/^[a-f0-9]{64}$/.test(key), true);
@@ -168,7 +173,7 @@ test('a service UID rotates a readable root-owned exposed key and retains its re
     import assert from 'node:assert/strict';
     import fs from 'node:fs';
     import { createHash } from 'node:crypto';
-    import { getCliSecret } from ${JSON.stringify(helper)};
+    import { getCliSecret } from ${JSON.stringify(pathToFileURL(path.join(root, 'permissions-helpers.ts')).href)};
     const root = process.argv[1];
     const key = await getCliSecret(root);
     assert.equal(createHash('sha256').update(key).digest('hex') === process.argv[2], false);
