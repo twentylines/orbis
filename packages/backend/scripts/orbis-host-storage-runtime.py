@@ -30,6 +30,42 @@ DEPENDENCIES = {
     'library/traefik': {'reference': 'docker.io/library/traefik@sha256:171c9c3565b29f6c133f1c1b43c5d4e5853415198e9e1078c001f8702ff66aec'},
 }
 
+# Optional diagnostic instrumentation records only public source locations and
+# exception types. The original service, predicates and exceptions are unchanged.
+HOST_TRACE_BOOTSTRAP = r'''
+import json, os, pathlib, runpy, sys, threading
+if sys.platform != 'linux' or os.geteuid() != 0 or os.environ.get('ORBIS_HOST_STORAGE_TEST') != '1' or os.environ.get('ORBIS_HOST_STORAGE_TRACE') != '1':
+    raise SystemExit('The isolated Host observation diagnostic is not enabled.')
+service = pathlib.Path(sys.argv[1])
+if service.name != 'orbis-host-service.py' or not service.is_file():
+    raise SystemExit('The source Host service is required.')
+modules = {'orbis-host-app-storage.py', 'orbis-host-credential-peer.py', 'orbis-host-service.py', 'orbis-host.py'}
+files = {str(service.parent / name) for name in modules}
+observation_file = str(service.parent / 'orbis-host-app-storage.py')
+errors = {'ValueError', 'TypeError', 'KeyError', 'OSError', 'PermissionError', 'FileNotFoundError', 'RuntimeError'}
+local = threading.local()
+count = 0
+def trace(frame, event, arg):
+    global count
+    filename, function = frame.f_code.co_filename, frame.f_code.co_name
+    selected = filename == observation_file and function == 'observe'
+    if selected and event == 'call': local.active = True
+    if not getattr(local, 'active', False) or filename not in files: return None
+    if event == 'exception' and count < 200 and arg[0].__name__ in errors:
+        count += 1
+        record = {'module': pathlib.Path(filename).name, 'function': function, 'line': frame.f_lineno, 'error': arg[0].__name__}
+        try:
+            os.write(2, ('ORBIS_HOST_STORAGE_TRACE ' + json.dumps(record, sort_keys=True) + '\n').encode())
+        except OSError:
+            pass
+    if selected and event == 'return': local.active = False
+    return trace
+sys.settrace(trace)
+threading.settrace(trace)
+sys.argv = sys.argv[1:]
+runpy.run_path(str(service), run_name='__main__')
+'''
+
 
 class Refused(Exception):
     pass
@@ -229,9 +265,12 @@ class Runtime:
 
     def start_host(self):
         self.host_log = (self.folder / 'host.private.log').open('xb')
-        self.host = subprocess.Popen([sys.executable, '-B', str(self.source / 'scripts/orbis-host-service.py'),
+        command = [sys.executable, '-B', str(self.source / 'scripts/orbis-host-service.py'),
             '--root', str(self.root), '--docker-context', 'default', '--socket', str(self.socket),
-            '--snapshots', str(self.folder / 'snapshots'), '--state-dir', str(self.folder / 'host-state')],
+            '--snapshots', str(self.folder / 'snapshots'), '--state-dir', str(self.folder / 'host-state')]
+        if os.environ.get('ORBIS_HOST_STORAGE_TRACE') == '1':
+            command = [sys.executable, '-B', '-c', HOST_TRACE_BOOTSTRAP, *command[2:]]
+        self.host = subprocess.Popen(command,
             cwd=self.source, stdout=self.host_log, stderr=self.host_log,
             env={**os.environ, 'TMPDIR': str(self.folder), 'PYTHONDONTWRITEBYTECODE': '1'})
         # A Popen handle plus process start time prevents name-based cleanup.
@@ -414,6 +453,31 @@ class Runtime:
                 records.append({'service': identity[0], 'status': 'unavailable'})
         return records
 
+    def host_trace_records(self):
+        if os.environ.get('ORBIS_HOST_STORAGE_TRACE') != '1':
+            return []
+        path = self.folder / 'host.private.log'
+        if not path.is_file() or path.is_symlink():
+            return []
+        with path.open('rb') as log:
+            log.seek(max(0, path.stat().st_size - 128 * 1024))
+            lines = log.read(128 * 1024).splitlines()
+        records = []
+        for line in lines:
+            if not line.startswith(b'ORBIS_HOST_STORAGE_TRACE ') or len(line) > 512:
+                continue
+            try:
+                value = json.loads(line.split(b' ', 1)[1])
+                if (type(value) is dict and set(value) == {'module', 'function', 'line', 'error'}
+                        and value['module'] in ('orbis-host-app-storage.py', 'orbis-host-credential-peer.py', 'orbis-host-service.py', 'orbis-host.py')
+                        and type(value['function']) is str and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,127}|<(?:genexpr|listcomp|dictcomp|lambda)>', value['function'])
+                        and type(value['line']) is int and 1 <= value['line'] <= 100000
+                        and value['error'] in ('ValueError', 'TypeError', 'KeyError', 'OSError', 'PermissionError', 'FileNotFoundError', 'RuntimeError')):
+                    records.append(value)
+            except (ValueError, TypeError):
+                continue
+        return records[-20:]
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -423,7 +487,7 @@ def main():
     parser.add_argument('--probe', required=True, type=Path)
     args = parser.parse_args()
     runtime = Runtime(args.source, args.fixture, args.manifest, args.probe)
-    failure, cleaned, phase, diagnostics = None, False, 'prepare', []
+    failure, cleaned, phase, diagnostics, trace_records = None, False, 'prepare', [], []
     try:
         runtime.prepare()
         phase = 'start-host'
@@ -446,6 +510,10 @@ def main():
     finally:
         if failure is not None:
             diagnostics = runtime.diagnostics()
+            try:
+                trace_records = runtime.host_trace_records()
+            except (OSError, ValueError, TypeError):
+                trace_records = []
         try:
             cleaned = runtime.cleanup()
         except (Refused, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
@@ -454,6 +522,7 @@ def main():
               'cases': runtime.results, 'cleanup': cleaned, 'error': failure,
               'failurePhase': phase if failure is not None else None, 'runtimeStates': diagnostics,
               'failureRole': runtime.failure_role if runtime.failure_role in SERVICES else None,
+              'hostRefusals': trace_records, 'hostObservationTrace': os.environ.get('ORBIS_HOST_STORAGE_TRACE') == '1',
               'recoveryConfigured': False, 'productionTouched': False}
     # This receipt deliberately excludes raw Docker/Host/Core output and secrets.
     print(json.dumps(result, sort_keys=True))

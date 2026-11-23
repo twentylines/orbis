@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bounded safety checks for the optional real Host/Core Linux fixture."""
 import hashlib
+import ast
 import importlib.util
 import json
 from pathlib import Path
@@ -132,6 +133,20 @@ class RuntimeBoundaries(unittest.TestCase):
                 runtime.probe_core('positive')
         self.assertEqual(runtime.results, [{'case': 'positive', 'passed': False, 'phase': 'host-transport',
                                            'diagnostic': {'hostStatus': 409, 'metadataVerified': False}}])
+
+    def test_host_observation_trace_is_optional_and_preserves_only_source_metadata(self):
+        ast.parse(R.HOST_TRACE_BOOTSTRAP, feature_version=(3, 10))
+        with tempfile.TemporaryDirectory(prefix='host-observation-trace-') as temporary:
+            runtime = R.Runtime(Path('/checkout'), Path(temporary), Path('/manifest'), Path('/probe'))
+            expected = {'module': 'orbis-host-app-storage.py', 'function': '_observe', 'line': 200, 'error': 'ValueError'}
+            extra = {**expected, 'privateValue': 'must-not-print'}
+            log = b'private ordinary log\n' + b''.join(b'ORBIS_HOST_STORAGE_TRACE ' + json.dumps(row).encode() + b'\n'
+                for row in (expected, extra, {**expected, 'module': '/private/location'}, {**expected, 'line': -1}))
+            (runtime.folder / 'host.private.log').write_bytes(log)
+            with patch.dict(R.os.environ, {'ORBIS_HOST_STORAGE_TRACE': '0'}):
+                self.assertEqual(runtime.host_trace_records(), [])
+            with patch.dict(R.os.environ, {'ORBIS_HOST_STORAGE_TRACE': '1'}):
+                self.assertEqual(runtime.host_trace_records(), [expected])
 
     def test_cleanup_has_no_authority_before_initial_inventory(self):
         runtime = self.runtime()

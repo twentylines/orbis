@@ -12,6 +12,10 @@ on:
       digest:
         required: true
         type: string
+      trace:
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       tag:
@@ -26,6 +30,11 @@ on:
         description: 'Exact qualified candidate index digest'
         required: true
         type: string
+      trace:
+        description: 'Record bounded source locations of Host observation refusals'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -42,6 +51,7 @@ jobs:
       CANDIDATE_TAG: ${{ inputs.tag }}
       CANDIDATE_SHA: ${{ inputs.commit }}
       CANDIDATE_DIGEST: ${{ inputs.digest }}
+      ORBIS_HOST_STORAGE_TRACE: ${{ inputs.trace && '1' || '0' }}
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -82,7 +92,7 @@ jobs:
           sudo --non-interactive chown root:root "$fixture_parent"
           sudo --non-interactive chmod 700 "$fixture_parent"
           trap 'if sudo --non-interactive test -f "$fixture_parent/cleanup-complete"; then sudo --non-interactive rm -rf -- "$fixture_parent"; fi' EXIT
-          sudo --non-interactive env ORBIS_HOST_STORAGE_TEST=1 \
+          sudo --non-interactive env ORBIS_HOST_STORAGE_TEST=1 ORBIS_HOST_STORAGE_TRACE="$ORBIS_HOST_STORAGE_TRACE" \
             TMPDIR="$XDG_CACHE_HOME/tmp" \
             python3 -B packages/backend/scripts/orbis-host-storage-runtime.py \
             --source "$GITHUB_WORKSPACE" --fixture "$fixture_parent" \
