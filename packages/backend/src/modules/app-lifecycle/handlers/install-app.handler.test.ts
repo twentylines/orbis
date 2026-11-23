@@ -1,3 +1,4 @@
+import { AppJobService } from '../services/app-job.service';
 import { verifyInstallRequestOwnership } from '../install-request-receipt';
 import { TranslatableError } from '@/common/error/translatable-error';
 import { AppStoreRepository } from '@/modules/app-stores/app-store.repository';
@@ -50,6 +51,8 @@ const createFixture = () => {
   const mutex = new AsyncMutex();
   const config = mock<ConfigurationService>();
   config.get.calledWith('directories').mockReturnValue(fromAny({ dataDir: directory }));
+  const jobs = mock<AppJobService>();
+  jobs.hasUnsettledJob.mockResolvedValue(false);
   const handler = new InstallAppHandler(
     appRepository,
     appEventsQueue,
@@ -61,8 +64,9 @@ const createFixture = () => {
     mutex,
     config,
     mock<LoggerService>(),
+    jobs,
   );
-  return { handler, appRepository, appStoreRepository, appEventsQueue, statusManager, validationService, appInfo, mutex, startAppHandler };
+  return { jobs, handler, appRepository, appStoreRepository, appEventsQueue, statusManager, validationService, appInfo, mutex, startAppHandler };
 };
 
 describe('InstallAppHandler backup retention', () => {
@@ -299,4 +303,17 @@ it('refuses to claim a reserved install if its version changed before worker adm
   fixture.appRepository.getAppByUrn.mockResolvedValue({ ...app, version: app.version + 1 });
   expect(await fixture.handler.claim(appUrn, accepted.requestId, false)).toBeUndefined();
   expect(fixture.appRepository.finishInstallReservation).not.toHaveBeenCalled();
+});
+
+it.each(['pending', 'admitted-while-waiting'] as const)('preserves existing app settings when another operation is %s', async (state) => {
+  const f = createFixture();
+  f.appRepository.getAppByUrn.mockResolvedValue(createMockApp({ id: 19, status: 'updating', config: { VALUE: 'saved' } }));
+  if (state === 'pending') f.jobs.hasUnsettledJob.mockResolvedValue(true);
+  else f.jobs.hasUnsettledJob.mockResolvedValueOnce(false).mockResolvedValue(true);
+  await expect(f.handler.execute(appUrn, { form: { VALUE: 'must-not-save' } })).rejects.toThrow('unfinished app operation');
+  expect(f.appRepository.updateAppById).not.toHaveBeenCalled();
+  expect(f.appRepository.createApp).not.toHaveBeenCalled();
+  expect(f.appEventsQueue.publish).not.toHaveBeenCalled();
+  expect(f.startAppHandler.execute).not.toHaveBeenCalled();
+  expect(f.mutex.resourceLocks.size).toBe(0);
 });

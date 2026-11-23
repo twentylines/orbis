@@ -3,7 +3,7 @@ import realFs from 'node:fs/promises';
 import { randomUUID, createHash } from 'node:crypto';
 import { Volume } from 'memfs';
 import { parse as parseYaml } from 'yaml';
-import { AppJobService } from '@/modules/app-lifecycle/services/app-job.service';
+import { AppJobService, type JobEvent } from '@/modules/app-lifecycle/services/app-job.service';
 import type { StagedAppImageUpdate } from '@/modules/docker/app-image-pins';
 import os from 'node:os';
 import path from 'node:path';
@@ -132,6 +132,7 @@ describe('Retained-storage app lifecycle', () => {
   let filesystemService: FilesystemService;
   let appFilesManager: AppFilesManager;
   let backupManager: BackupManager;
+  let appJobs: AppJobService;
   let tasksService: TasksService;
   let taskDirectory: string;
   const configurationService = mock<ConfigurationService>();
@@ -420,6 +421,7 @@ describe('Retained-storage app lifecycle', () => {
     filesystemService = moduleRef.get(FilesystemService);
     appFilesManager = moduleRef.get(AppFilesManager);
     backupManager = moduleRef.get(BackupManager);
+    appJobs = moduleRef.get(AppJobService);
 
     databaseService.db = db;
     const safePath = filesystemService.getSafeFilePath.bind(filesystemService);
@@ -998,6 +1000,42 @@ describe('Retained-storage app lifecycle', () => {
         .catch(() => false);
       expect(dataFileExists).toBe(false);
     });
+  });
+
+  it.each(['backup', 'update'] as const)('preserves PostgreSQL state and retained data while a queued %s blocks other actions', async (command) => {
+    const info = await createAppInStore('test', { id: 'queued-' + command, tipi_version: 1 });
+    await settle(appLifecycleService.installApp({ appUrn: info.urn, form: { exposed: false } }));
+    const app = await appsRepository.getAppByUrn(info.urn);
+    if (!app) throw new Error('Missing installed app');
+    const event = appEventSchema.assert({
+      command,
+      appUrn: info.urn,
+      requestId: randomUUID(),
+      form: app.config,
+      jobVersion: 1,
+      ...(command === 'update' ? { performBackup: false } : {}),
+    }) as JobEvent;
+    await appJobs.admit(event, app);
+    await appsRepository.updateAppById(app.id, { status: command === 'backup' ? 'backing_up' : 'updating' });
+    const before = await appsRepository.getAppByUrn(info.urn);
+    try {
+      for (const request of [
+        () => appLifecycleService.startApp({ appUrn: info.urn }),
+        () => appLifecycleService.stopApp({ appUrn: info.urn }),
+        () => appLifecycleService.restartApp({ appUrn: info.urn }),
+        () => appLifecycleService.resetApp({ appUrn: info.urn }),
+        () => appLifecycleService.uninstallApp({ appUrn: info.urn, removeBackups: true }),
+        () => appLifecycleService.installApp({ appUrn: info.urn, form: { VALUE: 'must-not-save' } }),
+      ])
+        await expect(request()).rejects.toThrow('unfinished app operation');
+      const result = await appEventsQueue.publish({ command: 'uninstall', appUrn: info.urn, requestId: randomUUID(), form: {}, removeBackups: true });
+      expect(result).toMatchObject({ success: false, operationBlocked: true, statePreserved: true });
+      expect(await appsRepository.getAppByUrn(info.urn)).toEqual(before);
+      expect(await realFs.readFile(path.join(APP_DATA_DIR, 'test', info.id, 'retained-data'), 'utf8')).toBe('retained integration fixture');
+      expect(containerStates.get(info.urn.replace(':', '_'))?.running).toBe(true);
+    } finally {
+      await appJobs.abandon(event);
+    }
   });
 
   describe('update app config', () => {

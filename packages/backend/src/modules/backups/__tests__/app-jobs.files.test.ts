@@ -606,3 +606,58 @@ it('preserves a real backup while its durable app operation is unfinished and de
   await fixture.service.deleteAppBackup({ appUrn: urn, filename });
   await expect(fs.stat(file)).rejects.toMatchObject({ code: 'ENOENT' });
 });
+
+it.each([
+  ['backup', 'queued'],
+  ['backup', 'interrupted'],
+  ['update', 'queued'],
+  ['update', 'interrupted'],
+] as const)('preserves app data and backups against competing actions after a persisted %s/%s restart', async (command, state) => {
+  const data = event(command);
+  await admit(data);
+  const store = new AppJobStore(directory);
+  const before = await store.read(data.requestId);
+  if (!before) throw new Error('Missing operation fixture');
+  await store.write({ ...before, state }, before);
+  const restarted = new AppJobService(config, repository, tasks);
+  const retained = path.join(directory, 'retained-backup.tar.gz');
+  await fs.writeFile(retained, 'retained fixture bytes');
+  const execute = vi.fn(async () => {
+    await fs.unlink(retained);
+    return { success: true, message: 'Removed fixture' };
+  });
+  const factory = mock<AppLifecycleCommandFactory>();
+  factory.createCommand.mockReturnValue({ execute } as never);
+  const module = await Test.createTestingModule({ providers: [AppLifecycleService] })
+    .useMocker((token) => {
+      if (token === AppJobService) return restarted;
+      if (token === AppLifecycleCommandFactory) return factory;
+      if (token === APP_ASYNC_MUTEX) return new AsyncMutex();
+      if (token === TasksService) return tasks;
+      if (token === ConfigurationService) return config;
+      if (token === AppsRepository) return repository;
+      return mock();
+    })
+    .compile();
+  modules.push(module);
+  const service = module.get(AppLifecycleService);
+  for (const request of [
+    () => service.startApp({ appUrn: urn }),
+    () => service.stopApp({ appUrn: urn }),
+    () => service.restartApp({ appUrn: urn }),
+    () => service.resetApp({ appUrn: urn }),
+    () => service.uninstallApp({ appUrn: urn, removeBackups: true }),
+    () => service.restoreApp({ appUrn: urn, filename: 'retained-backup.tar.gz' }),
+    () => service.updateApp({ appUrn: urn, performBackup: false }),
+    () => service.backupApp({ appUrn: urn }),
+  ])
+    await expect(request()).rejects.toThrow('unfinished app operation');
+  const delayed = appEventSchema.assert({ command: 'uninstall', appUrn: urn, requestId: randomUUID(), form: {}, removeBackups: true });
+  const reply = vi.fn(async (_result: unknown) => {});
+  await service.invokeCommand(delayed, reply);
+  expect(reply.mock.calls[0]?.[0]).toMatchObject({ success: false, operationBlocked: true });
+  expect(execute).not.toHaveBeenCalled();
+  expect(repository.updateAppById).not.toHaveBeenCalled();
+  expect(await fs.readFile(retained, 'utf8')).toBe('retained fixture bytes');
+  expect((await store.read(data.requestId))?.state).toBe(state);
+});

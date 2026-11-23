@@ -28,7 +28,12 @@ export class ResetAppHandler implements ILifecycleHandler {
 
     const requestId = generateRequestId();
 
-    this.appEventsQueue.publish({ command: 'reset', appUrn, requestId, form: app.config }).then(async ({ success, message }) => {
+    this.appEventsQueue.publish({ command: 'reset', appUrn, requestId, form: app.config }).then(async (result) => {
+      const { success, message } = result;
+      if ('operationBlocked' in result && result.operationBlocked) {
+        this.statusManager.emitEvent({ appUrn, event: 'reset_error', error: message });
+        return;
+      }
       if (success) {
         await this.statusManager.emitSuccess({
           appId: app.id,

@@ -30,7 +30,12 @@ export class RestartAppHandler implements ILifecycleHandler<RestartAppParams> {
 
     const requestId = generateRequestId();
 
-    this.appEventsQueue.publish({ command: 'restart', appUrn, requestId, form: { ...app.config, skipPull } }).then(async ({ success, message }) => {
+    this.appEventsQueue.publish({ command: 'restart', appUrn, requestId, form: { ...app.config, skipPull } }).then(async (result) => {
+      const { success, message } = result;
+      if ('operationBlocked' in result && result.operationBlocked) {
+        this.statusManager.emitEvent({ appUrn, event: 'restart_error', error: message });
+        return;
+      }
       if (success) {
         await this.statusManager.emitSuccess({
           appId: app.id,

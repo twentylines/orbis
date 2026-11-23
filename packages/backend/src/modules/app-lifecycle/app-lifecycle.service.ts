@@ -72,6 +72,30 @@ export class AppLifecycleService {
     let freshJob = false;
 
     try {
+      if (!('jobVersion' in data && data.jobVersion === 1)) {
+        let blocked = true;
+        try {
+          blocked = await this.jobs.hasUnsettledJob(data.appUrn);
+        } catch {
+          this.logger.warn('The current app operation could not be verified. The queued action was preserved without execution.');
+        }
+        if (blocked) {
+          try {
+            const previous = (await this.tasks.read()).tasks.find((task) => task.id === data.requestId);
+            if (previous?.appUrn === data.appUrn && previous.action === data.command && previous.status === 'queued' && previous.startedAt === null)
+              await this.tasks.finish(data, false);
+          } catch {
+            this.logger.warn('The blocked app action could not be recorded in task history.');
+          }
+          await reply({
+            success: false,
+            message: 'Review the unfinished app operation before starting another app action.',
+            statePreserved: true,
+            operationBlocked: true,
+          });
+          return;
+        }
+      }
       if ('jobVersion' in data && data.jobVersion === 1) {
         if (data.command !== 'backup' && data.command !== 'update') throw new Error('Invalid app operation command.');
         const jobEvent = data as JobEvent;
@@ -320,9 +344,13 @@ export class AppLifecycleService {
   }
 
   private async admitAppRequest<T>(appUrn: AppUrn, request: () => Promise<T>, allowInstallRecovery = false) {
+    if (await this.jobs.hasUnsettledJob(appUrn))
+      throw new ConflictException('Review the unfinished app operation before starting another app action.');
     if (!allowInstallRecovery && this.mutex.resourceLocks.has(appUrn)) await this.installAppHandler.requireNoInstallHold(appUrn);
     const release = await this.mutex.acquire(appUrn);
     try {
+      if (await this.jobs.hasUnsettledJob(appUrn))
+        throw new ConflictException('Review the unfinished app operation before starting another app action.');
       if (!allowInstallRecovery) await this.installAppHandler.requireNoInstallHold(appUrn);
       return await request();
     } finally {

@@ -19,6 +19,7 @@ import { AppEventsQueue, type appEventResultSchema } from '../../queue/entities/
 import { appFormSchema } from '../dto/app-lifecycle.dto';
 import { hasInstallRequestHold, reserveInstallRequest, takeInstallRequestReceipt } from '../install-request-receipt';
 import { AppValidationService } from '../services/app-validation.service';
+import { AppJobService } from '../services/app-job.service';
 import { StatusManagerService } from '../services/status-manager.service';
 import { StartAppHandler } from './start-app.handler';
 import { type HandlerResult, type ILifecycleHandler, generateRequestId } from './base-handler';
@@ -44,6 +45,7 @@ export class InstallAppHandler implements ILifecycleHandler<InstallAppParams> {
     @Inject(APP_ASYNC_MUTEX) private readonly mutex: AsyncMutex,
     private readonly config: ConfigurationService,
     private readonly logger: LoggerService,
+    private readonly jobs: AppJobService,
   ) {}
 
   async execute(appUrn: AppUrn, params?: InstallAppParams): Promise<HandlerResult> {
@@ -61,8 +63,12 @@ export class InstallAppHandler implements ILifecycleHandler<InstallAppParams> {
     let releaseApp: (() => void) | undefined;
     const requestId = generateRequestId();
     try {
+      if (await this.jobs.hasUnsettledJob(appUrn))
+        throw new ConflictException('Review the unfinished app operation before installing or starting this app.');
       if (this.mutex.resourceLocks.has(appUrn)) await this.requireNoInstallHold(appUrn);
       releaseApp = await this.mutex.acquire(appUrn);
+      if (await this.jobs.hasUnsettledJob(appUrn))
+        throw new ConflictException('Review the unfinished app operation before installing or starting this app.');
       await this.requireNoInstallHold(appUrn);
       const request = { requestId, owner: this.owner, skipRun };
       const createdApp = await this.reserveApp(appUrn, parsedForm, request, params?.requireNew);
@@ -74,7 +80,9 @@ export class InstallAppHandler implements ILifecycleHandler<InstallAppParams> {
       void this.appEventsQueue
         .publish({ appUrn, command: 'install', requestId, form: { ...parsedForm, skipRun } })
         .catch(() => ({ success: false, message: 'The app install outcome could not be confirmed.' }))
-        .then(async ({ success, message }) => {
+        .then(async (result) => {
+          const { success, message } = result;
+          if ('operationBlocked' in result && result.operationBlocked) return;
           if (success) return;
           const leave = enterBackupMutation();
           if (!leave) return;

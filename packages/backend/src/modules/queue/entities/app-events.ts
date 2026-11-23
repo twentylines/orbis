@@ -74,6 +74,7 @@ export const appEventResultSchema = type({
   success: 'boolean',
   message: 'string',
   statePreserved: 'boolean?',
+  operationBlocked: 'boolean?',
   alreadyCompleted: 'boolean?',
   cancelled: 'boolean?',
   updateStatus: type("'running' | 'stopped'").optional(),

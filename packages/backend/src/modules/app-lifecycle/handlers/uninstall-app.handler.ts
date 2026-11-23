@@ -30,7 +30,12 @@ export class UninstallAppHandler implements ILifecycleHandler<UninstallAppParams
 
     const requestId = generateRequestId();
 
-    this.appEventsQueue.publish({ command: 'uninstall', appUrn, requestId, form: app.config, removeBackups }).then(async ({ success, message }) => {
+    this.appEventsQueue.publish({ command: 'uninstall', appUrn, requestId, form: app.config, removeBackups }).then(async (result) => {
+      const { success, message } = result;
+      if ('operationBlocked' in result && result.operationBlocked) {
+        this.statusManager.emitEvent({ appUrn, event: 'uninstall_error', error: message });
+        return;
+      }
       if (success) {
         await this.statusManager.deleteApp(app.id);
         this.statusManager.emitEvent({ appUrn, event: 'uninstall_success' });

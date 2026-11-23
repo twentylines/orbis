@@ -125,6 +125,7 @@ describe('install reservation through queue delivery', () => {
         mutex,
         config,
         mock<LoggerService>(),
+        mock<AppJobService>(),
       );
     const handler = newHandler();
     testingModule = await Test.createTestingModule({ providers: [AppLifecycleService] })

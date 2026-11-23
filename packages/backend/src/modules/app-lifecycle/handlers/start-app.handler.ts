@@ -30,7 +30,12 @@ export class StartAppHandler implements ILifecycleHandler<StartAppParams> {
 
     const requestId = generateRequestId();
 
-    this.appEventsQueue.publish({ appUrn, command: 'start', requestId, form: { ...app.config, skipPull } }).then(async ({ success, message }) => {
+    this.appEventsQueue.publish({ appUrn, command: 'start', requestId, form: { ...app.config, skipPull } }).then(async (result) => {
+      const { success, message } = result;
+      if ('operationBlocked' in result && result.operationBlocked) {
+        this.statusManager.emitEvent({ appUrn, event: 'start_error', error: message });
+        return;
+      }
       if (success) {
         await this.statusManager.emitSuccess({
           appId: app.id,

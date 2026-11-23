@@ -41,6 +41,10 @@ export class RestoreAppHandler implements ILifecycleHandler<RestoreAppParams> {
 
     this.appEventsQueue.publish({ appUrn, command: 'restore', requestId, filename, form: app.config }).then(async (result) => {
       const { success, message } = result;
+      if ('operationBlocked' in result && result.operationBlocked) {
+        this.statusManager.emitEvent({ appUrn, event: 'restore_error', error: message });
+        return;
+      }
       if (success) {
         const restoredAppConfig = await this.appFilesManager.getInstalledAppInfo(appUrn);
 
