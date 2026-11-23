@@ -63,6 +63,7 @@ export const appEventResultSchema = type({
   alreadyCompleted: 'boolean?',
   cancelled: 'boolean?',
   updateStatus: type("'running' | 'stopped'").optional(),
+  appStopped: 'boolean?',
 });
 
 export type AppEventFormInput = typeof queueAppFormSchema.inferIn;

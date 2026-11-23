@@ -42,7 +42,7 @@ describe.each(['backup', 'restore'] as const)('%s requires a stopped application
     expect(await command.execute(appUrn)).toEqual({
       success: false,
       message: 'The app could not be stopped',
-      ...(action === 'backup' ? { statePreserved: true } : {}),
+      ...(action === 'backup' ? { statePreserved: true } : { appStopped: false }),
     });
     expect(backupManager.backupApp).not.toHaveBeenCalled();
     expect(backupManager.restoreApp).not.toHaveBeenCalled();
@@ -66,4 +66,21 @@ describe.each(['backup', 'restore'] as const)('%s requires a stopped application
     expect(dockerService.composeApp).toHaveBeenCalledExactlyOnceWith(appUrn, 'stop');
     expect(steps).toEqual(['stopped', action]);
   });
+
+  if (action === 'restore') {
+    it('reports the stopped stage when archive restoration fails after a successful stop', async () => {
+      const { command, dockerService, backupManager } = fixture();
+      dockerService.composeApp.mockResolvedValue({ success: true, stdout: '', stderr: '' });
+      backupManager.restoreApp.mockRejectedValue(new Error('Invalid backup archive'));
+      expect(await command.execute(appUrn)).toEqual({ success: false, message: 'Invalid backup archive', appStopped: true });
+    });
+
+    it('preserves the stopped-stage result through the queue response schema', async () => {
+      const { command } = fixture();
+      const result = await command.execute(appUrn);
+      expect(appEventResultSchema.assert(JSON.parse(JSON.stringify(result)))).toMatchObject({ success: true, appStopped: true });
+    });
+  }
 });
+
+import { appEventResultSchema } from '@/modules/queue/entities/app-events';

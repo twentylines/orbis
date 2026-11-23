@@ -25,7 +25,7 @@ import { TasksService } from '../tasks/tasks.service';
 import { INSTALLATION_MESSAGE, installationHeld, installationMode } from '@/common/installation-mode';
 import type { RestoreComposeStart } from '../docker/docker.service';
 import { enterBackupMutation } from '@/common/backup-maintenance';
-import type { AppJobContext, JobEvent } from './services/app-job.service';
+import { AppJobService, type AppJobContext, type JobEvent } from './services/app-job.service';
 
 @Injectable()
 export class AppLifecycleService {
@@ -49,6 +49,7 @@ export class AppLifecycleService {
     private readonly tasks: TasksService,
     private readonly backups: BackupManager,
     @Inject(DOCKERODE) private readonly docker: Dockerode,
+    private readonly jobs: AppJobService,
   ) {
     this.logger.debug('Subscribing to app events...');
     this.appEventsQueue.onEvent((data, reply, delivery) => this.invokeCommand(data, reply, delivery?.redelivered ?? false));
@@ -342,6 +343,24 @@ export class AppLifecycleService {
   public async updateAppSettings(params: { appUrn: AppUrn; form: unknown }) {
     await this.installAppHandler.requireNoInstallHold(params.appUrn);
     return this.updateConfigHandler.execute(params.appUrn, { form: params.form });
+  }
+
+  public async deleteAppBackup(params: { appUrn: AppUrn; filename: string }) {
+    if (installationHeld()) throw new ConflictException(INSTALLATION_MESSAGE);
+    const leave = enterBackupMutation();
+    if (!leave) throw new ConflictException('A full backup or app recovery is in progress. Retry when it finishes.');
+    let release: (() => void) | undefined;
+    try {
+      if (this.mutex.resourceLocks.has(params.appUrn)) throw new ConflictException('Wait for the current app operation to finish.');
+      release = await this.mutex.acquire(params.appUrn);
+      await this.installAppHandler.requireNoInstallHold(params.appUrn);
+      if ((await this.jobs.hasUnsettledJob(params.appUrn)) || (await this.backups.hasPendingRestore(params.appUrn)))
+        throw new ConflictException('Review the unfinished app operation before deleting its backups.');
+      await this.backups.deleteBackup(params.appUrn, params.filename);
+    } finally {
+      release?.();
+      leave();
+    }
   }
 
   public async updateApp(params: { appUrn: AppUrn; performBackup: boolean }) {

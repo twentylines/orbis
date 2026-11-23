@@ -275,6 +275,14 @@ export class AppJobService implements OnModuleDestroy, OnModuleInit {
     });
   }
 
+  async hasUnsettledJob(appUrn: AppUrn): Promise<boolean> {
+    const current = await this.store().current(appUrn);
+    if (!current) return false;
+    const record = await this.store().read(current.requestId);
+    if (!record || record.appUrn !== appUrn || record.command !== current.command) throw jobStoreError();
+    return !['succeeded', 'failed', 'cancelled'].includes(record.state);
+  }
+
   async getJob(appUrn: AppUrn, requestId?: string): Promise<{ job: AppJob | null }> {
     const history = await this.tasks.read();
     const task = history.tasks.find(

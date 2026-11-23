@@ -11,6 +11,7 @@ import { AppsRepository } from '../apps/apps.repository';
 import type { AppStatus } from '@/core/database/drizzle/types';
 import { SystemEventsQueue } from '../queue/entities/system-events';
 import { ConfigurationService } from '@/core/config/configuration.service';
+import { AppJobService } from './services/app-job.service';
 
 const TRANSITIONAL_STATES: AppStatus[] = [
   'installing',
@@ -34,6 +35,7 @@ export class AppStatusSyncService {
     private readonly configuration: ConfigurationService,
     @Inject(DOCKERODE) private readonly docker: Dockerode,
     @Inject(APP_ASYNC_MUTEX) private readonly mutex: AsyncMutex,
+    private readonly jobs: AppJobService,
   ) {
     if (this.configuration.get('userSettings').eventsTimeout > 5) {
       this.logger.warn(
@@ -81,54 +83,71 @@ export class AppStatusSyncService {
 
       for (const app of apps) {
         const appUrn: AppUrn = `${app.appName}:${app.appStoreSlug}` as AppUrn;
-        if (app.status === 'installing' && this.mutex.resourceLocks.has(appUrn)) {
+        if (this.mutex.resourceLocks.has(appUrn)) {
           skippedCount++;
           continue;
         }
 
-        const isTransitional = TRANSITIONAL_STATES.includes(app.status);
-        if (isTransitional) {
-          const timeSinceUpdate = Math.floor(Date.now() / 1000) - app.updatedAt;
-
-          if (timeSinceUpdate < this.configuration.get('userSettings').eventsTimeout * 60) {
-            this.logger.debug(`Skipping ${appUrn} - in recent transitional state '${app.status}'`);
+        const release = await this.mutex.acquire(appUrn);
+        try {
+          if (await this.jobs.hasUnsettledJob(appUrn)) {
             skippedCount++;
             continue;
           }
-          this.logger.warn(`App ${appUrn} stuck in '${app.status}' for ${Math.round(timeSinceUpdate / 60)} minutes, forcing status sync`);
-        }
-
-        const dockerStatus = dockerStatusMap.get(appUrn);
-        let newStatus: AppStatus;
-
-        if (!dockerStatus) {
-          newStatus = 'stopped';
-        } else if (dockerStatus.running === dockerStatus.total) {
-          newStatus = 'running';
-        } else {
-          newStatus = 'stopped';
-          if (dockerStatus.running > 0) {
-            this.logger.warn(`App ${appUrn} has mixed container states: ${dockerStatus.running}/${dockerStatus.total} running`);
+          const current = await this.appRepository.getAppByUrn(appUrn);
+          if (
+            !current ||
+            current.id !== app.id ||
+            current.createdAt !== app.createdAt ||
+            current.version !== app.version ||
+            current.status !== app.status ||
+            current.updatedAt !== app.updatedAt
+          ) {
+            skippedCount++;
+            continue;
           }
-        }
 
-        if (app.status !== newStatus) {
-          if (app.status === 'installing') {
-            const release = await this.mutex.acquire(appUrn);
-            try {
+          const isTransitional = TRANSITIONAL_STATES.includes(app.status);
+          if (isTransitional) {
+            const timeSinceUpdate = Math.floor(Date.now() / 1000) - app.updatedAt;
+
+            if (timeSinceUpdate < this.configuration.get('userSettings').eventsTimeout * 60) {
+              this.logger.debug(`Skipping ${appUrn} - in recent transitional state '${app.status}'`);
+              skippedCount++;
+              continue;
+            }
+            this.logger.warn(`App ${appUrn} stuck in '${app.status}' for ${Math.round(timeSinceUpdate / 60)} minutes, forcing status sync`);
+          }
+
+          const dockerStatus = dockerStatusMap.get(appUrn);
+          let newStatus: AppStatus;
+
+          if (!dockerStatus) {
+            newStatus = 'stopped';
+          } else if (dockerStatus.running === dockerStatus.total) {
+            newStatus = 'running';
+          } else {
+            newStatus = 'stopped';
+            if (dockerStatus.running > 0) {
+              this.logger.warn(`App ${appUrn} has mixed container states: ${dockerStatus.running}/${dockerStatus.total} running`);
+            }
+          }
+
+          if (app.status !== newStatus) {
+            if (app.status === 'installing') {
               if (!(await this.appRepository.finishInstallReservation(app, newStatus))) {
                 skippedCount++;
                 continue;
               }
-            } finally {
-              release();
+            } else {
+              await this.appRepository.updateAppById(app.id, { status: newStatus });
             }
-          } else {
-            await this.appRepository.updateAppById(app.id, { status: newStatus });
+            this.sseService.emit('app', { event: 'status_change', appUrn, appStatus: newStatus });
+            this.logger.info(`Synced ${appUrn}: '${app.status}' -> '${newStatus}'`);
+            syncedCount++;
           }
-          this.sseService.emit('app', { event: 'status_change', appUrn, appStatus: newStatus });
-          this.logger.info(`Synced ${appUrn}: '${app.status}' -> '${newStatus}'`);
-          syncedCount++;
+        } finally {
+          release();
         }
       }
 

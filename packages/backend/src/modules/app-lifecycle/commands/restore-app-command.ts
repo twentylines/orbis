@@ -15,23 +15,25 @@ export class RestoreAppCommand extends AppLifecycleCommand {
     super(moduleRef, docker);
   }
 
-  public async execute(appUrn: AppUrn): Promise<{ success: boolean; message: string }> {
+  public async execute(appUrn: AppUrn): Promise<{ success: boolean; message: string; appStopped: boolean }> {
     const logger = this.moduleRef.get(LoggerService, { strict: false });
     const dockerService = this.moduleRef.get(DockerService, { strict: false });
     const backupManager = this.moduleRef.get(BackupManager, { strict: false });
+    let appStopped = false;
 
     try {
       // Stop the app
       logger.info(`Stopping app ${appUrn} for restore operation`);
       await dockerService.composeApp(appUrn, 'stop');
+      appStopped = true;
 
       await backupManager.restoreApp(appUrn, this.filename);
 
       // Done
       logger.info(`App ${appUrn} restored!`);
-      return { success: true, message: `App ${appUrn} restored successfully` };
+      return { success: true, message: `App ${appUrn} restored successfully`, appStopped };
     } catch (err) {
-      return this.handleAppError(err, appUrn, 'restore');
+      return { ...(await this.handleAppError(err, appUrn, 'restore')), appStopped };
     }
   }
 }

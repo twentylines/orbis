@@ -128,4 +128,19 @@ describe('RestoreAppHandler', () => {
       status: 'stopped',
     });
   });
+
+  it.each([
+    { appStopped: false, expected: 'running' },
+    { appStopped: true, expected: 'stopped' },
+    { appStopped: undefined, expected: 'stopped' },
+  ] as const)('reports $expected after restore failure with stopped-stage evidence $appStopped', async ({ appStopped, expected }) => {
+    appRepository.getAppByUrn.mockResolvedValue(fromPartial({ id: 23, status: 'running', config: {} }));
+    appEventsQueue.publish.mockResolvedValue({ success: false, message: 'Restore failed', ...(appStopped === undefined ? {} : { appStopped }) });
+    const handler = new RestoreAppHandler(appRepository, appEventsQueue, statusManager, appFilesManager, startAppHandler);
+    await handler.execute(appUrn, { filename: 'saved.tar.gz' });
+    await flushPromises();
+    expect(statusManager.emitError).toHaveBeenCalledWith({ appId: 23, appUrn, event: 'restore_error', status: expected, error: 'Restore failed' });
+    expect(startAppHandler.execute).not.toHaveBeenCalled();
+    expect(appRepository.updateAppById).not.toHaveBeenCalled();
+  });
 });

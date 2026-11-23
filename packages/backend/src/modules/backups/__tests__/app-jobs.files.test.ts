@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
+import type Dockerode from 'dockerode';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import { ConfigurationService } from '@/core/config/configuration.service';
@@ -17,6 +18,8 @@ import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { AppFilesManager } from '@/modules/apps/app-files-manager';
 import { BackupManager } from '@/modules/backups/backup.manager';
 import { AppLifecycleService } from '@/modules/app-lifecycle/app-lifecycle.service';
+import { AppStatusSyncService } from '@/modules/app-lifecycle/app-status-sync.service';
+import { SystemEventsQueue } from '@/modules/queue/entities/system-events';
 import { AppLifecycleCommandFactory } from '@/modules/app-lifecycle/app-lifecycle-command.factory';
 import { BackupAppHandler } from '@/modules/app-lifecycle/handlers/backup-app.handler';
 import { StartAppHandler } from '@/modules/app-lifecycle/handlers/start-app.handler';
@@ -530,4 +533,76 @@ it.each(['symlink', 'corrupt', 'permissions'] as const)('fails closed for %s ope
   else await fs.chmod(file, 0o644);
   await expect(jobs.cancel(urn, data.requestId)).rejects.toThrow();
   await expect(jobs.begin(data, false)).rejects.toThrow();
+});
+
+it('allows ordinary status reconciliation when no operation has been admitted', async () => {
+  expect(await jobs.hasUnsettledJob(urn)).toBe(false);
+});
+
+it.each(['queued', 'running', 'cancel-requested', 'sealed', 'interrupted', 'succeeded', 'failed', 'cancelled'] as const)(
+  'reads the persisted %s state before allowing status reconciliation',
+  async (state) => {
+    const data = event();
+    await admit(data);
+    const store = new AppJobStore(directory);
+    const before = await store.read(data.requestId);
+    if (!before) throw new Error('Missing admitted record');
+    await store.write({ ...before, state }, before);
+    // A restarted service has no live worker. The app pointer still contains the admission snapshot.
+    const restarted = new AppJobService(config, repository, new TasksService(config, mock<LoggerService>()));
+    const unsettled = !['succeeded', 'failed', 'cancelled'].includes(state);
+    expect(await restarted.hasUnsettledJob(urn)).toBe(unsettled);
+    app = { ...app, updatedAt: 0 };
+    repository.getApps.mockResolvedValue([app]);
+    config.get.calledWith('userSettings').mockReturnValue({ eventsTimeout: 5 } as never);
+    const docker = mock<Dockerode>();
+    docker.listContainers.mockResolvedValue([]);
+    const sync = new AppStatusSyncService(
+      mock<LoggerService>(),
+      repository,
+      mock<SSEService>(),
+      mock<SystemEventsQueue>(),
+      config,
+      docker,
+      new AsyncMutex(),
+      restarted,
+    );
+    expect(await sync.syncAllAppStatuses()).toMatchObject({ success: true, syncedCount: unsettled ? 0 : 1, skippedCount: unsettled ? 1 : 0 });
+    if (unsettled) expect(repository.updateAppById).not.toHaveBeenCalled();
+    else expect(repository.updateAppById).toHaveBeenCalledWith(app.id, { status: 'stopped' });
+  },
+);
+
+it('refuses status reconciliation when the admitted operation record disappears', async () => {
+  const data = event();
+  await admit(data);
+  await fs.unlink(path.join(directory, 'state', 'orbis-app-jobs', `${data.requestId}.json`));
+  await expect(jobs.hasUnsettledJob(urn)).rejects.toThrow('operation record');
+});
+
+it.each(['appUrn', 'command'] as const)('refuses status reconciliation when the operation %s changes', async (field) => {
+  const data = event();
+  await admit(data);
+  const store = new AppJobStore(directory);
+  const before = await store.read(data.requestId);
+  if (!before) throw new Error('Missing admitted record');
+  const changed = field === 'appUrn' ? { ...before, appUrn: 'other:store' as typeof urn } : { ...before, command: 'backup' as const };
+  await store.write(changed, before);
+  await expect(jobs.hasUnsettledJob(urn)).rejects.toThrow('operation record');
+});
+
+it('preserves a real backup while its durable app operation is unfinished and deletes it after settlement', async () => {
+  const fixture = await backupWorker();
+  const filename = 'retained.tar.gz';
+  const file = path.join(directory, 'backups', 'store', 'demo', filename);
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, 'retained backup bytes');
+  const data = event();
+  await admit(data);
+  await expect(fixture.service.deleteAppBackup({ appUrn: urn, filename })).rejects.toThrow('unfinished app operation');
+  expect(await fs.readFile(file, 'utf8')).toBe('retained backup bytes');
+  const context = await begin(data);
+  await jobs.finish(data, context, { success: true, message: 'Completed' });
+  await fixture.service.deleteAppBackup({ appUrn: urn, filename });
+  await expect(fs.stat(file)).rejects.toMatchObject({ code: 'ENOENT' });
 });

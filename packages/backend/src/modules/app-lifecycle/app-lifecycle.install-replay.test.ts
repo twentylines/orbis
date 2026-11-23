@@ -24,6 +24,7 @@ import { mock } from 'vitest-mock-extended';
 import { AppLifecycleCommandFactory } from './app-lifecycle-command.factory';
 import { AppLifecycleService } from './app-lifecycle.service';
 import { AppStatusSyncService } from './app-status-sync.service';
+import { AppJobService } from './services/app-job.service';
 import { InstallAppHandler } from './handlers/install-app.handler';
 import { StartAppHandler } from './handlers/start-app.handler';
 import { hasInstallRequestHold, installRequestDirectory, reserveInstallRequest, takeInstallRequestReceipt } from './install-request-receipt';
@@ -161,6 +162,7 @@ describe('install reservation through queue delivery', () => {
         config,
         docker,
         mutex,
+        mock<AppJobService>(),
       ).syncAllAppStatuses();
     return {
       current,
