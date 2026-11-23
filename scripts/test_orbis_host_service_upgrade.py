@@ -3,6 +3,8 @@ import json
 import os
 import tempfile
 import unittest
+import uuid
+from contextlib import ExitStack, nullcontext
 from pathlib import Path
 from unittest import mock
 
@@ -169,6 +171,194 @@ class OrbisHostServiceUpgradeTests(unittest.TestCase):
         checked = {call.args[0] for call in inspected.call_args_list}
         self.assertTrue({installed / name for name in UPGRADE.LEGACY_SCRIPTS} <= checked)
         self.assertNotIn(installed / 'orbis-host-core-capture-reader.py', checked)
+
+
+class RetainedHelperRollbackTests(unittest.TestCase):
+    def setUp(self):
+        self.stack = ExitStack()
+        self.addCleanup(self.stack.close)
+        folder = self.stack.enter_context(tempfile.TemporaryDirectory())
+        self.base = Path(folder).resolve()
+        self.root = self.base / 'installation'
+        self.root.mkdir(mode=0o700)
+        self.installed = self.base / 'host-service'
+        self.installed.mkdir(mode=0o700)
+        self.unit = self.base / 'orbis-host.service'
+        self.workspace = self.base / (UPGRADE.WORKSPACE_PREFIX + uuid.uuid4().hex)
+        self.workspace.mkdir(mode=0o700)
+        previous = self.workspace / 'previous'
+        previous.mkdir(mode=0o700)
+        self.extraction = self.base / 'selected'
+        self.extraction.mkdir(mode=0o700)
+        (self.extraction / 'host-copy-custody').mkdir(mode=0o700)
+        for path, body in [(self.installed / 'orbis-host-service.py', b'# candidate\n'),
+                           (previous / 'orbis-host-service.py', b'# prior\n'),
+                           (self.unit, b'candidate unit\n'),
+                           (self.workspace / 'previous-unit', b'prior unit\n')]:
+            path.write_bytes(body)
+            path.chmod(0o600)
+        self.maintenance = self.base / 'helper-maintenance.json'
+        self.patch(UPGRADE.HOST.AUTHORITY, 'OWNER', os.geteuid())
+        self.patch(UPGRADE.SETUP, 'INSTALL_DIR', self.installed)
+        self.patch(UPGRADE.SETUP, 'UNIT_FILE', self.unit)
+        self.patch(UPGRADE, 'STATE_DIR', self.base)
+        self.patch(UPGRADE, 'MAINTENANCE', self.maintenance)
+        self.patch(UPGRADE, 'require_root_owned')
+        self.patch(UPGRADE, 'require_maintenance_identity')
+        self.patch(UPGRADE, 'require_profile')
+        self.patch(UPGRADE, 'require_installed', return_value=None)
+        self.health = self.patch(UPGRADE, 'verify_service')
+        self.patch(UPGRADE.SETUP, 'run_systemctl')
+        self.stop = self.patch(UPGRADE, 'stop_service')
+        self.jobs = self.patch(UPGRADE, 'job_identity', return_value=None)
+        self.patch(UPGRADE.HOST, 'host_lock', side_effect=lambda _: nullcontext())
+        self.selection = {'directory': str(self.extraction), 'selectionSha256': 'a' * 64}
+        self.patch(UPGRADE.SETUP, 'hold_source_selection', side_effect=lambda *_: nullcontext(self.selection))
+        self.custody = {'selection': self.selection,
+                        'prior': UPGRADE.SETUP.actual_copy(previous, self.workspace / 'previous-unit'),
+                        'candidate': UPGRADE.SETUP.actual_copy(self.installed, self.unit)}
+        self.record = {'schema': 'orbis.helper-upgrade.v1', 'root': str(self.root), 'dockerContext': 'test',
+                       'workspace': str(self.workspace), 'previousDigest': 'sha256:' + 'b' * 64,
+                       'stage': 'verified', 'observerProfile': None, 'sourceCustody': self.custody}
+        UPGRADE.SERVICE.write_private(self.maintenance, self.record)
+        self.binding = {'operationId': str(uuid.uuid4()), 'planSha256': 'c' * 64,
+                        'targetDigest': 'sha256:' + 'd' * 64}
+
+    def patch(self, owner, name, *args, **kwargs):
+        return self.stack.enter_context(mock.patch.object(owner, name, *args, **kwargs))
+
+    def retain(self):
+        return UPGRADE.retain_previous(self.workspace, self.binding)
+
+    def rollback(self, retained):
+        with mock.patch.object(UPGRADE.os, 'geteuid', return_value=0):
+            return UPGRADE.rollback_retained(self.root, 'test', str(self.root), retained)
+
+    def test_retention_preserves_both_copies_and_retires_only_maintenance(self):
+        retained = self.retain()
+        self.assertFalse(self.maintenance.exists())
+        self.assertEqual((self.workspace / 'previous/orbis-host-service.py').read_bytes(), b'# prior\n')
+        self.assertEqual((self.installed / 'orbis-host-service.py').read_bytes(), b'# candidate\n')
+        body = (self.workspace / 'retained.json').read_bytes()
+        self.assertEqual(UPGRADE.SETUP._hash(body), retained['sha256'])
+        self.assertEqual(json.loads(body)['binding'], self.binding)
+        self.stop.assert_not_called()
+
+    def test_verified_rollback_restores_exact_source_and_unit_then_settles(self):
+        retained = self.retain()
+        result = self.rollback(retained)
+        self.assertTrue(result['restored'])
+        self.assertEqual((self.installed / 'orbis-host-service.py').read_bytes(), b'# prior\n')
+        self.assertEqual(self.unit.read_bytes(), b'prior unit\n')
+        self.assertFalse(self.workspace.exists())
+        self.assertFalse(self.maintenance.exists())
+        self.assertEqual(self.health.call_args_list, [mock.call(self.record['previousDigest'], self.root, 'test')] * 2)
+        receipts = list((self.extraction / 'host-copy-custody').glob('host-copy-transition-*.json'))
+        self.assertEqual(len(receipts), 1)
+        self.assertEqual(json.loads(receipts[0].read_bytes())['outcome'], 'prior-restored')
+
+    def test_retention_requires_verified_execution_custody_and_never_overwrites(self):
+        self.record['sourceCustody'] = None
+        UPGRADE.SERVICE.write_private(self.maintenance, self.record)
+        with self.assertRaises(ValueError):
+            self.retain()
+        self.record['sourceCustody'] = self.custody
+        UPGRADE.SERVICE.write_private(self.maintenance, self.record)
+        (self.workspace / 'retained.json').write_bytes(b'earlier evidence')
+        with self.assertRaises(FileExistsError):
+            self.retain()
+        self.assertEqual((self.workspace / 'retained.json').read_bytes(), b'earlier evidence')
+        self.assertTrue(self.maintenance.exists())
+
+    def test_crossed_operation_or_plan_refuses_before_stop(self):
+        retained = self.retain()
+        for key, value in [('operationId', str(uuid.uuid4())), ('planSha256', 'e' * 64),
+                           ('targetDigest', 'sha256:' + 'f' * 64), ('sha256', '0' * 64)]:
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                self.rollback({**retained, key: value})
+        self.stop.assert_not_called()
+        self.assertFalse(self.maintenance.exists())
+
+    def test_unhealthy_original_core_refuses_before_any_helper_change(self):
+        retained = self.retain()
+        self.health.side_effect = RuntimeError('original Core not healthy')
+        with self.assertRaises(RuntimeError):
+            self.rollback(retained)
+        self.stop.assert_not_called()
+        self.assertFalse(self.maintenance.exists())
+        self.assertTrue(self.workspace.exists())
+
+    def test_changed_retained_or_installed_copy_refuses_before_stop(self):
+        retained = self.retain()
+        for path in [self.workspace / 'previous/orbis-host-service.py', self.installed / 'orbis-host-service.py']:
+            before = path.read_bytes()
+            path.write_bytes(b'# changed\n')
+            with self.subTest(path=path.name), self.assertRaises(ValueError):
+                self.rollback(retained)
+            self.stop.assert_not_called()
+            path.write_bytes(before)
+
+    def test_changed_source_execution_or_observer_refuses_before_stop(self):
+        retained = self.retain()
+        self.selection['selectionSha256'] = 'f' * 64
+        with self.assertRaises(ValueError):
+            self.rollback(retained)
+        self.selection['selectionSha256'] = 'a' * 64
+        with mock.patch.object(UPGRADE, 'require_installed', return_value={'different': True}), self.assertRaises(ValueError):
+            self.rollback(retained)
+        self.stop.assert_not_called()
+
+    def test_other_active_job_or_maintenance_refuses_without_touching_retained_copy(self):
+        retained = self.retain()
+        with mock.patch.object(UPGRADE, 'job_identity', side_effect=ValueError('active job')), self.assertRaises(ValueError):
+            self.rollback(retained)
+        UPGRADE.SERVICE.write_private(self.maintenance, {'earlier': 'maintenance'})
+        with self.assertRaises(ValueError):
+            self.rollback(retained)
+        self.assertEqual(UPGRADE.SERVICE.read_private(self.maintenance), {'earlier': 'maintenance'})
+        self.stop.assert_not_called()
+
+    def test_job_accepted_while_stopping_keeps_both_copies_and_maintenance(self):
+        retained = self.retain()
+        self.jobs.side_effect = [None, None, ('new job', 'running')]
+        with self.assertRaises(ValueError):
+            self.rollback(retained)
+        self.assertTrue(self.maintenance.exists())
+        self.assertTrue((self.workspace / 'previous').exists())
+        self.assertEqual((self.installed / 'orbis-host-service.py').read_bytes(), b'# candidate\n')
+
+    def test_job_accepted_during_health_check_refuses_before_stopping(self):
+        retained = self.retain()
+        self.jobs.side_effect = [None, ('new job', 'running')]
+        with self.assertRaises(ValueError):
+            self.rollback(retained)
+        self.stop.assert_not_called()
+        self.assertTrue(self.maintenance.exists())
+        self.assertTrue((self.workspace / 'previous').exists())
+
+    def test_failed_restored_health_preserves_rollback_evidence(self):
+        retained = self.retain()
+        self.health.side_effect = [None, RuntimeError('restored helper health unavailable')]
+        with self.assertRaises(RuntimeError):
+            self.rollback(retained)
+        self.assertTrue(self.maintenance.exists())
+        self.assertTrue(self.workspace.exists())
+        self.assertEqual((self.installed / 'orbis-host-service.py').read_bytes(), b'# prior\n')
+
+    def test_lost_stop_reply_recovers_toward_original_copy(self):
+        retained = self.retain()
+        self.stop.side_effect = RuntimeError('lost supervisor reply')
+        with self.assertRaises(RuntimeError):
+            self.rollback(retained)
+        record = UPGRADE.SERVICE.read_private(self.maintenance)
+        self.assertEqual(record['stage'], 'retained-rollback')
+        self.assertEqual(record['retention'], retained)
+        self.stop.side_effect = None
+        with mock.patch.object(UPGRADE.os, 'geteuid', return_value=0):
+            result = UPGRADE.recover(self.root, 'test', str(self.root))
+        self.assertTrue(result['recovered'])
+        self.assertEqual((self.installed / 'orbis-host-service.py').read_bytes(), b'# prior\n')
+        self.assertFalse(self.workspace.exists())
 
 
 if __name__ == "__main__":

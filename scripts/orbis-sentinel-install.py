@@ -24,15 +24,15 @@ PYTHON = Path('/usr/bin/python3')
 INSTALLED_ROOT = Path('/opt/orbis-sentinel')
 INSTALLED_STATE = Path('/var/lib/orbis-sentinel')
 HOST_SOURCE_PLAN = 'orbis.host-source-publication-plan.v2'
-TOOLKIT_COMMIT = '203bbb7594f59be179c569dbc6959ed5e6038b96'
+TOOLKIT_COMMIT = '913bafac3efe5c900c97e0a8574c48cc24ebec1d'
 TOOLKIT = {
-    'activate_release.py': (28644, '0b4645072cb1de6251b27b5e063bdd38163078ea9c6b1ede7161ef89d71c924f'),
+    'activate_release.py': (32783, '52cb4e90627fc49ede28ace1229ce0142df481a2dc1acd69f2bc17c7e30cdadd'),
     'verify_release.py': (14462, '9461fb041d055bbae13cc3ce48f3daf09ff8835ceedb8a77c4bf15c237137629'),
     'stage_release.py': (23385, '4d4d52bfbfcc5891d6b1d17da9e14c7ff6c1559aa59e19db7aec5ae28adc50b2'),
     'bootstrap_verifier.py': (13977, '965002f855e940446951d27a2bd44a37043efa692d3e4ba56473bd5525de6e6c'),
     'LICENSE': (35149, '3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986'),
 }
-RELEASE = {'version': '0.1.0-dev.20', 'sha256': '06a4f27aa6bb2424f86a5d6df9d857f2d037007059b9ce21258798e1166285d5', 'sourceCommit': '203bbb7594f59be179c569dbc6959ed5e6038b96'}
+RELEASE = {'version': '0.1.0-dev.21', 'sha256': '59e6d959e0d181c064b3c1c09443076cbe9bce11a29f9ebc732aa1923a4ad00c', 'sourceCommit': '913bafac3efe5c900c97e0a8574c48cc24ebec1d'}
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 _PREPARATIONS = weakref.WeakKeyDictionary()
 

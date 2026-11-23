@@ -345,6 +345,135 @@ def restore_previous(workspace: Path, digest: str, root: Path, context: str) -> 
         SETUP.record_source_copy_transition(root, context, custody, outcome="prior-restored")
 
 
+def retention_binding(value):
+    if (type(value) is not dict or set(value) != {'operationId', 'planSha256', 'targetDigest'}
+            or type(value['operationId']) is not str
+            or type(value['planSha256']) is not str or not re.fullmatch(r'[a-f0-9]{64}', value['planSha256'])
+            or type(value['targetDigest']) is not str or not SETUP.PLAN.DIGEST.fullmatch(value['targetDigest'])):
+        raise ValueError('Helper rollback retention requires one exact component upgrade binding')
+    try:
+        identifier = uuid.UUID(value['operationId'])
+    except ValueError as error:
+        raise ValueError('Helper rollback retention operation is invalid') from error
+    if str(identifier) != value['operationId'] or identifier.version != 4:
+        raise ValueError('Helper rollback retention operation is invalid')
+    return dict(value)
+
+
+def retain_previous(workspace, binding):
+    """Keep verified helper source rollback custody for a larger transaction.
+
+    This receipt records facts only. It does not authorize a component update,
+    approve recovery, release a hold or certify the other components healthy.
+    """
+    binding = retention_binding(binding)
+    record = SERVICE.read_private(MAINTENANCE)
+    if (not isinstance(record, dict) or record.get('stage') != 'verified'
+            or record.get('sourceCustody') is None
+            or workspace_from_record(record, Path(record['root']), record['dockerContext']) != workspace):
+        raise ValueError('Helper rollback retention needs exact verified source custody')
+    custody = record['sourceCustody']
+    _require_custodied_copy(custody, 'prior', workspace / 'previous', workspace / 'previous-unit')
+    _require_custodied_copy(custody, 'candidate', SETUP.INSTALL_DIR, SETUP.UNIT_FILE)
+    require_maintenance_identity(Path(record['root']), record['dockerContext'])
+    value = {'schema': 'orbis.helper-upgrade-retained.v1', 'binding': binding, 'maintenance': record}
+    body = SETUP._receipt_bytes(value)
+    with HOST.AUTHORITY.protected_directory(workspace) as pinned:
+        directory = os.dup(pinned)
+        identity = SETUP._SetupSources._directory_identity(os.fstat(directory))
+    try:
+        descriptor = os.open('retained.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                             0o600, dir_fd=directory)
+        with os.fdopen(descriptor, 'wb') as output:
+            output.write(body)
+            output.flush()
+            os.fsync(output.fileno())
+        os.fsync(directory)
+        with HOST.AUTHORITY.protected_directory(workspace) as observed:
+            if (SETUP._SetupSources._directory_identity(os.fstat(observed)) != identity
+                    or SETUP._SetupSources._directory_identity(os.fstat(directory)) != identity):
+                raise ValueError('Helper rollback retention directory changed')
+            with HOST.AUTHORITY.protected_file(observed, 'retained.json', 131072) as retained:
+                if retained != body or SERVICE.read_private(MAINTENANCE) != record:
+                    raise ValueError('Helper rollback retention changed before maintenance settled')
+    finally:
+        os.close(directory)
+    MAINTENANCE.unlink()
+    sync_directory(STATE_DIR)
+    return {'schema': 'orbis.helper-upgrade-retention.v1', **binding,
+            'workspace': str(workspace), 'sha256': hashlib.sha256(body).hexdigest()}
+
+
+def rollback_retained(root, context, confirmation, retained):
+    """Restore retained helper bytes only after the original Core is healthy.
+
+    The independent coordinator must restore/verify Core first. Uncertain or
+    mixed Core state never permits replacing the helper with its old copy.
+    """
+    if os.geteuid() != 0:
+        raise ValueError('Helper rollback requires root privileges')
+    root = root.resolve(strict=True)
+    if confirmation != str(root):
+        raise ValueError('Helper rollback requires the exact confirmed installation')
+    if (type(retained) is not dict
+            or set(retained) != {'schema', 'operationId', 'planSha256', 'targetDigest', 'workspace', 'sha256'}
+            or retained['schema'] != 'orbis.helper-upgrade-retention.v1'
+            or type(retained['workspace']) is not str or type(retained['sha256']) is not str
+            or not re.fullmatch(r'[a-f0-9]{64}', retained['sha256'])):
+        raise ValueError('Helper rollback retention descriptor is invalid')
+    binding = retention_binding({key: retained[key] for key in ('operationId', 'planSha256', 'targetDigest')})
+    workspace = Path(retained['workspace'])
+    if (workspace.parent != SETUP.INSTALL_DIR.parent or not workspace.name.startswith(WORKSPACE_PREFIX)
+            or workspace != workspace.resolve(strict=True)):
+        raise ValueError('Helper rollback retention workspace is invalid')
+    with HOST.host_lock(root):
+        if MAINTENANCE.exists() or MAINTENANCE.is_symlink():
+            raise ValueError('Resolve existing helper maintenance before retained rollback')
+        with HOST.AUTHORITY.protected_directory(workspace) as directory:
+            with HOST.AUTHORITY.protected_file(directory, 'retained.json', 131072) as body:
+                value = json.loads(body)
+                if (hashlib.sha256(body).hexdigest() != retained['sha256']
+                        or type(value) is not dict or set(value) != {'schema', 'binding', 'maintenance'}
+                        or value['schema'] != 'orbis.helper-upgrade-retained.v1' or value['binding'] != binding
+                        or SETUP._receipt_bytes(value) != body):
+                    raise ValueError('Helper rollback retention receipt changed')
+                record = value['maintenance']
+                if (not isinstance(record, dict) or record.get('stage') != 'verified'
+                        or record.get('sourceCustody') is None
+                        or workspace_from_record(record, root, context) != workspace):
+                    raise ValueError('Helper rollback belongs to a different verified installation')
+                digest = record.get('previousDigest')
+                if type(digest) is not str or not SETUP.PLAN.DIGEST.fullmatch(digest):
+                    raise ValueError('Helper rollback original Core identity is invalid')
+                custody = record['sourceCustody']
+                selection = custody['selection']
+                source = Path(selection['directory']) / 'scripts'
+                with SETUP.hold_source_selection(source, selection['selectionSha256']) as current:
+                    if current is None or {key: item for key, item in current.items() if key != 'inventory'} != selection:
+                        raise ValueError('Helper rollback source execution custody changed')
+                    profile = require_installed(root, context)
+                    if profile != record.get('observerProfile'):
+                        raise ValueError('Helper rollback observer profile changed')
+                    previous_job = job_identity()
+                    _require_custodied_copy(custody, 'prior', workspace / 'previous', workspace / 'previous-unit')
+                    _require_custodied_copy(custody, 'candidate', SETUP.INSTALL_DIR, SETUP.UNIT_FILE)
+                    verify_service(digest, root, context)
+                    # A restart must resume restoration, rather than treating
+                    # the earlier verified candidate as the requested outcome.
+                    record = {**record, 'stage': 'retained-rollback', 'retention': retained}
+                    SERVICE.write_private(MAINTENANCE, record)
+        require_maintenance_identity(root, context)
+        if job_identity() != previous_job:
+            raise ValueError('A Core operation changed before stopping the helper; preserve rollback custody')
+        stop_service(profile)
+        if job_identity() != previous_job:
+            raise ValueError('A Core operation changed while stopping the helper; preserve rollback custody')
+        restore_previous(workspace, digest, root, context)
+        finish(workspace)
+        return {'operationId': binding['operationId'], 'planSha256': binding['planSha256'],
+                'service': 'active', 'restored': True}
+
+
 def finish(workspace: Path) -> None:
     MAINTENANCE.unlink(missing_ok=True)
     sync_directory(STATE_DIR)
@@ -352,12 +481,16 @@ def finish(workspace: Path) -> None:
     sync_directory(workspace.parent)
 
 
-def upgrade(root: Path, context: str, source: Path, confirmation: str | None, *, source_custody=None) -> dict:
+def upgrade(root: Path, context: str, source: Path, confirmation: str | None, *, source_custody=None, retain=None) -> dict:
     if os.geteuid() != 0:
         raise ValueError("helper upgrade requires root privileges")
     root = root.resolve(strict=True)
     if confirmation != str(root):
         raise ValueError(f"helper upgrade requires --confirm-root {root}")
+    if retain is not None:
+        retain = retention_binding(retain)
+        if source_custody is None:
+            raise ValueError('Coordinated helper rollback requires verified installer execution custody')
     with HOST.host_lock(root), SETUP.hold_source_selection(source, source_custody) as selection:
         ready = preflight(root, context, source)
         if (
@@ -455,7 +588,10 @@ def upgrade(root: Path, context: str, source: Path, confirmation: str | None, *,
             transition = SETUP.record_source_copy_transition(root, context, copy_custody,
                 outcome="candidate-active", copy_receipt=receipt)
             ready.update(hostCopyCustodySha256=receipt, hostCopyTransitionSha256=transition)
-        finish(workspace)
+        if retain is not None:
+            ready['retainedRollback'] = retain_previous(workspace, retain)
+        else:
+            finish(workspace)
         return {**ready, "service": "active", "socket": str(SETUP.SOCKET_FILE), "upgraded": True}
 
 
