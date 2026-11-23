@@ -10,6 +10,32 @@ permissions:
   contents: read
 
 jobs:
+  cli-key-permissions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+
+      - name: Verify Node.js security baseline
+        run: node packages/backend/scripts/verify-node-security.cjs
+
+      - name: Verify CLI key isolation across Linux users
+        run: |
+          fixture_parent="$(mktemp -d "${GITHUB_WORKSPACE:?}/.orbis-permissions-XXXXXX")"
+          chmod 0711 "$fixture_parent"
+          trap 'sudo --non-interactive rm -rf -- "$fixture_parent"' EXIT
+          node_binary="$(command -v node)"
+          sudo --non-interactive env TMPDIR="$fixture_parent" ORBIS_CLI_KEY_TEST_ROOT="$fixture_parent" \
+            "$node_binary" --experimental-strip-types --test \
+            packages/backend/src/common/helpers/__tests__/permissions-linux.test.mjs
+
   tests:
     runs-on: ubuntu-latest
     steps:
