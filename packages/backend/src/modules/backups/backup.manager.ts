@@ -8,7 +8,7 @@ import { ArchiveService, type ArchiveEntry } from '@/core/archive/archive.servic
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { LoggerService } from '@/core/logger/logger.service';
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, type OnModuleInit } from '@nestjs/common';
 import { appInfoSchema } from '@runtipi/common/schemas';
 import type { AppUrn } from '@runtipi/common/types';
 import { type } from 'arktype';
@@ -18,14 +18,16 @@ import { AppsRepository } from '../apps/apps.repository';
 import { RestoreTransaction } from './restore-transaction';
 import { validateArchiveLinks, validateBackupTree } from './backup-links';
 import { copyStableBackupFile, copyStableBackupTree } from './stable-backup-copy';
+import { BackupStagingCleanup } from './backup-staging-cleanup';
 
 const ledgerFile = 'orbis-app-migrations.json';
 const maxLedgerBytes = 48 * 1024;
 const backupLedgerSchema = type({ version: '1', appUrn: 'string', ledger: appMigrationLedgerSchema }).onUndeclaredKey('reject');
 
 @Injectable()
-export class BackupManager {
+export class BackupManager implements OnModuleInit {
   private readonly restoreTransaction: RestoreTransaction;
+  private readonly stagingCleanup: BackupStagingCleanup;
 
   constructor(
     private readonly archiveManager: ArchiveService,
@@ -35,6 +37,7 @@ export class BackupManager {
     private readonly appFilesManager: AppFilesManager,
     private readonly appsRepository: AppsRepository,
   ) {
+    this.stagingCleanup = new BackupStagingCleanup(() => config.get('directories').dataDir, logger);
     this.restoreTransaction = new RestoreTransaction(
       filesystem,
       logger,
@@ -56,6 +59,10 @@ export class BackupManager {
         else await appsRepository.updateAppById(app.id, data);
       },
     );
+  }
+
+  async onModuleInit() {
+    await this.stagingCleanup.recover();
   }
 
   public getPendingRestores = () => this.restoreTransaction.pendingApps();
@@ -181,13 +188,8 @@ export class BackupManager {
 
       this.logger.info('Backup completed!');
     } finally {
-      try {
-        if (pendingPath) {
-          await fs.promises.rm(pendingPath, { force: true });
-        }
-      } finally {
-        await fs.promises.rm(tempDir, { recursive: true, force: true });
-      }
+      if (pendingPath) await this.stagingCleanup.dispose(appUrn, 'partial', pendingPath);
+      await this.stagingCleanup.dispose(appUrn, 'snapshot', tempDir);
     }
   };
 
@@ -266,7 +268,7 @@ export class BackupManager {
         };
       });
     } finally {
-      await fs.promises.rm(archiveDirectory, { recursive: true, force: true });
+      await this.stagingCleanup.dispose(appUrn, 'restore', archiveDirectory);
     }
   };
 

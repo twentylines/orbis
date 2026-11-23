@@ -300,6 +300,96 @@ describe('BackupManager real files and archives', () => {
     expect(await fs.promises.readFile(path.join(userConfigDir, 'app.env'), 'utf8')).toBe('SETTING=newer\n');
   };
 
+  it('keeps a completed backup successful and retries failed snapshot cleanup on startup', async () => {
+    const remove = fs.promises.rm.bind(fs.promises);
+    let failed = false;
+    vi.spyOn(fs.promises, 'rm').mockImplementation(async (file, options) => {
+      if (!failed && path.basename(String(file)).startsWith(`${appUrn}-`)) {
+        failed = true;
+        throw new Error('Cleanup storage unavailable');
+      }
+      await remove(file, options);
+    });
+    await manager.backupApp(appUrn);
+    expect(failed).toBe(true);
+    const [saved] = await manager.listBackupsByAppId(appUrn);
+    expect(saved).toBeDefined();
+    const records = path.join(root, 'data/state/backup-staging-cleanup');
+    expect(await fs.promises.readdir(records)).toHaveLength(1);
+    await manager.onModuleInit();
+    expect(await fs.promises.readdir(records)).toEqual([]);
+    expect((await manager.listBackupsByAppId(appUrn)).map((entry) => entry.id)).toEqual([saved?.id]);
+  });
+
+  it('preserves the capture error when disposing the incomplete snapshot also fails', async () => {
+    vi.spyOn(archive, 'createTarGz').mockRejectedValue(new Error('Original archive failure'));
+    const remove = fs.promises.rm.bind(fs.promises);
+    let failed = false;
+    vi.spyOn(fs.promises, 'rm').mockImplementation(async (file, options) => {
+      if (!failed && path.basename(String(file)).startsWith(`${appUrn}-`)) {
+        failed = true;
+        throw new Error('Secondary cleanup failure');
+      }
+      await remove(file, options);
+    });
+    await expect(manager.backupApp(appUrn)).rejects.toThrow('Original archive failure');
+    expect(await manager.listBackupsByAppId(appUrn)).toEqual([]);
+    await manager.onModuleInit();
+    expect(await fs.promises.readdir(path.join(root, 'data/state/backup-staging-cleanup'))).toEqual([]);
+  });
+
+  it.each([false, true])('preserves the restore outcome while retrying private archive cleanup, extraction failure=%s', async (failExtract) => {
+    const saved = await savedBackupWithNewerLiveFiles();
+    if (failExtract) vi.spyOn(archive, 'extractTarGz').mockResolvedValue({ stdout: '', stderr: 'Fixture extraction failure' });
+    const remove = fs.promises.rm.bind(fs.promises);
+    let retained: string | undefined;
+    const failure = vi.spyOn(fs.promises, 'rm').mockImplementation(async (file, options) => {
+      if (!retained && path.basename(String(file)).startsWith(`${appUrn}-restore-`)) {
+        retained = await fs.promises.realpath(file);
+        throw new Error('Secondary archive cleanup failure');
+      }
+      await remove(file, options);
+    });
+    try {
+      if (failExtract) {
+        await expect(manager.restoreApp(appUrn, saved.id)).rejects.toThrow('could not be extracted completely');
+        await expectNewerLiveFiles();
+      } else {
+        await manager.restoreApp(appUrn, saved.id);
+        expect(await fs.promises.readFile(path.join(appDataDir, 'data/record'), 'utf8')).toBe('original data\n');
+      }
+      expect(retained).toBeDefined();
+      expect(await manager.hasPendingRestore(appUrn)).toBe(false);
+      await manager.onModuleInit();
+      expect(retained && fs.existsSync(retained)).toBe(false);
+    } finally {
+      failure.mockRestore();
+      if (retained) await remove(retained, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps a prior archive and the original save error when failed partial cleanup needs startup retry', async () => {
+    await manager.backupApp(appUrn);
+    const before = await manager.listBackupsByAppId(appUrn);
+    vi.spyOn(filesystem, 'copyFile').mockImplementation(async (_source, destination) => {
+      await fs.promises.writeFile(destination, 'incomplete fixture', { mode: 0o600 });
+      return false;
+    });
+    const remove = fs.promises.rm.bind(fs.promises);
+    let failed = false;
+    vi.spyOn(fs.promises, 'rm').mockImplementation(async (file, options) => {
+      if (!failed && String(file).endsWith('.partial')) {
+        failed = true;
+        throw new Error('Partial cleanup failure');
+      }
+      await remove(file, options);
+    });
+    await expect(manager.backupApp(appUrn)).rejects.toThrow('could not be saved');
+    expect((await manager.listBackupsByAppId(appUrn)).map((entry) => entry.id)).toEqual(before.map((entry) => entry.id));
+    await manager.onModuleInit();
+    expect(await fs.promises.readdir(backupDir)).toEqual(before.map((entry) => entry.id));
+  });
+
   it('lists and extracts the same private archive even if the public archive is replaced after listing', async () => {
     const saved = await savedBackupWithNewerLiveFiles();
     const publicArchive = await manager.getBackupPath(appUrn, saved.id);
@@ -326,12 +416,15 @@ describe('BackupManager real files and archives', () => {
 
   it('does not acknowledge or publish a snapshot when a source file changes during the actual copy', async () => {
     const open = fs.promises.open.bind(fs.promises);
+    const watched = path.join(appDataDir, 'data/record');
+    const original = await fs.promises.lstat(watched, { bigint: true });
     let replaced = false;
     vi.spyOn(fs.promises, 'open').mockImplementation(async (...args) => {
       const handle = await open(...args);
-      if (!replaced && String(args[0]).endsWith('/data/record') && !String(args[0]).includes('/content/')) {
+      const entry = await handle.stat({ bigint: true });
+      if (!replaced && entry.isFile() && entry.dev === original.dev && entry.ino === original.ino) {
         replaced = true;
-        await fs.promises.writeFile(path.join(appDataDir, 'data/record'), 'changed during snapshot');
+        await fs.promises.writeFile(watched, 'changed during snapshot');
       }
       return handle;
     });
@@ -468,7 +561,7 @@ describe('BackupManager real files and archives', () => {
     if (!saved) throw new Error('Expected a previous backup');
     const original = await fs.promises.readFile(await manager.getBackupPath(appUrn, saved.id));
     vi.spyOn(filesystem, 'copyFile').mockImplementation(async (_source, destination) => {
-      await fs.promises.writeFile(destination, 'partial copy');
+      await fs.promises.writeFile(destination, 'partial copy', { mode: 0o600 });
       return false;
     });
     await expect(manager.backupApp(appUrn)).rejects.toThrow('could not be saved');

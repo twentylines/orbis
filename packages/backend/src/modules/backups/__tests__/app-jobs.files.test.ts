@@ -150,7 +150,7 @@ async function backupWorker() {
   vi.spyOn(filesystem, 'getSafeFilePath').mockImplementation((value) =>
     path.resolve(value).startsWith(directory + path.sep) ? path.resolve(value) : safe(value),
   );
-  vi.spyOn(filesystem, 'createTempDirectory').mockImplementation(() => fs.mkdtemp(path.join(directory, 'snapshot-')));
+  vi.spyOn(filesystem, 'createTempDirectory').mockImplementation((prefix) => fs.mkdtemp(path.join(directory, path.basename(prefix))));
   config.get.calledWith('userSettings').mockReturnValue({ maxBackups: 20 } as never);
   repository.getMigrationLedger.mockResolvedValue({ baselined: true, migrationIds: ['001-schema'] });
   repository.updateAppById.mockImplementation(async (_id, update) => {
@@ -254,7 +254,7 @@ it('cancels through the actual admission, worker, command, snapshot and Task Cen
   expect((await tasks.read()).tasks[0]).toMatchObject({ id: request.requestId, status: 'cancelled', cancellable: false });
   expect(await f.backups.listBackupsByAppId(urn)).toHaveLength(0);
   expect(await fs.readFile(path.join(f.data, 'record'), 'utf8')).toBe('original');
-  expect((await fs.readdir(directory)).some((name) => name.startsWith('snapshot-'))).toBe(false);
+  expect((await fs.readdir(directory)).some((name) => name.startsWith(`${urn}-`))).toBe(false);
 });
 
 it('does not execute a delayed queued backup after its request was cancelled', async () => {

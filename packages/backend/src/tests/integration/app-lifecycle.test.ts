@@ -431,7 +431,7 @@ describe('Retained-storage app lifecycle', () => {
     });
 
     vi.spyOn(filesystemService, 'createTempDirectory').mockImplementation(async (prefix) => {
-      return fs.promises.mkdtemp(path.join(fixturePaths.root, `${path.basename(prefix)}-`));
+      return fs.promises.mkdtemp(path.join(fixturePaths.root, path.basename(prefix)));
     });
 
     configurationService.getConfig.mockReturnValue(
