@@ -32,10 +32,12 @@ export class UserConfigService {
 
   async updateUserConfig(appUrn: AppUrn, updateUserConfigDto: UpdateUserConfigDto) {
     const userComposeFile = await this.appFilesManager.getUserComposeFile(appUrn);
-    await this.filesystem.writeTextFile(userComposeFile.path, updateUserConfigDto.dockerCompose);
+    if (!(await this.filesystem.writePrivateTextFile(userComposeFile.path, updateUserConfigDto.dockerCompose)))
+      throw new Error('The user Compose file could not be saved.');
 
     const userEnvFile = await this.appFilesManager.getUserEnv(appUrn);
-    await this.filesystem.writeTextFile(userEnvFile.path, updateUserConfigDto.appEnv);
+    if (!(await this.filesystem.writePrivateTextFile(userEnvFile.path, updateUserConfigDto.appEnv)))
+      throw new Error('The app environment file could not be saved.');
   }
 
   async enableUserConfig(appUrn: AppUrn): Promise<void> {

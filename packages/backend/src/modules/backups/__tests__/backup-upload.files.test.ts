@@ -11,6 +11,8 @@ import type { ConfigurationService } from '@/core/config/configuration.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import type { LoggerService } from '@/core/logger/logger.service';
 import type { AppFilesManager } from '@/modules/apps/app-files-manager';
+import { UserConfigService } from '@/modules/user-config/user-config.service';
+import type { AppsService } from '@/modules/apps/apps.service';
 import type { AppsRepository } from '@/modules/apps/apps.repository';
 import type { Request } from 'express';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,6 +25,7 @@ describe('Streamed backup uploads with real files and archives', () => {
   let storage: BackupUploadStorage;
   let archive: ArchiveService;
   let manager: BackupManager;
+  let filesystem: FilesystemService;
   let backups: string;
   let incoming: string;
   let logger: LoggerService;
@@ -59,7 +62,7 @@ describe('Streamed backup uploads with real files and archives', () => {
     backups = path.join(root, 'data/backups/store/demo');
     storage = new BackupUploadStorage(path.join(root, 'data/backups'));
     logger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as LoggerService;
-    const filesystem = new FilesystemService(logger);
+    filesystem = new FilesystemService(logger);
     const originalSafePath = filesystem.getSafeFilePath.bind(filesystem);
     vi.spyOn(filesystem, 'getSafeFilePath').mockImplementation((file) => {
       const resolved = path.resolve(file);
@@ -147,6 +150,57 @@ describe('Streamed backup uploads with real files and archives', () => {
       before.atimeNs,
     ]);
     expect(await fs.promises.readFile(outside, 'utf8')).toBe('external fixture');
+  });
+
+  it.each(['app.env', 'docker-compose.yml'])('refuses to edit a restored %s link without changing its external target', async (name) => {
+    const outside = path.join(root, 'external-config');
+    await fs.promises.writeFile(outside, 'external fixture', { mode: 0o600 });
+    const link = path.join(root, 'source/user-config', name);
+    await fs.promises.rm(link, { force: true });
+    await fs.promises.symlink(outside, link);
+    await archive.createTarGz(path.join(root, 'source'), incoming);
+    await publish(await uploaded());
+    await manager.restoreApp(appUrn, 'legacy.tar.gz');
+    const directory = path.join(root, 'data/user-config/store/demo');
+    const installed = path.join(directory, name);
+    expect(await fs.promises.readlink(installed)).toBe(outside);
+    const files = {
+      getUserComposeFile: async () => ({ path: path.join(directory, 'docker-compose.yml'), content: null }),
+      getUserEnv: async () => ({ path: path.join(directory, 'app.env'), content: null }),
+    } as unknown as AppFilesManager;
+    const service = new UserConfigService(files, {} as AppsRepository, {} as AppsService, filesystem);
+    const before = await fs.promises.lstat(outside, { bigint: true });
+    await expect(service.updateUserConfig(appUrn, { dockerCompose: 'services: {}', appEnv: 'SETTING=updated' })).rejects.toThrow(
+      'could not be saved',
+    );
+    const after = await fs.promises.lstat(outside, { bigint: true });
+    expect([after.ino, after.mode, after.mtimeNs, after.ctimeNs, after.atimeNs]).toEqual([
+      before.ino,
+      before.mode,
+      before.mtimeNs,
+      before.ctimeNs,
+      before.atimeNs,
+    ]);
+    expect(await fs.promises.readFile(outside, 'utf8')).toBe('external fixture');
+    expect(await fs.promises.readlink(installed)).toBe(outside);
+  });
+
+  it('still saves ordinary user configuration as private regular files', async () => {
+    const directory = path.join(root, 'data/user-config/store/demo');
+    const files = {
+      getUserComposeFile: async () => ({ path: path.join(directory, 'docker-compose.yml'), content: null }),
+      getUserEnv: async () => ({ path: path.join(directory, 'app.env'), content: null }),
+    } as unknown as AppFilesManager;
+    const service = new UserConfigService(files, {} as AppsRepository, {} as AppsService, filesystem);
+    await service.updateUserConfig(appUrn, { dockerCompose: 'services: {}', appEnv: 'SETTING=updated' });
+    for (const [name, contents] of [
+      ['docker-compose.yml', 'services: {}'],
+      ['app.env', 'SETTING=updated'],
+    ]) {
+      const file = path.join(directory, name ?? '');
+      expect(await fs.promises.readFile(file, 'utf8')).toBe(`${contents}\n`);
+      expect((await fs.promises.lstat(file)).mode & 0o777).toBe(0o600);
+    }
   });
 
   it.each(['link-first', 'child-first', 'parent-traversal', 'root-link', 'hardlink', 'duplicate'])(
