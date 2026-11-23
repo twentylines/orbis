@@ -72,6 +72,7 @@ def prepare(manifest_path, folder, dependencies):
     }
     core_mounts = [bind(root / name, '/data/' + name) for name in preflight.DATA_PATHS if name != 'app-data']
     core_mounts += [bind(root / 'app-data', '/app-data'), bind(root / 'auth', '/data/.secrets'),
+                    bind(root / 'cache', '/cache'),
                     bind(env_file, '/data/.env'), bind('/var/run/docker.sock', '/var/run/docker.sock', True),
                     bind(folder / 'socket/host.sock', '/run/orbis/host.sock'),
                     bind(folder / 'public-probe', '/opt/orbis-test-probe', True)]
