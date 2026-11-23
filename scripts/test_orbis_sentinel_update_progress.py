@@ -224,6 +224,23 @@ persist('rolled-back')
                 INSTALL._run(self.root, 'activate-sentinel', ACTIVATE, [script], timeout=4)
         self.assertEqual(self.jobs()[0]['phase'], 'failed')
 
+    def test_retained_return_typed_refusal_is_reconciliation_without_claiming_success(self):
+        script = self.root / 'fixture.py'
+        script.write_text("""
+class RecoveryRequired(ValueError):
+    pass
+
+def restore_retained():
+    raise RecoveryRequired('Synthetic retained return requires reconciliation')
+
+restore_retained()
+""")
+        with self.assertRaises(INSTALL.SentinelInstallError):
+            with INSTALL._observe_update(RELEASE['version'], 'rolling-back'):
+                INSTALL._run(self.root, 'restore-sentinel', ACTIVATE, [script], timeout=4)
+        self.assertEqual(self.jobs()[0]['phase'], 'recovery-required')
+        self.assertEqual((self.root / 'restore-sentinel.stdout').read_bytes(), b'')
+
     def test_live_attempts_keep_distinct_records_and_pid_reuse_is_interrupted(self):
         self.assertEqual(INSTALL.read_update_progress(), {'version': 1, 'available': True, 'jobs': []})
         with INSTALL._observe_update('1.2.3', 'preparing') as first:

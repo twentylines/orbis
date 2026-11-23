@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import unittest
 from unittest import mock
+import uuid
 
 
 SPEC = importlib.util.spec_from_file_location('sentinel_installer_tests', Path(__file__).with_name('orbis-sentinel-install.py'))
@@ -144,6 +145,150 @@ class PreparationTests(unittest.TestCase):
         with self.assertRaisesRegex(INSTALL.SentinelInstallError, 'already been consumed'):
             self.activate(prepared)
         self.assertEqual(sum(item[0] == 'activate-sentinel' for item in self.commands), 1)
+
+    def retained_binding(self):
+        return {'operationId': str(uuid.uuid4()), 'planSha256': '2' * 64, 'targetDigest': 'sha256:' + '3' * 64}
+
+    def retained_ticket(self, binding):
+        return {'schema': 'orbis-sentinel.upgrade-retention-ticket.v1', 'activationId': '4' * 32,
+                'sha256': '5' * 64, 'binding': dict(binding)}
+
+    def retained_activation(self, prepared, binding, *, changes=None):
+        ticket = self.retained_ticket(binding)
+
+        def command(work, name, code, arguments, **options):
+            self.assertEqual(name, 'activate-sentinel')
+            self.assertEqual(code, INSTALL._ACTIVATE_RETAINED)
+            self.assertEqual(json.loads(arguments[1])['retain'], binding)
+            result = {**self.release, 'publisherVerified': True, 'activated': True, 'retainedVersionsRemoved': 0,
+                      'activationId': ticket['activationId'], 'retainedRollback': ticket, **(changes or {})}
+            return json.dumps(result).encode()
+
+        with mock.patch.object(INSTALL, 'RELEASE', self.release), mock.patch.object(INSTALL, '_run', side_effect=command):
+            return INSTALL.activate(prepared, retain=binding)
+
+    def restored_result(self, ticket):
+        return {'restored': True, 'activationId': '6' * 32, 'restoredActivationId': ticket['activationId'],
+                'version': '0.1.0-dev.20', 'retainedVersionsRemoved': 0,
+                'previousRelease': {'version': '0.1.0-dev.20', 'sha256': '7' * 64, 'sourceCommit': '8' * 40}}
+
+    def return_activation(self, prepared, ticket, binding, *, command=None):
+        with mock.patch.object(INSTALL, 'RELEASE', self.release), mock.patch.object(INSTALL, '_run', side_effect=command or
+                               (lambda *_args, **_kwargs: json.dumps(self.restored_result(ticket)).encode())):
+            return INSTALL.restore_retained(prepared, ticket, binding=binding)
+
+    def test_retained_activation_requires_exact_ticket_and_preserves_default_one_use_boundary(self):
+        binding = self.retained_binding()
+        prepared = self.prepare()
+        result = self.retained_activation(prepared, binding)
+        self.assertEqual(result['retainedRollback'], self.retained_ticket(binding))
+        with self.assertRaises(INSTALL.SentinelInstallError):
+            self.activate(prepared)
+        for changes in ({'retainedRollback': None}, {'activationId': '0' * 32},
+                        {'retainedRollback': self.retained_ticket(self.retained_binding())}):
+            with self.subTest(changes=changes), self.assertRaises(INSTALL.SentinelInstallError):
+                self.retained_activation(self.prepare(), binding, changes=changes)
+
+    def test_live_return_reuses_only_its_bound_preparation_and_keeps_each_attempts_evidence(self):
+        binding = self.retained_binding()
+        prepared = self.prepare()
+        ticket = self.retained_activation(prepared, binding)['retainedRollback']
+        calls = []
+
+        def command(work, name, code, arguments, **options):
+            self.assertEqual(name, 'restore-sentinel')
+            self.assertEqual(code, INSTALL._RESTORE_RETAINED)
+            self.assertEqual(arguments[0], prepared.work / 'toolkit/activate_release.py')
+            self.assertEqual(json.loads(arguments[1]), ticket)
+            self.assertEqual(json.loads(arguments[2]), prepared.release)
+            self.assertEqual(work.parent, prepared.work)
+            self.assertEqual({p.name for p in work.iterdir()}, {'tmp', 'cache', 'config', 'state', 'data'})
+            calls.append(work)
+            return json.dumps(self.restored_result(ticket)).encode()
+
+        self.assertTrue(self.return_activation(prepared, ticket, binding, command=command)['restored'])
+        self.assertTrue(self.return_activation(prepared, ticket, binding, command=command)['restored'])
+        self.assertNotEqual(calls[0], calls[1])
+        self.assertTrue(all(path.exists() for path in calls))
+
+    def test_restart_can_authenticate_a_fresh_preparation_before_observing_the_retained_return(self):
+        binding = self.retained_binding()
+        prepared = self.prepare()
+        ticket = self.retained_ticket(binding)
+        self.assertTrue(self.return_activation(prepared, ticket, binding)['restored'])
+        self.assertTrue(prepared.used)
+        with self.assertRaises(INSTALL.SentinelInstallError):
+            self.activate(prepared)
+
+    def test_retention_binding_and_ticket_refusals_do_not_consume_unused_preparation(self):
+        prepared = self.prepare()
+        binding = self.retained_binding()
+        with self.assertRaises(INSTALL.SentinelInstallError):
+            INSTALL.activate(prepared, retain={**binding, 'operationId': 'invalid'})
+        with self.assertRaises(INSTALL.SentinelInstallError):
+            INSTALL.restore_retained(prepared, self.retained_ticket(binding), binding=self.retained_binding())
+        self.assertFalse(prepared.used)
+        self.assertTrue(self.activate(prepared)['activated'])
+
+    def test_changed_or_unretained_used_preparation_cannot_dispatch_return(self):
+        binding = self.retained_binding()
+        prepared = self.prepare()
+        self.activate(prepared)
+        with mock.patch.object(INSTALL, '_run') as run, self.assertRaises(INSTALL.SentinelInstallError):
+            INSTALL.restore_retained(prepared, self.retained_ticket(binding), binding=binding)
+        run.assert_not_called()
+        prepared = self.prepare()
+        ticket = self.retained_activation(prepared, binding)['retainedRollback']
+        prepared.files[0]['path'].write_bytes(b'changed toolkit')
+        with mock.patch.object(INSTALL, '_run') as run, self.assertRaises(INSTALL.SentinelInstallError):
+            INSTALL.restore_retained(prepared, ticket, binding=binding)
+        run.assert_not_called()
+
+    def test_return_requires_confirmed_identity_without_version_pruning_or_bool_counts(self):
+        binding = self.retained_binding()
+        ticket = self.retained_ticket(binding)
+        for changes in ({'restored': False}, {'version': '0.1.0-dev.19'}, {'retainedVersionsRemoved': False},
+                        {'restoredActivationId': '9' * 32}, {'activationId': ticket['activationId']},
+                        {'previousRelease': None}):
+            result = {**self.restored_result(ticket), **changes}
+            with self.subTest(changes=changes), self.assertRaises(INSTALL.SentinelInstallError):
+                self.return_activation(self.prepare(), ticket, binding,
+                                       command=lambda *_args, **_kwargs: json.dumps(result).encode())
+
+    def test_isolated_return_wrapper_binds_verified_candidate_before_any_return_api_call(self):
+        binding = self.retained_binding()
+        ticket = self.retained_ticket(binding)
+        record = {'activation': {'candidate': self.release, 'previous': self.restored_result(ticket)['previousRelease']}}
+        body = json.dumps(record).encode()
+        ticket['sha256'] = digest(body)
+        (self.root / ('retention-' + ticket['activationId'] + '.json')).write_bytes(body)
+        module = self.root / 'activate_release.py'
+        module.write_text('''
+import json
+from pathlib import Path
+STATE=Path(__file__).parent
+class RecoveryRequired(ValueError): pass
+class _Parent:
+    def __init__(self,path): self.path=path
+    def close(self): pass
+def _read(parent,name,mode): return (parent.path/name).read_bytes()
+_json=json.loads
+def restore_retained(ticket):
+    (STATE/'called').write_text('called')
+    return {'restored':True,'version':'0.1.0-dev.20'}
+''')
+        def run(expected):
+            return subprocess.run([str(INSTALL.PYTHON), '-I', '-B', '-c', INSTALL._RESTORE_RETAINED,
+                str(module), json.dumps(ticket), json.dumps(expected)], capture_output=True,
+                env=INSTALL._environment(self.root), timeout=10)
+
+        wrong = run({**self.release, 'sourceCommit': '9' * 40})
+        self.assertNotEqual(wrong.returncode, 0)
+        self.assertFalse((self.root / 'called').exists())
+        right = run(self.release)
+        self.assertEqual(right.returncode, 0, right.stderr)
+        self.assertEqual(json.loads(right.stdout)['previousRelease'], record['activation']['previous'])
+        self.assertTrue((self.root / 'called').exists())
 
     def test_equal_byte_input_replacement_is_rejected_before_activation(self):
         prepared = self.prepare()

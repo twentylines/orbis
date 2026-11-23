@@ -24,17 +24,18 @@ PYTHON = Path('/usr/bin/python3')
 INSTALLED_ROOT = Path('/opt/orbis-sentinel')
 INSTALLED_STATE = Path('/var/lib/orbis-sentinel')
 HOST_SOURCE_PLAN = 'orbis.host-source-publication-plan.v2'
-TOOLKIT_COMMIT = '913bafac3efe5c900c97e0a8574c48cc24ebec1d'
+TOOLKIT_COMMIT = '6318c989eb060ae022ef9a631cd7fe5d40f882a9'
 TOOLKIT = {
-    'activate_release.py': (32783, '52cb4e90627fc49ede28ace1229ce0142df481a2dc1acd69f2bc17c7e30cdadd'),
+    'activate_release.py': (45277, 'e3c5036f0b481b15c7d9954ffafe89a92edca49c29b3c0684b550d58d25543e6'),
     'verify_release.py': (14462, '9461fb041d055bbae13cc3ce48f3daf09ff8835ceedb8a77c4bf15c237137629'),
     'stage_release.py': (23385, '4d4d52bfbfcc5891d6b1d17da9e14c7ff6c1559aa59e19db7aec5ae28adc50b2'),
     'bootstrap_verifier.py': (13977, '965002f855e940446951d27a2bd44a37043efa692d3e4ba56473bd5525de6e6c'),
     'LICENSE': (35149, '3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986'),
 }
-RELEASE = {'version': '0.1.0-dev.21', 'sha256': '59e6d959e0d181c064b3c1c09443076cbe9bce11a29f9ebc732aa1923a4ad00c', 'sourceCommit': '913bafac3efe5c900c97e0a8574c48cc24ebec1d'}
+RELEASE = {'version': '0.1.0-dev.23', 'sha256': 'b6f019a135887d2725962f94d823fc43ce764e9e80f29da50859489f8f129518', 'sourceCommit': '6318c989eb060ae022ef9a631cd7fe5d40f882a9'}
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 _PREPARATIONS = weakref.WeakKeyDictionary()
+_RETENTIONS = weakref.WeakKeyDictionary()
 
 
 class SentinelInstallError(ValueError):
@@ -442,7 +443,7 @@ def _report(value):
 _TOOLKIT_OBSERVER = """
 def _observe_activation_refusal(frame, event, value):
     if (frame.f_code.co_filename != _progress_sys.argv[0]
-            or frame.f_code.co_name != 'activate_release'):
+            or frame.f_code.co_name not in ('activate_release', 'restore_retained')):
         return None
     if (event == 'exception' and isinstance(value, tuple) and len(value) == 3
             and type(value[1]) is frame.f_globals.get('RecoveryRequired')):
@@ -475,10 +476,10 @@ def _observed_command(command, options, progress, name, timeout):
     with incoming, outgoing:
         incoming.setblocking(False)
         prefix = _REPORTER
-        if name in ('verify-package', 'activate-sentinel'):
+        if name in ('verify-package', 'activate-sentinel', 'restore-sentinel'):
             prefix += f'_progress_observation = {name!r}\n' + _TOOLKIT_OBSERVER
             prefix += '_progress_sys.setprofile(_observe_toolkit)\n'
-            if name == 'activate-sentinel':
+            if name in ('activate-sentinel', 'restore-sentinel'):
                 prefix += '_progress_sys.settrace(_observe_activation_refusal)\n'
         else:
             prefix += '_download_report = _report\n'
@@ -525,7 +526,7 @@ def _run(work, name, code, arguments, *, timeout=60, descriptors=()):
         command = [str(interpreter), '-I', '-B', '-c', code, *map(str, arguments)]
         options = dict(cwd=work, env=_environment(work), stdin=subprocess.DEVNULL, pass_fds=descriptors)
         progress = _PROGRESS.get()
-        if progress and (name.startswith('download-') or name in {'verify-package', 'activate-sentinel'}):
+        if progress and (name.startswith('download-') or name in {'verify-package', 'activate-sentinel', 'restore-sentinel'}):
             result = _observed_command(command, options, progress, name, timeout)
         else:
             result = subprocess.run(command, **options, capture_output=True, timeout=timeout)
@@ -737,8 +738,33 @@ def _confirmed(result, release, *, activated):
         raise SentinelInstallError('Sentinel did not confirm the verified component identity')
 
 
-def activate(prepared):
-    require_host()
+def _retention_binding(value):
+    if (type(value) is not dict or set(value) != {'operationId', 'planSha256', 'targetDigest'}
+            or type(value['operationId']) is not str
+            or type(value['planSha256']) is not str or not re.fullmatch(r'[a-f0-9]{64}', value['planSha256'])
+            or type(value['targetDigest']) is not str or not re.fullmatch(r'sha256:[a-f0-9]{64}', value['targetDigest'])):
+        raise SentinelInstallError('An exact coordinated operation binding is required')
+    try:
+        operation = uuid.UUID(value['operationId'])
+    except ValueError as error:
+        raise SentinelInstallError('The coordinated operation ID is invalid') from error
+    if operation.version != 4 or str(operation) != value['operationId']:
+        raise SentinelInstallError('The coordinated operation ID is invalid')
+    return dict(value)
+
+
+def _retention_ticket(value, binding, *, activation_id=None):
+    if (type(value) is not dict or set(value) != {'schema', 'activationId', 'sha256', 'binding'}
+            or value['schema'] != 'orbis-sentinel.upgrade-retention-ticket.v1'
+            or type(value['activationId']) is not str or not re.fullmatch(r'[a-f0-9]{32}', value['activationId'])
+            or type(value['sha256']) is not str or not re.fullmatch(r'[a-f0-9]{64}', value['sha256'])
+            or value['binding'] != binding
+            or activation_id is not None and value['activationId'] != activation_id):
+        raise SentinelInstallError('Sentinel did not confirm the operation-bound retained activation')
+    return {**value, 'binding': dict(binding)}
+
+
+def _consume_preparation(prepared):
     if not isinstance(prepared, Prepared) or prepared.used:
         raise SentinelInstallError('Sentinel preparation has already been consumed')
     prepared.used = True
@@ -749,26 +775,134 @@ def activate(prepared):
         raise SentinelInstallError('Prepared Sentinel identity changed') from None
     if sealed is None or current != sealed[0] or (sealed[1] and prepared.release != RELEASE):
         raise SentinelInstallError('Prepared Sentinel identity changed')
+    return sealed
+
+
+def activate(prepared, *, retain=None):
+    require_host()
+    binding = _retention_binding(retain) if retain is not None else None
+    sealed = _consume_preparation(prepared)
     with _observe_update(prepared.release['version'], 'installing', previous=getattr(prepared, 'progress', None)):
-        result = _activate_files(prepared)
+        result = _activate_files(prepared, retain=binding) if binding is not None else _activate_files(prepared)
+        if binding is not None:
+            ticket = _retention_ticket(result.get('retainedRollback'), binding, activation_id=result.get('activationId'))
+            if result.get('activationId') != ticket['activationId']:
+                raise SentinelInstallError('Sentinel retained activation identity is missing')
+            _RETENTIONS[prepared] = (sealed, ticket)
         _progress_phase('complete')
         return result
 
 
-def _activate_files(prepared):
+_ACTIVATE_RETAINED = '''
+import json,pathlib,runpy,sys
+sys.argv=sys.argv[1:]
+sys.path.insert(0,str(pathlib.Path(sys.argv[0]).parent))
+api=runpy.run_path(sys.argv[0])
+options=json.loads(sys.argv[1])
+for key in ('artifact','bundle','workspace','verifier'):
+    options[key]=pathlib.Path(options[key])
+print(json.dumps(api['activate_release'](**options),sort_keys=True))
+'''
+
+
+_RESTORE_RETAINED = '''
+import hashlib,json,pathlib,runpy,sys
+sys.argv=sys.argv[1:]
+sys.path.insert(0,str(pathlib.Path(sys.argv[0]).parent))
+api=runpy.run_path(sys.argv[0])
+ticket,expected=json.loads(sys.argv[1]),json.loads(sys.argv[2])
+state=api['_Parent'](api['STATE'])
+try:
+    body=api['_read'](state,'retention-'+ticket['activationId']+'.json',0o600)
+finally:
+    state.close()
+if body is None or hashlib.sha256(body).hexdigest()!=ticket['sha256']:
+    raise api['RecoveryRequired']('The retained Sentinel admission changed')
+record=api['_json'](body)
+candidate=record['activation']['candidate']
+if {key:candidate[key] for key in expected}!=expected:
+    raise api['RecoveryRequired']('The verified preparation differs from the retained activation')
+previous={key:record['activation']['previous'][key] for key in expected}
+result=api['restore_retained'](ticket)
+print(json.dumps({**result,'previousRelease':previous},sort_keys=True))
+'''
+
+
+def _activate_files(prepared, *, retain=None):
     with Directory(prepared.work, private=True) as directory:
         if directory.identity() != prepared.identity:
             raise SentinelInstallError('Prepared Sentinel namespace changed')
         _check_files(prepared.files)
         filename = 'orbis-sentinel-' + prepared.release['version'] + '.tar.gz'
-        result = _json(_run(prepared.work, 'activate-sentinel',
-            "import runpy,sys;sys.argv=sys.argv[1:];runpy.run_path(sys.argv[0],run_name='__main__')",
-            [prepared.work / 'toolkit' / 'activate_release.py', '--artifact', prepared.work / 'inputs' / filename,
-             '--bundle', prepared.work / 'inputs' / (filename + '.sigstore.json'), '--workspace', prepared.work / 'verification',
-             '--verifier', prepared.verifier, '--sha256', prepared.release['sha256'], '--version', prepared.release['version'],
-             '--source-commit', prepared.release['sourceCommit']], timeout=None))
+        if retain is None:
+            code = "import runpy,sys;sys.argv=sys.argv[1:];runpy.run_path(sys.argv[0],run_name='__main__')"
+            arguments = [prepared.work / 'toolkit' / 'activate_release.py', '--artifact', prepared.work / 'inputs' / filename,
+                         '--bundle', prepared.work / 'inputs' / (filename + '.sigstore.json'), '--workspace', prepared.work / 'verification',
+                         '--verifier', prepared.verifier, '--sha256', prepared.release['sha256'], '--version', prepared.release['version'],
+                         '--source-commit', prepared.release['sourceCommit']]
+        else:
+            code = _ACTIVATE_RETAINED
+            options = {'artifact': str(prepared.work / 'inputs' / filename),
+                       'bundle': str(prepared.work / 'inputs' / (filename + '.sigstore.json')),
+                       'workspace': str(prepared.work / 'verification'), 'verifier': str(prepared.verifier),
+                       'sha256': prepared.release['sha256'], 'version': prepared.release['version'],
+                       'source_commit': prepared.release['sourceCommit'], 'retain': retain}
+            arguments = [prepared.work / 'toolkit' / 'activate_release.py', json.dumps(options)]
+        result = _json(_run(prepared.work, 'activate-sentinel', code, arguments, timeout=None))
         directory.check()
         _confirmed(result, prepared.release, activated=True)
+        return result
+
+
+def restore_retained(prepared, ticket, *, binding):
+    """Use the verified toolkit's exact return API; never select a version here.
+
+    The coordinator must separately hold its source and operation admission.
+    An unused authenticated preparation supports restart reconciliation. A live
+    successful retained activation can reuse its pinned preparation directly.
+    """
+    require_host()
+    binding = _retention_binding(binding)
+    ticket = _retention_ticket(ticket, binding)
+    retained = _RETENTIONS.get(prepared) if isinstance(prepared, Prepared) else None
+    if retained is None:
+        sealed = _consume_preparation(prepared)
+    else:
+        sealed, original_ticket = retained
+        try:
+            current = _preparation_identity(prepared)
+        except (TypeError, KeyError, AttributeError):
+            raise SentinelInstallError('Prepared Sentinel retention changed') from None
+        if (not prepared.used or current != sealed[0]
+                or sealed[1] and prepared.release != RELEASE or ticket != original_ticket):
+            raise SentinelInstallError('Prepared Sentinel retention changed')
+    with _observe_update(prepared.release['version'], 'rolling-back', previous=getattr(prepared, 'progress', None)) as progress:
+        if progress:
+            progress.activation_phase = 'rolling-back'
+        with Directory(prepared.work, private=True) as directory:
+            if directory.identity() != prepared.identity:
+                raise SentinelInstallError('Prepared Sentinel namespace changed')
+            _check_files(prepared.files)
+            # Every observation attempt has exclusive output files. A lost
+            # reply never overwrites earlier evidence or repeats activation.
+            attempt = directory.mkdir('return-' + uuid.uuid4().hex)
+            with Directory(attempt, private=True) as output:
+                for name in ('tmp', 'cache', 'config', 'state', 'data'):
+                    output.mkdir(name)
+                result = _json(_run(attempt, 'restore-sentinel', _RESTORE_RETAINED,
+                    [prepared.work / 'toolkit' / 'activate_release.py', json.dumps(ticket), json.dumps(prepared.release)], timeout=None))
+                output.check()
+            _check_files(prepared.files)
+            directory.check()
+        previous = _release_identity(result.get('previousRelease')) if type(result) is dict else None
+        if (type(result) is not dict or result.get('restored') is not True or previous is None
+                or result.get('version') != previous['version'] or result.get('restoredActivationId') != ticket['activationId']
+                or type(result.get('activationId')) is not str or not re.fullmatch(r'[a-f0-9]{32}', result['activationId'])
+                or result['activationId'] == ticket['activationId']
+                or type(result.get('retainedVersionsRemoved')) is not int or result['retainedVersionsRemoved'] != 0):
+            raise SentinelInstallError('Sentinel did not confirm the exact retained return')
+        _RETENTIONS[prepared] = (sealed, ticket)
+        _progress_phase('rolled-back')
         return result
 
 
