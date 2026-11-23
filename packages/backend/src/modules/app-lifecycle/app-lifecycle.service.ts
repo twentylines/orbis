@@ -133,6 +133,30 @@ export class AppLifecycleService {
           return;
         }
       }
+      if (data.command === 'generate_env') {
+        const previous = (await this.tasks.read()).tasks.find((task) => task.id === data.requestId);
+        if (previous && (previous.appUrn !== data.appUrn || previous.action !== data.command))
+          throw new Error('Settings request identity does not match its task.');
+        if (redelivered || previous?.status !== 'queued') {
+          const completed = previous?.status === 'succeeded';
+          if (!completed && previous?.status !== 'failed') await this.tasks.interrupt(data);
+          await reply({
+            success: completed,
+            ...(completed ? { alreadyCompleted: true } : {}),
+            message: completed ? 'These settings have already been saved.' : 'This settings request was interrupted. Refresh before saving again.',
+          });
+          return;
+        }
+        if (!data.settingsBinding || (await this.jobs.hasUnsettledJob(data.appUrn)) || (await this.backups.hasPendingRestore(data.appUrn))) {
+          await this.tasks.finish(data, false);
+          await reply({
+            success: false,
+            message: 'Refresh the app and resolve any unfinished operation before saving its settings.',
+            statePreserved: true,
+          });
+          return;
+        }
+      }
       if (data.command === 'update') {
         const previous = (await this.tasks.read()).tasks.find((task) => task.id === data.requestId);
         if (previous && (previous.appUrn !== data.appUrn || previous.action !== data.command)) {
@@ -341,8 +365,15 @@ export class AppLifecycleService {
   }
 
   public async updateAppSettings(params: { appUrn: AppUrn; form: unknown }) {
-    await this.installAppHandler.requireNoInstallHold(params.appUrn);
-    return this.updateConfigHandler.execute(params.appUrn, { form: params.form });
+    if (installationHeld()) throw new ConflictException(INSTALLATION_MESSAGE);
+    if (this.mutex.resourceLocks.has(params.appUrn)) throw new ConflictException('Wait for the current app operation to finish.');
+    const pending = await this.admitAppRequest(params.appUrn, async () => {
+      if ((await this.jobs.hasUnsettledJob(params.appUrn)) || (await this.backups.hasPendingRestore(params.appUrn)))
+        throw new ConflictException('Review the unfinished app operation before changing its settings.');
+      return this.updateConfigHandler.prepare(params.appUrn, { form: params.form });
+    });
+    // Publication is admitted under the app lock; waiting for its worker must happen after release.
+    return pending.complete();
   }
 
   public async deleteAppBackup(params: { appUrn: AppUrn; filename: string }) {

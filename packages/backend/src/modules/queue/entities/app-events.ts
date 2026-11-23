@@ -21,11 +21,19 @@ const queueAppFormSchema = type({
 });
 
 const commonAppCommandSchema = type({
-  command: type("'start' | 'stop' | 'install' | 'reset' | 'restart' | 'generate_env' | 'backup'"),
+  command: type("'start' | 'stop' | 'install' | 'reset' | 'restart' | 'backup'"),
   appUrn: arkAppUrn,
   form: queueAppFormSchema,
   requestId: 'string.uuid',
   jobVersion: type.unit(1).optional(),
+});
+
+const appSettingsCommandSchema = type({
+  command: type.unit('generate_env'),
+  appUrn: arkAppUrn,
+  form: queueAppFormSchema,
+  requestId: 'string.uuid',
+  settingsBinding: '/^[a-f0-9]{64}$/?',
 });
 
 const uninstallAppCommandSchema = type({
@@ -53,7 +61,13 @@ const updateAppCommandSchema = type({
   jobVersion: type.unit(1).optional(),
 });
 
-export const appEventSchema = type.or(commonAppCommandSchema, uninstallAppCommandSchema, restoreAppCommandSchema, updateAppCommandSchema);
+export const appEventSchema = type.or(
+  commonAppCommandSchema,
+  appSettingsCommandSchema,
+  uninstallAppCommandSchema,
+  restoreAppCommandSchema,
+  updateAppCommandSchema,
+);
 export type AppEvent = typeof appEventSchema.infer;
 
 export const appEventResultSchema = type({

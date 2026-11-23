@@ -106,7 +106,7 @@ export class AppLifecycleCommandFactory {
       case 'restore':
         return new RestoreAppCommand(this.moduleRef, this.docker, eventData.filename);
       case 'generate_env':
-        return new GenerateAppEnvCommand(this.moduleRef, this.docker);
+        return new GenerateAppEnvCommand(this.moduleRef, this.docker, eventData.settingsBinding);
       case 'update':
         return new UpdateAppCommand(this.moduleRef, this.docker, eventData.performBackup, eventData.requestId);
       default:

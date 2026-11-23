@@ -16,6 +16,7 @@ import type { AppMigrationLedger } from './app-migration-ledger';
 import type { MigrationJournalState } from '../backups/app-migration-journal';
 import { settleMigrationRollback, readMigrationRollback } from './app-migration-rollback';
 import { commitAppMigration, readAppMigrationCommit } from './app-migration-commit';
+import { appSettingsBinding } from './app-settings-binding';
 
 export type InstallAppReservation = Pick<App, 'id' | 'createdAt' | 'appName' | 'appStoreSlug'> & Partial<Pick<App, 'version'>>;
 
@@ -147,6 +148,25 @@ export class AppsRepository {
       .returning()
       .execute();
     return updatedApps[0];
+  }
+
+  public async updateSettingsIfCurrent(expected: App, data: Partial<NewApp>) {
+    const binding = appSettingsBinding(expected);
+    return this.db.transaction(
+      async (transaction) => {
+        const [current] = await transaction.select().from(app).where(eq(app.id, expected.id)).for('update');
+        if (!current || appSettingsBinding(current) !== binding)
+          throw new Error('The application changed before its settings could be saved. Refresh and try again.');
+        const [updated] = await transaction
+          .update(app)
+          .set({ ...data, updatedAt: Math.floor(Date.now() / 1000) })
+          .where(eq(app.id, expected.id))
+          .returning();
+        if (!updated) throw new Error('Application settings could not be saved.');
+        return updated;
+      },
+      { isolationLevel: 'serializable' },
+    );
   }
 
   /**

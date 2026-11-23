@@ -1008,5 +1008,19 @@ describe('Retained-storage app lifecycle', () => {
       const app = await appsRepository.getAppByUrn(appInfo.urn);
       expect(app?.pendingRestart).toBe(true);
     });
+
+    it.each(['version', 'config'] as const)('rejects stale settings against the actual PostgreSQL %s value', async (field) => {
+      const info = await createAppInStore('test', { id: `settings-stale-${field}` });
+      await settle(appLifecycleService.installApp({ appUrn: info.urn, form: { VALUE: 'original' }, skipRun: true }));
+      await waitFor(async () => expect((await appsRepository.getAppByUrn(info.urn))?.status).toBe('stopped'));
+      const before = await appsRepository.getAppByUrn(info.urn);
+      if (!before) throw new Error('Missing installed fixture app');
+      const patch = field === 'version' ? { version: before.version + 1 } : { config: { VALUE: 'newer writer' } };
+      await appsRepository.updateAppById(before.id, patch);
+      await expect(appsRepository.updateSettingsIfCurrent(before, { config: { VALUE: 'stale writer' } })).rejects.toThrow('application changed');
+      const after = await appsRepository.getAppByUrn(info.urn);
+      expect(after).toMatchObject(patch);
+      expect(after?.config).not.toEqual({ VALUE: 'stale writer' });
+    });
   });
 });
