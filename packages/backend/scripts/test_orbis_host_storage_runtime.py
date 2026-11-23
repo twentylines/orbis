@@ -431,5 +431,79 @@ assert.throws(() => session({cookies: ['runtipi-sid=bad\r\nvalue']}));
         self.assertEqual(runtime.results, [])
 
 
+class HostEngineBoundaries(unittest.TestCase):
+    def runtime(self):
+        runtime = R.Runtime(Path('/checkout'), Path('/checkout/.orbis-host-ABC123'), Path('/manifest'), Path('/probe'), host_engine=True)
+        runtime.manifest = {'commit': 'a' * 40}
+        runtime.owned['a' * 64] = ('runtipi', 'sha256:' + 'b' * 64, R.IMAGE + '@sha256:' + 'c' * 64)
+        return runtime
+
+    def test_optional_engine_requires_both_explicit_gates_before_engine_access(self):
+        runtime = self.runtime()
+        with patch.object(R.sys, 'platform', 'linux'), patch.object(R.os, 'geteuid', return_value=0), \
+                patch.dict(R.os.environ, {'ORBIS_HOST_STORAGE_TEST': '1'}, clear=True), patch.object(runtime, 'docker') as docker:
+            with self.assertRaisesRegex(R.Refused, 'explicit-host-engine-gate-required'): runtime.prepare()
+            docker.assert_not_called()
+
+    def test_disabled_or_unknown_engine_case_never_reaches_container_exec(self):
+        runtime = self.runtime()
+        for mode, environment in (('upgrade', {}), ('unknown', {'ORBIS_HOST_ENGINE_TEST': '1'})):
+            with self.subTest(mode=mode), patch.dict(R.os.environ, environment, clear=True), patch.object(runtime, 'docker') as docker:
+                with self.assertRaisesRegex(R.Refused, 'explicit-host-engine-gate-required'): runtime.probe_host_engine(mode)
+                docker.assert_not_called()
+
+    def test_engine_directory_preparation_creates_only_named_empty_synthetic_cases(self):
+        with tempfile.TemporaryDirectory(prefix='host-engine-prepare-') as temporary:
+            parent = Path(temporary)
+            folder = parent / 'fixture'
+            folder.mkdir(mode=0o700)
+            manifest = parent / 'manifest.json'
+            manifest.write_text(json.dumps({'schema': 'orbis.release.v1', 'image': R.IMAGE,
+                'tag': 'v0.9.2-rc.6', 'commit': 'a' * 40, 'digest': 'sha256:' + 'b' * 64,
+                'runtipiCompatibility': '4.10.1', 'installationProtocol': 'orbis.installation-state.v1'}))
+            prepared = F.prepare(manifest, folder, R.DEPENDENCIES, host_engine=True)
+            for name in ('engine-upgrade', 'engine-rollback'):
+                directory = prepared['root'] / 'app-data/fixture' / name
+                self.assertEqual([p.name for p in directory.iterdir()], ['marker'])
+                self.assertEqual((directory / 'marker').read_text(), 'scoped fixture\n')
+            self.assertNotIn('ORBIS_HOST_SOCKET=', (prepared['root'] / '.env').read_text())
+
+    def test_failed_engine_output_is_bounded_and_never_treated_as_acceptance(self):
+        runtime = self.runtime()
+        state = {'Image': 'same', 'State': {'StartedAt': 'same', 'Status': 'running', 'Health': {'Status': 'healthy'}}}
+        child = {'case': 'host-engine-upgrade', 'passed': False, 'cleanup': True, 'modeledHost': False,
+            'mainWorkerTested': False, 'productionTouched': False, 'failurePhase': 'actual-isolated-migration', 'private': 'must-not-print'}
+        result = subprocess.CompletedProcess([], 1, json.dumps(child).encode(), b'')
+        with patch.dict(R.os.environ, {'ORBIS_HOST_ENGINE_TEST': '1'}), patch.object(runtime, 'inspect', return_value=state), \
+                patch.object(runtime, 'docker', return_value=result):
+            with self.assertRaisesRegex(R.Refused, 'host-engine-probe-failed'): runtime.probe_host_engine('upgrade')
+        self.assertEqual(runtime.results, [{'case': 'host-engine-upgrade', 'passed': False, 'cleanup': True,
+            'failurePhase': 'actual-isolated-migration', 'modeledHost': False, 'mainWorkerTested': False}])
+
+    def test_cleanup_model_and_worker_claims_cannot_be_used_as_real_engine_acceptance(self):
+        state = {'Image': 'same', 'State': {'StartedAt': 'same', 'Status': 'running', 'Health': {'Status': 'healthy'}}}
+        for change in ({'cleanup': False}, {'modeledHost': True}, {'mainWorkerTested': True}, {'failurePhase': 'actual-isolated-migration'}):
+            runtime = self.runtime()
+            child = {'case': 'host-engine-upgrade', 'passed': True, 'cleanup': True, 'modeledHost': False,
+                'mainWorkerTested': False, 'productionTouched': False, **change}
+            result = subprocess.CompletedProcess([], 0, json.dumps(child).encode(), b'')
+            with self.subTest(change=change), patch.dict(R.os.environ, {'ORBIS_HOST_ENGINE_TEST': '1'}), \
+                    patch.object(runtime, 'inspect', return_value=state), patch.object(runtime, 'docker', return_value=result):
+                with self.assertRaisesRegex(R.Refused, 'host-engine-probe-failed'): runtime.probe_host_engine('upgrade')
+            self.assertFalse(runtime.results[0]['passed'])
+
+    def test_success_is_not_recorded_if_the_controller_restarted(self):
+        runtime = self.runtime()
+        state = {'Image': 'same', 'State': {'StartedAt': 'before', 'Status': 'running', 'Health': {'Status': 'healthy'}}}
+        changed = {'Image': 'same', 'State': {**state['State'], 'StartedAt': 'after'}}
+        child = {'case': 'host-engine-upgrade', 'passed': True, 'cleanup': True, 'modeledHost': False,
+            'mainWorkerTested': False, 'productionTouched': False}
+        result = subprocess.CompletedProcess([], 0, json.dumps(child).encode(), b'')
+        with patch.dict(R.os.environ, {'ORBIS_HOST_ENGINE_TEST': '1'}), patch.object(runtime, 'inspect', side_effect=[state, changed]), \
+                patch.object(runtime, 'docker', return_value=result):
+            with self.assertRaisesRegex(R.Refused, 'host-engine-controller-changed'): runtime.probe_host_engine('upgrade')
+        self.assertEqual(runtime.results, [])
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Qualify the real read-only Host/Core storage connection on a fresh Linux runner.
+"""Qualify real Host/Core storage and optional isolated data flows on Linux.
 
 The fixture never configures recovery, systemd or production services. Optional
 normal setup creates an account only in this run's disposable installation.
+Optional Engine cases write only separately named synthetic test databases.
 It refuses existing installations and destroys only positively identified actors
 created by this run. Generated environment files and raw process output stay local.
 """
@@ -23,6 +24,7 @@ import sys
 import time
 
 IMAGE = 'ghcr.io/twentylines/orbis'
+ENGINE_IMAGE = 'docker.io/library/postgres@sha256:09f23e02d76670d3b346a3c00aa33a27cf57aab8341eedfcdaed41459d14f5c4'
 SERVICES = ('runtipi-db', 'runtipi-queue', 'runtipi-reverse-proxy', 'runtipi')
 NETWORK = 'runtipi_tipi_main_network'
 DEPENDENCIES = {
@@ -447,10 +449,11 @@ def run(arguments, root, *, timeout=60, accepted=(0,)):
 
 
 class Runtime:
-    def __init__(self, source, folder, manifest_path, probe, *, normal_setup=False):
+    def __init__(self, source, folder, manifest_path, probe, *, normal_setup=False, host_engine=False):
         self.source, self.folder = source, folder
         self.manifest_path, self.probe = manifest_path, probe
         self.normal_setup = normal_setup
+        self.host_engine = host_engine
         self.normal_scope = None
         self.layout_folder = folder
         self.host_state = folder / 'host-state'
@@ -489,6 +492,7 @@ class Runtime:
     def prepare(self):
         require(sys.platform == 'linux' and os.geteuid() == 0, 'linux-root-required')
         require(os.environ.get('ORBIS_HOST_STORAGE_TEST') == '1', 'explicit-fixture-gate-required')
+        require(not self.host_engine or os.environ.get('ORBIS_HOST_ENGINE_TEST') == '1', 'explicit-host-engine-gate-required')
         require(self.source.is_dir() and self.source == self.source.resolve(strict=True), 'physical-source-required')
         require(self.folder == self.folder.resolve(strict=True) and self.folder.parent == self.source
                 and re.fullmatch(r'\.orbis-host-[A-Za-z0-9]{6,16}', self.folder.name), 'scoped-fixture-required')
@@ -516,7 +520,7 @@ class Runtime:
         # The workflow verifies the registry index/platform/config against the
         # publication receipt before this runner touches Docker.
         self.references = {name: value['image'] for name, value in prepared['config']['services'].items()}
-        require(self.probe.is_file() and not self.probe.is_symlink() and self.probe.stat().st_size < 1024 * 1024, 'source-probe-required')
+        require(self.probe.is_file() and not self.probe.is_symlink() and self.probe.stat().st_size < 2 * 1024 * 1024, 'source-probe-required')
         target = self.folder / 'public-probe/probe.mjs'
         with target.open('xb') as output:
             output.write(self.probe.read_bytes())
@@ -530,6 +534,16 @@ class Runtime:
             with marker.open('x') as output:
                 output.write('ephemeral-normal-setup\n' + self.manifest['commit'] + '\n')
             marker.chmod(0o644)
+        if self.host_engine:
+            marker = self.folder / 'public-probe/host-engine-enabled'
+            with marker.open('x') as output:
+                output.write('ephemeral-host-engine\n' + self.manifest['commit'] + '\n' + secrets.token_hex(32) + '\n')
+            marker.chmod(0o644)
+            self.docker('pull', '--quiet', ENGINE_IMAGE, timeout=180)
+            engine = self.inspect(ENGINE_IMAGE, kind='image')
+            require(engine.get('Os') == 'linux' and engine.get('Architecture') == 'amd64'
+                    and canonical_reference(ENGINE_IMAGE) in {canonical_reference(value) for value in (engine.get('RepoDigests') or [])},
+                    'migration-engine-image-identity-mismatch')
         for reference in set(self.references.values()):
             self.docker('pull', '--quiet', reference, timeout=180)
         for name, reference in self.references.items():
@@ -554,7 +568,7 @@ class Runtime:
             self.socket = self.layout_folder / 'socket/host.sock'
         return fixture.prepare(self.manifest_path, self.layout_folder, DEPENDENCIES,
                                before_populate=self.issue_normal_birth if self.normal_setup else None,
-                               credential_socket=self.normal_setup)
+                               credential_socket=self.normal_setup, host_engine=self.host_engine)
 
     def issue_normal_birth(self, root):
         require(self.normal_setup and self.normal_scope is not None and root == self.root
@@ -598,6 +612,29 @@ class Runtime:
         require(after['State']['StartedAt'] == before['State']['StartedAt'] and after['Image'] == before['Image'], 'normal-setup-controller-changed')
         credential = load(self.source / 'scripts/orbis-host-credential-service.py', 'normal_setup_config_boundary')
         require(not os.path.lexists(self.host_state / credential.CONFIG_NAME), 'unexpected-recovery-configuration')
+
+    def probe_host_engine(self, mode):
+        require(self.host_engine and os.environ.get('ORBIS_HOST_ENGINE_TEST') == '1'
+                and mode in ('upgrade', 'rollback'), 'explicit-host-engine-gate-required')
+        before = self.inspect(self.core_id())
+        require(before['State']['Status'] == 'running' and before['State'].get('Health', {}).get('Status') == 'healthy', 'candidate-health-lost')
+        result = self.docker('exec', self.core_id(), 'node', '/opt/orbis-test-probe/probe.mjs',
+                             'host-engine-' + mode, self.manifest['commit'], '--exercise-host-engine', timeout=180, accepted=(0, 1))
+        require(len(result.stdout) <= 16384 and not result.stderr, 'invalid-host-engine-probe-output')
+        record = json.loads(result.stdout)
+        require(type(record) is dict and record.get('case') == 'host-engine-' + mode, 'invalid-host-engine-probe-output')
+        passed = (result.returncode == 0 and record.get('passed') is True and record.get('cleanup') is True
+                  and record.get('modeledHost') is False and record.get('mainWorkerTested') is False
+                  and record.get('productionTouched') is False and record.get('failurePhase') is None)
+        phases = ('fixture-preconditions', 'actual-host-witness', 'actual-postgres-fixture',
+                  'actual-host-backed-checkpoint', 'actual-isolated-migration', 'actual-checkpoint-rollback', 'owned-actor-cleanup')
+        if passed:
+            after = self.inspect(self.core_id())
+            require(after['State']['StartedAt'] == before['State']['StartedAt'] and after['Image'] == before['Image'], 'host-engine-controller-changed')
+        self.results.append({'case': 'host-engine-' + mode, 'passed': passed, 'cleanup': record.get('cleanup') is True,
+                             'failurePhase': record.get('failurePhase') if record.get('failurePhase') in phases else None,
+                             'modeledHost': False, 'mainWorkerTested': False})
+        require(passed, 'host-engine-probe-failed')
 
     def start_host(self):
         self.host_log = (self.folder / 'host.private.log').open('xb')
@@ -840,7 +877,8 @@ def main():
     parser.add_argument('--probe', required=True, type=Path)
     args = parser.parse_args()
     runtime = Runtime(args.source, args.fixture, args.manifest, args.probe,
-                      normal_setup=os.environ.get('ORBIS_NORMAL_SETUP_TEST') == '1')
+                      normal_setup=os.environ.get('ORBIS_NORMAL_SETUP_TEST') == '1',
+                      host_engine=os.environ.get('ORBIS_HOST_ENGINE_TEST') == '1')
     failure, cleaned, phase, diagnostics, trace_records = None, False, 'prepare', [], []
     try:
         runtime.prepare()
@@ -860,6 +898,10 @@ def main():
         if runtime.normal_setup:
             phase = 'normal-setup-api'
             runtime.probe_normal_setup()
+        if runtime.host_engine:
+            for mode in ('upgrade', 'rollback'):
+                phase = 'host-engine-' + mode
+                runtime.probe_host_engine(mode)
         require(runtime.enrollment_hash() == original, 'enrollment-changed')
         for store in ('fixture', '_user'):
             require((runtime.root / 'app-data' / store / 'probe/marker').read_text() == 'scoped fixture\n', 'fixture-data-changed')
@@ -883,7 +925,7 @@ def main():
               'failurePhase': phase if failure is not None else None, 'runtimeStates': diagnostics,
               'failureRole': runtime.failure_role if runtime.failure_role in SERVICES else None,
               'hostRefusals': trace_records, 'hostObservationTrace': os.environ.get('ORBIS_HOST_STORAGE_TRACE') == '1',
-              'normalSetup': runtime.normal_setup, 'recoveryConfigured': False, 'productionTouched': False}
+              'normalSetup': runtime.normal_setup, 'hostEngine': runtime.host_engine, 'recoveryConfigured': False, 'productionTouched': False}
     # This receipt deliberately excludes raw Docker/Host/Core output and secrets.
     print(json.dumps(result, sort_keys=True))
     return 0 if result['passed'] else 1

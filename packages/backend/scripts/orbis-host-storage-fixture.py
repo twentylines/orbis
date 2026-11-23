@@ -28,7 +28,7 @@ def private_json(file, value):
         output.write('\n')
 
 
-def prepare(manifest_path, folder, dependencies, *, before_populate=None, credential_socket=False):
+def prepare(manifest_path, folder, dependencies, *, before_populate=None, credential_socket=False, host_engine=False):
     """Prepare fresh files; an explicit caller hook may run before population."""
     stage = load('storage_fixture_stage', 'orbis-stage-release.py')
     preflight = load('storage_fixture_preflight', 'migration-preflight.py')
@@ -44,6 +44,11 @@ def prepare(manifest_path, folder, dependencies, *, before_populate=None, creden
     for store in ('fixture', '_user'):
         (root / 'app-data' / store / 'probe').mkdir(mode=0o700, parents=True)
         (root / 'app-data' / store / 'probe/marker').write_text('scoped fixture\n')
+    if host_engine:
+        for name in ('engine-upgrade', 'engine-rollback'):
+            directory = root / 'app-data/fixture' / name
+            directory.mkdir(mode=0o700)
+            (directory / 'marker').write_text('scoped fixture\n')
     (root / 'state/seed').write_text(secrets.token_hex(32))
     os.chmod(root / 'state/seed', 0o600)
     environment = {
