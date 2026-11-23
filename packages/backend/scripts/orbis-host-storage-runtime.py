@@ -34,7 +34,7 @@ DEPENDENCIES = {
 # Optional diagnostic instrumentation records only public source locations and
 # exception types. The original service, predicates and exceptions are unchanged.
 HOST_TRACE_BOOTSTRAP = r'''
-import json, os, pathlib, runpy, sys, threading
+import json, os, pathlib, re, runpy, sys, threading
 if sys.platform != 'linux' or os.geteuid() != 0 or os.environ.get('ORBIS_HOST_STORAGE_TEST') != '1' or os.environ.get('ORBIS_HOST_STORAGE_TRACE') != '1':
     raise SystemExit('The isolated Host observation diagnostic is not enabled.')
 service = pathlib.Path(sys.argv[1])
@@ -55,6 +55,19 @@ def trace(frame, event, arg):
     if event == 'exception' and count < 200 and arg[0].__name__ in errors:
         count += 1
         record = {'module': pathlib.Path(filename).name, 'function': function, 'line': frame.f_lineno, 'error': arg[0].__name__}
+        if filename == observation_file and function == 'mounts':
+            # Classify only the rejected syntax. Never emit paths, inode IDs,
+            # namespaces, mount destinations or other observed values.
+            root = frame.f_locals.get('root')
+            destination = frame.f_locals.get('destination')
+            extra = frame.f_locals.get('extra', [])
+            record['mountInput'] = {
+                'rootAbsolute': isinstance(root, str) and root.startswith('/'),
+                'destinationAbsolute': isinstance(destination, str) and destination.startswith('/'),
+                'destinationCanonical': isinstance(destination, str) and os.path.normpath(destination) == destination,
+                'namespaceHandle': isinstance(root, str) and re.fullmatch(r'(?:net|mnt|uts|ipc|user|pid|pid_for_children|cgroup|time|time_for_children):\[[0-9]{1,20}\]', root) is not None,
+                'filesystem': 'nsfs' if extra and extra[0] == 'nsfs' else 'other',
+            }
         if filename == observation_file and function == 'verify':
             # Compare copies for diagnosis only. Never alter a witness or emit
             # observed values, configuration, paths or process identities.
@@ -795,14 +808,22 @@ class Runtime:
                 value = json.loads(line.split(b' ', 1)[1])
                 base = {'module', 'function', 'line', 'error'}
                 extended = base | {'differences', 'mountOrderOnly', 'otherDefinitionFieldsEqual'}
+                mount_input = base | {'mountInput'}
                 fields = ('pid', 'daemonSha256', 'socketIdentity', 'enrollmentSha256', 'publicationSha256',
                           'controller.id', 'controller.imageId', 'controller.startedAt', 'controller.definitionSha256')
-                if (type(value) is dict and set(value) in (base, extended)
+                if (type(value) is dict and set(value) in (base, extended, mount_input)
                         and value['module'] in ('orbis-host-app-storage.py', 'orbis-host-credential-peer.py', 'orbis-host-service.py', 'orbis-host.py')
                         and type(value['function']) is str and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,127}|<(?:genexpr|listcomp|dictcomp|lambda)>', value['function'])
                         and type(value['line']) is int and 1 <= value['line'] <= 100000
                         and value['error'] in ('ValueError', 'TypeError', 'KeyError', 'OSError', 'PermissionError', 'FileNotFoundError', 'RuntimeError')):
-                    if set(value) == base or (type(value['differences']) is list and len(value['differences']) <= len(fields)
+                    if set(value) == mount_input:
+                        selected = value['mountInput']
+                        if (value['module'] == 'orbis-host-app-storage.py' and value['function'] == 'mounts'
+                                and type(selected) is dict and set(selected) == {'rootAbsolute', 'destinationAbsolute', 'destinationCanonical', 'namespaceHandle', 'filesystem'}
+                                and all(type(selected[key]) is bool for key in ('rootAbsolute', 'destinationAbsolute', 'destinationCanonical', 'namespaceHandle'))
+                                and selected['filesystem'] in ('nsfs', 'other')):
+                            records.append(value)
+                    elif set(value) == base or (type(value['differences']) is list and len(value['differences']) <= len(fields)
                             and all(type(key) is str and key in fields for key in value['differences'])
                             and type(value['mountOrderOnly']) is bool and type(value['otherDefinitionFieldsEqual']) is bool):
                         records.append(value)

@@ -141,15 +141,18 @@ class RuntimeBoundaries(unittest.TestCase):
             expected = {'module': 'orbis-host-app-storage.py', 'function': '_observe', 'line': 200, 'error': 'ValueError'}
             difference = {**expected, 'function': 'verify', 'differences': ['controller.definitionSha256'],
                           'mountOrderOnly': True, 'otherDefinitionFieldsEqual': True}
+            mount = {**expected, 'function': 'mounts', 'mountInput': {'rootAbsolute': False,
+                'destinationAbsolute': True, 'destinationCanonical': True, 'namespaceHandle': True, 'filesystem': 'nsfs'}}
+            invalid_mount = {**mount, 'mountInput': {**mount['mountInput'], 'filesystem': '/private/location'}}
             extra = {**expected, 'privateValue': 'must-not-print'}
             log = b'private ordinary log\n' + b''.join(b'ORBIS_HOST_STORAGE_TRACE ' + json.dumps(row).encode() + b'\n'
-                for row in (expected, difference, extra, {**difference, 'differences': ['/private/location']},
+                for row in (expected, difference, mount, invalid_mount, extra, {**difference, 'differences': ['/private/location']},
                             {**expected, 'module': '/private/location'}, {**expected, 'line': -1}))
             (runtime.folder / 'host.private.log').write_bytes(log)
             with patch.dict(R.os.environ, {'ORBIS_HOST_STORAGE_TRACE': '0'}):
                 self.assertEqual(runtime.host_trace_records(), [])
             with patch.dict(R.os.environ, {'ORBIS_HOST_STORAGE_TRACE': '1'}):
-                self.assertEqual(runtime.host_trace_records(), [expected, difference])
+                self.assertEqual(runtime.host_trace_records(), [expected, difference, mount])
 
     def test_cleanup_has_no_authority_before_initial_inventory(self):
         runtime = self.runtime()
