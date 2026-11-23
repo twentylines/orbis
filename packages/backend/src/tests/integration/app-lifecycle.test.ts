@@ -635,7 +635,10 @@ describe('Retained-storage app lifecycle', () => {
       const before = await appsRepository.getAppByUrn(info.urn);
       await createAppInStore('test', { id: info.id, tipi_version: 2, exposable: true, force_expose: true });
       await settle(appLifecycleService.updateApp({ appUrn: info.urn, performBackup: false }), 'failed');
-      expect(await appsRepository.getAppByUrn(info.urn)).toMatchObject({ version: 1, status: 'running', config: before?.config });
+      // Task completion precedes the asynchronous queue reply's SQL status reconciliation.
+      await waitFor(async () => {
+        expect(await appsRepository.getAppByUrn(info.urn)).toMatchObject({ version: 1, status: 'running', config: before?.config });
+      });
       expect((await appFilesManager.getInstalledAppInfo(info.urn))?.tipi_version).toBe(1);
     });
 
