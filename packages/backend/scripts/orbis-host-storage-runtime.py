@@ -54,6 +54,9 @@ local = threading.local()
 count = 0
 def trace(frame, event, arg):
     global count
+    # Only calls, returns and exceptions matter; tracing every source line can
+    # distort a real credential request enough to hit its unchanged deadline.
+    frame.f_trace_lines = False
     filename, function = frame.f_code.co_filename, frame.f_code.co_name
     selected = (filename == observation_file and function == 'observe'
                 or filename == ownership_file and function == 'request'
@@ -61,7 +64,7 @@ def trace(frame, event, arg):
     if selected and event == 'call': local.depth = getattr(local, 'depth', 0) + 1
     if not getattr(local, 'depth', 0) or filename not in files: return None
     if event == 'exception' and count < 200 and arg[0].__name__ in errors:
-        if pathlib.Path(filename).name in credential_modules and arg[0].__name__ == 'FileNotFoundError':
+        if arg[0].__name__ == 'FileNotFoundError':
             return trace
         count += 1
         record = {'module': pathlib.Path(filename).name, 'function': function, 'line': frame.f_lineno, 'error': arg[0].__name__}

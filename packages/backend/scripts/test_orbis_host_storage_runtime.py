@@ -172,13 +172,14 @@ class RuntimeBoundaries(unittest.TestCase):
         captured = []
         scope = {'pathlib': __import__('pathlib'), 'local': threading.local(), 'count': 0,
             'files': {filename}, 'observation_file': '/fixture/orbis-host-app-storage.py', 'ownership_file': filename,
-            'credential_modules': {'orbis-host-ownership-bootstrap.py'}, 'errors': {'ValueError'},
+            'credential_modules': {'orbis-host-ownership-bootstrap.py'}, 'errors': {'ValueError', 'FileNotFoundError'},
             'json': json, 'os': SimpleNamespace(write=lambda descriptor, body: captured.append(body))}
         exec(compile(ast.Module(body=[function], type_ignores=[]), '<bounded-trace>', 'exec'), scope)
         functions = {}
         exec(compile("def request(operation, data):\n"
                      "    if operation == 'change-admission': return request('ownership-check', data)\n"
-                     "    raise ValueError('private-sensitive-message')\n", filename, 'exec'), functions)
+                     "    try: raise FileNotFoundError('private-missing')\n"
+                     "    except FileNotFoundError: raise ValueError('private-sensitive-message')\n", filename, 'exec'), functions)
         previous = sys.gettrace()
         try:
             sys.settrace(scope['trace'])
