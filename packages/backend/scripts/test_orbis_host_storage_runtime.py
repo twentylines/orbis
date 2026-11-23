@@ -50,6 +50,14 @@ class RuntimeBoundaries(unittest.TestCase):
     def runtime(self):
         return R.Runtime(Path('/checkout'), Path('/checkout/.orbis-host-ABCDEF'), Path('/manifest'), Path('/probe'))
 
+    def test_startup_diagnostics_do_not_disclose_messages_or_private_values(self):
+        body = (b"Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'argon2' imported from /app/main.mjs\n"
+                b"Cannot find module '/private/location'\nsecret=sensitive-value\n"
+                b"Error: ENOENT at /private/other\n")
+        self.assertEqual(R.startup_signals(body, {'argon2'}), {
+            'markers': ['missing-file', 'missing-module'], 'missingPackages': ['argon2']})
+        self.assertNotIn('sensitive-value', json.dumps(R.startup_signals(body, {'argon2'})))
+
     def test_official_repository_aliases_preserve_the_exact_digest(self):
         digest = 'sha256:' + 'a' * 64
         expected = 'docker.io/library/postgres@' + digest

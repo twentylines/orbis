@@ -65,6 +65,34 @@ def canonical_reference(value):
     return registry + '/' + '/'.join(parts) + '@' + digest
 
 
+def startup_signals(body, packages):
+    """Select known failure markers; never return messages, paths or log lines."""
+    text = body[:256 * 1024].decode('utf-8', errors='replace')
+    markers = {
+        'missing-module': ('ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND', 'Cannot find package', 'Cannot find module'),
+        'native-module': ('ERR_DLOPEN_FAILED', 'invalid ELF header'),
+        'syntax-error': ('SyntaxError:',),
+        'reference-error': ('ReferenceError:',),
+        'type-error': ('TypeError:',),
+        'permission-denied': ('EACCES', 'EPERM'),
+        'missing-file': ('ENOENT',),
+        'busy-file': ('EBUSY',),
+        'connection-refused': ('ECONNREFUSED',),
+        'database-authentication': ('password authentication failed',),
+        'cli-secret-storage': ('CLI authentication storage is invalid or not private',),
+        'server-configuration': ('Invalid server configuration',),
+        'settings-configuration': ('Invalid settings.json file',),
+        'dependency-injection': ("Nest can't resolve dependencies",),
+    }
+    missing = set()
+    for value in re.findall(r"Cannot find (?:package|module) ['\"]([^'\"\r\n]{1,200})['\"]", text):
+        root = '/'.join(value.split('/')[:2]) if value.startswith('@') else value.split('/')[0]
+        if root in packages:
+            missing.add(root)
+    return {'markers': sorted(key for key, values in markers.items() if any(value in text for value in values)),
+            'missingPackages': sorted(missing)}
+
+
 def load(file, name):
     spec = importlib.util.spec_from_file_location(name, file)
     module = importlib.util.module_from_spec(spec)
@@ -335,6 +363,11 @@ class Runtime:
                     'status': status if status in ('created', 'running', 'paused', 'restarting', 'removing', 'exited', 'dead') else 'unknown',
                     'health': health if health in ('starting', 'healthy', 'unhealthy') else 'none',
                     'exitCode': state.get('ExitCode') if type(state.get('ExitCode')) is int else None})
+                if identity[0] == 'runtipi' and status != 'running':
+                    package = json.loads((self.source / 'packages/backend/package.json').read_bytes())
+                    packages = set(package.get('dependencies', {}))
+                    logs = self.docker('logs', '--tail', '100', identifier)
+                    records[-1]['startup'] = startup_signals(logs.stdout + logs.stderr, packages)
             except (Refused, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
                 records.append({'service': identity[0], 'status': 'unavailable'})
         return records
