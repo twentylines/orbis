@@ -550,5 +550,177 @@ class HostEngineBoundaries(unittest.TestCase):
         self.assertEqual(runtime.results, [])
 
 
+class MainWorkerBoundaries(unittest.TestCase):
+    def runtime(self, folder=Path('/checkout/.orbis-host-ABCDEF')):
+        runtime = R.Runtime(Path('/checkout'), folder, Path('/manifest'), Path('/probe'), normal_setup=True, main_worker=True)
+        runtime.manifest = {'commit': 'a' * 40}
+        runtime.main_intent = {'schema': 'orbis.main-worker-fixture.v1', 'commit': 'a' * 40,
+            'name': 'orbis-api-1234abcd', 'appUrn': 'orbis-api-1234abcd:_user', 'scope': 'b' * 64,
+            'image': R.IMAGE + '@sha256:' + 'c' * 64, 'imageId': 'sha256:' + 'd' * 64}
+        return runtime
+
+    def actor(self, runtime):
+        intent = runtime.main_intent
+        return {'Name': '/orbis-api-1234abcd__user-web-1', 'Image': intent['imageId'],
+            'Config': {'Image': intent['image'], 'Labels': {
+                'orbis.fixture.scope': intent['scope'], 'com.docker.compose.project': intent['appUrn'].replace(':', '_'),
+                'com.docker.compose.service': 'web', 'runtipi.appurn': intent['appUrn'], 'runtipi.managed': 'true'}},
+            'HostConfig': {'NetworkMode': 'none', 'Privileged': False},
+            'Mounts': [{'Type': 'bind', 'Source': str(runtime.root / 'app-data/_user' / intent['name'] / 'data'),
+                'Destination': '/synthetic-data', 'RW': True}]}
+
+    def test_main_worker_requires_separate_opt_in_and_normal_setup_before_engine_access(self):
+        for normal_setup, environment in ((False, {'ORBIS_MAIN_WORKER_TEST': '1'}), (True, {})):
+            runtime = self.runtime()
+            runtime.normal_setup = normal_setup
+            with self.subTest(normal=normal_setup), patch.object(R.sys, 'platform', 'linux'), \
+                    patch.object(R.os, 'geteuid', return_value=0), patch.dict(R.os.environ, {'ORBIS_HOST_STORAGE_TEST': '1', **environment}, clear=True), \
+                    patch.object(runtime, 'docker') as docker:
+                with self.assertRaisesRegex(R.Refused, 'explicit-main-worker-gate-required'): runtime.prepare()
+                docker.assert_not_called()
+
+    def test_main_actor_requires_all_scope_image_namespace_and_bind_properties(self):
+        import copy
+        runtime = self.runtime()
+        actor = self.actor(runtime)
+        self.assertEqual(runtime.app_identity(actor)[1], runtime.main_intent['imageId'])
+        pinned = copy.deepcopy(actor)
+        pinned['Config']['Image'] = runtime.main_intent['imageId']
+        self.assertEqual(runtime.app_identity(pinned)[1], runtime.main_intent['imageId'])
+        mutations = [
+            lambda value: value['Config']['Labels'].update({'orbis.fixture.scope': 'e' * 64}),
+            lambda value: value['Config']['Labels'].update({'com.docker.compose.project': 'other'}),
+            lambda value: value['Config']['Labels'].update({'com.docker.compose.service': 'other'}),
+            lambda value: value.update(Image='sha256:' + 'f' * 64),
+            lambda value: value['Config'].update(Image=R.IMAGE + '@sha256:' + 'e' * 64),
+            lambda value: value['Mounts'][0].update(Source='/other/data'),
+            lambda value: value['Mounts'].append({'Source': '/var/run/docker.sock', 'Destination': '/var/run/docker.sock'}),
+            lambda value: value['HostConfig'].update(Privileged=True),
+            lambda value: value['HostConfig'].update(NetworkMode='host'),
+            lambda value: value['HostConfig'].update(Devices=[{'PathOnHost': '/dev/sda'}]),
+        ]
+        for index, mutate in enumerate(mutations):
+            changed = copy.deepcopy(actor)
+            mutate(changed)
+            with self.subTest(mutation=index), self.assertRaisesRegex(R.Refused, 'unowned-main-worker-container'):
+                runtime.app_identity(changed)
+
+    def test_inventory_never_adopts_an_actor_that_existed_before_this_run(self):
+        runtime = self.runtime()
+        previous, fresh, other = 'a' * 64, 'b' * 64, 'c' * 64
+        runtime.original_containers = {previous}
+        actor = self.actor(runtime)
+        unrelated = {'Config': {'Labels': {'orbis.fixture.scope': 'e' * 64}}}
+        with patch.object(runtime, 'identifiers', return_value={previous, fresh, other}), \
+                patch.object(runtime, 'inspect', side_effect=lambda key: actor if key == fresh else unrelated) as inspect:
+            runtime.collect_app_owned()
+        self.assertEqual(set(runtime.app_owned), {fresh})
+        self.assertNotIn(previous, [call.args[0] for call in inspect.call_args_list])
+
+    def test_changed_actor_refuses_cleanup_before_any_container_write(self):
+        with tempfile.TemporaryDirectory(prefix='main-worker-cleanup-') as temporary:
+            runtime = self.runtime(Path(temporary))
+            runtime.original_containers, runtime.original_networks = set(), set()
+            actor = self.actor(runtime)
+            runtime.app_owned['a' * 64] = runtime.app_identity(actor)
+            actor['Mounts'][0]['Source'] = '/other/data'
+            with patch.object(runtime, 'inspect', return_value=actor), patch.object(runtime, 'docker') as docker:
+                with self.assertRaisesRegex(R.Refused, 'unowned-main-worker-container'): runtime.cleanup()
+                docker.assert_not_called()
+            self.assertFalse((runtime.folder / 'cleanup-complete').exists())
+
+    def test_cleanup_stops_exact_producers_then_bound_app_before_releasing_scope(self):
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory(prefix='main-worker-cleanup-') as temporary:
+            runtime = self.runtime(Path(temporary))
+            runtime.original_containers, runtime.original_networks = set(), set()
+            core, queue, app = 'a' * 64, 'b' * 64, 'c' * 64
+            actors = {app: self.actor(runtime)}
+            for identifier, service in ((core, 'runtipi'), (queue, 'runtipi-queue')):
+                reference = R.IMAGE + '@sha256:' + 'd' * 64
+                actors[identifier] = {'Name': '/' + service, 'Image': 'sha256:' + 'e' * 64,
+                    'Config': {'Image': reference, 'Labels': {'com.docker.compose.project': 'runtipi',
+                        'com.docker.compose.service': service, 'com.docker.compose.project.working_dir': str(runtime.root)}}}
+                runtime.owned[identifier] = (service, actors[identifier]['Image'], reference)
+            runtime.app_owned[app] = runtime.app_identity(actors[app])
+            operations = []
+            def docker(*arguments, **kwargs):
+                operations.append(arguments)
+                if arguments[0] == 'rm': actors.pop(arguments[1])
+            runtime.normal_scope = Mock()
+            def release():
+                self.assertFalse(actors)
+                self.assertFalse((runtime.folder / 'cleanup-complete').exists())
+            runtime.normal_scope.release.side_effect = release
+            with patch.object(runtime, 'inspect', side_effect=lambda key: actors[key]), \
+                    patch.object(runtime, 'identifiers', side_effect=lambda kind: set(actors) if kind == 'container' else set()), \
+                    patch.object(runtime, 'docker', side_effect=docker):
+                self.assertTrue(runtime.cleanup())
+            self.assertEqual(operations[:3], [('stop', '--time', '10', core), ('stop', '--time', '10', queue), ('stop', '--time', '10', app)])
+            self.assertEqual(set(arguments[1] for arguments in operations if arguments[0] == 'rm'), {core, queue, app})
+            runtime.normal_scope.release.assert_called_once_with()
+
+    def test_normal_setup_success_without_app_steps_cannot_satisfy_main_worker(self):
+        runtime = self.runtime()
+        runtime.owned['a' * 64] = ('runtipi', 'sha256:' + 'b' * 64, R.IMAGE + '@sha256:' + 'c' * 64)
+        state = {'State': {'Status': 'running', 'Health': {'Status': 'healthy'}}}
+        record = {'case': 'normal-setup-api', 'passed': True, 'completed': ['root-authorized-first-registration',
+            'second-operator-registration-refused', 'root-authorized-password-change-and-session-retirement', 'session-logout']}
+        child = subprocess.CompletedProcess([], 0, json.dumps(record).encode(), b'')
+        with patch.object(runtime, 'inspect', return_value=state), patch.object(runtime, 'docker', return_value=child), \
+                patch.object(runtime, 'collect_app_owned'):
+            with self.assertRaisesRegex(R.Refused, 'invalid-normal-setup-case-sequence'): runtime.probe_normal_setup()
+
+    def test_api_probe_refuses_wrong_task_identity_unavailable_history_and_missing_restore(self):
+        import shutil
+        node = shutil.which('node')
+        if not node: self.skipTest('Node.js is required for actual probe control flow')
+        helper = 'async function mainWorker(' + R.NORMAL_SETUP_PROBE.split('async function mainWorker(', 1)[1].split('function session(response)', 1)[0]
+        harness = r'''
+import assert from 'node:assert/strict';
+let phase;
+let completed;
+let value;
+let tasks;
+let bad;
+const intent = {schema: 'orbis.main-worker-fixture.v1', commit: 'a'.repeat(40), name: 'orbis-api-1234abcd',
+  appUrn: 'orbis-api-1234abcd:_user', scope: 'b'.repeat(64), image: 'ghcr.io/twentylines/orbis@sha256:'+'c'.repeat(64), imageId: 'sha256:'+'d'.repeat(64)};
+function require(value) {assert.ok(value);}
+const fs = {
+  lstat: async () => ({isFile: () => true, isSymbolicLink: () => false, uid: 0, mode: 0o644, size: 100}),
+  readFile: async (file) => file.endsWith('.json') ? JSON.stringify(intent) : value,
+  writeFile: async (_file, content) => {value = content;},
+};
+async function request(method, route) {
+  if (route === '/api/tasks') return {status: 200, body: {storage: bad === 'history' ? 'unavailable' : 'persistent', tasks}};
+  if (route === '/api/custom-apps') return {status: 201, body: {appUrn: intent.appUrn}};
+  if (route.startsWith('/api/apps/')) return {status: 200, body: route.endsWith('/installed') ? {installed: []} : {app: {isVisibleOnGuestDashboard: true}}};
+  if (method === 'GET' && route.startsWith('/api/backups/')) return {status: 200, body: {total: 1, data: [{id: 'fixture.tar.gz', size: 100}]}};
+  const action = route.endsWith('/update-config') ? 'generate_env' : route.split('/').at(-1);
+  const id = `00000000-0000-4000-8000-${String(tasks.length+1).padStart(12,'0')}`;
+  tasks.push({id, action, appUrn: bad === 'identity' ? 'other:_user' : intent.appUrn, status: 'succeeded',
+    startedAt: '2026-11-23T00:00:00Z', finishedAt: bad === 'time' ? 'invalid' : '2026-11-23T00:00:01Z'});
+  if (action === 'restore' && bad !== 'restore') value = 'before\n';
+  return {status: 201, body: {requestId: id}};
+}
+'''
+        cases = r'''
+for (const mode of ['', 'identity', 'history', 'restore', 'time']) {
+  bad = mode; phase = ''; completed = []; tasks = []; value = 'before\n';
+  if (!mode) {
+    await mainWorker('fixture-session', intent.commit);
+    assert.equal(tasks.length, 6);
+    assert.equal(completed.at(-1), 'main-worker-uninstalled-with-retained-task-history');
+  } else {
+    await assert.rejects(mainWorker('fixture-session', intent.commit));
+    assert.equal(phase, mode === 'restore' ? 'main-worker-restore' : 'main-worker-install');
+    assert.ok(!completed.includes('main-worker-uninstalled-with-retained-task-history'));
+  }
+}
+'''
+        result = subprocess.run([node, '--input-type=module', '-e', harness + helper + cases], capture_output=True, timeout=15)
+        self.assertEqual(result.returncode, 0, 'Actual Main API probe refusal regression')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

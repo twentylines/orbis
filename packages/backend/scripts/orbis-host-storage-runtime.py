@@ -182,6 +182,114 @@ function request(method, pathname, { body, cookie } = {}) {
   });
 }
 
+async function mainWorker(cookie, commit) {
+  phase = 'main-worker-preconditions';
+  const marker = '/opt/orbis-test-probe/main-worker-enabled.json';
+  const info = await fs.lstat(marker);
+  require(info.isFile() && !info.isSymbolicLink() && info.uid === 0 && (info.mode & 0o022) === 0 && info.size < 4096);
+  const intent = JSON.parse(await fs.readFile(marker, 'utf8'));
+  require(intent.schema === 'orbis.main-worker-fixture.v1' && intent.commit === commit);
+  require(/^orbis-api-[a-f0-9]{8}$/.test(intent.name) && intent.appUrn === `${intent.name}:_user`);
+  require(/^[a-f0-9]{64}$/.test(intent.scope));
+  require(/^ghcr\.io\/twentylines\/orbis@sha256:[a-f0-9]{64}$/.test(intent.image));
+  require(/^sha256:[a-f0-9]{64}$/.test(intent.imageId));
+  const urn = intent.appUrn;
+  const endpoint = encodeURIComponent(urn);
+  const data = `/app-data/_user/${intent.name}/data/value.txt`;
+  const requests = [];
+  const form = { openPort: false, exposed: false, exposedLocal: false, skipPull: true, maxBackups: 2 };
+  async function task(method, route, action, body) {
+    const accepted = await request(method, route, { body, cookie });
+    require([200, 201, 202].includes(accepted.status) && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(accepted.body?.requestId));
+    const id = accepted.body.requestId;
+    require(!requests.some((entry) => entry.id === id));
+    requests.push({ id, action });
+    const deadline = Date.now() + 120000;
+    while (Date.now() < deadline) {
+      const history = await request('GET', '/api/tasks', { cookie });
+      require(history.status === 200 && history.body?.storage === 'persistent' && Array.isArray(history.body.tasks));
+      const matches = history.body.tasks.filter((entry) => entry.id === id);
+      require(matches.length <= 1);
+      const found = matches[0];
+      if (found) {
+        require(found.appUrn === urn && found.action === action);
+        require(!['failed', 'interrupted', 'unconfirmed', 'cancelled'].includes(found.status));
+        if (found.status === 'succeeded') {
+          require(typeof found.startedAt === 'string' && typeof found.finishedAt === 'string');
+          require(Number.isFinite(Date.parse(found.startedAt)) && Date.parse(found.finishedAt) >= Date.parse(found.startedAt));
+          return;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    throw new Error('task-deadline');
+  }
+  phase = 'main-worker-create';
+  const program = "const fs=require('node:fs');fs.mkdirSync('/synthetic-data',{recursive:true});if(!fs.existsSync('/synthetic-data/value.txt'))fs.writeFileSync('/synthetic-data/value.txt','before\\n');setInterval(()=>{},1000)";
+  const config = {
+    services: { web: {
+      image: intent.image, entrypoint: ['node', '-e'], command: [program],
+      network_mode: 'none', restart: 'no', healthcheck: { disable: true },
+      volumes: ['${APP_DATA_DIR}/data:/synthetic-data'],
+      labels: { 'orbis.fixture.scope': intent.scope },
+      'x-runtipi': { is_main: true, internal_port: 3000 },
+    } },
+    'x-runtipi': { schema_version: 2 },
+  };
+  const created = await request('POST', '/api/custom-apps', { cookie, body: { name: intent.name, config } });
+  require(created.status === 201 && created.body?.appUrn === urn);
+  completed.push('main-worker-custom-app-created');
+  phase = 'main-worker-install';
+  await task('POST', `/api/app-lifecycle/${endpoint}/install`, 'install', form);
+  const deadline = Date.now() + 15000;
+  let value;
+  while (Date.now() < deadline) {
+    try { value = await fs.readFile(data, 'utf8'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (value === 'before\n') break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  require(value === 'before\n');
+  const dataInfo = await fs.lstat(data);
+  require(dataInfo.isFile() && !dataInfo.isSymbolicLink());
+  completed.push('main-worker-installed-and-running');
+  phase = 'main-worker-backup';
+  await task('POST', `/api/backups/${endpoint}/backup`, 'backup');
+  const backups = await request('GET', `/api/backups/${endpoint}`, { cookie });
+  require(backups.status === 200 && backups.body?.total === 1 && backups.body.data?.length === 1);
+  const backup = backups.body.data[0];
+  require(typeof backup.id === 'string' && /^[a-zA-Z0-9_.-]+\.tar\.gz$/.test(backup.id) && backup.size > 0);
+  const archive = await fs.lstat(`/data/backups/_user/${intent.name}/${backup.id}`);
+  require(archive.isFile() && !archive.isSymbolicLink() && archive.size === backup.size);
+  completed.push('main-worker-backup-retained');
+  phase = 'main-worker-restore';
+  await fs.writeFile(data, 'after\n', { flag: 'w' });
+  require(await fs.readFile(data, 'utf8') === 'after\n');
+  await task('POST', `/api/backups/${endpoint}/restore`, 'restore', { filename: backup.id });
+  require(await fs.readFile(data, 'utf8') === 'before\n');
+  completed.push('main-worker-backup-data-restored');
+  phase = 'main-worker-restart';
+  await task('POST', `/api/app-lifecycle/${endpoint}/start`, 'start');
+  require(await fs.readFile(data, 'utf8') === 'before\n');
+  completed.push('main-worker-restored-app-started');
+  phase = 'main-worker-settings';
+  await task('PATCH', `/api/app-lifecycle/${endpoint}/update-config`, 'generate_env', { ...form, isVisibleOnGuestDashboard: true });
+  require(await fs.readFile(data, 'utf8') === 'before\n');
+  const settings = await request('GET', `/api/apps/${endpoint}`, { cookie });
+  require(settings.status === 200 && settings.body?.app?.isVisibleOnGuestDashboard === true);
+  completed.push('main-worker-settings-persisted');
+  phase = 'main-worker-uninstall';
+  await task('DELETE', `/api/app-lifecycle/${endpoint}/uninstall`, 'uninstall', { removeBackups: true });
+  const installed = await request('GET', '/api/apps/installed', { cookie });
+  require(installed.status === 200 && installed.body?.installed?.length === 0);
+  const history = await request('GET', '/api/tasks', { cookie });
+  require(history.status === 200 && history.body?.storage === 'persistent');
+  for (const expected of requests) {
+    const matches = history.body.tasks.filter((entry) => entry.id === expected.id);
+    require(matches.length === 1 && matches[0].appUrn === urn && matches[0].action === expected.action && matches[0].status === 'succeeded');
+  }
+  completed.push('main-worker-uninstalled-with-retained-task-history');
+}
+
 function session(response) {
   // The server retires a legacy domain cookie before issuing the host-only one.
   const cookies = response.cookies.filter((value) => value.startsWith('runtipi-sid=')
@@ -236,6 +344,8 @@ try {
   const replacementCookie = session(newLogin);
   require((await request('GET', '/api/apps/installed', { cookie: replacementCookie })).status === 200);
   completed.push('root-authorized-password-change-and-session-retirement');
+
+  if (process.argv[4] === '--exercise-main-worker') await mainWorker(replacementCookie, commit);
 
   phase = 'actual-logout';
   const loggedOut = await request('POST', '/api/auth/logout', { cookie: replacementCookie });
@@ -470,11 +580,14 @@ def run(arguments, root, *, timeout=60, accepted=(0,)):
 
 
 class Runtime:
-    def __init__(self, source, folder, manifest_path, probe, *, normal_setup=False, host_engine=False):
+    def __init__(self, source, folder, manifest_path, probe, *, normal_setup=False, host_engine=False, main_worker=False):
         self.source, self.folder = source, folder
         self.manifest_path, self.probe = manifest_path, probe
         self.normal_setup = normal_setup
         self.host_engine = host_engine
+        self.main_worker = main_worker
+        self.main_intent = None
+        self.app_owned = {}
         self.normal_scope = None
         self.layout_folder = folder
         self.host_state = folder / 'host-state'
@@ -514,6 +627,7 @@ class Runtime:
         require(sys.platform == 'linux' and os.geteuid() == 0, 'linux-root-required')
         require(os.environ.get('ORBIS_HOST_STORAGE_TEST') == '1', 'explicit-fixture-gate-required')
         require(not self.host_engine or os.environ.get('ORBIS_HOST_ENGINE_TEST') == '1', 'explicit-host-engine-gate-required')
+        require(not self.main_worker or self.normal_setup and os.environ.get('ORBIS_MAIN_WORKER_TEST') == '1', 'explicit-main-worker-gate-required')
         require(self.source.is_dir() and self.source == self.source.resolve(strict=True), 'physical-source-required')
         require(self.folder == self.folder.resolve(strict=True) and self.folder.parent == self.source
                 and re.fullmatch(r'\.orbis-host-[A-Za-z0-9]{6,16}', self.folder.name), 'scoped-fixture-required')
@@ -579,6 +693,17 @@ class Runtime:
         require(labels.get('org.opencontainers.image.source') == 'https://github.com/twentylines/orbis'
                 and labels.get('org.opencontainers.image.revision') == self.manifest['commit']
                 and labels.get('org.opencontainers.image.version') == self.manifest['tag'], 'pulled-candidate-identity-mismatch')
+        if self.main_worker:
+            self.main_intent = {'schema': 'orbis.main-worker-fixture.v1', 'commit': self.manifest['commit'],
+                'name': 'orbis-api-' + secrets.token_hex(4), 'scope': secrets.token_hex(32),
+                'image': self.references['runtipi'], 'imageId': core['Id']}
+            self.main_intent['appUrn'] = self.main_intent['name'] + ':_user'
+            marker = self.folder / 'public-probe/main-worker-enabled.json'
+            with marker.open('x') as output:
+                json.dump(self.main_intent, output)
+                output.write('\n')
+            marker.chmod(0o644)
+
 
     def prepare_installation(self, fixture):
         if self.normal_setup:
@@ -611,13 +736,25 @@ class Runtime:
     def probe_normal_setup(self):
         before = self.inspect(self.core_id())
         require(before['State']['Status'] == 'running' and before['State'].get('Health', {}).get('Status') == 'healthy', 'candidate-health-lost')
-        result = self.docker('exec', self.core_id(), 'node', '/opt/orbis-test-probe/normal-setup.mjs',
-                             self.manifest['commit'], '--exercise-normal-setup', timeout=180, accepted=(0, 1))
+        arguments = ['--exercise-main-worker'] if self.main_worker else []
+        try:
+            result = self.docker('exec', self.core_id(), 'node', '/opt/orbis-test-probe/normal-setup.mjs',
+                                 self.manifest['commit'], '--exercise-normal-setup', *arguments,
+                                 timeout=600 if self.main_worker else 180, accepted=(0, 1))
+        finally:
+            if self.main_worker:
+                self.collect_app_owned()
         require(len(result.stdout) <= 16384 and not result.stderr, 'invalid-normal-setup-probe-output')
         record = json.loads(result.stdout)
         require(type(record) is dict and record.get('case') == 'normal-setup-api', 'invalid-normal-setup-probe-output')
         allowed = ('root-authorized-first-registration', 'second-operator-registration-refused',
-                   'root-authorized-password-change-and-session-retirement', 'session-logout')
+                   'root-authorized-password-change-and-session-retirement')
+        if self.main_worker:
+            allowed += ('main-worker-custom-app-created', 'main-worker-installed-and-running',
+                        'main-worker-backup-retained', 'main-worker-backup-data-restored',
+                        'main-worker-restored-app-started', 'main-worker-settings-persisted',
+                        'main-worker-uninstalled-with-retained-task-history')
+        allowed += ('session-logout',)
         completed = record.get('completed', [])
         require(type(completed) is list and len(completed) <= len(allowed)
                 and completed == list(allowed[:len(completed)]), 'invalid-normal-setup-case-sequence')
@@ -625,7 +762,10 @@ class Runtime:
         self.results.append({'case': 'normal-setup-api', 'passed': passed, 'completed': completed,
             'failurePhase': record.get('failurePhase') if record.get('failurePhase') in (
                 'fixture-preconditions', 'actual-first-registration', 'second-registration-refusal',
-                'root-authorized-password-change', 'actual-logout') else None,
+                'root-authorized-password-change', 'actual-logout',
+                'main-worker-preconditions', 'main-worker-create', 'main-worker-install',
+                'main-worker-backup', 'main-worker-restore', 'main-worker-restart',
+                'main-worker-settings', 'main-worker-uninstall') else None,
             'lastStatus': record.get('lastStatus') if type(record.get('lastStatus')) is int
                           and 100 <= record['lastStatus'] <= 599 else None})
         require(passed, 'normal-setup-api-failed')
@@ -693,6 +833,43 @@ class Runtime:
                     '--project-directory', str(self.root), '-f', str(self.root / 'docker-compose.yml'),
                     '-f', str(self.root / 'user-config/tipi-compose.yml'), '-f', str(self.root / 'orbis-compose.yml'),
                     *arguments], self.root, timeout=300)
+
+    def app_identity(self, item):
+        require(self.main_worker and self.main_intent is not None, 'main-worker-intent-required')
+        intent = self.main_intent
+        config = item.get('Config') or {}
+        labels = config.get('Labels') or {}
+        host = item.get('HostConfig') or {}
+        expected = str(self.root / 'app-data/_user' / intent['name'] / 'data')
+        mounts = item.get('Mounts')
+        require(config.get('Image') in (intent['image'], intent['imageId']) and item.get('Image') == intent['imageId']
+                and labels.get('orbis.fixture.scope') == intent['scope']
+                and labels.get('com.docker.compose.project') == intent['appUrn'].replace(':', '_')
+                and labels.get('com.docker.compose.service') == 'web'
+                and labels.get('runtipi.appurn') == intent['appUrn'] and labels.get('runtipi.managed') == 'true'
+                and host.get('NetworkMode') == 'none' and host.get('Privileged') is False
+                and not host.get('Devices') and not host.get('CapAdd') and not host.get('PortBindings')
+                and type(mounts) is list and len(mounts) == 1
+                and mounts[0].get('Type') == 'bind' and mounts[0].get('Source') == expected
+                and mounts[0].get('Destination') == '/synthetic-data' and mounts[0].get('RW') is True,
+                'unowned-main-worker-container')
+        return (item.get('Name'), item['Image'], config['Image'], intent['scope'], expected)
+
+    def collect_app_owned(self):
+        require(self.main_worker and self.main_intent is not None and self.original_containers is not None,
+                'main-worker-intent-required')
+        present = self.identifiers('container')
+        for identifier in present - self.original_containers:
+            item = self.inspect(identifier)
+            labels = (item.get('Config') or {}).get('Labels') or {}
+            if labels.get('orbis.fixture.scope') != self.main_intent['scope']:
+                continue
+            identity = self.app_identity(item)
+            require(identifier not in self.app_owned or self.app_owned[identifier] == identity, 'main-worker-container-changed')
+            self.app_owned[identifier] = identity
+        # Actual uninstall can remove a previously retained actor. Absence is
+        # verified from the complete current inventory, never guessed by name.
+        self.app_owned = {key: value for key, value in self.app_owned.items() if key in present}
 
     def collect_owned(self):
         # Read-only inventory may discover actors from a partially failed up.
@@ -789,6 +966,8 @@ class Runtime:
             return False
         if self.container_creation_started:
             self.collect_owned()
+            if self.main_worker and self.main_intent is not None:
+                self.collect_app_owned()
         # Close only this Popen-owned service, never another pid/service by name.
         if self.host is not None and self.host.poll() is None:
             require(self.process_start(self.host.pid) == self.host_start, 'host-process-changed')
@@ -810,6 +989,17 @@ class Runtime:
                     and labels.get('com.docker.compose.project') == 'runtipi'
                     and labels.get('com.docker.compose.service') == name
                     and labels.get('com.docker.compose.project.working_dir') == str(self.root), 'cleanup-identity-changed')
+        for identifier, identity in self.app_owned.items():
+            require(self.app_identity(self.inspect(identifier)) == identity, 'main-worker-cleanup-identity-changed')
+        # Stop this run's Main and queue before removing its app actors, so a
+        # pending worker cannot recreate them during cleanup.
+        producers = [key for key, value in self.owned.items() if self.app_owned and value[0] in ('runtipi', 'runtipi-queue')]
+        for identifier in producers:
+            self.docker('stop', '--time', '10', identifier, timeout=25)
+        for identifier in self.app_owned:
+            self.docker('stop', '--time', '10', identifier, timeout=25)
+            require(self.app_identity(self.inspect(identifier)) == self.app_owned[identifier], 'main-worker-cleanup-identity-changed')
+            self.docker('rm', identifier)
         for identifier in reversed(list(self.owned)):
             self.docker('stop', '--time', '10', identifier, timeout=25)
             self.docker('rm', identifier)
@@ -905,7 +1095,8 @@ def main():
     args = parser.parse_args()
     runtime = Runtime(args.source, args.fixture, args.manifest, args.probe,
                       normal_setup=os.environ.get('ORBIS_NORMAL_SETUP_TEST') == '1',
-                      host_engine=os.environ.get('ORBIS_HOST_ENGINE_TEST') == '1')
+                      host_engine=os.environ.get('ORBIS_HOST_ENGINE_TEST') == '1',
+                      main_worker=os.environ.get('ORBIS_MAIN_WORKER_TEST') == '1')
     failure, cleaned, phase, diagnostics, trace_records = None, False, 'prepare', [], []
     try:
         runtime.prepare()
@@ -952,7 +1143,8 @@ def main():
               'failurePhase': phase if failure is not None else None, 'runtimeStates': diagnostics,
               'failureRole': runtime.failure_role if runtime.failure_role in SERVICES else None,
               'hostRefusals': trace_records, 'hostObservationTrace': os.environ.get('ORBIS_HOST_STORAGE_TRACE') == '1',
-              'normalSetup': runtime.normal_setup, 'hostEngine': runtime.host_engine, 'recoveryConfigured': False, 'productionTouched': False}
+              'normalSetup': runtime.normal_setup, 'hostEngine': runtime.host_engine, 'mainWorker': runtime.main_worker,
+              'recoveryConfigured': False, 'productionTouched': False}
     # This receipt deliberately excludes raw Docker/Host/Core output and secrets.
     print(json.dumps(result, sort_keys=True))
     return 0 if result['passed'] else 1

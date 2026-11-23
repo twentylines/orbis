@@ -24,6 +24,10 @@ on:
         required: false
         type: boolean
         default: false
+      main_worker:
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       tag:
@@ -53,6 +57,11 @@ on:
         required: false
         type: boolean
         default: false
+      main_worker:
+        description: 'Exercise actual Main app APIs and queue backup/restore on the fresh normal setup fixture'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -61,7 +70,7 @@ jobs:
   host-storage:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: ${{ inputs.main_worker && 20 || 15 }}
     env:
       XDG_CACHE_HOME: ${{ github.workspace }}/.orbis-host-cache
       BUN_INSTALL_CACHE_DIR: ${{ github.workspace }}/.orbis-host-cache/bun
@@ -72,6 +81,7 @@ jobs:
       ORBIS_HOST_STORAGE_TRACE: ${{ inputs.trace && '1' || '0' }}
       ORBIS_NORMAL_SETUP_TEST: ${{ inputs.normal_setup && '1' || '0' }}
       ORBIS_HOST_ENGINE_TEST: ${{ inputs.host_engine && '1' || '0' }}
+      ORBIS_MAIN_WORKER_TEST: ${{ inputs.main_worker && '1' || '0' }}
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -112,7 +122,7 @@ jobs:
           sudo --non-interactive chown root:root "$fixture_parent"
           sudo --non-interactive chmod 700 "$fixture_parent"
           trap 'if sudo --non-interactive test -f "$fixture_parent/cleanup-complete"; then sudo --non-interactive rm -rf -- "$fixture_parent"; fi' EXIT
-          sudo --non-interactive env ORBIS_HOST_STORAGE_TEST=1 ORBIS_HOST_STORAGE_TRACE="$ORBIS_HOST_STORAGE_TRACE" ORBIS_NORMAL_SETUP_TEST="$ORBIS_NORMAL_SETUP_TEST" ORBIS_HOST_ENGINE_TEST="$ORBIS_HOST_ENGINE_TEST" \
+          sudo --non-interactive env ORBIS_HOST_STORAGE_TEST=1 ORBIS_HOST_STORAGE_TRACE="$ORBIS_HOST_STORAGE_TRACE" ORBIS_NORMAL_SETUP_TEST="$ORBIS_NORMAL_SETUP_TEST" ORBIS_HOST_ENGINE_TEST="$ORBIS_HOST_ENGINE_TEST" ORBIS_MAIN_WORKER_TEST="$ORBIS_MAIN_WORKER_TEST" \
             TMPDIR="$XDG_CACHE_HOME/tmp" \
             python3 -B packages/backend/scripts/orbis-host-storage-runtime.py \
             --source "$GITHUB_WORKSPACE" --fixture "$fixture_parent" \
