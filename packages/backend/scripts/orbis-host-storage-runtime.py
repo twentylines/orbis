@@ -90,16 +90,20 @@ def startup_signals(body, packages, private_values=()):
         'schema-parse': ('ParseError:',),
         'bundled-commonjs-wrapper': ('Expected CommonJS module to have a function wrapper',),
         'database-query': ('DrizzleQueryError:', 'QueryFailedError:'),
+        'dependency-package': ('package is missing.', 'No driver (HTTP) has been selected'),
     }
     missing = set()
-    for value in re.findall(r"Cannot find (?:package|module) ['\"]([^'\"\r\n]{1,200})['\"]", text):
+    candidates = re.findall(r"Cannot find (?:package|module) ['\"]([^'\"\r\n]{1,200})['\"]", text)
+    candidates += re.findall(r'The "([^"\r\n]{1,200})" package is missing\.', text)
+    for value in candidates:
         root = '/'.join(value.split('/')[:2]) if value.startswith('@') else value.split('/')[0]
         if root in packages:
             missing.add(root)
     messages = []
     for line in text.splitlines():
-        if '[ExceptionHandler]' in line:
-            line = line.split('[ExceptionHandler]', 1)[1].strip()
+        context = re.search(r'\b(?:ERROR|FATAL)\s+\[[A-Za-z][A-Za-z0-9_.:-]{0,63}\]\s*', line)
+        if context:
+            line = line[context.end():].strip()
         elif not re.match(r'^[A-Za-z]{0,48}(?:Error|Exception)(?: \[[A-Z_]+\])?:', line):
             continue
         if re.search(r'password|token|secret|cookie|session|PRIVATE KEY', line, re.I):

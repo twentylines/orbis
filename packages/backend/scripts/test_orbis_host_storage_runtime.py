@@ -70,6 +70,13 @@ class RuntimeBoundaries(unittest.TestCase):
         result = R.startup_signals(body, set(), ['fixture-value'])
         self.assertEqual(result['messages'], ['Missing dependency <private> in module'])
 
+    def test_package_loader_failures_name_only_known_product_dependencies(self):
+        body = b'[Nest] ERROR [PackageLoader] The "class-validator" package is missing. Please install it.\n'
+        result = R.startup_signals(body, {'class-validator'})
+        self.assertEqual(result['missingPackages'], ['class-validator'])
+        self.assertEqual(result['markers'], ['dependency-package'])
+        self.assertEqual(result['messages'], ['The <quoted> package is missing. Please install it.'])
+
     def test_official_repository_aliases_preserve_the_exact_digest(self):
         digest = 'sha256:' + 'a' * 64
         expected = 'docker.io/library/postgres@' + digest
