@@ -18,7 +18,8 @@ import { settleMigrationRollback, readMigrationRollback } from './app-migration-
 import { commitAppMigration, readAppMigrationCommit } from './app-migration-commit';
 import { appSettingsBinding } from './app-settings-binding';
 
-export type InstallAppReservation = Pick<App, 'id' | 'createdAt' | 'appName' | 'appStoreSlug'> & Partial<Pick<App, 'version'>>;
+export type InstallAppReservation = Pick<App, 'id' | 'createdAt' | 'appName' | 'appStoreSlug'> &
+  Partial<Pick<App, 'version'>> & { preserveExisting?: true };
 
 const installReservationFilter = (reservation: InstallAppReservation) =>
   and(
@@ -78,7 +79,36 @@ export class AppsRepository {
     return readMigrationRollback(this.db, state, status);
   }
 
+  public async reserveCustomDraft(reservation: InstallAppReservation, data: Partial<NewApp>) {
+    const [row] = await this.db
+      .update(app)
+      .set({ ...data, status: 'installing', updatedAt: Math.floor(Date.now() / 1000) })
+      .where(
+        and(
+          eq(app.id, reservation.id),
+          eq(app.createdAt, reservation.createdAt),
+          eq(app.appName, reservation.appName),
+          eq(app.appStoreSlug, '_user'),
+          eq(app.appStoreSlug, reservation.appStoreSlug),
+          eq(app.status, 'missing'),
+          eq(app.migrationsBaselined, false),
+          reservation.version === undefined ? undefined : eq(app.version, reservation.version),
+        ),
+      )
+      .returning();
+    return row;
+  }
+
   public async deleteInstallReservation(reservation: InstallAppReservation) {
+    // A saved custom draft predates the request. Releasing its reservation must never delete it.
+    if (reservation.preserveExisting) {
+      const rows = await this.db
+        .update(app)
+        .set({ status: 'missing', updatedAt: Math.floor(Date.now() / 1000) })
+        .where(installReservationFilter(reservation))
+        .returning({ id: app.id });
+      return rows.length === 1;
+    }
     const rows = await this.db.delete(app).where(installReservationFilter(reservation)).returning({ id: app.id });
     return rows.length === 1;
   }

@@ -1,3 +1,5 @@
+import { duringCoreUpdateRequest } from '@/desktop/core-update-request';
+import { validCoreUpdate } from '@/desktop/core-update-state';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useMutation, useMutationState, useQuery } from '@tanstack/react-query';
 import { gte, rcompare } from 'semver';
@@ -115,13 +117,19 @@ export function OrbisDowngrade({
     retry: false,
   });
   const apply = useMutation({
-    mutationFn: async (value: Review) => {
-      await prepareDesktopForCoreUpdate();
-      return request<{ jobId: string; state: string }>('downgrade/apply', { planId: value.planId, ...(value.forced ? { force: true } : {}) });
-    },
-    onSuccess: (result, value) => {
+    mutationFn: (value: Review) =>
+      duringCoreUpdateRequest(async () => {
+        await prepareDesktopForCoreUpdate();
+        const result = await request<{ jobId: string; state: string }>('downgrade/apply', {
+          planId: value.planId,
+          ...(value.forced ? { force: true } : {}),
+        });
+        if (!validCoreUpdate(result.jobId, value.targetTag)) throw new Error('The host returned an incomplete update response.');
+        rememberAcceptedCoreUpdate(result.jobId, value.targetTag, 'downgrade');
+        return result;
+      }),
+    onSuccess: () => {
       setReview(null);
-      rememberAcceptedCoreUpdate(result.jobId, value.targetTag, 'downgrade');
     },
     retry: false,
   });

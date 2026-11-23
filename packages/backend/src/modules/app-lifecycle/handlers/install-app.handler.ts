@@ -6,6 +6,7 @@ import { TranslatableError } from '@/common/error/translatable-error';
 import { extractAppUrn } from '@/common/helpers/app-helpers';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
+import type { App } from '@/core/database/drizzle/types';
 import { AsyncMutex } from '@/utils/mutex/async-mutex';
 import { APP_ASYNC_MUTEX } from '@/utils/mutex/mutex.module';
 import { AppStoreRepository } from '@/modules/app-stores/app-store.repository';
@@ -90,7 +91,12 @@ export class InstallAppHandler implements ILifecycleHandler<InstallAppParams> {
             const cleanup = await takeInstallRequestReceipt(dataDir, receipt);
             if (cleanup && (await this.appRepository.deleteInstallReservation(createdApp))) {
               await this.removeSpentReceipt(cleanup);
-              this.statusManager.emitEvent({ appUrn, event: 'install_error', error: message });
+              this.statusManager.emitEvent({
+                appUrn,
+                event: 'install_error',
+                error: message,
+                ...(createdApp.preserveExisting ? { appStatus: 'missing' as const } : {}),
+              });
             }
           } finally {
             leave();
@@ -115,13 +121,16 @@ export class InstallAppHandler implements ILifecycleHandler<InstallAppParams> {
     const app = await this.appRepository.getAppByUrn(appUrn);
     if (app?.status !== 'installing') return undefined;
     const receipt = { app, requestId, owner: this.owner, skipRun };
-    const cleanup = await takeInstallRequestReceipt(this.config.get('directories').dataDir, receipt);
+    const dataDir = this.config.get('directories').dataDir;
+    const cleanup =
+      (await takeInstallRequestReceipt(dataDir, receipt)) ??
+      (await takeInstallRequestReceipt(dataDir, { ...receipt, app: { ...app, preserveExisting: true } }));
     if (cleanup) {
       return {
         form: { ...app.config, skipRun },
         ownership: cleanup.ownership,
         settle: async (result: typeof appEventResultSchema.infer) => {
-          const alreadyRetired = await this.settle(app, appUrn, skipRun, result, requestId);
+          const alreadyRetired = await this.settle(cleanup.ownership.reservation, appUrn, skipRun, result, requestId);
           if (!alreadyRetired && (result.success || result.statePreserved === true)) await this.removeSpentReceipt(cleanup);
         },
       };
@@ -165,7 +174,13 @@ export class InstallAppHandler implements ILifecycleHandler<InstallAppParams> {
       : await this.appRepository.finishInstallReservation(app, appStatus);
     if (!settled) throw new Error('The app install reservation changed before completion. Review the app task.');
     if (result.success) this.statusManager.emitEvent({ appUrn, event: 'install_success', appStatus });
-    else this.statusManager.emitEvent({ appUrn, event: 'install_error', error: result.message, ...(unchanged ? {} : { appStatus }) });
+    else
+      this.statusManager.emitEvent({
+        appUrn,
+        event: 'install_error',
+        error: result.message,
+        ...(unchanged ? (app.preserveExisting ? { appStatus: 'missing' as const } : {}) : { appStatus }),
+      });
     return false;
   }
 
@@ -174,7 +189,7 @@ export class InstallAppHandler implements ILifecycleHandler<InstallAppParams> {
     parsedForm: typeof appFormSchema.infer,
     request: Parameters<typeof reserveInstallRequest>[2],
     requireNew = false,
-  ) {
+  ): Promise<(App & { preserveExisting?: true }) | undefined> {
     const { appName, appStoreId } = extractAppUrn(appUrn);
     const release = await this.mutex.acquire(appStoreLockKey(appStoreId));
     try {
@@ -182,6 +197,29 @@ export class InstallAppHandler implements ILifecycleHandler<InstallAppParams> {
       if (app) {
         if (requireNew) throw new ConflictException('This app is already installed on the selected server.');
         if (app.status === 'installing') throw new ConflictException('Wait for the current app install to finish.');
+        if (appStoreId === '_user' && app.status === 'missing') {
+          if (app.migrationsBaselined) throw new ConflictException('Review the existing app storage before installing this app again.');
+          const appInfo = await this.marketplaceService.getAppInfoFromAppStoreOrInstalled(appUrn);
+          if (!appInfo) throw new TranslatableError('APP_ERROR_APP_NOT_FOUND', { id: appUrn }, HttpStatus.NOT_FOUND);
+          await this.validationService.validateInstallSettings(appUrn, appInfo, parsedForm, app.id);
+          return await reserveInstallRequest(this.config.get('directories').dataDir, appUrn, request, async () => {
+            const reserved = await this.appRepository.reserveCustomDraft(app, {
+              config: parsedForm,
+              version: appInfo.tipi_version,
+              port: parsedForm.port ?? appInfo.port,
+              exposed: parsedForm.exposed ?? false,
+              domain: parsedForm.domain ?? null,
+              localSubdomain: parsedForm.localSubdomain ?? null,
+              openPort: parsedForm.openPort ?? false,
+              exposedLocal: parsedForm.exposedLocal ?? false,
+              isVisibleOnGuestDashboard: parsedForm.isVisibleOnGuestDashboard,
+              enableAuth: parsedForm.enableAuth ?? false,
+              maxBackups: parsedForm.maxBackups ?? null,
+            });
+            if (!reserved) throw new ConflictException('The custom app changed before its installation could be reserved.');
+            return { ...reserved, preserveExisting: true as const };
+          });
+        }
         const { port, exposed, exposedLocal, openPort, domain, isVisibleOnGuestDashboard, enableAuth, localSubdomain, maxBackups } = parsedForm;
         await this.appRepository.updateAppById(app.id, {
           config: parsedForm,

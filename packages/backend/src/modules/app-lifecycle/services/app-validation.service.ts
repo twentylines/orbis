@@ -95,18 +95,18 @@ export class AppValidationService {
     }
   }
 
-  private async validateDemoModeLimit() {
+  private async validateDemoModeLimit(excludeAppId?: number) {
     const { demoMode } = this.config.getConfig();
     const apps = await this.appRepository.getApps();
 
-    if (demoMode && apps.length >= 6) {
+    if (demoMode && apps.filter((app) => app.id !== excludeAppId).length >= 6) {
       throw new TranslatableError('SYSTEM_ERROR_DEMO_MODE_LIMIT');
     }
   }
 
-  public async validateInstallSettings(appUrn: AppUrn, appInfo: AppInfo, form: ParsedForm) {
+  public async validateInstallSettings(appUrn: AppUrn, appInfo: AppInfo, form: ParsedForm, excludeAppId?: number) {
     assertUmbrelRuntimeAccess(appInfo, form);
-    await this.validateDemoModeLimit();
+    await this.validateDemoModeLimit(excludeAppId);
     this.validateDomainSettings(form);
     this.validateArchitecture(appUrn, appInfo);
     this.validateMinTipiVersion(appUrn, appInfo.min_tipi_version);
@@ -114,15 +114,15 @@ export class AppValidationService {
     this.validateForceExpose(appUrn, appInfo, form.exposed);
 
     if (form.exposed && form.domain) {
-      await this.validateDomainUniqueness(form.domain);
+      await this.validateDomainUniqueness(form.domain, excludeAppId);
     }
 
     if (form.exposedLocal && form.localSubdomain) {
-      await this.validateLocalSubdomainUniqueness(form.localSubdomain);
+      await this.validateLocalSubdomainUniqueness(form.localSubdomain, excludeAppId);
     }
 
     if (form.openPort && form.port) {
-      await this.validatePortUniqueness(form.port);
+      await this.validatePortUniqueness(form.port, excludeAppId);
     }
   }
 

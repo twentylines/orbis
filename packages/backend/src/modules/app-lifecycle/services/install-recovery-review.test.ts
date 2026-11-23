@@ -197,3 +197,24 @@ describe('install recovery review', () => {
     }
   });
 });
+
+it('reviews a saved-draft receipt without losing its version binding', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-draft-review-'));
+  try {
+    const config = mock<ConfigurationService>();
+    config.get.calledWith('directories').mockReturnValue({ dataDir: directory } as never);
+    const apps = mock<AppsRepository>();
+    apps.getAppByUrn.mockResolvedValue(app);
+    const review = new InstallRecoveryReviewService(config, apps, new AsyncMutex());
+    const record = { requestId: randomUUID(), owner: randomUUID(), skipRun: true };
+    const draft = { ...app, preserveExisting: true as const };
+    await reserveInstallRequest(directory, urn, record, async () => draft);
+    expect(await review.review(urn)).toMatchObject({ state: 'held', hold: { phase: 'pending', reservation: 'matches' } });
+    expect(await takeInstallRequestReceipt(directory, { ...record, app: draft })).toBeTypeOf('function');
+    expect(await review.review(urn)).toMatchObject({ state: 'held', hold: { phase: 'spent', reservation: 'matches' } });
+    apps.getAppByUrn.mockResolvedValue({ ...app, version: app.version + 1 });
+    expect(await review.review(urn)).toMatchObject({ state: 'held', hold: { reservation: 'changed' } });
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});

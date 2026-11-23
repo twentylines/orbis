@@ -42,6 +42,10 @@ export function installRequestDirectory(dataDir: string, appUrn: AppUrn) {
 }
 
 function receiptBytes({ owner, app, skipRun }: InstallRequest) {
+  if (app.preserveExisting) {
+    if (!Number.isSafeInteger(app.version) || Number(app.version) < 0) throw ownershipFailure();
+    return Buffer.from(JSON.stringify([3, owner, app.id, app.createdAt, app.appName, app.appStoreSlug, skipRun, app.version, true]));
+  }
   if (app.version === undefined) return Buffer.from(JSON.stringify([1, owner, app.id, app.createdAt, app.appName, app.appStoreSlug, skipRun]));
   if (!Number.isSafeInteger(app.version) || app.version < 0) throw ownershipFailure();
   return Buffer.from(JSON.stringify([2, owner, app.id, app.createdAt, app.appName, app.appStoreSlug, skipRun, app.version]));
@@ -290,6 +294,7 @@ export async function takeInstallRequestReceipt(dataDir: string, request: Instal
           appName: request.app.appName,
           appStoreSlug: request.app.appStoreSlug,
           ...(request.app.version === undefined ? {} : { version: request.app.version }),
+          ...(request.app.preserveExisting ? { preserveExisting: true as const } : {}),
         });
         const ownership = Object.freeze({
           appUrn: createAppUrn(reservation.appName, reservation.appStoreSlug),
@@ -437,7 +442,8 @@ export async function reopenSpentInstallRequest(dataDir: string, appUrn: AppUrn,
       if (read.bytesRead !== Number(info.size)) throw ownershipFailure();
       bytes = body.subarray(0, read.bytesRead);
       const parsed: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-      if (!Array.isArray(parsed) || parsed.length !== 8 || parsed[0] !== 2) return;
+      if (!Array.isArray(parsed) || !((parsed[0] === 2 && parsed.length === 8) || (parsed[0] === 3 && parsed.length === 9 && parsed[8] === true)))
+        return;
       const [, owner, id, createdAt, appName, appStoreSlug, skipRun, version] = parsed;
       if (
         typeof owner !== 'string' ||
@@ -457,7 +463,12 @@ export async function reopenSpentInstallRequest(dataDir: string, appUrn: AppUrn,
         createAppUrn(appName, appStoreSlug) !== appUrn
       )
         throw ownershipFailure();
-      request = { owner, requestId, skipRun, app: { id, createdAt, appName, appStoreSlug, version } };
+      request = {
+        owner,
+        requestId,
+        skipRun,
+        app: { id, createdAt, appName, appStoreSlug, version, ...(parsed[0] === 3 ? { preserveExisting: true as const } : {}) },
+      };
       if (!receiptBytes(request).equals(bytes)) throw ownershipFailure();
     } finally {
       await file.close();

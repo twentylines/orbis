@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyn
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppContext } from '@/context/app-context';
 import { useWindowVisible } from './window-visibility';
+import { coreUpdateRequestPending } from './core-update-request';
 import {
   armStartedOperation,
   readOperationContinuity,
@@ -41,7 +42,7 @@ export const serverRestartQueryKey = ['orbis-host-restart'] as const;
 type AcceptedUpdate = { id: string; targetTag: string; operation?: CoreUpdateOperation };
 let acceptedUpdate: AcceptedUpdate | null = null;
 let updatePending = false;
-export const coreUpdateIsPending = () => updatePending;
+export const coreUpdateIsPending = () => updatePending || coreUpdateRequestPending();
 export const prepareDesktopForCoreUpdate = () =>
   Promise.all([
     import('@/modules/dashboard/pages/dashboard'),

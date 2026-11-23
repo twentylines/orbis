@@ -317,3 +317,125 @@ it.each(['pending', 'admitted-while-waiting'] as const)('preserves existing app 
   expect(f.startAppHandler.execute).not.toHaveBeenCalled();
   expect(f.mutex.resourceLocks.size).toBe(0);
 });
+
+it('installs a saved custom draft through the queue without creating another row or starting it', async () => {
+  const fixture = createFixture();
+  const customUrn = 'draft:_user' as AppUrn;
+  const draft = createMockApp({ id: 19, createdAt: 1000, appName: 'draft', appStoreSlug: '_user', status: 'missing' });
+  fixture.appRepository.getAppByUrn.mockResolvedValue(draft);
+  fixture.appRepository.reserveCustomDraft.mockResolvedValue({ ...draft, status: 'installing' });
+  await fixture.handler.execute(customUrn, { form: { maxBackups: 9 } });
+  expect(fixture.startAppHandler.execute).not.toHaveBeenCalled();
+  expect(fixture.appRepository.createApp).not.toHaveBeenCalled();
+  expect(fixture.appEventsQueue.publish).toHaveBeenCalledWith(expect.objectContaining({ appUrn: customUrn, command: 'install' }));
+});
+
+const savedDraftFixture = () => {
+  const f = createFixture();
+  const urn = 'draft:_user' as AppUrn;
+  let row = createMockApp({ id: 19, createdAt: 1000, appName: 'draft', appStoreSlug: '_user', status: 'missing' });
+  f.appRepository.getAppByUrn.mockImplementation(async () => row);
+  f.appRepository.reserveCustomDraft.mockImplementation(async (_reservation, data) => {
+    row = { ...row, ...data, status: 'installing' };
+    return row;
+  });
+  f.appRepository.deleteInstallReservation.mockImplementation(async (reservation) => {
+    expect(reservation).toMatchObject({ id: 19, createdAt: 1000, preserveExisting: true });
+    row = { ...row, status: 'missing' };
+    return true;
+  });
+  return { ...f, urn, row: () => row };
+};
+
+it('retains draft identity and accepted settings when the queue refuses delivery', async () => {
+  const f = savedDraftFixture();
+  f.appEventsQueue.publish.mockRejectedValue(new Error('Queue unavailable'));
+  await f.handler.execute(f.urn, { form: { maxBackups: 9 } });
+  await vi.waitFor(() => expect(f.appRepository.deleteInstallReservation).toHaveBeenCalledOnce());
+  expect(f.row()).toMatchObject({ id: 19, createdAt: 1000, status: 'missing', config: { maxBackups: 9 } });
+  await expect(f.handler.requireNoInstallHold(f.urn)).resolves.toBeUndefined();
+  expect(f.startAppHandler.execute).not.toHaveBeenCalled();
+});
+
+it.each([true, false])('preserves the draft origin through worker ownership and settlement: statePreserved %s', async (statePreserved) => {
+  const f = savedDraftFixture();
+  f.appRepository.finishInstallReservation.mockResolvedValue(true);
+  const accepted = await f.handler.execute(f.urn, { form: { maxBackups: 9 }, skipRun: true });
+  const claimed = await f.handler.claim(f.urn, accepted.requestId, true);
+  expect(claimed).toBeDefined();
+  if (!claimed) throw new Error('Missing draft ownership');
+  expect(await verifyInstallRequestOwnership(claimed.ownership, f.urn, accepted.requestId)).toMatchObject({ id: 19, preserveExisting: true });
+  await claimed.settle({ success: false, statePreserved, message: 'Installation refused' });
+  if (statePreserved) {
+    expect(f.appRepository.deleteInstallReservation).toHaveBeenCalledOnce();
+    expect(f.row().status).toBe('missing');
+    await expect(f.handler.requireNoInstallHold(f.urn)).resolves.toBeUndefined();
+  } else {
+    expect(f.appRepository.deleteInstallReservation).not.toHaveBeenCalled();
+    expect(f.appRepository.finishInstallReservation).toHaveBeenCalledWith(expect.objectContaining({ preserveExisting: true }), 'stopped');
+    await expect(f.handler.requireNoInstallHold(f.urn)).rejects.toThrow('needs review');
+  }
+});
+
+it('validates a custom draft before reserving it and excludes only its own operational row', async () => {
+  const f = savedDraftFixture();
+  f.validationService.validateInstallSettings.mockRejectedValue(new Error('Another app uses this port'));
+  await expect(f.handler.execute(f.urn, { form: { openPort: true, port: 18993 } })).rejects.toThrow('Another app');
+  expect(f.validationService.validateInstallSettings).toHaveBeenCalledWith(
+    f.urn,
+    f.appInfo,
+    expect.objectContaining({ openPort: true, port: 18993 }),
+    19,
+  );
+  expect(f.appRepository.reserveCustomDraft).not.toHaveBeenCalled();
+  expect(f.appEventsQueue.publish).not.toHaveBeenCalled();
+  expect(f.row().status).toBe('missing');
+  await expect(f.handler.requireNoInstallHold(f.urn)).resolves.toBeUndefined();
+});
+
+it('preserves a provisional hold if the draft reservation reply is lost', async () => {
+  const f = savedDraftFixture();
+  f.appRepository.reserveCustomDraft.mockResolvedValue(undefined);
+  await expect(f.handler.execute(f.urn, { form: {} })).rejects.toThrow('custom app changed');
+  expect(f.appEventsQueue.publish).not.toHaveBeenCalled();
+  expect(f.startAppHandler.execute).not.toHaveBeenCalled();
+  await expect(f.handler.requireNoInstallHold(f.urn)).rejects.toThrow('needs review');
+});
+
+it('does not reinstall an existing migrated custom app as an uninstalled draft', async () => {
+  const f = savedDraftFixture();
+  f.appRepository.getAppByUrn.mockResolvedValue({ ...f.row(), migrationsBaselined: true });
+  await expect(f.handler.execute(f.urn, { form: {} })).rejects.toThrow('existing app storage');
+  expect(f.appRepository.reserveCustomDraft).not.toHaveBeenCalled();
+  expect(f.appEventsQueue.publish).not.toHaveBeenCalled();
+  expect(f.startAppHandler.execute).not.toHaveBeenCalled();
+});
+
+it('checks other apps for conflicts while allowing a draft to retain its own port and domain', async () => {
+  const f = savedDraftFixture();
+  const config = mock<ConfigurationService>();
+  config.getConfig.mockReturnValue(fromAny({ architecture: 'arm64', version: '4.12.0', demoMode: false }));
+  f.appRepository.getApps.mockResolvedValue([f.row()]);
+  f.appRepository.getAppsByDomain.mockResolvedValue([]);
+  f.appRepository.getAppsByLocalSubdomain.mockResolvedValue([]);
+  f.appRepository.getAppsByPort.mockResolvedValue([]);
+  const validation = new AppValidationService(f.appRepository, config, mock<LoggerService>());
+  const info = createMockAppInfo({ supported_architectures: ['arm64'], exposable: true, force_expose: false, min_tipi_version: undefined });
+  const form = {
+    exposed: true,
+    domain: 'draft.example.com',
+    exposedLocal: true,
+    localSubdomain: 'draft',
+    openPort: true,
+    port: 18993,
+    skipRun: false,
+    skipPull: false,
+    skipEnv: false,
+  };
+  await validation.validateInstallSettings(f.urn, info, form, 19);
+  expect(f.appRepository.getAppsByDomain).toHaveBeenCalledWith(form.domain, 19);
+  expect(f.appRepository.getAppsByLocalSubdomain).toHaveBeenCalledWith('draft', 19);
+  expect(f.appRepository.getAppsByPort).toHaveBeenCalledWith(18993, 19);
+  f.appRepository.getAppsByPort.mockResolvedValue([createMockApp({ id: 20 })]);
+  await expect(validation.validateInstallSettings(f.urn, info, form, 19)).rejects.toBeInstanceOf(TranslatableError);
+});

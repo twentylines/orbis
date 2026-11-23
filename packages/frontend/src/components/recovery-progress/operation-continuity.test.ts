@@ -248,3 +248,18 @@ test('verified returned terminals retain requested identity through departure an
   const restore = advanceOperationContinuity(null, job('running'), false, now);
   expect(advanceOperationContinuity(restore, { ...job('running'), status: 'returned' }, false, now)).toBe(restore);
 });
+
+test('accepted update progress is visible after reload before the network answers', async () => {
+  const child = Bun.spawn([process.execPath, new URL('./operation-boundary-reload.fixture.tsx', import.meta.url).pathname], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+  expect({ code, stderr }).toEqual({ code: 0, stderr: '' });
+  expect(JSON.parse(stdout)).toEqual([
+    { kind: 'active', progressVisibleBeforeNetwork: true, workspaceReleased: false },
+    { kind: 'terminal-hint', progressVisibleBeforeNetwork: true, workspaceReleased: false },
+    { kind: 'expired', progressVisibleBeforeNetwork: false, workspaceReleased: false },
+    { kind: 'unrelated-restore', progressVisibleBeforeNetwork: false, workspaceReleased: false },
+  ]);
+});

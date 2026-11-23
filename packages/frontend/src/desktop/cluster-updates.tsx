@@ -1,3 +1,4 @@
+import { duringCoreUpdateRequest } from './core-update-request';
 import { useMutation, useQueries, useQueryClient, type Query } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
@@ -132,10 +133,14 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
           continue;
         }
         try {
-          const plan = await command<Plan>(entry.server.id, 'plan-orbis', { tag: entry.data.release?.tag });
-          if (entry.server.local) await prepareDesktopForCoreUpdate();
-          const accepted = await command<{ jobId: string }>(entry.server.id, 'apply-orbis', { planId: plan.planId });
-          if (entry.server.local) rememberAcceptedCoreUpdate(accepted.jobId, plan.targetTag);
+          const start = async () => {
+            const plan = await command<Plan>(entry.server.id, 'plan-orbis', { tag: entry.data.release?.tag });
+            if (entry.server.local) await prepareDesktopForCoreUpdate();
+            const accepted = await command<{ jobId: string }>(entry.server.id, 'apply-orbis', { planId: plan.planId });
+            if (entry.server.local) rememberAcceptedCoreUpdate(accepted.jobId, plan.targetTag);
+          };
+          if (entry.server.local) await duringCoreUpdateRequest(start);
+          else await start();
           setOutcomes((current) => [
             ...current,
             { server: entry.server.name, message: 'Orbis update started. Follow its status below.', failed: false },

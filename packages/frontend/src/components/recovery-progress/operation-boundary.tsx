@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -10,6 +10,7 @@ import { restoreStatusSchema, type RestoreJob } from '@/modules/system-backups/c
 import {
   advanceCoreUpdate,
   coreJobIsActive,
+  coreUpdateTitle,
   resumeCoreUpdate,
   validCoreUpdate,
   type CoreUpdateStatus,
@@ -99,6 +100,18 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
         : null;
     })(),
   );
+  useLayoutEffect(() => {
+    const marker = initialMarker.current;
+    const resumed = resumeCoreUpdate(marker);
+    if (!resumed || !marker || (marker.operation !== 'update' && marker.operation !== 'downgrade')) return;
+    // A same-tab receipt supplies presentation only. Fresh Host/build status
+    // still has to certify completion before the workspace can return.
+    operation.current = marker.operation;
+    startedId.current = marker.jobId;
+    coreRef.current = resumed;
+    setCore(resumed);
+    setSnapshot({ state: 'checking', operation: marker.operation, supported: true, unavailable: true });
+  }, []);
   const [attempt, setAttempt] = useState(0);
   const [signInRequired, setSignInRequired] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
@@ -438,12 +451,16 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
       )}
       <RecoveryScene
         open={!showChildren && snapshot !== null}
-        title={waiting ? 'Waiting for the server to respond' : title}
-        status={waiting || (core?.phase === 'downloading' && core.download) ? undefined : status}
+        title={waiting ? (core ? coreUpdateTitle(core.phase, core.operation) : 'Waiting for the server to respond') : title}
+        status={
+          waiting ? (core ? 'Reconnecting to update progress' : undefined) : core?.phase === 'downloading' && core.download ? undefined : status
+        }
         variant={kind}
         detail={
           waiting
-            ? 'Orbis will reload automatically.'
+            ? core
+              ? 'Checking the last accepted update. Progress will resume when the server responds.'
+              : 'Orbis will reload automatically.'
             : (actionError ??
               (core?.phase === 'returned'
                 ? core.message

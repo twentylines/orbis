@@ -9,6 +9,7 @@ import {
   hasInstallRequestHold,
   installRequestDirectory,
   reserveInstallRequest,
+  reopenSpentInstallRequest,
   takeInstallRequestReceipt,
   verifyInstallRequestOwnership,
 } from './install-request-receipt';
@@ -148,3 +149,33 @@ it.each(['bytes', 'replacement', 'link', 'permissions', 'original-name', 'extra-
     expect(await fs.lstat(value.spent)).toBeTruthy();
   },
 );
+
+it('retains an existing draft origin after reopening a spent receipt', async () => {
+  const request = { requestId: randomUUID(), owner: randomUUID(), skipRun: true };
+  const app = { id: 7, createdAt: 123, appName: 'fixture', appStoreSlug: 'catalogue', version: 1, preserveExisting: true as const };
+  await reserveInstallRequest(root, urn, request, async () => app);
+  expect(await takeInstallRequestReceipt(root, { ...request, app: { ...app, preserveExisting: undefined } })).toBeUndefined();
+  const cleanup = await takeInstallRequestReceipt(root, { ...request, app });
+  expect(cleanup).toBeTypeOf('function');
+  const resumed = await reopenSpentInstallRequest(root, urn, request.requestId);
+  expect(resumed?.reservation).toEqual(app);
+  expect(resumed?.skipRun).toBe(true);
+  await resumed?.verify();
+  await resumed?.retire();
+  expect(await hasInstallRequestHold(root, urn)).toBe(false);
+  if (cleanup) await expect(verifyInstallRequestOwnership(cleanup.ownership, urn, request.requestId)).rejects.toThrow();
+});
+
+it.each([false, 'true', 1])('rejects a malformed saved-draft origin marker without deleting evidence: %s', async (origin) => {
+  const request = { requestId: randomUUID(), owner: randomUUID(), skipRun: false };
+  const app = { id: 7, createdAt: 123, appName: 'fixture', appStoreSlug: 'catalogue', version: 1, preserveExisting: true as const };
+  await reserveInstallRequest(root, urn, request, async () => app);
+  const directory = installRequestDirectory(root, urn);
+  const filename = path.join(directory, request.requestId);
+  const body = JSON.parse(await fs.readFile(filename, 'utf8'));
+  body[8] = origin;
+  await fs.writeFile(filename, JSON.stringify(body));
+  expect(await takeInstallRequestReceipt(root, { ...request, app })).toBeUndefined();
+  expect(await hasInstallRequestHold(root, urn)).toBe(true);
+  expect(await fs.readFile(filename, 'utf8')).toBe(JSON.stringify(body));
+});

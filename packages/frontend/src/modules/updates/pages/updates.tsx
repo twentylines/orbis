@@ -1,3 +1,4 @@
+import { duringCoreUpdateRequest } from '@/desktop/core-update-request';
 import { packageRestartRequired, packageUpdateLimit, selectedPackageNames, startPackageUpdate } from '../package-updates';
 import { UpdateDownloadProgress } from '@/components/recovery-progress/update-download-progress';
 import type { DownloadProgress } from '@/desktop/download-progress';
@@ -426,18 +427,19 @@ function LocalUpdates() {
   const updateCore = useMutation({
     mutationKey: ['orbis-compatibility', 'update', user.id, build.data?.version ?? '', 'apply'],
     gcTime: compatibilityReviewTime,
-    mutationFn: async (tag: string) => {
-      setCoreRequestStage('checking');
-      const [checked] = await Promise.all([hostRequest<HostPlan>('plan', { tag }), prepareDesktopForCoreUpdate()]);
-      if (checked.targetTag !== tag) throw new Error('The checked release changed. Refresh before updating.');
-      setCoreRequestStage('starting');
-      const result = await hostRequest<{ jobId: string; state: string }>('apply', { planId: checked.planId });
-      if (!validCoreUpdate(result.jobId, tag)) throw new Error('The host returned an incomplete update response.');
-      return result;
-    },
-    onSuccess: (result, tag) => {
+    mutationFn: (tag: string) =>
+      duringCoreUpdateRequest(async () => {
+        setCoreRequestStage('checking');
+        const [checked] = await Promise.all([hostRequest<HostPlan>('plan', { tag }), prepareDesktopForCoreUpdate()]);
+        if (checked.targetTag !== tag) throw new Error('The checked release changed. Refresh before updating.');
+        setCoreRequestStage('starting');
+        const result = await hostRequest<{ jobId: string; state: string }>('apply', { planId: checked.planId });
+        if (!validCoreUpdate(result.jobId, tag)) throw new Error('The host returned an incomplete update response.');
+        rememberAcceptedCoreUpdate(result.jobId, tag);
+        return result;
+      }),
+    onSuccess: () => {
       setCoreReview(null);
-      rememberAcceptedCoreUpdate(result.jobId, tag);
     },
     onSettled: () => {
       coreUpdateRequested.current = false;

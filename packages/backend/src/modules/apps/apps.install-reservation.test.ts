@@ -26,7 +26,8 @@ beforeEach(() => {
       if (sql.startsWith('update')) {
         for (const match of (sql.split(' where ')[0] ?? '').matchAll(/"([^"]+)" = \$(\d+)/g)) row[match[1] ?? ''] = params[Number(match[2]) - 1];
       } else row = {};
-      return { rows: [[id]], rowCount: 1 };
+      const columns = [...(sql.split(' returning ')[1] ?? '').matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+      return { rows: [columns.map((column) => (column === 'id' ? id : row[column ?? '']))], rowCount: 1 };
     },
   } as unknown as Client;
   const db: Database = drizzle({ client, schema });
@@ -60,3 +61,34 @@ it('preserves the historical minimal-reservation contract for non-versioned call
   expect(queries[0]?.split(' where ')[1]).not.toContain('"app"."version" =');
   expect(row.version).toBe(4);
 });
+
+it('releases a saved draft reservation by returning it to missing without deleting its row', async () => {
+  row.config = { VALUE: 'retained' };
+  const original = structuredClone(row);
+  expect(await repository.deleteInstallReservation({ ...reservation, preserveExisting: true })).toBe(true);
+  expect(row).toMatchObject({ ...original, status: 'missing' });
+  expect(queries[0]).toMatch(/^update /);
+});
+
+it.each(['matching', 'changed-id', 'changed-version', 'changed-status', 'migrated', 'other-store'] as const)(
+  'reserves only the original uninstalled custom draft: %s',
+  async (state) => {
+    row.app_store_slug = '_user';
+    row.status = 'missing';
+    const draft = { ...reservation, appStoreSlug: '_user' };
+    if (state === 'changed-id') row.id = 8;
+    if (state === 'changed-version') row.version = 5;
+    if (state === 'changed-status') row.status = 'running';
+    if (state === 'migrated') row.migrations_baselined = true;
+    if (state === 'other-store') row.app_store_slug = 'store';
+    const before = structuredClone(row);
+    const accepted = await repository.reserveCustomDraft(draft, { version: 6, maxBackups: 9 });
+    if (state === 'matching') {
+      expect(accepted).toMatchObject({ id: 7, createdAt: 123, status: 'installing', version: 6, maxBackups: 9 });
+      expect(row).toMatchObject({ id: 7, app_store_slug: '_user', migrations_baselined: false });
+    } else {
+      expect(accepted).toBeUndefined();
+      expect(row).toEqual(before);
+    }
+  },
+);

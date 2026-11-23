@@ -87,11 +87,18 @@ async function readInstallHold(dataDir: string, appUrn: AppUrn) {
 
     if (content.length === 0 && !spent) return { requestId, phase: 'provisional' as const, row: null, verify };
     const parsed: unknown = JSON.parse(content.toString('utf8'));
-    if (!Array.isArray(parsed) || !((parsed[0] === 1 && parsed.length === 7) || (parsed[0] === 2 && parsed.length === 8)))
+    if (
+      !Array.isArray(parsed) ||
+      !(
+        (parsed[0] === 1 && parsed.length === 7) ||
+        (parsed[0] === 2 && parsed.length === 8) ||
+        (parsed[0] === 3 && parsed.length === 9 && parsed[8] === true)
+      )
+    )
       throw new Error('Invalid install recovery record.');
     const [version, owner, id, createdAt, appName, appStoreSlug, skipRun, appVersion] = parsed;
     if (
-      (version === 2 && (typeof appVersion !== 'number' || !Number.isSafeInteger(appVersion) || appVersion < 0)) ||
+      (version !== 1 && (typeof appVersion !== 'number' || !Number.isSafeInteger(appVersion) || appVersion < 0)) ||
       typeof owner !== 'string' ||
       !requestIdPattern.test(owner) ||
       typeof skipRun !== 'boolean' ||
@@ -109,7 +116,7 @@ async function readInstallHold(dataDir: string, appUrn: AppUrn) {
     return {
       requestId,
       phase: spent ? ('spent' as const) : ('pending' as const),
-      row: { id, createdAt, ...(version === 2 ? { version: Number(appVersion) } : {}) },
+      row: { id, createdAt, ...(version !== 1 ? { version: Number(appVersion) } : {}) },
       verify,
     };
   } finally {
