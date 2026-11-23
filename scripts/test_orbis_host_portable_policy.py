@@ -71,6 +71,22 @@ class PortablePolicyTests(unittest.TestCase):
         self.assertEqual(M.table('1 0 8:1 / / rw - ext4 /dev/a rw\n2 1 8:2 / /media/Media\\040Disk rw - ext4 /dev/b rw')[1]['mountPoint'],'/media/Media Disk')
         with self.assertRaises(ValueError):M.table('1 0 BAD / / rw - ext4 /dev/a rw')
 
+class NamespaceMountTableTests(unittest.TestCase):
+    def test_known_unrelated_namespace_handles_are_retained_as_metadata(self):
+        for namespace in ('net', 'mnt', 'pid', 'ipc', 'uts', 'user', 'cgroup', 'time'):
+            with self.subTest(namespace=namespace):
+                row = M.table(f'1 0 0:4 {namespace}:[4026533000] /run/fixture-namespace rw - nsfs nsfs rw')
+                self.assertEqual(row[0]['root'], f'{namespace}:[4026533000]')
+                self.assertEqual(row[0]['filesystem'], 'nsfs')
+
+    def test_unrecognized_relative_roots_do_not_become_paths(self):
+        for root, filesystem in (('relative', 'ext4'), ('net:[4026533000]', 'ext4'),
+                ('unknown:[1]', 'nsfs'), ('net:[0]', 'nsfs'), ('net:[-1]', 'nsfs'),
+                ('net:[0001]', 'nsfs'), ('net:[1]/suffix', 'nsfs'), ('net:[123456789012345678901]', 'nsfs')):
+            with self.subTest(root=root, filesystem=filesystem), self.assertRaises(ValueError):
+                M.table(f'1 0 0:4 {root} /run/fixture-namespace rw - {filesystem} nsfs rw')
+
+
 class PortableEnrollmentTests(unittest.TestCase):
     def setUp(self):
         from test_orbis_host_capture_authority import CaptureAuthorityTests

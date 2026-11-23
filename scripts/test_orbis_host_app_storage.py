@@ -242,6 +242,36 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(before, after)
 
 
+class MountTableParserTests(unittest.TestCase):
+    def test_unrelated_kernel_namespace_handles_preserve_storage_binding(self):
+        host = b'1 0 8:1 / / rw - ext4 /dev/fixture rw\n'
+        main = b'2 1 8:1 /fixture/app-data /app-data rw - ext4 /dev/fixture rw\n'
+        before = M._boundaries(M.mounts(host), M.mounts(main), '/srv/app-data/store/app', '/app-data/store/app')
+        for namespace in ('net', 'mnt', 'pid', 'ipc', 'uts', 'user', 'cgroup', 'time'):
+            extra = f'3 1 0:4 {namespace}:[4026533000] /run/fixture-namespace rw - nsfs nsfs rw\n'.encode()
+            with self.subTest(namespace=namespace):
+                rows = M.mounts(host + extra)
+                self.assertEqual(rows[-1]['root'], f'{namespace}:[4026533000]')
+                self.assertEqual(M._boundaries(rows, M.mounts(main), '/srv/app-data/store/app', '/app-data/store/app'), before)
+
+    def test_nonpath_roots_require_exact_kernel_namespace_syntax_and_nsfs(self):
+        for root, filesystem in (('relative', 'ext4'), ('net:[4026533000]', 'ext4'),
+                ('unknown:[4026533000]', 'nsfs'), ('net:[0]', 'nsfs'), ('net:[-1]', 'nsfs'),
+                ('net:[0001]', 'nsfs'), ('net:[1]/suffix', 'nsfs'), ('net:[123456789012345678901]', 'nsfs')):
+            with self.subTest(root=root, filesystem=filesystem), self.assertRaises(ValueError):
+                M.mounts(f'1 0 0:4 {root} /run/fixture-namespace rw - {filesystem} nsfs rw\n'.encode())
+
+    def test_namespace_mounts_never_back_application_data_or_escape_submount_checks(self):
+        host = M.mounts(b'1 0 8:1 / / rw - ext4 /dev/fixture rw\n')
+        main = M.mounts(b'2 1 8:1 /fixture/app-data /app-data rw - ext4 /dev/fixture rw\n')
+        for location in ('/srv/app-data/store/app', '/srv/app-data/store/app/nested'):
+            rows = M.mounts(f'3 1 0:4 net:[4026533000] {location} rw - nsfs nsfs rw\n'.encode())
+            with self.subTest(location=location), self.assertRaises(ValueError):
+                M._boundaries(host + rows, main, '/srv/app-data/store/app', '/app-data/store/app')
+        namespace_backing = M.mounts(b'2 1 0:4 net:[4026533000] /app-data rw - nsfs nsfs rw\n')
+        with self.assertRaises(ValueError): M._boundaries(host, namespace_backing, '/srv/app-data/store/app', '/app-data/store/app')
+
+
 class RouteTests(unittest.TestCase):
     def dispatch(self, *, body=None, extra=(), trusted=True, declared=None, error=None):
         from test_orbis_host_sentinel_integration import SERVICE

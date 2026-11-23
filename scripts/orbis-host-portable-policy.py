@@ -62,8 +62,12 @@ def table(body):
             if split < 6 or len(fields) < split + 4 or not re.fullmatch(r'[0-9]+:[0-9]+', fields[2]):
                 raise fail()
             mountpoint, root = unescape(fields[4]), unescape(fields[3])
-            for item in (mountpoint, root):
-                if item != '/': path(item)
+            if mountpoint != '/': path(mountpoint)
+            # Namespace handles are metadata for unrelated nsfs mounts. The
+            # selected storage proof still requires a canonical path root.
+            namespace_root = (fields[split + 1] == 'nsfs'
+                              and re.fullmatch(r'(?:net|mnt|pid|ipc|uts|user|cgroup|time):\[[1-9][0-9]{0,19}\]', root) is not None)
+            if root != '/' and not namespace_root: path(root)
             if not re.fullmatch(r'[a-zA-Z0-9_.-]{1,64}', fields[split + 1]): raise fail()
             result.append({'mountId': str(int(fields[0])), 'majorMinor': fields[2], 'mountPoint': mountpoint,
                            'root': root, 'filesystem': fields[split + 1], 'source': unescape(fields[split + 2])})

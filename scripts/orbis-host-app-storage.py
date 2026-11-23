@@ -136,7 +136,9 @@ def mounts(body):
             if re.search(r'\\(?!040|011|012|134)', value): fail()
             return re.sub(r'\\(040|011|012|134)', lambda m: chr(int(m[1], 8)), value)
         root, destination = decoded(fields[3]), decoded(fields[4])
-        if (not root.startswith('/') or not destination.startswith('/')
+        # nsfs namespace handles are valid kernel roots, not directory paths.
+        namespace_root = (extra[0] == 'nsfs' and re.fullmatch(r'(?:net|mnt|pid|ipc|uts|user|cgroup|time):\[[1-9][0-9]{0,19}\]', root) is not None)
+        if (not (root.startswith('/') or namespace_root) or not destination.startswith('/')
                 or os.path.normpath(destination) != destination): fail()
         result.append({'root': root, 'destination': destination, 'options': fields[5].split(','),
                        'optional': fields[6:], 'device': fields[2]})
@@ -177,7 +179,10 @@ def _boundaries(host_rows, main_rows, host_path, main_path):
     if (len(candidates) != 1 or any(option.startswith(('shared:', 'master:', 'propagate_from:'))
                                   for option in candidates[0]['optional'])): fail()
     containing = sorted((row for row in host_rows if _inside(row['destination'], host_path)), key=lambda row: len(row['destination']))
-    if not containing or 'rw' not in containing[-1]['options'] or 'rw' not in candidates[0]['options']: fail()
+    # Only path-backed directory mounts can back application data. Recognizing
+    # unrelated namespace handles does not authorize them as storage.
+    if (not containing or not containing[-1]['root'].startswith('/') or not candidates[0]['root'].startswith('/')
+            or 'rw' not in containing[-1]['options'] or 'rw' not in candidates[0]['options']): fail()
     return digest({'host': containing[-1], 'main': candidates[0]})
 
 
