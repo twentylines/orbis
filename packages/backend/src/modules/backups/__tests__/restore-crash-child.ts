@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createAppUrn } from '@/common/helpers/app-helpers';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
@@ -6,7 +7,8 @@ import type { LoggerService } from '@/core/logger/logger.service';
 import { RestoreTransaction } from '../restore-transaction';
 
 const [root, boundary] = process.argv.slice(2);
-if (!root || !boundary || !root.startsWith('/tmp/orbis-restore-transaction-')) throw new Error('Invalid isolated crash fixture');
+if (!root || !boundary || path.dirname(root) !== path.resolve(tmpdir()) || !/^orbis-restore-transaction-[A-Za-z0-9]+$/.test(path.basename(root)))
+  throw new Error('Invalid isolated crash fixture');
 const groups = ['app-data', 'app', 'user-config'] as const;
 const locations = Object.fromEntries(groups.map((name) => [name, path.join(root, 'live', name, 'store', 'demo')])) as Record<
   (typeof groups)[number],
@@ -36,8 +38,11 @@ fs.promises.rm = async (file, options) => {
   await remove(file, options);
   if (boundary === 'cleanup' && path.basename(String(file)).includes('.orbis-restore-')) await stopAtCheckpoint();
 };
+const filesystem = new FilesystemService(logger);
+const safePath = filesystem.getSafeFilePath.bind(filesystem);
+filesystem.getSafeFilePath = (file) => (path.resolve(file).startsWith(root + path.sep) ? path.resolve(file) : safePath(file));
 const transaction = new RestoreTransaction(
-  new FilesystemService(logger),
+  filesystem,
   logger,
   () => path.join(root, 'data', 'state', 'app-restores'),
   () => locations,

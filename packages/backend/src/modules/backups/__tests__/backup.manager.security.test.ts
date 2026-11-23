@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DATA_DIR } from '@/common/constants';
 import { createAppUrn } from '@/common/helpers/app-helpers';
@@ -69,6 +70,7 @@ describe('BackupManager restore security', () => {
   let listTarGz: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
+    await fs.promises.mkdir(tmpdir(), { recursive: true });
     await fs.promises.mkdir('/tmp', { recursive: true });
     rootDir = await fs.promises.mkdtemp('/tmp/runtipi-backup-test-');
     dataDir = path.join(rootDir, 'data');

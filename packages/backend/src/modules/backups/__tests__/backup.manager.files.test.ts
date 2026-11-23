@@ -11,6 +11,7 @@ import type { AppsRepository } from '@/modules/apps/apps.repository';
 import { createMockApp } from '@/tests/helpers/app-mocks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackupManager } from '../backup.manager';
+import * as stableCopy from '../stable-backup-copy';
 import type { ModuleRef } from '@nestjs/core';
 import type Dockerode from 'dockerode';
 import { BackupAppCommand } from '@/modules/app-lifecycle/commands/backup-app-command';
@@ -133,9 +134,9 @@ describe('BackupManager real files and archives', () => {
     expect(compress).not.toHaveBeenCalled();
     expect(await manager.listBackupsByAppId(appUrn)).toHaveLength(0);
     expect(await fs.promises.readFile(path.join(appDataDir, 'data/record'), 'utf8')).toBe('original data\n');
-    vi.spyOn(filesystem, 'copyDirectory').mockResolvedValue(false);
+    vi.spyOn(stableCopy, 'copyStableBackupTree').mockRejectedValue(new Error('Source could not be copied'));
     ready.mockClear();
-    await expect(manager.backupApp(appUrn, ready)).rejects.toThrow('App data could not be copied');
+    await expect(manager.backupApp(appUrn, ready)).rejects.toThrow('Source could not be copied');
     expect(ready).not.toHaveBeenCalled();
   });
 
@@ -299,6 +300,50 @@ describe('BackupManager real files and archives', () => {
     expect(await fs.promises.readFile(path.join(userConfigDir, 'app.env'), 'utf8')).toBe('SETTING=newer\n');
   };
 
+  it('lists and extracts the same private archive even if the public archive is replaced after listing', async () => {
+    const saved = await savedBackupWithNewerLiveFiles();
+    const publicArchive = await manager.getBackupPath(appUrn, saved.id);
+    const list = archive.listTarGz.bind(archive);
+    let checkedArchive: string | undefined;
+    let stagingMode: number | undefined;
+    vi.spyOn(archive, 'listTarGz').mockImplementation(async (file, signal) => {
+      checkedArchive = file;
+      stagingMode = (await fs.promises.stat(path.dirname(file))).mode & 0o777;
+      const result = await list(file, signal);
+      await fs.promises.rename(publicArchive, `${publicArchive}.retained`);
+      await fs.promises.writeFile(publicArchive, 'replacement, not the checked archive');
+      return result;
+    });
+    const extract = vi.spyOn(archive, 'extractTarGz');
+    await manager.restoreApp(appUrn, saved.id);
+    expect(checkedArchive).not.toBe(publicArchive);
+    expect(stagingMode).toBe(0o700);
+    expect(extract.mock.calls[0]?.[0]).toBe(checkedArchive);
+    expect(await fs.promises.readFile(path.join(appDataDir, 'data/record'), 'utf8')).toBe('original data\n');
+    expect(checkedArchive && fs.existsSync(path.dirname(checkedArchive))).toBe(false);
+    expect(await fs.promises.readFile(publicArchive, 'utf8')).toBe('replacement, not the checked archive');
+  });
+
+  it('does not acknowledge or publish a snapshot when a source file changes during the actual copy', async () => {
+    const open = fs.promises.open.bind(fs.promises);
+    let replaced = false;
+    vi.spyOn(fs.promises, 'open').mockImplementation(async (...args) => {
+      const handle = await open(...args);
+      if (!replaced && String(args[0]).endsWith('/data/record') && !String(args[0]).includes('/content/')) {
+        replaced = true;
+        await fs.promises.writeFile(path.join(appDataDir, 'data/record'), 'changed during snapshot');
+      }
+      return handle;
+    });
+    const ready = vi.fn();
+    const compress = vi.spyOn(archive, 'createTarGz');
+    await expect(manager.backupApp(appUrn, ready)).rejects.toThrow('changed');
+    expect(replaced).toBe(true);
+    expect(ready).not.toHaveBeenCalled();
+    expect(compress).not.toHaveBeenCalled();
+    expect(await manager.listBackupsByAppId(appUrn)).toEqual([]);
+  });
+
   it.each(['app-data', 'app', 'user-config'])('preserves all live directories when the restored %s copy fails', async (group) => {
     const saved = await savedBackupWithNewerLiveFiles();
     const rename = fs.promises.rename.bind(fs.promises);
@@ -386,9 +431,9 @@ describe('BackupManager real files and archives', () => {
 
   it.each(['data', 'app', 'user-config'])('does not publish a backup after a failed %s copy', async (group) => {
     const failedSource = { data: appDataDir, app: appInstalledDir, 'user-config': userConfigDir }[group];
-    const copy = filesystem.copyDirectory.bind(filesystem);
-    vi.spyOn(filesystem, 'copyDirectory').mockImplementation((source, destination, options) =>
-      source === failedSource ? Promise.resolve(false) : copy(source, destination, options),
+    const copy = stableCopy.copyStableBackupTree;
+    vi.spyOn(stableCopy, 'copyStableBackupTree').mockImplementation((source, destination, options) =>
+      source === failedSource ? Promise.reject(new Error('Source copy failed')) : copy(source, destination, options),
     );
     await expect(manager.backupApp(appUrn)).rejects.toThrow();
     expect(await manager.listBackupsByAppId(appUrn)).toEqual([]);

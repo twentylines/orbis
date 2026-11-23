@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createAppUrn } from '@/common/helpers/app-helpers';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
@@ -24,7 +25,7 @@ describe('Restore transaction real filesystem and process interruptions', () => 
     new RestoreTransaction(filesystem, { warn: vi.fn() } as unknown as LoggerService, journalRoot, () => locations, reconcile);
 
   beforeEach(async () => {
-    root = await fs.promises.mkdtemp('/tmp/orbis-restore-transaction-');
+    root = await fs.promises.mkdtemp(path.join(tmpdir(), 'orbis-restore-transaction-'));
     locations = Object.fromEntries(groups.map((name) => [name, path.join(root, 'live', name, 'store', 'demo')])) as typeof locations;
     sources = Object.fromEntries(groups.map((name) => [name, path.join(root, 'source', name)])) as typeof sources;
     await fs.promises.mkdir(path.join(root, 'data'), { recursive: true });
@@ -36,6 +37,10 @@ describe('Restore transaction real filesystem and process interruptions', () => 
       await fs.promises.writeFile(path.join(sources[name], '.binary'), payload);
     }
     filesystem = new FilesystemService({ error: vi.fn() } as unknown as LoggerService);
+    const safePath = filesystem.getSafeFilePath.bind(filesystem);
+    vi.spyOn(filesystem, 'getSafeFilePath').mockImplementation((file) =>
+      path.resolve(file).startsWith(root + path.sep) ? path.resolve(file) : safePath(file),
+    );
     transaction = makeTransaction();
   });
 
@@ -174,7 +179,7 @@ describe('Restore transaction real filesystem and process interruptions', () => 
   it('retains the committed journal after cleanup fails and keeps the complete restored data', async () => {
     const remove = fs.promises.rm.bind(fs.promises);
     let failed = false;
-    vi.spyOn(fs.promises, 'rm').mockImplementation(async (file, options) => {
+    const failure = vi.spyOn(fs.promises, 'rm').mockImplementation(async (file, options) => {
       if (!failed && path.basename(String(file)).includes('.orbis-restore-')) {
         failed = true;
         throw new Error('Cleanup storage unavailable');
@@ -185,7 +190,7 @@ describe('Restore transaction real filesystem and process interruptions', () => 
     expect(failed).toBe(true);
     await expectFiles('new');
     expect(await transaction.pendingApps()).toEqual([urn]);
-    vi.restoreAllMocks();
+    failure.mockRestore();
     transaction = makeTransaction();
     await transaction.recover(urn);
     await expectFiles('new');
@@ -268,14 +273,14 @@ describe('Restore transaction real filesystem and process interruptions', () => 
 
   it('keeps the original directories and journal when rollback itself fails, then recovers on retry', async () => {
     const rename = fs.promises.rename.bind(fs.promises);
-    vi.spyOn(fs.promises, 'rename').mockImplementation(async (source, destination) => {
+    const failure = vi.spyOn(fs.promises, 'rename').mockImplementation(async (source, destination) => {
       if ((String(source).endsWith('/incoming') && String(destination) === locations.app) || String(source).endsWith('/previous'))
         throw new Error('Storage unavailable');
       await rename(source, destination);
     });
     await expect(transaction.replace(urn, sources)).rejects.toThrow('Restore recovery is incomplete');
     expect(await transaction.pendingApps()).toEqual([urn]);
-    vi.restoreAllMocks();
+    failure.mockRestore();
     transaction = makeTransaction();
     await transaction.recover(urn);
     await expectFiles('old');

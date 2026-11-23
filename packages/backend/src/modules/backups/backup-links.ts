@@ -12,10 +12,12 @@ const inside = (root: string, target: string) => {
   return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 };
 
-export async function validateBackupTree(root: string, allowLinks = true): Promise<void> {
+export async function validateBackupTree(root: string, allowLinks = true, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
   const canonical = await fs.promises.realpath(root);
   const entries: ArchiveEntry[] = [];
   const visit = async (file: string): Promise<void> => {
+    signal?.throwIfAborted();
     const entry = await fs.promises.lstat(file);
     const relative = path.relative(root, file).split(path.sep).join('/');
     entries.push({

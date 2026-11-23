@@ -15,8 +15,9 @@ import { type } from 'arktype';
 import { AppFilesManager } from '../apps/app-files-manager';
 import { appMigrationLedgerSchema } from '../apps/app-migration-ledger';
 import { AppsRepository } from '../apps/apps.repository';
-import { RestoreTransaction, preserveTreeMetadata } from './restore-transaction';
+import { RestoreTransaction } from './restore-transaction';
 import { validateArchiveLinks, validateBackupTree } from './backup-links';
+import { copyStableBackupFile, copyStableBackupTree } from './stable-backup-copy';
 
 const ledgerFile = 'orbis-app-migrations.json';
 const maxLedgerBytes = 48 * 1024;
@@ -121,27 +122,9 @@ export class BackupManager {
 
       const { appDataDir, appInstalledDir } = this.appFilesManager.getAppPaths(appUrn);
 
-      const copyOptions = {
-        verbatimSymlinks: true,
-        dereference: false,
-        ...(job
-          ? {
-              filter: () => {
-                job.check();
-                return true;
-              },
-            }
-          : {}),
-      };
-      if (!(await this.filesystem.copyDirectory(appDataDir, path.join(contentDir, 'app-data'), copyOptions))) {
-        throw new Error('App data could not be copied into the backup');
-      }
-
-      if (!(await this.filesystem.copyDirectory(appInstalledDir, path.join(contentDir, 'app'), copyOptions))) {
-        throw new Error('App files could not be copied into the backup');
-      }
-      await preserveTreeMetadata(appDataDir, path.join(contentDir, 'app-data'));
-      await preserveTreeMetadata(appInstalledDir, path.join(contentDir, 'app'));
+      const copyOptions = { signal: job?.signal, check: job ? () => job.check() : undefined };
+      await copyStableBackupTree(appDataDir, path.join(contentDir, 'app-data'), copyOptions);
+      await copyStableBackupTree(appInstalledDir, path.join(contentDir, 'app'), copyOptions);
 
       const userConfig = await fs.promises.lstat(this.filesystem.getSafeFilePath(userConfigDir)).catch((error: NodeJS.ErrnoException) => {
         if (error.code === 'ENOENT') return null;
@@ -149,10 +132,7 @@ export class BackupManager {
       });
       if (userConfig?.isDirectory()) {
         this.logger.info('Including user configuration in backup...');
-        if (!(await this.filesystem.copyDirectory(userConfigDir, path.join(contentDir, 'user-config'), copyOptions))) {
-          throw new Error('User configuration could not be copied into the backup');
-        }
-        await preserveTreeMetadata(userConfigDir, path.join(contentDir, 'user-config'), false);
+        await copyStableBackupTree(userConfigDir, path.join(contentDir, 'user-config'), { ...copyOptions, allowLinks: false });
       } else if (userConfig) {
         throw new Error('User configuration is not a readable directory');
       }
@@ -225,61 +205,69 @@ export class BackupManager {
       throw new Error('The backup file does not exist');
     }
 
-    this.validateRestoreArchiveEntries(await this.archiveManager.listTarGz(archive));
-    await this.restoreTransaction.replace(appUrn, async (restoreDir) => {
-      this.logger.info('Extracting archive...');
-      const { stderr, stdout } = await this.archiveManager.extractTarGz(archive, restoreDir);
-      this.logger.debug('--- archiveManager.extractTarGz ---');
-      this.logger.debug('stderr:', stderr);
-      this.logger.debug('stdout:', stdout);
-      if (stderr.trim()) throw new Error('The backup archive could not be extracted completely');
+    const archiveDirectory = await fs.promises.mkdtemp(path.join(tmpdir(), `${appUrn}-restore-`));
+    try {
+      await fs.promises.chmod(archiveDirectory, 0o700);
+      const stableArchive = path.join(archiveDirectory, 'backup.tar.gz');
+      await copyStableBackupFile(archive, stableArchive);
+      this.validateRestoreArchiveEntries(await this.archiveManager.listTarGz(stableArchive));
+      await this.restoreTransaction.replace(appUrn, async (restoreDir) => {
+        this.logger.info('Extracting archive...');
+        const { stderr, stdout } = await this.archiveManager.extractTarGz(stableArchive, restoreDir);
+        this.logger.debug('--- archiveManager.extractTarGz ---');
+        this.logger.debug('stderr:', stderr);
+        this.logger.debug('stdout:', stdout);
+        if (stderr.trim()) throw new Error('The backup archive could not be extracted completely');
 
-      const runValidationFsOperation = pLimit(16);
+        const runValidationFsOperation = pLimit(16);
 
-      await this.validateRestoreDirectory(path.join(restoreDir, 'app-data'), { allowSymlinks: true }, undefined, runValidationFsOperation);
-      await this.validateRestoreDirectory(
-        path.join(restoreDir, 'app'),
-        { allowSymlinks: true, rejectHardLinks: true },
-        undefined,
-        runValidationFsOperation,
-      );
-      await this.validateRestoreDirectory(
-        path.join(restoreDir, 'user-config'),
-        {
-          allowSymlinks: false,
-          optional: true,
-          rejectHardLinks: true,
-        },
-        undefined,
-        runValidationFsOperation,
-      );
+        await this.validateRestoreDirectory(path.join(restoreDir, 'app-data'), { allowSymlinks: true }, undefined, runValidationFsOperation);
+        await this.validateRestoreDirectory(
+          path.join(restoreDir, 'app'),
+          { allowSymlinks: true, rejectHardLinks: true },
+          undefined,
+          runValidationFsOperation,
+        );
+        await this.validateRestoreDirectory(
+          path.join(restoreDir, 'user-config'),
+          {
+            allowSymlinks: false,
+            optional: true,
+            rejectHardLinks: true,
+          },
+          undefined,
+          runValidationFsOperation,
+        );
 
-      const ledgerPath = path.join(restoreDir, ledgerFile);
-      const metadata = await fs.promises.lstat(ledgerPath).catch((error: NodeJS.ErrnoException) => {
-        if (error.code === 'ENOENT') return null;
-        throw error;
-      });
-      const app = await this.appsRepository.getAppByUrn(appUrn);
-      let migration: { appId: number; ledger: typeof appMigrationLedgerSchema.infer } | undefined;
-      if (metadata) {
-        if (!metadata.isFile() || metadata.nlink !== 1 || metadata.size > maxLedgerBytes || !app) {
-          throw new Error('Invalid application migration ledger in backup');
+        const ledgerPath = path.join(restoreDir, ledgerFile);
+        const metadata = await fs.promises.lstat(ledgerPath).catch((error: NodeJS.ErrnoException) => {
+          if (error.code === 'ENOENT') return null;
+          throw error;
+        });
+        const app = await this.appsRepository.getAppByUrn(appUrn);
+        let migration: { appId: number; ledger: typeof appMigrationLedgerSchema.infer } | undefined;
+        if (metadata) {
+          if (!metadata.isFile() || metadata.nlink !== 1 || metadata.size > maxLedgerBytes || !app) {
+            throw new Error('Invalid application migration ledger in backup');
+          }
+          const saved = backupLedgerSchema.assert(JSON.parse(await fs.promises.readFile(ledgerPath, 'utf8')));
+          if (saved.appUrn !== appUrn) throw new Error('Application migration ledger belongs to another application');
+          migration = { appId: app.id, ledger: saved.ledger };
+        } else if (app) {
+          const ledger = await this.appsRepository.getMigrationLedger(app.id);
+          if (ledger.migrationIds.length) throw new Error('This backup predates the application migration history');
+          migration = { appId: app.id, ledger: { baselined: false, migrationIds: [] } };
         }
-        const saved = backupLedgerSchema.assert(JSON.parse(await fs.promises.readFile(ledgerPath, 'utf8')));
-        if (saved.appUrn !== appUrn) throw new Error('Application migration ledger belongs to another application');
-        migration = { appId: app.id, ledger: saved.ledger };
-      } else if (app) {
-        const ledger = await this.appsRepository.getMigrationLedger(app.id);
-        if (ledger.migrationIds.length) throw new Error('This backup predates the application migration history');
-        migration = { appId: app.id, ledger: { baselined: false, migrationIds: [] } };
-      }
-      return {
-        migration,
-        'app-data': path.join(restoreDir, 'app-data'),
-        app: path.join(restoreDir, 'app'),
-        'user-config': (await this.filesystem.isDirectory(path.join(restoreDir, 'user-config'))) ? path.join(restoreDir, 'user-config') : null,
-      };
-    });
+        return {
+          migration,
+          'app-data': path.join(restoreDir, 'app-data'),
+          app: path.join(restoreDir, 'app'),
+          'user-config': (await this.filesystem.isDirectory(path.join(restoreDir, 'user-config'))) ? path.join(restoreDir, 'user-config') : null,
+        };
+      });
+    } finally {
+      await fs.promises.rm(archiveDirectory, { recursive: true, force: true });
+    }
   };
 
   private validateRestoreArchiveEntries(entries: ArchiveEntry[]) {

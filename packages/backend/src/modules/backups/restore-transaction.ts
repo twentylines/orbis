@@ -54,7 +54,8 @@ const ensureDirectory = async (directory: string) => {
   await requireDirectory(directory);
 };
 
-const visitCopiedTree = async (source: string, destination: string, apply: boolean) => {
+const visitCopiedTree = async (source: string, destination: string, apply: boolean, signal?: AbortSignal) => {
+  signal?.throwIfAborted();
   const original = await fs.promises.lstat(source, { bigint: true });
   const copied = await fs.promises.lstat(destination, { bigint: true });
   if (!original.isFile() && !original.isDirectory() && !original.isSymbolicLink()) throw new Error('Backup contains unsupported file types');
@@ -72,49 +73,48 @@ const visitCopiedTree = async (source: string, destination: string, apply: boole
     return;
   }
   if (original.isDirectory()) {
-    for (const name of await fs.promises.readdir(source)) await visitCopiedTree(path.join(source, name), path.join(destination, name), apply);
+    for (const name of await fs.promises.readdir(source)) await visitCopiedTree(path.join(source, name), path.join(destination, name), apply, signal);
   }
   if (apply) {
     if (original.isSymbolicLink()) {
       await fs.promises.unlink(destination);
-      const result = await spawnAsync('cp', ['-pP', '--', source, destination]);
+      const result = await spawnAsync('cp', ['-pP', '--', source, destination], { signal });
       if (result.stderr.trim()) throw new Error('Backup symbolic link metadata could not be preserved');
       return;
     }
     if (original.uid !== copied.uid || original.gid !== copied.gid) await fs.promises.chown(destination, Number(original.uid), Number(original.gid));
     await fs.promises.chmod(destination, Number(original.mode & 0o7777n));
-    const result = await spawnAsync('touch', ['-r', source, '--', destination]);
+    const result = await spawnAsync('touch', ['-r', source, '--', destination], { signal });
     if (result.stderr.trim()) throw new Error('Backup timestamps could not be preserved');
   }
 };
 
-const verifyCopiedMetadata = async (source: string, destination: string): Promise<void> => {
+const verifyCopiedMetadata = async (source: string, destination: string, signal?: AbortSignal): Promise<void> => {
+  signal?.throwIfAborted();
   const original = await fs.promises.lstat(source, { bigint: true });
   const copied = await fs.promises.lstat(destination, { bigint: true });
   if (original.uid !== copied.uid || original.gid !== copied.gid || original.mode !== copied.mode || original.mtimeNs !== copied.mtimeNs)
     throw new Error('Backup copy did not preserve file metadata');
   if (original.isDirectory())
-    for (const name of await fs.promises.readdir(source)) await verifyCopiedMetadata(path.join(source, name), path.join(destination, name));
+    for (const name of await fs.promises.readdir(source)) await verifyCopiedMetadata(path.join(source, name), path.join(destination, name), signal);
 };
 
-export const preserveTreeMetadata = async (source: string, destination: string, allowLinks = true) => {
-  await validateBackupTree(source, allowLinks);
-  await visitCopiedTree(source, destination, process.platform !== 'linux');
+export const preserveTreeMetadata = async (source: string, destination: string, allowLinks = true, signal?: AbortSignal) => {
+  signal?.throwIfAborted();
+  await validateBackupTree(source, allowLinks, signal);
+  await visitCopiedTree(source, destination, process.platform !== 'linux', signal);
   if (process.platform === 'linux') {
     // One metadata pass per tree avoids a process per file and does not recopy data.
     const reference = (await fs.promises.lstat(source)).isDirectory() ? `${source}/.` : source;
-    const result = await spawnAsync('cp', [
-      '--attributes-only',
-      '--preserve=mode,ownership,timestamps',
-      '--recursive',
-      '--no-dereference',
-      '--',
-      reference,
-      destination,
-    ]);
+    const result = await spawnAsync(
+      'cp',
+      ['--attributes-only', '--preserve=mode,ownership,timestamps', '--recursive', '--no-dereference', '--', reference, destination],
+      { signal },
+    );
     if (result.stderr.trim()) throw new Error('Backup file metadata could not be preserved');
   }
-  await verifyCopiedMetadata(source, destination);
+  await verifyCopiedMetadata(source, destination, signal);
+  signal?.throwIfAborted();
 };
 
 const syncTree = async (directory: string) => {

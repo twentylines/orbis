@@ -17,6 +17,7 @@ import { ArchiveService } from '@/core/archive/archive.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { AppFilesManager } from '@/modules/apps/app-files-manager';
 import { BackupManager } from '@/modules/backups/backup.manager';
+import * as stableCopy from '../stable-backup-copy';
 import { AppLifecycleService } from '@/modules/app-lifecycle/app-lifecycle.service';
 import { AppStatusSyncService } from '@/modules/app-lifecycle/app-status-sync.service';
 import { SystemEventsQueue } from '@/modules/queue/entities/system-events';
@@ -293,7 +294,7 @@ it('does not execute a delayed queued backup after its request was cancelled', a
 
 it('cancels during copy and confirms the original app resumes before reporting cancellation', async () => {
   const f = await backupWorker();
-  const copy = f.filesystem.copyDirectory.bind(f.filesystem);
+  const copy = stableCopy.copyStableBackupTree;
   let entered!: () => void;
   let release!: () => void;
   const copying = new Promise<void>((resolve) => {
@@ -302,7 +303,7 @@ it('cancels during copy and confirms the original app resumes before reporting c
   const wait = new Promise<void>((resolve) => {
     release = resolve;
   });
-  vi.spyOn(f.filesystem, 'copyDirectory').mockImplementation(async (...args) => {
+  vi.spyOn(stableCopy, 'copyStableBackupTree').mockImplementation(async (...args) => {
     if (args[0] === f.data) {
       entered();
       await wait;
@@ -330,10 +331,10 @@ it('keeps failed runtime recovery interrupted instead of reporting the backup ca
   const wait = new Promise<void>((resolve) => {
     release = resolve;
   });
-  vi.spyOn(f.filesystem, 'copyDirectory').mockImplementation(async () => {
+  vi.spyOn(stableCopy, 'copyStableBackupTree').mockImplementation(async () => {
     entered();
     await wait;
-    return false;
+    throw new Error('Source copy failed');
   });
   f.start.mockRejectedValue(new Error('Could not resume original'));
   const request = await f.handler.execute(urn);

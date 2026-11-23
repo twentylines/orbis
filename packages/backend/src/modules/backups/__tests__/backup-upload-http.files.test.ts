@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { tmpdir } from 'node:os';
 import http from 'node:http';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -32,7 +33,7 @@ describe('Backup multipart HTTP endpoint with real disk staging', () => {
   let logger: LoggerService;
 
   beforeEach(async () => {
-    root = await fs.promises.mkdtemp('/tmp/orbis-upload-http-');
+    root = await fs.promises.mkdtemp(path.join(tmpdir(), 'orbis-upload-http-'));
     uploads = path.join(root, 'backups/store/demo/.uploads');
     source = path.join(root, 'backup.tar.gz');
     const tree = path.join(root, 'tree');
@@ -56,7 +57,12 @@ describe('Backup multipart HTTP endpoint with real disk staging', () => {
     expect((await archive.createTarGz(tree, source)).stderr).toBe('');
     const configuration = { get: (key: string) => (key === 'demoMode' ? false : { dataDir: root }) } as unknown as ConfigurationService;
     const repository = { getAppByUrn: vi.fn().mockResolvedValue({ id: 1 }) } as unknown as AppsRepository;
-    manager = new BackupManager(archive, logger, configuration, new FilesystemService(logger), {} as AppFilesManager, repository);
+    const filesystem = new FilesystemService(logger);
+    const safePath = filesystem.getSafeFilePath.bind(filesystem);
+    vi.spyOn(filesystem, 'getSafeFilePath').mockImplementation((file) =>
+      path.resolve(file).startsWith(root + path.sep) ? path.resolve(file) : safePath(file),
+    );
+    manager = new BackupManager(archive, logger, configuration, filesystem, {} as AppFilesManager, repository);
     service = new BackupsService(repository, configuration, manager);
     const storage = new BackupUploadStorage(path.join(root, 'backups'));
     const module = await Test.createTestingModule({
