@@ -54,6 +54,25 @@ def trace(frame, event, arg):
     if event == 'exception' and count < 200 and arg[0].__name__ in errors:
         count += 1
         record = {'module': pathlib.Path(filename).name, 'function': function, 'line': frame.f_lineno, 'error': arg[0].__name__}
+        if filename == observation_file and function == 'verify':
+            # Compare copies for diagnosis only. Never alter a witness or emit
+            # observed values, configuration, paths or process identities.
+            try:
+                before = frame.f_locals['self'].before
+                current = frame.f_locals['current']
+                fields = ('pid', 'daemonSha256', 'socketIdentity', 'enrollmentSha256', 'publicationSha256')
+                differences = [key for key in fields if before.get(key) != current.get(key)]
+                differences += ['controller.' + key for key in ('id', 'imageId', 'startedAt', 'definitionSha256')
+                                if before['controller'].get(key) != current['controller'].get(key)]
+                previous_mounts, current_mounts = before['raw'].get('Mounts'), current['raw'].get('Mounts')
+                encode = lambda rows: sorted(json.dumps(row, sort_keys=True) for row in rows)
+                record['differences'] = differences
+                record['mountOrderOnly'] = (type(previous_mounts) is list and type(current_mounts) is list
+                    and previous_mounts != current_mounts and encode(previous_mounts) == encode(current_mounts))
+                record['otherDefinitionFieldsEqual'] = all(before['raw'].get(key) == current['raw'].get(key)
+                    for key in ('Config', 'HostConfig', 'Path', 'Args'))
+            except Exception:
+                pass
         try:
             os.write(2, ('ORBIS_HOST_STORAGE_TRACE ' + json.dumps(record, sort_keys=True) + '\n').encode())
         except OSError:
@@ -468,12 +487,19 @@ class Runtime:
                 continue
             try:
                 value = json.loads(line.split(b' ', 1)[1])
-                if (type(value) is dict and set(value) == {'module', 'function', 'line', 'error'}
+                base = {'module', 'function', 'line', 'error'}
+                extended = base | {'differences', 'mountOrderOnly', 'otherDefinitionFieldsEqual'}
+                fields = ('pid', 'daemonSha256', 'socketIdentity', 'enrollmentSha256', 'publicationSha256',
+                          'controller.id', 'controller.imageId', 'controller.startedAt', 'controller.definitionSha256')
+                if (type(value) is dict and set(value) in (base, extended)
                         and value['module'] in ('orbis-host-app-storage.py', 'orbis-host-credential-peer.py', 'orbis-host-service.py', 'orbis-host.py')
                         and type(value['function']) is str and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,127}|<(?:genexpr|listcomp|dictcomp|lambda)>', value['function'])
                         and type(value['line']) is int and 1 <= value['line'] <= 100000
                         and value['error'] in ('ValueError', 'TypeError', 'KeyError', 'OSError', 'PermissionError', 'FileNotFoundError', 'RuntimeError')):
-                    records.append(value)
+                    if set(value) == base or (type(value['differences']) is list and len(value['differences']) <= len(fields)
+                            and all(type(key) is str and key in fields for key in value['differences'])
+                            and type(value['mountOrderOnly']) is bool and type(value['otherDefinitionFieldsEqual']) is bool):
+                        records.append(value)
             except (ValueError, TypeError):
                 continue
         return records[-20:]
