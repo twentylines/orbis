@@ -2,14 +2,18 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
+import { stripTypeScriptTypes } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { getCliSecret } from '../permissions-helpers.ts';
 
 const canChangeUid = process.platform === 'linux' && process.getuid?.() === 0;
 const checkout = fileURLToPath(new URL('../../../../../../', import.meta.url));
-const helperSource = fs.readFileSync(new URL('../permissions-helpers.ts', import.meta.url));
+// Evaluate the exact production helper through Node's own type stripper. The
+// other UID must not need access through the runner's private home directory.
+const helperSource = fs.readFileSync(new URL('../permissions-helpers.ts', import.meta.url), 'utf8');
+const helper = `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(helperSource)).toString('base64')}`;
 const serviceUid = 65534;
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 
@@ -25,14 +29,14 @@ function fixture(t) {
   assert.equal(stat.isDirectory(), true);
   assert.equal(stat.mode & 0o022, 0);
   const root = fs.mkdtempSync(path.join(parent, 'case-'));
-  fs.writeFileSync(path.join(root, 'permissions-helpers.ts'), helperSource, { mode: 0o644 });
-  fs.chmodSync(path.join(root, 'permissions-helpers.ts'), 0o644);
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return root;
 }
 
 function asService(code, root, ...args) {
-  const result = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', code, root, ...args], {
+  // The parent enters this generated directory before dropping UID. Relative
+  // fixture paths keep the probe independent of checkout-ancestor permissions.
+  const result = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', code, '.', ...args], {
     uid: serviceUid,
     gid: serviceUid,
     cwd: root,
@@ -144,7 +148,7 @@ test('a service UID creates and persists its private key', { skip: !canChangeUid
     `
     import assert from 'node:assert/strict';
     import fs from 'node:fs';
-    import { getCliSecret } from ${JSON.stringify(pathToFileURL(path.join(root, 'permissions-helpers.ts')).href)};
+    import { getCliSecret } from ${JSON.stringify(helper)};
     const root = process.argv[1];
     const key = await getCliSecret(root);
     assert.equal(/^[a-f0-9]{64}$/.test(key), true);
@@ -173,7 +177,7 @@ test('a service UID rotates a readable root-owned exposed key and retains its re
     import assert from 'node:assert/strict';
     import fs from 'node:fs';
     import { createHash } from 'node:crypto';
-    import { getCliSecret } from ${JSON.stringify(pathToFileURL(path.join(root, 'permissions-helpers.ts')).href)};
+    import { getCliSecret } from ${JSON.stringify(helper)};
     const root = process.argv[1];
     const key = await getCliSecret(root);
     assert.equal(createHash('sha256').update(key).digest('hex') === process.argv[2], false);
