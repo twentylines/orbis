@@ -261,5 +261,172 @@ class CandidateBoundaries(unittest.TestCase):
                         C.verify(Path('/checkout'), tag, commit, digest)
 
 
+
+
+class NormalSetupBoundaries(unittest.TestCase):
+    def runtime(self, folder=Path('/checkout/.orbis-host-ABC123')):
+        runtime = R.Runtime(Path('/checkout'), folder, Path('/manifest'), Path('/probe'), normal_setup=True)
+        runtime.manifest = {'commit': 'a' * 40}
+        return runtime
+
+    def test_normal_setup_never_reaches_engine_without_linux_root_and_both_gates(self):
+        for platform, uid, environment in (
+            ('darwin', 0, {'ORBIS_HOST_STORAGE_TEST': '1', 'ORBIS_NORMAL_SETUP_TEST': '1'}),
+            ('linux', 1000, {'ORBIS_HOST_STORAGE_TEST': '1', 'ORBIS_NORMAL_SETUP_TEST': '1'}),
+            ('linux', 0, {'ORBIS_NORMAL_SETUP_TEST': '1'}),
+        ):
+            with self.subTest(platform=platform, uid=uid, environment=environment):
+                runtime = self.runtime()
+                with patch.object(R.sys, 'platform', platform), patch.object(R.os, 'geteuid', return_value=uid), \
+                        patch.dict(R.os.environ, environment, clear=True), patch.object(runtime, 'docker') as docker:
+                    with self.assertRaises(R.Refused): runtime.prepare()
+                    docker.assert_not_called()
+
+    def test_optional_setup_requires_its_own_gate_before_global_mount_operations(self):
+        runtime = self.runtime()
+        with patch.dict(R.os.environ, {'ORBIS_HOST_STORAGE_TEST': '1'}, clear=True), \
+                patch.object(R, 'ProtectedScope') as scope:
+            with self.assertRaisesRegex(R.Refused, 'explicit-normal-setup-gate-required'):
+                runtime.prepare_installation(None)
+            scope.assert_not_called()
+
+    def test_scope_refuses_foreign_system_or_preexisting_state_before_mounting(self):
+        for platform, uid, environment in (('darwin', 0, {'ORBIS_NORMAL_SETUP_TEST': '1'}),
+                ('linux', 1000, {'ORBIS_NORMAL_SETUP_TEST': '1'}), ('linux', 0, {})):
+            with self.subTest(platform=platform, uid=uid, gate=environment):
+                scope = R.ProtectedScope(Path('/checkout'), Path('/checkout/.orbis-host-ABC123'))
+                with patch.object(R.sys, 'platform', platform), patch.object(R.os, 'geteuid', return_value=uid), \
+                        patch.dict(R.os.environ, environment, clear=True), patch.object(R, 'mount_command') as mount:
+                    with self.assertRaises(R.Refused): scope.preflight()
+                    mount.assert_not_called()
+
+    def test_birth_hook_runs_on_empty_root_before_any_generated_installation_content(self):
+        with tempfile.TemporaryDirectory(prefix='normal-setup-prepare-') as temporary:
+            parent = Path(temporary)
+            folder = parent / 'fixture'
+            folder.mkdir(mode=0o700)
+            manifest = parent / 'manifest.json'
+            manifest.write_text(json.dumps({'schema': 'orbis.release.v1', 'image': R.IMAGE,
+                'tag': 'v0.9.2-rc.5', 'commit': 'a' * 40, 'digest': 'sha256:' + 'b' * 64,
+                'runtipiCompatibility': '4.10.1', 'installationProtocol': 'orbis.installation-state.v1'}))
+            seen = []
+            def observe(root):
+                self.assertEqual(list(root.iterdir()), [])
+                seen.append(root)
+            prepared = F.prepare(manifest, folder, R.DEPENDENCIES, before_populate=observe, credential_socket=True)
+            self.assertEqual(seen, [prepared['root']])
+            self.assertIn('ORBIS_HOST_SOCKET=/run/orbis/host.sock', (prepared['root'] / '.env').read_text().splitlines())
+
+    def test_default_fixture_does_not_request_credential_mutations(self):
+        with tempfile.TemporaryDirectory(prefix='normal-setup-default-') as temporary:
+            folder = Path(temporary) / 'fixture'
+            folder.mkdir(mode=0o700)
+            manifest = folder.parent / 'manifest.json'
+            manifest.write_text(json.dumps({'schema': 'orbis.release.v1', 'image': R.IMAGE,
+                'tag': 'v0.9.2-rc.5', 'commit': 'a' * 40, 'digest': 'sha256:' + 'b' * 64,
+                'runtipiCompatibility': '4.10.1', 'installationProtocol': 'orbis.installation-state.v1'}))
+            prepared = F.prepare(manifest, folder, R.DEPENDENCIES)
+            self.assertNotIn('ORBIS_HOST_SOCKET=', (prepared['root'] / '.env').read_text())
+
+    def test_failed_birth_hook_never_populates_installation(self):
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory(prefix='normal-setup-failed-birth-') as temporary:
+            folder = Path(temporary) / 'fixture'
+            folder.mkdir(mode=0o700)
+            manifest = folder.parent / 'manifest.json'
+            manifest.write_text(json.dumps({'schema': 'orbis.release.v1', 'image': R.IMAGE,
+                'tag': 'v0.9.2-rc.5', 'commit': 'a' * 40, 'digest': 'sha256:' + 'b' * 64,
+                'runtipiCompatibility': '4.10.1', 'installationProtocol': 'orbis.installation-state.v1'}))
+            hook = Mock(side_effect=R.Refused('real-birth-refused'))
+            with self.assertRaisesRegex(R.Refused, 'real-birth-refused'):
+                F.prepare(manifest, folder, R.DEPENDENCIES, before_populate=hook, credential_socket=True)
+            self.assertEqual(list((folder / 'install').iterdir()), [])
+            self.assertEqual(list(folder.iterdir()), [folder / 'install'])
+
+    def test_active_or_changed_mount_prevents_cleanup_marker(self):
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory(prefix='normal-setup-cleanup-') as temporary:
+            runtime = self.runtime(Path(temporary))
+            runtime.original_containers, runtime.original_networks = set(), set()
+            runtime.normal_scope = Mock()
+            def refuse():
+                self.assertFalse((runtime.folder / 'cleanup-complete').exists())
+                raise R.Refused('still-active')
+            runtime.normal_scope.release.side_effect = refuse
+            with patch.object(runtime, 'identifiers', return_value=set()), patch.object(runtime, 'docker') as docker:
+                with self.assertRaisesRegex(R.Refused, 'still-active'): runtime.cleanup()
+                docker.assert_not_called()
+            self.assertFalse((runtime.folder / 'cleanup-complete').exists())
+
+    def test_cleanup_marker_follows_owned_inventory_and_mount_release(self):
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory(prefix='normal-setup-cleanup-') as temporary:
+            runtime = self.runtime(Path(temporary))
+            runtime.original_containers, runtime.original_networks = set(), set()
+            runtime.normal_scope = Mock()
+            def release(): self.assertFalse((runtime.folder / 'cleanup-complete').exists())
+            runtime.normal_scope.release.side_effect = release
+            with patch.object(runtime, 'identifiers', return_value=set()), patch.object(runtime, 'docker') as docker:
+                self.assertTrue(runtime.cleanup())
+                docker.assert_not_called()
+            runtime.normal_scope.release.assert_called_once_with()
+            self.assertTrue((runtime.folder / 'cleanup-complete').is_file())
+
+    def test_changed_inventory_prevents_unmount_and_deletion(self):
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory(prefix='normal-setup-inventory-') as temporary:
+            runtime = self.runtime(Path(temporary))
+            runtime.original_containers, runtime.original_networks = set(), set()
+            runtime.normal_scope = Mock()
+            with patch.object(runtime, 'identifiers', return_value={'f' * 64}), patch.object(runtime, 'docker') as docker:
+                with self.assertRaisesRegex(R.Refused, 'original-inventory-changed'): runtime.cleanup()
+                docker.assert_not_called()
+            runtime.normal_scope.release.assert_not_called()
+            self.assertFalse((runtime.folder / 'cleanup-complete').exists())
+
+    def test_failed_api_check_is_failure_and_never_leaks_child_fields(self):
+        runtime = self.runtime()
+        runtime.owned['a' * 64] = ('runtipi', 'sha256:' + 'b' * 64, R.IMAGE + '@sha256:' + 'c' * 64)
+        state = {'State': {'Status': 'running', 'Health': {'Status': 'healthy'}}}
+        child = {'case': 'normal-setup-api', 'passed': False, 'completed': [],
+                 'failurePhase': 'actual-first-registration', 'lastStatus': 503,
+                 'privateValue': 'must-not-print'}
+        result = subprocess.CompletedProcess([], 1, json.dumps(child).encode(), b'')
+        with patch.object(runtime, 'inspect', return_value=state), patch.object(runtime, 'docker', return_value=result):
+            with self.assertRaisesRegex(R.Refused, 'normal-setup-api-failed'): runtime.probe_normal_setup()
+        self.assertEqual(runtime.results, [{'case': 'normal-setup-api', 'passed': False, 'completed': [],
+            'failurePhase': 'actual-first-registration', 'lastStatus': 503}])
+
+    def test_api_selects_only_the_live_host_only_cookie_after_legacy_domain_retirement(self):
+        import shutil
+        node = shutil.which('node')
+        if not node: self.skipTest('Node.js is required for the real cookie parser')
+        helper = R.NORMAL_SETUP_PROBE.split('function session(response) {', 1)[1].split('\ntry {', 1)[0]
+        script = "import assert from 'node:assert/strict';\nfunction require(value) { assert.ok(value); }\nfunction session(response) {" + helper + r'''
+const current = 'runtipi-sid=current-session; Path=/; HttpOnly; SameSite=Lax';
+const retired = 'runtipi-sid=; Domain=.fixture.invalid; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+assert.equal(session({cookies: [retired, current]}), 'runtipi-sid=current-session');
+assert.equal(session({cookies: [current]}), 'runtipi-sid=current-session');
+for (const cookies of [[], [retired], [current, current], ['runtipi-sid=domain-only; Domain=.fixture.invalid']]) {
+  assert.throws(() => session({cookies}));
+}
+assert.throws(() => session({cookies: ['runtipi-sid=bad\r\nvalue']}));
+'''
+        result = subprocess.run([node, '--input-type=module', '-e', script], capture_output=True, timeout=15)
+        self.assertEqual(result.returncode, 0, 'Actual normal-setup cookie parser regression')
+
+    def test_out_of_order_or_invented_api_subchecks_are_not_accepted(self):
+        runtime = self.runtime()
+        runtime.owned['a' * 64] = ('runtipi', 'sha256:' + 'b' * 64, R.IMAGE + '@sha256:' + 'c' * 64)
+        state = {'State': {'Status': 'running', 'Health': {'Status': 'healthy'}}}
+        for completed in (['session-logout'], ['unknown'], 'session-logout'):
+            child = {'case': 'normal-setup-api', 'passed': True, 'completed': completed}
+            result = subprocess.CompletedProcess([], 0, json.dumps(child).encode(), b'')
+            with self.subTest(completed=completed), patch.object(runtime, 'inspect', return_value=state), \
+                    patch.object(runtime, 'docker', return_value=result):
+                with self.assertRaisesRegex(R.Refused, 'invalid-normal-setup-case-sequence'): runtime.probe_normal_setup()
+        self.assertEqual(runtime.results, [])
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

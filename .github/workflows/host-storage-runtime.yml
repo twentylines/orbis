@@ -16,6 +16,10 @@ on:
         required: false
         type: boolean
         default: false
+      normal_setup:
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       tag:
@@ -32,6 +36,11 @@ on:
         type: string
       trace:
         description: 'Record bounded source locations of Host observation refusals'
+        required: false
+        type: boolean
+        default: false
+      normal_setup:
+        description: 'Exercise real first registration and password change on a fresh Root-owned fixture'
         required: false
         type: boolean
         default: false
@@ -52,6 +61,7 @@ jobs:
       CANDIDATE_SHA: ${{ inputs.commit }}
       CANDIDATE_DIGEST: ${{ inputs.digest }}
       ORBIS_HOST_STORAGE_TRACE: ${{ inputs.trace && '1' || '0' }}
+      ORBIS_NORMAL_SETUP_TEST: ${{ inputs.normal_setup && '1' || '0' }}
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -92,7 +102,7 @@ jobs:
           sudo --non-interactive chown root:root "$fixture_parent"
           sudo --non-interactive chmod 700 "$fixture_parent"
           trap 'if sudo --non-interactive test -f "$fixture_parent/cleanup-complete"; then sudo --non-interactive rm -rf -- "$fixture_parent"; fi' EXIT
-          sudo --non-interactive env ORBIS_HOST_STORAGE_TEST=1 ORBIS_HOST_STORAGE_TRACE="$ORBIS_HOST_STORAGE_TRACE" \
+          sudo --non-interactive env ORBIS_HOST_STORAGE_TEST=1 ORBIS_HOST_STORAGE_TRACE="$ORBIS_HOST_STORAGE_TRACE" ORBIS_NORMAL_SETUP_TEST="$ORBIS_NORMAL_SETUP_TEST" \
             TMPDIR="$XDG_CACHE_HOME/tmp" \
             python3 -B packages/backend/scripts/orbis-host-storage-runtime.py \
             --source "$GITHUB_WORKSPACE" --fixture "$fixture_parent" \

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Qualify the real read-only Host/Core storage connection on a fresh Linux runner.
 
-The fixture never configures recovery, systemd, production services or accounts.
+The fixture never configures recovery, systemd or production services. Optional
+normal setup creates an account only in this run's disposable installation.
 It refuses existing installations and destroys only positively identified actors
 created by this run. Generated environment files and raw process output stay local.
 """
@@ -93,6 +94,242 @@ class Refused(Exception):
 def require(value, code):
     if not value:
         raise Refused(code)
+
+
+NORMAL_SETUP_PROBE = r'''
+import { randomBytes, randomUUID } from 'node:crypto';
+import fs from 'node:fs/promises';
+import http from 'node:http';
+
+let phase = 'fixture-preconditions';
+const completed = [];
+let lastStatus;
+
+function require(value) {
+  if (!value) throw new Error('fixture-refused');
+}
+
+function request(method, pathname, { body, cookie } = {}) {
+  return new Promise((resolve, reject) => {
+    const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
+    const req = http.request({
+      host: '127.0.0.1', port: 3000, method, path: pathname, agent: false, signal: AbortSignal.timeout(120000),
+      headers: {
+        Host: 'fixture.invalid', Origin: 'http://fixture.invalid', Connection: 'close',
+        ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': payload.length } : {}),
+        ...(cookie ? { Cookie: cookie } : {}),
+      },
+    }, (response) => {
+      const chunks = [];
+      let size = 0;
+      response.on('data', (chunk) => {
+        size += chunk.length;
+        if (size > 65536) response.destroy(new Error('response-limit'));
+        else chunks.push(chunk);
+      });
+      response.once('error', reject);
+      response.once('aborted', () => reject(new Error('response-aborted')));
+      response.once('end', () => {
+        lastStatus = response.statusCode;
+        const raw = Buffer.concat(chunks).toString('utf8');
+        try {
+          resolve({ status: response.statusCode, body: raw ? JSON.parse(raw) : undefined,
+            cookies: response.headers['set-cookie'] ?? [] });
+        } catch {
+          reject(new Error('response-json'));
+        }
+      });
+    });
+    req.setTimeout(120000, () => req.destroy(new Error('request-deadline')));
+    req.once('error', reject);
+    req.end(payload);
+  });
+}
+
+function session(response) {
+  // The server retires a legacy domain cookie before issuing the host-only one.
+  const cookies = response.cookies.filter((value) => value.startsWith('runtipi-sid=')
+    && value.split(';', 1)[0] !== 'runtipi-sid=' && !/(?:^|;)\s*Domain=/i.test(value));
+  require(cookies.length === 1);
+  const cookie = cookies[0].split(';', 1)[0];
+  require(cookie.length <= 4096 && !cookie.includes('\r') && !cookie.includes('\n'));
+  return cookie;
+}
+
+try {
+  const commit = process.argv[2];
+  require(process.argv[3] === '--exercise-normal-setup');
+  require(process.platform === 'linux' && process.geteuid?.() === 0);
+  require(/^[a-f0-9]{40}$/.test(commit) && process.env.ORBIS_COMMIT === commit);
+  require(process.env.NODE_ENV === 'production' && process.env.DEMO_MODE === 'false');
+  require(process.env.ORBIS_HOST_SOCKET === '/run/orbis/host.sock');
+  const marker = '/opt/orbis-test-probe/normal-setup-enabled';
+  const info = await fs.lstat(marker);
+  require(info.isFile() && !info.isSymbolicLink() && info.uid === 0 && (info.mode & 0o022) === 0);
+  require(await fs.readFile(marker, 'utf8') === `ephemeral-normal-setup\n${commit}\n`);
+
+  const username = `fixture-${randomUUID().slice(0, 12)}`;
+  const originalPassword = randomBytes(32).toString('base64url');
+  const replacementPassword = randomBytes(32).toString('base64url');
+  phase = 'actual-first-registration';
+  const registered = await request('POST', '/api/auth/register', { body: { username, password: originalPassword } });
+  require(registered.status === 201 && registered.body?.success === true);
+  const originalCookie = session(registered);
+  const apps = await request('GET', '/api/apps/installed', { cookie: originalCookie });
+  require(apps.status === 200 && Array.isArray(apps.body?.installed) && apps.body.installed.length === 0);
+  completed.push('root-authorized-first-registration');
+
+  phase = 'second-registration-refusal';
+  const duplicate = await request('POST', '/api/auth/register', {
+    body: { username: `fixture-other-${randomUUID().slice(0, 12)}`, password: randomBytes(32).toString('base64url') },
+  });
+  require(duplicate.status === 403);
+  require((await request('GET', '/api/apps/installed', { cookie: originalCookie })).status === 200);
+  completed.push('second-operator-registration-refused');
+
+  phase = 'root-authorized-password-change';
+  const changed = await request('PATCH', '/api/auth/password', {
+    body: { currentPassword: originalPassword, newPassword: replacementPassword }, cookie: originalCookie,
+  });
+  require(changed.status === 204);
+  require((await request('GET', '/api/apps/installed', { cookie: originalCookie })).status === 401);
+  const oldLogin = await request('POST', '/api/auth/login', { body: { username, password: originalPassword } });
+  require(oldLogin.status === 400 && oldLogin.cookies.length === 0);
+  const newLogin = await request('POST', '/api/auth/login', { body: { username, password: replacementPassword } });
+  require(newLogin.status === 201 && newLogin.body?.success === true && !newLogin.body?.totpSessionId);
+  const replacementCookie = session(newLogin);
+  require((await request('GET', '/api/apps/installed', { cookie: replacementCookie })).status === 200);
+  completed.push('root-authorized-password-change-and-session-retirement');
+
+  phase = 'actual-logout';
+  const loggedOut = await request('POST', '/api/auth/logout', { cookie: replacementCookie });
+  require(loggedOut.status === 204);
+  require((await request('GET', '/api/apps/installed', { cookie: replacementCookie })).status === 401);
+  completed.push('session-logout');
+  process.stdout.write(`${JSON.stringify({ case: 'normal-setup-api', passed: true, completed, credentialsLogged: false })}\n`);
+} catch {
+  // Passwords, cookies, response bodies and error stacks are deliberately absent.
+  process.stdout.write(`${JSON.stringify({ case: 'normal-setup-api', passed: false, completed, failurePhase: phase, lastStatus })}\n`);
+  process.exitCode = 1;
+}
+
+'''
+
+MAPPED = Path('/var/lib/orbis-normal-setup-fixture')
+STATE_PARENT = Path('/var/lib/orbis')
+STATE = STATE_PARENT / 'state'
+
+
+
+
+def identity(path):
+    value = path.lstat()
+    require(stat.S_ISDIR(value.st_mode) and not path.is_symlink(), 'physical-directory-required')
+    return value.st_dev, value.st_ino, value.st_uid, value.st_gid, stat.S_IMODE(value.st_mode)
+
+
+def mount_rows():
+    rows = []
+    for line in Path('/proc/self/mountinfo').read_text().splitlines():
+        fields = line.split()
+        require(len(fields) >= 10 and '-' in fields, 'invalid-mount-table')
+        # Fixed mount points and generated scopes contain no escaped whitespace.
+        rows.append({'id': fields[0], 'point': fields[4], 'options': fields[5],
+                     'optional': fields[6:fields.index('-')]})
+    return rows
+
+
+def mount_command(*arguments):
+    result = subprocess.run(arguments, capture_output=True, timeout=20)
+    require(result.returncode == 0, 'protected-fixture-mount-operation-failed')
+
+
+class ProtectedScope:
+    def __init__(self, source, physical):
+        self.source, self.physical = Path(source), Path(physical)
+        self.physical_identity = None
+        self.created = []
+        self.mounts = []
+        self.entered = False
+
+    def preflight(self):
+        require(sys.platform == 'linux' and os.geteuid() == 0, 'linux-root-required')
+        require(os.environ.get('ORBIS_NORMAL_SETUP_TEST') == '1', 'explicit-normal-setup-gate-required')
+        require(self.source == self.source.resolve(strict=True)
+                and self.physical == self.physical.resolve(strict=True)
+                and self.physical.parent == self.source
+                and re.fullmatch(r'\.orbis-host-[A-Za-z0-9]{6,16}', self.physical.name), 'named-checkout-scope-required')
+        self.physical_identity = identity(self.physical)
+        require(self.physical_identity[2:] == (0, 0, 0o700)
+                and not list(self.physical.iterdir()), 'fresh-root-owned-scope-required')
+        require(not any(os.path.lexists(path) for path in (MAPPED, STATE_PARENT)), 'preexisting-orbis-state-refused')
+        require(not any(row['point'] in (str(MAPPED), str(STATE_PARENT), str(STATE)) for row in mount_rows()), 'preexisting-orbis-mount-refused')
+
+    def directory(self, path):
+        path.mkdir(mode=0o700)
+        before = identity(path)
+        require(before[2:] == (0, 0, 0o700), 'unprotected-mountpoint')
+        self.created.append((path, before))
+
+    def bind(self, source, target):
+        before = identity(source)
+        placeholder = identity(target)
+        prior = {row['id'] for row in mount_rows()}
+        mount_command('mount', '--bind', str(source), str(target))
+        # Retain the exact new mount before further operations, so a failed
+        # propagation update still has a positively bound cleanup target.
+        rows = [row for row in mount_rows() if row['point'] == str(target)]
+        require(len(rows) == 1 and rows[0]['id'] not in prior and identity(target) == before, 'new-bind-mount-not-proven')
+        self.mounts.append({'target': target, 'source': source, 'identity': before,
+                            'placeholder': placeholder, 'mountId': rows[0]['id']})
+        mount_command('mount', '--make-private', str(target))
+        rows = [row for row in mount_rows() if row['point'] == str(target)]
+        require(len(rows) == 1 and rows[0]['id'] == self.mounts[-1]['mountId']
+                and not any(value.startswith(('shared:', 'master:', 'propagate_from:')) for value in rows[0]['optional']),
+                'private-bind-propagation-required')
+
+    def verify(self):
+        require(self.physical_identity is not None and identity(self.physical) == self.physical_identity, 'physical-scope-replaced')
+        rows = mount_rows()
+        for record in self.mounts:
+            matches = [row for row in rows if row['point'] == str(record['target'])]
+            require(len(matches) == 1 and matches[0]['id'] == record['mountId']
+                    and identity(record['source']) == record['identity']
+                    and identity(record['target']) == record['identity'], 'protected-fixture-mount-changed')
+
+    def enter(self):
+        self.preflight()
+        private_state = self.physical / 'private-host-state'
+        private_state.mkdir(mode=0o700)
+        try:
+            self.directory(MAPPED)
+            self.directory(STATE_PARENT)
+            self.directory(STATE)
+            self.bind(self.physical, MAPPED)
+            self.bind(private_state, STATE)
+            self.verify()
+            self.entered = True
+            return MAPPED, STATE
+        except BaseException:
+            self.release()
+            raise
+
+    def release(self):
+        # No lazy/forced unmount, group signal, name-based process stop or broad
+        # deletion. An active actor/changed identity leaves evidence for review.
+        if self.mounts:
+            self.verify()
+        while self.mounts:
+            record = self.mounts[-1]
+            mount_command('umount', str(record['target']))
+            require(identity(record['target']) == record['placeholder'], 'mountpoint-placeholder-changed')
+            self.mounts.pop()
+        for path, before in reversed(self.created):
+            require(identity(path) == before and not list(path.iterdir()), 'mountpoint-not-empty-or-changed')
+            path.rmdir()
+        self.created.clear()
+        self.entered = False
+
 
 
 def canonical_reference(value):
@@ -197,9 +434,13 @@ def run(arguments, root, *, timeout=60, accepted=(0,)):
 
 
 class Runtime:
-    def __init__(self, source, folder, manifest_path, probe):
+    def __init__(self, source, folder, manifest_path, probe, *, normal_setup=False):
         self.source, self.folder = source, folder
         self.manifest_path, self.probe = manifest_path, probe
+        self.normal_setup = normal_setup
+        self.normal_scope = None
+        self.layout_folder = folder
+        self.host_state = folder / 'host-state'
         self.root = folder / 'install'
         self.socket = folder / 'socket/host.sock'
         self.host = None
@@ -256,7 +497,7 @@ class Runtime:
             require(item.get('Name') != NETWORK and (item.get('Labels') or {}).get('com.docker.compose.project') != 'runtipi', 'existing-network-refused')
         fixture = load(Path(__file__).with_name('orbis-host-storage-fixture.py'), 'storage_runtime_fixture')
         fixture.SOURCE = self.source
-        prepared = fixture.prepare(self.manifest_path, self.folder, DEPENDENCIES)
+        prepared = self.prepare_installation(fixture)
         self.manifest = prepared['manifest']
         require(self.manifest['image'] == IMAGE and re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+', self.manifest['tag']), 'candidate-required')
         # The workflow verifies the registry index/platform/config against the
@@ -267,6 +508,15 @@ class Runtime:
         with target.open('xb') as output:
             output.write(self.probe.read_bytes())
         target.chmod(0o644)
+        if self.normal_setup:
+            api = self.folder / 'public-probe/normal-setup.mjs'
+            with api.open('xb') as output:
+                output.write(NORMAL_SETUP_PROBE.encode())
+            api.chmod(0o644)
+            marker = self.folder / 'public-probe/normal-setup-enabled'
+            with marker.open('x') as output:
+                output.write('ephemeral-normal-setup\n' + self.manifest['commit'] + '\n')
+            marker.chmod(0o644)
         for reference in set(self.references.values()):
             self.docker('pull', '--quiet', reference, timeout=180)
         for name, reference in self.references.items():
@@ -282,11 +532,65 @@ class Runtime:
                 and labels.get('org.opencontainers.image.revision') == self.manifest['commit']
                 and labels.get('org.opencontainers.image.version') == self.manifest['tag'], 'pulled-candidate-identity-mismatch')
 
+    def prepare_installation(self, fixture):
+        if self.normal_setup:
+            require(os.environ.get('ORBIS_NORMAL_SETUP_TEST') == '1', 'explicit-normal-setup-gate-required')
+            self.normal_scope = ProtectedScope(self.source, self.folder)
+            self.layout_folder, self.host_state = self.normal_scope.enter()
+            self.root = self.layout_folder / 'install'
+            self.socket = self.layout_folder / 'socket/host.sock'
+        return fixture.prepare(self.manifest_path, self.layout_folder, DEPENDENCIES,
+                               before_populate=self.issue_normal_birth if self.normal_setup else None,
+                               credential_socket=self.normal_setup)
+
+    def issue_normal_birth(self, root):
+        require(self.normal_setup and self.normal_scope is not None and root == self.root
+                and root == Path('/var/lib/orbis-normal-setup-fixture/install')
+                and not list(root.iterdir()), 'exact-empty-normal-setup-root-required')
+        self.normal_scope.verify()
+        host = load(self.source / 'scripts/orbis-host.py', 'actual_normal_setup_host')
+        detect = load(self.source / 'scripts/orbis-install-detect.py', 'actual_normal_setup_discovery')
+        birth = host.load_script('orbis-host-ownership-bootstrap.py', 'actual_normal_setup_birth')
+        manifest = host.PLAN.require_installation_protocol(json.loads(self.manifest_path.read_bytes()))
+        reader = detect.DockerReader('default')
+        require(reader.socket() in ('/var/run/docker.sock', '/run/docker.sock'), 'local-normal-setup-engine-required')
+        with host.host_lock(root):
+            self.normal_scope.verify()
+            receipt = birth.prepare_new(host, root, reader, manifest)
+            birth.verify_reference(host, root, reader.context, hashlib.sha256(reader.daemon().encode()).hexdigest(), receipt)
+            self.normal_scope.verify()
+
+    def probe_normal_setup(self):
+        before = self.inspect(self.core_id())
+        require(before['State']['Status'] == 'running' and before['State'].get('Health', {}).get('Status') == 'healthy', 'candidate-health-lost')
+        result = self.docker('exec', self.core_id(), 'node', '/opt/orbis-test-probe/normal-setup.mjs',
+                             self.manifest['commit'], '--exercise-normal-setup', timeout=180, accepted=(0, 1))
+        require(len(result.stdout) <= 16384 and not result.stderr, 'invalid-normal-setup-probe-output')
+        record = json.loads(result.stdout)
+        require(type(record) is dict and record.get('case') == 'normal-setup-api', 'invalid-normal-setup-probe-output')
+        allowed = ('root-authorized-first-registration', 'second-operator-registration-refused',
+                   'root-authorized-password-change-and-session-retirement', 'session-logout')
+        completed = record.get('completed', [])
+        require(type(completed) is list and len(completed) <= len(allowed)
+                and completed == list(allowed[:len(completed)]), 'invalid-normal-setup-case-sequence')
+        passed = result.returncode == 0 and record.get('passed') is True and completed == list(allowed)
+        self.results.append({'case': 'normal-setup-api', 'passed': passed, 'completed': completed,
+            'failurePhase': record.get('failurePhase') if record.get('failurePhase') in (
+                'fixture-preconditions', 'actual-first-registration', 'second-registration-refusal',
+                'root-authorized-password-change', 'actual-logout') else None,
+            'lastStatus': record.get('lastStatus') if type(record.get('lastStatus')) is int
+                          and 100 <= record['lastStatus'] <= 599 else None})
+        require(passed, 'normal-setup-api-failed')
+        after = self.inspect(self.core_id())
+        require(after['State']['StartedAt'] == before['State']['StartedAt'] and after['Image'] == before['Image'], 'normal-setup-controller-changed')
+        credential = load(self.source / 'scripts/orbis-host-credential-service.py', 'normal_setup_config_boundary')
+        require(not os.path.lexists(self.host_state / credential.CONFIG_NAME), 'unexpected-recovery-configuration')
+
     def start_host(self):
         self.host_log = (self.folder / 'host.private.log').open('xb')
         command = [sys.executable, '-B', str(self.source / 'scripts/orbis-host-service.py'),
             '--root', str(self.root), '--docker-context', 'default', '--socket', str(self.socket),
-            '--snapshots', str(self.folder / 'snapshots'), '--state-dir', str(self.folder / 'host-state')]
+            '--snapshots', str(self.layout_folder / 'snapshots'), '--state-dir', str(self.host_state)]
         if os.environ.get('ORBIS_HOST_STORAGE_TRACE') == '1':
             command = [sys.executable, '-B', '-c', HOST_TRACE_BOOTSTRAP, *command[2:]]
         self.host = subprocess.Popen(command,
@@ -443,6 +747,8 @@ class Runtime:
             self.docker('network', 'rm', self.network)
         require(self.identifiers('container') == self.original_containers
                 and self.identifiers('network') == self.original_networks, 'original-inventory-changed')
+        if self.normal_scope is not None:
+            self.normal_scope.release()
         (self.folder / 'cleanup-complete').write_text('Only positively identified fixture actors removed.\n')
         return True
 
@@ -512,7 +818,8 @@ def main():
     parser.add_argument('--manifest', required=True, type=Path)
     parser.add_argument('--probe', required=True, type=Path)
     args = parser.parse_args()
-    runtime = Runtime(args.source, args.fixture, args.manifest, args.probe)
+    runtime = Runtime(args.source, args.fixture, args.manifest, args.probe,
+                      normal_setup=os.environ.get('ORBIS_NORMAL_SETUP_TEST') == '1')
     failure, cleaned, phase, diagnostics, trace_records = None, False, 'prepare', [], []
     try:
         runtime.prepare()
@@ -529,6 +836,9 @@ def main():
         runtime.probe_outside()
         phase = 'directory-drift-refusal'
         runtime.probe_core('directory-drift')
+        if runtime.normal_setup:
+            phase = 'normal-setup-api'
+            runtime.probe_normal_setup()
         require(runtime.enrollment_hash() == original, 'enrollment-changed')
         for store in ('fixture', '_user'):
             require((runtime.root / 'app-data' / store / 'probe/marker').read_text() == 'scoped fixture\n', 'fixture-data-changed')
@@ -552,7 +862,7 @@ def main():
               'failurePhase': phase if failure is not None else None, 'runtimeStates': diagnostics,
               'failureRole': runtime.failure_role if runtime.failure_role in SERVICES else None,
               'hostRefusals': trace_records, 'hostObservationTrace': os.environ.get('ORBIS_HOST_STORAGE_TRACE') == '1',
-              'recoveryConfigured': False, 'productionTouched': False}
+              'normalSetup': runtime.normal_setup, 'recoveryConfigured': False, 'productionTouched': False}
     # This receipt deliberately excludes raw Docker/Host/Core output and secrets.
     print(json.dumps(result, sort_keys=True))
     return 0 if result['passed'] else 1

@@ -1,7 +1,8 @@
 """Private fixture builder used by the real Host/Core Linux qualification.
 
 Creates only fresh synthetic installation data. No Docker, enrollment or authority
-operation runs from this module. Credentials never leave the generated directory.
+operation runs implicitly. An optional pre-population callback lets the caller
+issue real birth authority while the installation is empty. Credentials stay local.
 """
 from pathlib import Path
 import hashlib
@@ -27,13 +28,15 @@ def private_json(file, value):
         output.write('\n')
 
 
-def prepare(manifest_path, folder, dependencies):
-    """Prepare only. Never starts Docker, enrolls a Host or grants authority."""
+def prepare(manifest_path, folder, dependencies, *, before_populate=None, credential_socket=False):
+    """Prepare fresh files; an explicit caller hook may run before population."""
     stage = load('storage_fixture_stage', 'orbis-stage-release.py')
     preflight = load('storage_fixture_preflight', 'migration-preflight.py')
     manifest = stage.PLAN.validate_manifest(json.loads(manifest_path.read_text()))
     root = folder / 'install'
     root.mkdir(mode=0o700)
+    if before_populate is not None:
+        before_populate(root)
     for suffix in [*preflight.DATA_PATHS, 'data/postgres', 'data/queue', 'auth', 'cache']:
         (root / suffix).mkdir(mode=0o700, parents=True, exist_ok=True)
     for name in ['host-state', 'snapshots', 'socket', 'public-probe']:
@@ -60,6 +63,8 @@ def prepare(manifest_path, folder, dependencies):
         'THEME_BASE': 'gray', 'THEME_COLOR': 'green', 'TZ': 'UTC',
         'EXPERIMENTAL_INSECURE_COOKIE': 'false', 'LOG_LEVEL': 'info',
     }
+    if credential_socket:
+        environment['ORBIS_HOST_SOCKET'] = '/run/orbis/host.sock'
     env_file = root / '.env'
     env_file.write_text(''.join(f'{key}={value}\n' for key, value in environment.items()))
     os.chmod(env_file, 0o600)
