@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
@@ -116,6 +117,90 @@ describe('Streamed backup uploads with real files and archives', () => {
     expect(await fs.promises.readFile(path.join(root, 'data/user-config/store/demo/app.env'), 'utf8')).toBe('SETTING=archived\n');
     expect(fs.existsSync(path.join(root, 'app-data/store/demo/newer-data'))).toBe(false);
   });
+
+  it('validates, publishes and restores inert container links in every archive tree without touching their targets', async () => {
+    const outside = path.join(root, 'outside');
+    await fs.promises.writeFile(outside, 'external fixture', { mode: 0o600 });
+    const links = [];
+    for (const group of ['app-data', 'app', 'user-config']) {
+      for (const [name, target] of Object.entries({ absolute: '/container/config.yaml', external: outside, dangling: 'not-created', loop: 'loop' })) {
+        await fs.promises.symlink(target, path.join(root, 'source', group, name));
+        links.push({ group, name, target });
+      }
+    }
+    await archive.createTarGz(path.join(root, 'source'), incoming);
+    const before = await fs.promises.lstat(outside, { bigint: true });
+    await publish(await uploaded());
+    const target = path.join(backups, 'legacy.tar.gz');
+    expect(await fs.promises.readFile(target)).toEqual(await fs.promises.readFile(incoming));
+    await manager.restoreApp(appUrn, 'legacy.tar.gz');
+    const groups = { 'app-data': 'app-data/store/demo', app: 'apps/store/demo', 'user-config': 'data/user-config/store/demo' };
+    for (const { group, name, target } of links) {
+      expect(await fs.promises.readlink(path.join(root, groups[group as keyof typeof groups], name))).toBe(target);
+    }
+    const after = await fs.promises.lstat(outside, { bigint: true });
+    expect([after.ino, after.mode, after.mtimeNs, after.ctimeNs, after.atimeNs]).toEqual([
+      before.ino,
+      before.mode,
+      before.mtimeNs,
+      before.ctimeNs,
+      before.atimeNs,
+    ]);
+    expect(await fs.promises.readFile(outside, 'utf8')).toBe('external fixture');
+  });
+
+  it.each(['link-first', 'child-first', 'parent-traversal', 'root-link', 'hardlink', 'duplicate'])(
+    'rejects a crafted %s archive before any restore extraction',
+    async (fault) => {
+      const entry = (name: string, kind: string, content = '', target = '') => {
+        const bytes = Buffer.from(content);
+        const block = Buffer.alloc(512);
+        block.write(name, 0, 100);
+        block.write(`${bytes.length.toString(8).padStart(11, '0')}\0`, 124, 12);
+        block.fill(32, 148, 156);
+        block.write(kind, 156);
+        block.write(target, 157, 100);
+        block.write('ustar\0', 257);
+        const sum = block.reduce((total, byte) => total + byte, 0);
+        block.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148, 8);
+        return Buffer.concat([block, bytes, Buffer.alloc((512 - (bytes.length % 512)) % 512)]);
+      };
+      const link = entry('app-data/redirect', '2', '', '/outside');
+      const child = entry('app-data/redirect/overwrite', '0', 'must not be extracted');
+      const bad =
+        fault === 'link-first'
+          ? [link, child]
+          : fault === 'child-first'
+            ? [child, link]
+            : fault === 'parent-traversal'
+              ? [link, entry('app-data/redirect/../overwrite', '0', 'must not be extracted')]
+              : fault === 'root-link'
+                ? [entry('user-config', '2', '', '/outside')]
+                : fault === 'hardlink'
+                  ? [entry('app-data/hard', '1', '', '/outside')]
+                  : [entry('app-data/duplicate', '0', 'first'), entry('./app-data/duplicate', '0', 'second')];
+      await fs.promises.writeFile(
+        incoming,
+        gzipSync(
+          Buffer.concat([
+            entry('app-data', '5'),
+            entry('app', '5'),
+            entry('app/config.json', '0', JSON.stringify(config)),
+            ...bad,
+            Buffer.alloc(1024),
+          ]),
+        ),
+      );
+      const extract = vi.spyOn(archive, 'extractTarGz');
+      await expect(publish(await uploaded())).rejects.toThrow('not a valid backup');
+      expect(await manager.listBackupsByAppId(appUrn)).toEqual([]);
+      await fs.promises.mkdir(backups, { recursive: true });
+      await fs.promises.copyFile(incoming, path.join(backups, 'rejected.tar.gz'));
+      await expect(manager.restoreApp(appUrn, 'rejected.tar.gz')).rejects.toThrow('unsupported file types');
+      expect(extract).not.toHaveBeenCalled();
+      expect(await fs.promises.readFile(path.join(root, 'app-data/store/demo/newer-data'), 'utf8')).toBe('newer');
+    },
+  );
 
   it('rejects the previously accepted corrupt archive before publication and removes its staging', async () => {
     await fs.promises.writeFile(incoming, 'not a gzip archive');

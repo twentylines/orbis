@@ -458,7 +458,7 @@ export class AppMigrationRunner {
         await fs.chown(swap.incomingDirectory, stagingOwner.uid, stagingOwner.gid);
         await fs.chmod(swap.incomingDirectory, 0o700);
         await this.journal.verifyCheckpoint();
-        await swap.seal(signal, { allowAppDataLinks: true });
+        await swap.seal(signal, { allowAppDataLinks: 'verbatim' });
         await this.journal.restoreStep(attempt.id, 'staged');
         await quiescent();
         await this.journal.restoreStep(attempt.id, 'promoting');

@@ -368,7 +368,7 @@ export class AppMigrationJournal {
       if (!info.isDirectory() || String(info.dev) !== observed.directory.device || String(info.ino) !== observed.directory.inode)
         throw migrationFailure();
       await requireMigrationAppStopped(docker, before, observed);
-      await validateBackupTree(localDirectory);
+      await validateBackupTree(localDirectory, 'verbatim');
       let total = 0n;
       let count = 0;
       const audit = async (name: string): Promise<void> => {
@@ -390,18 +390,22 @@ export class AppMigrationJournal {
       if (output.stderr.trim()) throw migrationFailure();
       await fs.chmod(pending, 0o600);
       const entries = await archive.listTarGz(pending);
-      validateArchiveLinks(entries, (name) => {
-        const normalized = name.replace(/^(?:\.\/)+/, '').replace(/\/$/, '');
-        if (!normalized || normalized === '.') return 'app-data';
-        if (
-          path.posix.isAbsolute(normalized) ||
-          path.posix.normalize(normalized) !== normalized ||
-          normalized.split('/').includes('..') ||
-          normalized.includes('\\')
-        )
-          throw migrationFailure();
-        return `app-data/${normalized}`;
-      });
+      validateArchiveLinks(
+        entries,
+        (name) => {
+          const normalized = name.replace(/^(?:\.\/)+/, '').replace(/\/$/, '');
+          if (!normalized || normalized === '.') return 'app-data';
+          if (
+            path.posix.isAbsolute(normalized) ||
+            path.posix.normalize(normalized) !== normalized ||
+            normalized.split('/').includes('..') ||
+            normalized.includes('\\')
+          )
+            throw migrationFailure();
+          return `app-data/${normalized}`;
+        },
+        'verbatim',
+      );
       await requireMigrationAppStopped(docker, before, observed);
       const handle = await fs.open(pending, constants.O_RDONLY | constants.O_NOFOLLOW);
       try {

@@ -1,3 +1,4 @@
+import { validBackupLinkTarget } from '../backups/backup-links';
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -270,7 +271,7 @@ export class BackupDirectorySwap {
     this.plan.phase = current.phase;
     this.plan.incoming = current.incoming;
   }
-  async seal(signal: AbortSignal, options: { allowAppDataLinks?: boolean } = {}) {
+  async seal(signal: AbortSignal, options: { allowAppDataLinks?: boolean | 'verbatim' } = {}) {
     signal.throwIfAborted();
     await this.refresh();
     if (this.plan.phase !== 'staging') throw failed();
@@ -290,7 +291,9 @@ export class BackupDirectorySwap {
       if (stat.isSymbolicLink() && options.allowAppDataLinks) {
         if (String(stat.dev) !== (this.plan.version === 2 ? this.plan.staging?.device : this.plan.device)) throw failed();
         const target = await fs.readlink(file);
-        await resolveBackupLinkPath(this.incomingDirectory, path.dirname(file), target);
+        if (options.allowAppDataLinks === 'verbatim') {
+          if (!validBackupLinkTarget(target)) throw failed();
+        } else await resolveBackupLinkPath(this.incomingDirectory, path.dirname(file), target);
         const after = await fs.lstat(file, { bigint: true });
         if (after.dev !== stat.dev || after.ino !== stat.ino || after.ctimeNs !== stat.ctimeNs || (await fs.readlink(file)) !== target)
           throw failed();

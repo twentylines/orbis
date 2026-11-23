@@ -1,10 +1,10 @@
 import fs, { type BigIntStats } from 'node:fs';
 import type { FileHandle } from 'node:fs/promises';
 import path from 'node:path';
-import { validateBackupTree } from './backup-links';
+import { type BackupLinkPolicy, validateBackupTree } from './backup-links';
 import { preserveTreeMetadata } from './restore-transaction';
 
-type CopyOptions = { signal?: AbortSignal; check?: () => void; allowLinks?: boolean };
+type CopyOptions = { signal?: AbortSignal; check?: () => void; allowLinks?: BackupLinkPolicy };
 const maxNodes = 1_000_000;
 const maxBytes = 1024n ** 4n;
 const maxDepth = 128;

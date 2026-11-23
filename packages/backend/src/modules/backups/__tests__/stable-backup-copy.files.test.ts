@@ -229,3 +229,42 @@ it.skipIf(process.platform !== 'linux')('uses descriptor-relative paths for nest
   await copyStableBackupTree(source, destination);
   expect(open.mock.calls.some(([file]) => /^\/proc\/\d+\/fd\/\d+\/record$/.test(String(file)))).toBe(true);
 });
+
+it('preserves inert container links and their metadata without opening or modifying the linked targets', async () => {
+  await fs.promises.mkdir(source);
+  const outside = path.join(root, 'outside');
+  await fs.promises.writeFile(outside, 'untouched external bytes', { mode: 0o600 });
+  const targets = { absolute: outside, external: '../outside', dangling: 'missing', loop: 'loop' };
+  for (const [name, target] of Object.entries(targets)) await fs.promises.symlink(target, path.join(source, name));
+  const before = await fs.promises.lstat(outside, { bigint: true });
+  const metadata = async (file: string) => {
+    const value = await fs.promises.lstat(file, { bigint: true });
+    return { uid: value.uid, gid: value.gid, mode: value.mode, modified: value.mtimeNs };
+  };
+  await copyStableBackupTree(source, destination, { allowLinks: 'verbatim' });
+  for (const [name, target] of Object.entries(targets)) {
+    expect(await fs.promises.readlink(path.join(destination, name))).toBe(target);
+    expect(await metadata(path.join(destination, name))).toEqual(await metadata(path.join(source, name)));
+  }
+  const after = await fs.promises.lstat(outside, { bigint: true });
+  expect([after.ino, after.mode, after.mtimeNs, after.ctimeNs, after.atimeNs]).toEqual([
+    before.ino,
+    before.mode,
+    before.mtimeNs,
+    before.ctimeNs,
+    before.atimeNs,
+  ]);
+  expect(await fs.promises.readFile(outside, 'utf8')).toBe('untouched external bytes');
+});
+
+it('still refuses hardlinked files and root symlinks in verbatim mode', async () => {
+  await fs.promises.mkdir(source);
+  const outside = path.join(root, 'outside');
+  await fs.promises.writeFile(outside, 'external fixture');
+  await fs.promises.link(outside, path.join(source, 'hard'));
+  await expect(copyStableBackupTree(source, destination, { allowLinks: 'verbatim' })).rejects.toThrow('single-link regular file');
+  expect(fs.existsSync(destination)).toBe(false);
+  await fs.promises.rename(source, path.join(root, 'original'));
+  await fs.promises.symlink(path.join(root, 'original'), source);
+  await expect(copyStableBackupTree(source, destination, { allowLinks: 'verbatim' })).rejects.toThrow('regular directory');
+});

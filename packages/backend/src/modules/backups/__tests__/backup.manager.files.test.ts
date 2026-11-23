@@ -241,24 +241,65 @@ describe('BackupManager real files and archives', () => {
     });
   });
 
-  it.each(['absolute', 'escape', 'cycle', 'dangling'])(
-    'rejects a source %s symlink without reading its target or publishing a backup',
-    async (kind) => {
-      const link = path.join(appDataDir, 'data', 'unsafe');
-      const target =
-        kind === 'absolute'
-          ? path.join(appDataDir, 'data', 'record')
-          : kind === 'escape'
-            ? '../../../outside'
-            : kind === 'cycle'
-              ? 'unsafe'
-              : 'missing';
-      await fs.promises.symlink(target, link);
-      await expect(manager.backupApp(appUrn)).rejects.toThrow('Backup contains unsupported file types');
-      expect(await manager.listBackupsByAppId(appUrn)).toEqual([]);
-      expect(await fs.promises.readlink(link)).toBe(target);
-    },
-  );
+  it.each([false, true])('round-trips container links in all app trees without touching external targets, cross-device=%s', async (crossDevice) => {
+    const outside = path.join(root, 'outside');
+    await write(outside, 'untouched external data');
+    const before = await fs.promises.lstat(outside, { bigint: true });
+    const metadata = async (file: string) => {
+      const value = await fs.promises.lstat(file, { bigint: true });
+      return { uid: value.uid, gid: value.gid, mode: value.mode, modified: value.mtimeNs };
+    };
+    const links = [];
+    for (const directory of [appDataDir, appInstalledDir, userConfigDir]) {
+      for (const [name, target] of Object.entries({
+        absolute: '/container/config.yaml',
+        external: outside,
+        relative: path.relative(directory, outside),
+        dangling: 'not-created',
+        cycleA: 'cycleB',
+        cycleB: 'cycleA',
+      })) {
+        const file = path.join(directory, name);
+        await fs.promises.symlink(target, file);
+        links.push({ file, target, attributes: await metadata(file) });
+      }
+    }
+    await manager.backupApp(appUrn);
+    const [saved] = await manager.listBackupsByAppId(appUrn);
+    if (!saved) throw new Error('Expected a complete backup');
+    const entries = await archive.listTarGz(await manager.getBackupPath(appUrn, saved.id));
+    expect(entries.filter((entry) => entry.type === 'l')).toHaveLength(links.length);
+    for (const { file } of links) {
+      await fs.promises.unlink(file);
+      await write(file, 'later app data');
+    }
+    let crossed = 0;
+    if (crossDevice) {
+      const rename = fs.promises.rename.bind(fs.promises);
+      vi.spyOn(fs.promises, 'rename').mockImplementation(async (from, to) => {
+        if (String(from).includes('/extracted/') && String(to).endsWith('/incoming')) {
+          crossed++;
+          throw Object.assign(new Error('Cross-device staging'), { code: 'EXDEV' });
+        }
+        return rename(from, to);
+      });
+    }
+    await manager.restoreApp(appUrn, saved.id);
+    expect(crossed).toBe(crossDevice ? 3 : 0);
+    for (const { file, target, attributes } of links) {
+      expect(await fs.promises.readlink(file)).toBe(target);
+      expect(await metadata(file)).toEqual(attributes);
+    }
+    const after = await fs.promises.lstat(outside, { bigint: true });
+    expect([after.ino, after.mode, after.mtimeNs, after.ctimeNs, after.atimeNs]).toEqual([
+      before.ino,
+      before.mode,
+      before.mtimeNs,
+      before.ctimeNs,
+      before.atimeNs,
+    ]);
+    expect(await fs.promises.readFile(outside, 'utf8')).toBe('untouched external data');
+  });
 
   it('preserves subsecond file and directory timestamps through backup and restore', async () => {
     const file = path.join(appDataDir, 'data', 'record');

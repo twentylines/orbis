@@ -530,6 +530,40 @@ it('restores the protected baseline before target activation and retains the cha
   expect(writes).toBe(1);
 });
 
+it('captures and restores container links without resolving them or changing external targets', async () => {
+  const outside = path.join(root, 'outside');
+  await fs.writeFile(outside, 'external fixture', { mode: 0o600 });
+  const targets = { absolute: '/container/config.yaml', external: outside, dangling: 'not-created', cycleA: 'cycleB', cycleB: 'cycleA' };
+  for (const [name, target] of Object.entries(targets)) await fs.symlink(target, path.join(data, name));
+  const before = await fs.lstat(outside, { bigint: true });
+  behavior = 'script-failed';
+  const value = await ready();
+  const entries = await archive.listTarGz(path.join(value.directory, 'before.tar.gz'));
+  expect(entries.filter((entry) => entry.type === 'l')).toHaveLength(Object.keys(targets).length);
+  await expect(new AppMigrationRunner(value, storage).run(plans())).rejects.toThrow();
+  for (const name of Object.keys(targets)) {
+    await fs.unlink(path.join(data, name));
+    await fs.symlink('changed-after-checkpoint', path.join(data, name));
+  }
+  await new AppMigrationRunner(value, storage).restoreCheckpoint([], data, archive);
+  expect((await value.read()).phase).toBe('restored');
+  for (const [name, target] of Object.entries(targets)) expect(await fs.readlink(path.join(data, name))).toBe(target);
+  const after = await fs.lstat(outside, { bigint: true });
+  expect([after.ino, after.mode, after.mtimeNs, after.ctimeNs, after.atimeNs]).toEqual([
+    before.ino,
+    before.mode,
+    before.mtimeNs,
+    before.ctimeNs,
+    before.atimeNs,
+  ]);
+  expect(await fs.readFile(outside, 'utf8')).toBe('external fixture');
+  await value.verifyCheckpoint();
+  await value.close();
+  journal = await AppMigrationJournal.open(path.join(root, 'operations'), operation);
+  await new AppMigrationRunner(journal, storage).restoreCheckpoint([], data, archive);
+  expect((await journal.read()).restores).toHaveLength(1);
+});
+
 it('never automatically restores after the target could have written data', async () => {
   const value = await ready();
   await new AppMigrationRunner(value, storage).run(plans());

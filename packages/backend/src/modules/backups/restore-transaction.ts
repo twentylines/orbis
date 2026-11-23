@@ -9,7 +9,7 @@ import { type } from 'arktype';
 import type { AppUrn } from '@runtipi/common/types';
 import { assertNoRestoreMounts } from './restore-mounts';
 import { appMigrationLedgerSchema } from '../apps/app-migration-ledger';
-import { validateBackupTree } from './backup-links';
+import { type BackupLinkPolicy, validateBackupTree } from './backup-links';
 
 const groups = ['app-data', 'app', 'user-config'] as const;
 type Group = (typeof groups)[number];
@@ -99,7 +99,7 @@ const verifyCopiedMetadata = async (source: string, destination: string, signal?
     for (const name of await fs.promises.readdir(source)) await verifyCopiedMetadata(path.join(source, name), path.join(destination, name), signal);
 };
 
-export const preserveTreeMetadata = async (source: string, destination: string, allowLinks = true, signal?: AbortSignal) => {
+export const preserveTreeMetadata = async (source: string, destination: string, allowLinks: BackupLinkPolicy = true, signal?: AbortSignal) => {
   signal?.throwIfAborted();
   await validateBackupTree(source, allowLinks, signal);
   await visitCopiedTree(source, destination, process.platform !== 'linux', signal);
@@ -300,7 +300,7 @@ export class RestoreTransaction {
     }
   }
 
-  public async replace(appUrn: AppUrn, prepare: Sources | ((directory: string) => Promise<Sources>)) {
+  public async replace(appUrn: AppUrn, prepare: Sources | ((directory: string) => Promise<Sources>), options: { linkPolicy?: 'verbatim' } = {}) {
     if (this.active.has(appUrn)) throw new Error('An app restore is already in progress');
     this.active.add(appUrn);
     try {
@@ -360,10 +360,10 @@ export class RestoreTransaction {
             if (!moved) {
               if (!(await this.filesystem.copyDirectory(source, incoming, { preserveTimestamps: true, verbatimSymlinks: true, dereference: false })))
                 throw new Error('App files could not be staged for restore');
-              await preserveTreeMetadata(source, incoming);
+              await preserveTreeMetadata(source, incoming, options.linkPolicy);
             }
           } else await fs.promises.mkdir(incoming);
-          await validateBackupTree(incoming);
+          await validateBackupTree(incoming, options.linkPolicy);
           await syncTree(incoming);
           await syncDirectory(workspace);
           await syncDirectory(path.dirname(workspace));

@@ -129,7 +129,7 @@ export class BackupManager implements OnModuleInit {
 
       const { appDataDir, appInstalledDir } = this.appFilesManager.getAppPaths(appUrn);
 
-      const copyOptions = { signal: job?.signal, check: job ? () => job.check() : undefined };
+      const copyOptions = { signal: job?.signal, check: job ? () => job.check() : undefined, allowLinks: 'verbatim' as const };
       await copyStableBackupTree(appDataDir, path.join(contentDir, 'app-data'), copyOptions);
       await copyStableBackupTree(appInstalledDir, path.join(contentDir, 'app'), copyOptions);
 
@@ -139,7 +139,7 @@ export class BackupManager implements OnModuleInit {
       });
       if (userConfig?.isDirectory()) {
         this.logger.info('Including user configuration in backup...');
-        await copyStableBackupTree(userConfigDir, path.join(contentDir, 'user-config'), { ...copyOptions, allowLinks: false });
+        await copyStableBackupTree(userConfigDir, path.join(contentDir, 'user-config'), copyOptions);
       } else if (userConfig) {
         throw new Error('User configuration is not a readable directory');
       }
@@ -213,67 +213,71 @@ export class BackupManager implements OnModuleInit {
       const stableArchive = path.join(archiveDirectory, 'backup.tar.gz');
       await copyStableBackupFile(archive, stableArchive);
       this.validateRestoreArchiveEntries(await this.archiveManager.listTarGz(stableArchive));
-      await this.restoreTransaction.replace(appUrn, async (restoreDir) => {
-        this.logger.info('Extracting archive...');
-        const { stderr, stdout } = await this.archiveManager.extractTarGz(stableArchive, restoreDir);
-        this.logger.debug('--- archiveManager.extractTarGz ---');
-        this.logger.debug('stderr:', stderr);
-        this.logger.debug('stdout:', stdout);
-        if (stderr.trim()) throw new Error('The backup archive could not be extracted completely');
+      await this.restoreTransaction.replace(
+        appUrn,
+        async (restoreDir) => {
+          this.logger.info('Extracting archive...');
+          const { stderr, stdout } = await this.archiveManager.extractTarGz(stableArchive, restoreDir);
+          this.logger.debug('--- archiveManager.extractTarGz ---');
+          this.logger.debug('stderr:', stderr);
+          this.logger.debug('stdout:', stdout);
+          if (stderr.trim()) throw new Error('The backup archive could not be extracted completely');
 
-        const runValidationFsOperation = pLimit(16);
+          const runValidationFsOperation = pLimit(16);
 
-        await this.validateRestoreDirectory(path.join(restoreDir, 'app-data'), { allowSymlinks: true }, undefined, runValidationFsOperation);
-        await this.validateRestoreDirectory(
-          path.join(restoreDir, 'app'),
-          { allowSymlinks: true, rejectHardLinks: true },
-          undefined,
-          runValidationFsOperation,
-        );
-        await this.validateRestoreDirectory(
-          path.join(restoreDir, 'user-config'),
-          {
-            allowSymlinks: false,
-            optional: true,
-            rejectHardLinks: true,
-          },
-          undefined,
-          runValidationFsOperation,
-        );
+          await this.validateRestoreDirectory(path.join(restoreDir, 'app-data'), { allowSymlinks: true }, undefined, runValidationFsOperation);
+          await this.validateRestoreDirectory(
+            path.join(restoreDir, 'app'),
+            { allowSymlinks: true, rejectHardLinks: true },
+            undefined,
+            runValidationFsOperation,
+          );
+          await this.validateRestoreDirectory(
+            path.join(restoreDir, 'user-config'),
+            {
+              allowSymlinks: true,
+              optional: true,
+              rejectHardLinks: true,
+            },
+            undefined,
+            runValidationFsOperation,
+          );
 
-        const ledgerPath = path.join(restoreDir, ledgerFile);
-        const metadata = await fs.promises.lstat(ledgerPath).catch((error: NodeJS.ErrnoException) => {
-          if (error.code === 'ENOENT') return null;
-          throw error;
-        });
-        const app = await this.appsRepository.getAppByUrn(appUrn);
-        let migration: { appId: number; ledger: typeof appMigrationLedgerSchema.infer } | undefined;
-        if (metadata) {
-          if (!metadata.isFile() || metadata.nlink !== 1 || metadata.size > maxLedgerBytes || !app) {
-            throw new Error('Invalid application migration ledger in backup');
+          const ledgerPath = path.join(restoreDir, ledgerFile);
+          const metadata = await fs.promises.lstat(ledgerPath).catch((error: NodeJS.ErrnoException) => {
+            if (error.code === 'ENOENT') return null;
+            throw error;
+          });
+          const app = await this.appsRepository.getAppByUrn(appUrn);
+          let migration: { appId: number; ledger: typeof appMigrationLedgerSchema.infer } | undefined;
+          if (metadata) {
+            if (!metadata.isFile() || metadata.nlink !== 1 || metadata.size > maxLedgerBytes || !app) {
+              throw new Error('Invalid application migration ledger in backup');
+            }
+            const saved = backupLedgerSchema.assert(JSON.parse(await fs.promises.readFile(ledgerPath, 'utf8')));
+            if (saved.appUrn !== appUrn) throw new Error('Application migration ledger belongs to another application');
+            migration = { appId: app.id, ledger: saved.ledger };
+          } else if (app) {
+            const ledger = await this.appsRepository.getMigrationLedger(app.id);
+            if (ledger.migrationIds.length) throw new Error('This backup predates the application migration history');
+            migration = { appId: app.id, ledger: { baselined: false, migrationIds: [] } };
           }
-          const saved = backupLedgerSchema.assert(JSON.parse(await fs.promises.readFile(ledgerPath, 'utf8')));
-          if (saved.appUrn !== appUrn) throw new Error('Application migration ledger belongs to another application');
-          migration = { appId: app.id, ledger: saved.ledger };
-        } else if (app) {
-          const ledger = await this.appsRepository.getMigrationLedger(app.id);
-          if (ledger.migrationIds.length) throw new Error('This backup predates the application migration history');
-          migration = { appId: app.id, ledger: { baselined: false, migrationIds: [] } };
-        }
-        return {
-          migration,
-          'app-data': path.join(restoreDir, 'app-data'),
-          app: path.join(restoreDir, 'app'),
-          'user-config': (await this.filesystem.isDirectory(path.join(restoreDir, 'user-config'))) ? path.join(restoreDir, 'user-config') : null,
-        };
-      });
+          return {
+            migration,
+            'app-data': path.join(restoreDir, 'app-data'),
+            app: path.join(restoreDir, 'app'),
+            'user-config': (await this.filesystem.isDirectory(path.join(restoreDir, 'user-config'))) ? path.join(restoreDir, 'user-config') : null,
+          };
+        },
+        { linkPolicy: 'verbatim' },
+      );
     } finally {
       await this.stagingCleanup.dispose(appUrn, 'restore', archiveDirectory);
     }
   };
 
   private validateRestoreArchiveEntries(entries: ArchiveEntry[]) {
-    validateArchiveLinks(entries, (entry) => this.normalizeArchiveEntryPath(entry));
+    validateArchiveLinks(entries, (entry) => this.normalizeArchiveEntryPath(entry), 'verbatim');
     for (const entry of entries) {
       const entryPath = this.normalizeArchiveEntryPath(entry.path);
 
@@ -324,10 +328,9 @@ export class BackupManager implements OnModuleInit {
     if (!directoryStats.isDirectory()) {
       throw new Error('Backup contains unsupported file types');
     }
-    if (directory === rootDirectory) await validateBackupTree(rootDirectory, options.allowSymlinks);
+    if (directory === rootDirectory) await validateBackupTree(rootDirectory, options.allowSymlinks ? 'verbatim' : false);
 
     const entries = await runFsOperation(() => fs.promises.readdir(directory, { withFileTypes: true }));
-    const rootPath = path.resolve(rootDirectory);
     let nextEntryIndex = 0;
 
     const workers = Array.from({ length: Math.min(16, entries.length) }, async () => {
@@ -346,12 +349,8 @@ export class BackupManager implements OnModuleInit {
             throw new Error('Backup contains unsupported file types');
           }
 
-          const linkTarget = await runFsOperation(() => fs.promises.readlink(entryPath));
-          const resolvedTarget = path.resolve(path.dirname(entryPath), linkTarget);
-
-          if (path.isAbsolute(linkTarget) || !this.isPathInsideOrEqual(rootPath, resolvedTarget)) {
-            throw new Error('Backup contains unsupported file types');
-          }
+          // The root audit validated the link text. Never resolve a container
+          // path against this server's filesystem while restoring it.
           continue;
         }
 
@@ -377,12 +376,6 @@ export class BackupManager implements OnModuleInit {
     });
 
     await Promise.all(workers);
-  }
-
-  private isPathInsideOrEqual(parentPath: string, childPath: string): boolean {
-    const relativePath = path.relative(parentPath, childPath);
-
-    return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
   }
 
   /**

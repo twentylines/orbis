@@ -7,14 +7,19 @@ const hasControls = (value: string) => {
   for (const character of value) if (character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127) return true;
   return false;
 };
+// Verbatim targets are stored as link text, never resolved or traversed.
+export type BackupLinkPolicy = boolean | 'verbatim';
+export const validBackupLinkTarget = (target: unknown): target is string =>
+  typeof target === 'string' && target.length > 0 && Buffer.byteLength(target) <= 4096 && !hasControls(target) && !target.includes('\\');
 const inside = (root: string, target: string) => {
   const relative = path.relative(root, target);
   return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 };
 
-export async function validateBackupTree(root: string, allowLinks = true, signal?: AbortSignal): Promise<void> {
+export async function validateBackupTree(root: string, allowLinks: BackupLinkPolicy = true, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted();
-  const canonical = await fs.promises.realpath(root);
+  if (!(await fs.promises.lstat(root)).isDirectory()) throw unsupported();
+  const canonical = allowLinks === 'verbatim' ? root : await fs.promises.realpath(root);
   const entries: ArchiveEntry[] = [];
   const visit = async (file: string): Promise<void> => {
     signal?.throwIfAborted();
@@ -29,8 +34,9 @@ export async function validateBackupTree(root: string, allowLinks = true, signal
       for (const name of await fs.promises.readdir(file)) await visit(path.join(file, name));
     } else if (entry.isSymbolicLink()) {
       const target = await fs.promises.readlink(file);
-      if (!allowLinks || file === root || !target || path.isAbsolute(target) || !inside(root, path.resolve(path.dirname(file), target)))
-        throw unsupported();
+      if (!allowLinks || file === root || !validBackupLinkTarget(target)) throw unsupported();
+      if (allowLinks === 'verbatim') return;
+      if (path.isAbsolute(target) || !inside(root, path.resolve(path.dirname(file), target))) throw unsupported();
       try {
         if (!inside(canonical, await fs.promises.realpath(file))) throw unsupported();
         const resolved = await fs.promises.stat(file);
@@ -38,13 +44,13 @@ export async function validateBackupTree(root: string, allowLinks = true, signal
       } catch {
         throw unsupported();
       }
-    } else if (!entry.isFile()) throw unsupported();
+    } else if (!entry.isFile() || entry.nlink !== 1) throw unsupported();
   };
   await visit(root);
-  validateArchiveLinks(entries, (value) => value);
+  validateArchiveLinks(entries, (value) => value, allowLinks);
 }
 
-export function validateArchiveLinks(entries: ArchiveEntry[], normalize: (entry: string) => string): void {
+export function validateArchiveLinks(entries: ArchiveEntry[], normalize: (entry: string) => string, allowLinks: BackupLinkPolicy = true): void {
   const paths = new Map<string, ArchiveEntry>();
   const directories = new Map<string, Set<string>>();
   const connect = (parent: string, target: string) => {
@@ -52,6 +58,9 @@ export function validateArchiveLinks(entries: ArchiveEntry[], normalize: (entry:
     directories.get(parent)?.add(target);
   };
   for (const entry of entries) {
+    // A member containing ".." must not be normalized past a symlink before
+    // extraction. Link targets may contain it only as uninterpreted text.
+    if (path.posix.isAbsolute(entry.path) || entry.path.split('/').includes('..')) throw unsupported();
     const name = normalize(entry.path).replace(/\/$/, '');
     if (paths.has(name)) throw unsupported();
     paths.set(name, entry);
@@ -72,6 +81,11 @@ export function validateArchiveLinks(entries: ArchiveEntry[], normalize: (entry:
       parent = path.posix.dirname(parent);
     }
     if (entry.type !== 'l') continue;
+    if (!allowLinks || !validBackupLinkTarget(entry.linkTarget)) throw unsupported();
+    if (allowLinks === 'verbatim') {
+      if (!['app-data', 'app', 'user-config'].includes(group ?? '')) throw unsupported();
+      continue;
+    }
     if (!['app-data', 'app'].includes(group ?? '')) throw unsupported();
     const visited = new Set<string>();
     let current = name;

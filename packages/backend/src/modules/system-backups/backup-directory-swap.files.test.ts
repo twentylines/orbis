@@ -552,6 +552,30 @@ it('rejects escaping links even when app-data links are enabled', async () => {
   await expect(test.swap.seal(signal(), { allowAppDataLinks: true })).rejects.toThrow();
 });
 
+it('promotes and reopens explicitly enabled inert container links without changing external targets', async () => {
+  const test = await fixture();
+  const outside = path.join(directory, 'outside');
+  await fs.writeFile(outside, 'external fixture', { mode: 0o600 });
+  const targets = { absolute: outside, dangling: 'not-created', loop: 'loop' };
+  for (const [name, target] of Object.entries(targets)) await fs.symlink(target, path.join(test.incoming, name));
+  const before = await fs.lstat(outside, { bigint: true });
+  await expect(test.swap.seal(signal(), { allowAppDataLinks: true })).rejects.toThrow();
+  await test.swap.seal(signal(), { allowAppDataLinks: 'verbatim' });
+  await test.swap.promote(signal());
+  await test.swap.commit();
+  await (await BackupDirectorySwap.open(test.journal)).commit();
+  for (const [name, target] of Object.entries(targets)) expect(await fs.readlink(path.join(test.root, name))).toBe(target);
+  const after = await fs.lstat(outside, { bigint: true });
+  expect([after.ino, after.mode, after.mtimeNs, after.ctimeNs, after.atimeNs]).toEqual([
+    before.ino,
+    before.mode,
+    before.mtimeNs,
+    before.ctimeNs,
+    before.atimeNs,
+  ]);
+  expect(await fs.readFile(outside, 'utf8')).toBe('external fixture');
+});
+
 it('does not overwrite an external target created after original children were backed up', async () => {
   const test = await fixture();
   await stage(test);
