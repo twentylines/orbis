@@ -43,18 +43,26 @@ service = pathlib.Path(sys.argv[1])
 if service.name != 'orbis-host-service.py' or not service.is_file():
     raise SystemExit('The source Host service is required.')
 modules = {'orbis-host-app-storage.py', 'orbis-host-credential-peer.py', 'orbis-host-service.py', 'orbis-host.py'}
+credential_modules = {'orbis-host-ownership-bootstrap.py', 'orbis-host-ownership-authority.py',
+                      'orbis-host-credential-fence.py', 'orbis-host-credential-service.py', 'orbis-host-existing-ownership.py'}
+modules |= credential_modules
 files = {str(service.parent / name) for name in modules}
 observation_file = str(service.parent / 'orbis-host-app-storage.py')
+ownership_file = str(service.parent / 'orbis-host-ownership-bootstrap.py')
 errors = {'ValueError', 'TypeError', 'KeyError', 'OSError', 'PermissionError', 'FileNotFoundError', 'RuntimeError'}
 local = threading.local()
 count = 0
 def trace(frame, event, arg):
     global count
     filename, function = frame.f_code.co_filename, frame.f_code.co_name
-    selected = filename == observation_file and function == 'observe'
-    if selected and event == 'call': local.active = True
-    if not getattr(local, 'active', False) or filename not in files: return None
+    selected = (filename == observation_file and function == 'observe'
+                or filename == ownership_file and function == 'request'
+                and frame.f_locals.get('operation') in ('change-admission', 'ownership-prepare', 'ownership-check', 'ownership-complete'))
+    if selected and event == 'call': local.depth = getattr(local, 'depth', 0) + 1
+    if not getattr(local, 'depth', 0) or filename not in files: return None
     if event == 'exception' and count < 200 and arg[0].__name__ in errors:
+        if pathlib.Path(filename).name in credential_modules and arg[0].__name__ == 'FileNotFoundError':
+            return trace
         count += 1
         record = {'module': pathlib.Path(filename).name, 'function': function, 'line': frame.f_lineno, 'error': arg[0].__name__}
         if filename == observation_file and function == 'mounts':
@@ -93,7 +101,7 @@ def trace(frame, event, arg):
             os.write(2, ('ORBIS_HOST_STORAGE_TRACE ' + json.dumps(record, sort_keys=True) + '\n').encode())
         except OSError:
             pass
-    if selected and event == 'return': local.active = False
+    if selected and event == 'return': local.depth -= 1
     return trace
 sys.settrace(trace)
 threading.settrace(trace)
@@ -109,6 +117,16 @@ class Refused(Exception):
 def require(value, code):
     if not value:
         raise Refused(code)
+
+
+def engine_probe_diagnostics(result):
+    error = result.stderr
+    return {'stdoutPresent': bool(result.stdout), 'stderrPresent': bool(error),
+            'outputBounded': len(result.stdout) <= 16384 and len(error) <= 16384,
+            'moduleResolutionError': any(value in error for value in (b'ERR_MODULE_NOT_FOUND', b'MODULE_NOT_FOUND', b'Cannot find module', b'Cannot find package')),
+            'dynamicRequireError': b'Dynamic require of' in error and b'not supported' in error,
+            'syntaxError': b'SyntaxError:' in error, 'referenceError': b'ReferenceError:' in error,
+            'permissionError': b'ERR_ACCESS_DENIED' in error}
 
 
 NORMAL_SETUP_PROBE = r'''
@@ -620,13 +638,17 @@ class Runtime:
         require(before['State']['Status'] == 'running' and before['State'].get('Health', {}).get('Status') == 'healthy', 'candidate-health-lost')
         result = self.docker('exec', self.core_id(), 'node', '/opt/orbis-test-probe/probe.mjs',
                              'host-engine-' + mode, self.manifest['commit'], '--exercise-host-engine', timeout=180, accepted=(0, 1))
-        require(len(result.stdout) <= 16384 and not result.stderr, 'invalid-host-engine-probe-output')
+        if len(result.stdout) > 16384 or result.stderr:
+            self.results.append({'case': 'host-engine-' + mode, 'passed': False,
+                                 'failurePhase': 'probe-startup', 'diagnostic': engine_probe_diagnostics(result),
+                                 'modeledHost': False, 'mainWorkerTested': False})
+            require(False, 'invalid-host-engine-probe-output')
         record = json.loads(result.stdout)
         require(type(record) is dict and record.get('case') == 'host-engine-' + mode, 'invalid-host-engine-probe-output')
         passed = (result.returncode == 0 and record.get('passed') is True and record.get('cleanup') is True
                   and record.get('modeledHost') is False and record.get('mainWorkerTested') is False
                   and record.get('productionTouched') is False and record.get('failurePhase') is None)
-        phases = ('fixture-preconditions', 'actual-host-witness', 'actual-postgres-fixture',
+        phases = ('fixture-preconditions', 'fixture-environment', 'fixture-marker', 'fixture-directory', 'actual-host-witness', 'actual-postgres-fixture',
                   'actual-host-backed-checkpoint', 'actual-isolated-migration', 'actual-checkpoint-rollback', 'owned-actor-cleanup')
         if passed:
             after = self.inspect(self.core_id())
@@ -849,7 +871,9 @@ class Runtime:
                 fields = ('pid', 'daemonSha256', 'socketIdentity', 'enrollmentSha256', 'publicationSha256',
                           'controller.id', 'controller.imageId', 'controller.startedAt', 'controller.definitionSha256')
                 if (type(value) is dict and set(value) in (base, extended, mount_input)
-                        and value['module'] in ('orbis-host-app-storage.py', 'orbis-host-credential-peer.py', 'orbis-host-service.py', 'orbis-host.py')
+                        and value['module'] in ('orbis-host-app-storage.py', 'orbis-host-credential-peer.py', 'orbis-host-service.py', 'orbis-host.py',
+                            'orbis-host-ownership-bootstrap.py', 'orbis-host-ownership-authority.py', 'orbis-host-credential-fence.py',
+                            'orbis-host-credential-service.py', 'orbis-host-existing-ownership.py')
                         and type(value['function']) is str and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,127}|<(?:genexpr|listcomp|dictcomp|lambda)>', value['function'])
                         and type(value['line']) is int and 1 <= value['line'] <= 100000
                         and value['error'] in ('ValueError', 'TypeError', 'KeyError', 'OSError', 'PermissionError', 'FileNotFoundError', 'RuntimeError')):

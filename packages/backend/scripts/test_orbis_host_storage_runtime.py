@@ -145,20 +145,55 @@ class RuntimeBoundaries(unittest.TestCase):
                 'destinationAbsolute': True, 'destinationCanonical': True, 'namespaceHandle': True, 'filesystem': 'nsfs'}}
             invalid_mount = {**mount, 'mountInput': {**mount['mountInput'], 'filesystem': '/private/location'}}
             extra = {**expected, 'privateValue': 'must-not-print'}
+            ownership = {'module': 'orbis-host-ownership-bootstrap.py', 'function': 'dispatch', 'line': 465, 'error': 'ValueError'}
             log = b'private ordinary log\n' + b''.join(b'ORBIS_HOST_STORAGE_TRACE ' + json.dumps(row).encode() + b'\n'
-                for row in (expected, difference, mount, invalid_mount, extra, {**difference, 'differences': ['/private/location']},
+                for row in (expected, difference, mount, ownership, {**ownership, 'privateValue': 'must-not-print'},
+                            invalid_mount, extra, {**difference, 'differences': ['/private/location']},
                             {**expected, 'module': '/private/location'}, {**expected, 'line': -1}))
             (runtime.folder / 'host.private.log').write_bytes(log)
             with patch.dict(R.os.environ, {'ORBIS_HOST_STORAGE_TRACE': '0'}):
                 self.assertEqual(runtime.host_trace_records(), [])
             with patch.dict(R.os.environ, {'ORBIS_HOST_STORAGE_TRACE': '1'}):
-                self.assertEqual(runtime.host_trace_records(), [expected, difference, mount])
+                self.assertEqual(runtime.host_trace_records(), [expected, difference, mount, ownership])
 
     def test_cleanup_has_no_authority_before_initial_inventory(self):
         runtime = self.runtime()
         with patch.object(runtime, 'docker') as docker:
             self.assertFalse(runtime.cleanup())
             docker.assert_not_called()
+
+    def test_optional_ownership_trace_preserves_nested_exceptions_without_argument_data(self):
+        import sys
+        import threading
+        from types import SimpleNamespace
+        tree = ast.parse(R.HOST_TRACE_BOOTSTRAP)
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'trace')
+        filename = '/fixture/orbis-host-ownership-bootstrap.py'
+        captured = []
+        scope = {'pathlib': __import__('pathlib'), 'local': threading.local(), 'count': 0,
+            'files': {filename}, 'observation_file': '/fixture/orbis-host-app-storage.py', 'ownership_file': filename,
+            'credential_modules': {'orbis-host-ownership-bootstrap.py'}, 'errors': {'ValueError'},
+            'json': json, 'os': SimpleNamespace(write=lambda descriptor, body: captured.append(body))}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), '<bounded-trace>', 'exec'), scope)
+        functions = {}
+        exec(compile("def request(operation, data):\n"
+                     "    if operation == 'change-admission': return request('ownership-check', data)\n"
+                     "    raise ValueError('private-sensitive-message')\n", filename, 'exec'), functions)
+        previous = sys.gettrace()
+        try:
+            sys.settrace(scope['trace'])
+            with self.assertRaises(ValueError): functions['request']('change-admission', {'private': 'private-body'})
+        finally:
+            sys.settrace(previous)
+        self.assertEqual(scope['local'].depth, 0)
+        self.assertGreaterEqual(len(captured), 2)
+        for body in captured:
+            row = json.loads(body.split(b' ', 1)[1])
+            self.assertEqual(set(row), {'module', 'function', 'line', 'error'})
+            self.assertEqual(row['module'], 'orbis-host-ownership-bootstrap.py')
+            self.assertEqual(row['error'], 'ValueError')
+            self.assertNotIn(b'private-sensitive-message', body)
+            self.assertNotIn(b'private-body', body)
 
     def test_cleanup_refuses_changed_container_before_any_engine_mutation(self):
         for field in ('name', 'image', 'reference', 'project', 'service', 'root'):
@@ -432,6 +467,15 @@ assert.throws(() => session({cookies: ['runtipi-sid=bad\r\nvalue']}));
 
 
 class HostEngineBoundaries(unittest.TestCase):
+    def test_child_startup_diagnostic_reports_only_fixed_flags(self):
+        result = subprocess.CompletedProcess([], 1, b'private body',
+            b'Error: Cannot find module private-value\nReferenceError: private-sensitive-message')
+        diagnostic = R.engine_probe_diagnostics(result)
+        self.assertTrue(diagnostic['moduleResolutionError'])
+        self.assertTrue(diagnostic['referenceError'])
+        self.assertTrue(all(type(value) is bool for value in diagnostic.values()))
+        self.assertNotIn('private', json.dumps(diagnostic))
+
     def runtime(self):
         runtime = R.Runtime(Path('/checkout'), Path('/checkout/.orbis-host-ABC123'), Path('/manifest'), Path('/probe'), host_engine=True)
         runtime.manifest = {'commit': 'a' * 40}

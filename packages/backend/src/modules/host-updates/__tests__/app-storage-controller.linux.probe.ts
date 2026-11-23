@@ -162,7 +162,7 @@ async function qualifyHostEngine() {
   let baseline: string[] | undefined;
   const owned = new Map<string, string>();
   let phase = 'fixture-preconditions';
-  let mode: 'upgrade' | 'rollback' | undefined;
+  const mode = process.argv[2] === 'host-engine-upgrade' ? 'upgrade' : process.argv[2] === 'host-engine-rollback' ? 'rollback' : undefined;
   let failurePhase: string | undefined;
   let cleanupPassed = false;
 
@@ -357,13 +357,14 @@ async function qualifyHostEngine() {
     assert.equal(process.arch, 'x64');
     assert.equal(process.geteuid?.(), 0);
     assert.match(commit ?? '', /^[a-f0-9]{40}$/);
+    phase = 'fixture-environment';
     assert.equal(process.env.ORBIS_COMMIT, commit);
     assert.equal(process.env.NODE_ENV, 'production');
     assert.equal(process.env.DEMO_MODE, 'false');
     assert.equal(process.argv[2] === 'host-engine-upgrade' || process.argv[2] === 'host-engine-rollback', true);
-    mode = process.argv[2] === 'host-engine-upgrade' ? 'upgrade' : 'rollback';
     appUrn = `engine-${mode}:fixture`;
     data = `/app-data/fixture/engine-${mode}`;
+    phase = 'fixture-marker';
     const markerPath = '/opt/orbis-test-probe/host-engine-enabled';
     const markerInfo = await fs.lstat(markerPath);
     assert.equal(markerInfo.isFile() && !markerInfo.isSymbolicLink() && markerInfo.uid === 0 && !(markerInfo.mode & 0o022), true);
@@ -373,6 +374,7 @@ async function qualifyHostEngine() {
     assert.equal(marker[3], '');
     assert.match(marker[2] ?? '', /^[a-f0-9]{64}$/);
     scope = createHash('sha256').update(`${marker[2]}\n${mode}`).digest('hex');
+    phase = 'fixture-directory';
     assert.equal(await fs.realpath(data), data);
     assert.deepEqual((await fs.readdir(data)).sort(), ['marker']);
     assert.equal(await fs.readFile(path.join(data, 'marker'), 'utf8'), 'scoped fixture\n');
