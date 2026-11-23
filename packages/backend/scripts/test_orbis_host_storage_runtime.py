@@ -55,12 +55,20 @@ class RuntimeBoundaries(unittest.TestCase):
                 b"Cannot find module '/private/location'\nsecret=sensitive-value\n"
                 b"Error: ENOENT at /private/other\n")
         self.assertEqual(R.startup_signals(body, {'argon2'}), {
-            'markers': ['missing-file', 'missing-module'], 'missingPackages': ['argon2']})
+            'markers': ['missing-file', 'missing-module'], 'missingPackages': ['argon2'],
+            'messages': ['Error [ERR_MODULE_NOT_FOUND]: Cannot find package <quoted> imported from <private>',
+                         'Error: ENOENT at <private>'], 'logBytes': len(body)})
         self.assertNotIn('sensitive-value', json.dumps(R.startup_signals(body, {'argon2'})))
 
     def test_minified_source_lines_cannot_hide_the_final_startup_failure(self):
         body = b'x' * (512 * 1024) + b'\nParseError: private detail\n'
-        self.assertEqual(R.startup_signals(body, set()), {'markers': ['schema-parse'], 'missingPackages': []})
+        self.assertEqual(R.startup_signals(body, set()), {
+            'markers': ['schema-parse'], 'missingPackages': [], 'messages': ['ParseError: private detail'], 'logBytes': len(body)})
+
+    def test_startup_message_redacts_fixture_values_and_skips_sensitive_lines(self):
+        body = b'\x1b[31m[Nest] ERROR [ExceptionHandler] Missing dependency fixture-value in module\x1b[0m\nError: password invalid\n'
+        result = R.startup_signals(body, set(), ['fixture-value'])
+        self.assertEqual(result['messages'], ['Missing dependency <private> in module'])
 
     def test_official_repository_aliases_preserve_the_exact_digest(self):
         digest = 'sha256:' + 'a' * 64

@@ -65,12 +65,13 @@ def canonical_reference(value):
     return registry + '/' + '/'.join(parts) + '@' + digest
 
 
-def startup_signals(body, packages):
-    """Select known failure markers; never return messages, paths or log lines."""
+def startup_signals(body, packages, private_values=()):
+    """Return bounded diagnostics without configuration, paths or credentials."""
     # Node can print a very long minified source line before its actual error.
     # Keep both bounded ends so that line cannot hide the final failure marker.
     text = (body[:128 * 1024] + b'\n' + body[-128 * 1024:]).decode('utf-8', errors='replace')
     text = '\n'.join(line for line in text.splitlines() if len(line) <= 4096)
+    text = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', text)
     markers = {
         'missing-module': ('ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND', 'Cannot find package', 'Cannot find module'),
         'native-module': ('ERR_DLOPEN_FAILED', 'invalid ELF header'),
@@ -95,8 +96,26 @@ def startup_signals(body, packages):
         root = '/'.join(value.split('/')[:2]) if value.startswith('@') else value.split('/')[0]
         if root in packages:
             missing.add(root)
+    messages = []
+    for line in text.splitlines():
+        if '[ExceptionHandler]' in line:
+            line = line.split('[ExceptionHandler]', 1)[1].strip()
+        elif not re.match(r'^[A-Za-z]{0,48}(?:Error|Exception)(?: \[[A-Z_]+\])?:', line):
+            continue
+        if re.search(r'password|token|secret|cookie|session|PRIVATE KEY', line, re.I):
+            continue
+        for value in private_values:
+            if isinstance(value, str) and len(value) >= 4:
+                line = line.replace(value, '<private>')
+        line = re.sub(r"(['\"`]).*?\1", '<quoted>', line)
+        line = re.sub(r'https?://\S+|/[\w./:@%+~=-]+|[\w.+-]+@[\w.-]+|[A-Za-z0-9_+/=-]{32,}', '<private>', line)
+        line = ''.join(char for char in line if 32 <= ord(char) <= 126)[:320]
+        if line and line not in messages:
+            messages.append(line)
+        if len(messages) == 3:
+            break
     return {'markers': sorted(key for key, values in markers.items() if any(value in text for value in values)),
-            'missingPackages': sorted(missing)}
+            'missingPackages': sorted(missing), 'messages': messages, 'logBytes': len(body)}
 
 
 def load(file, name):
@@ -373,7 +392,10 @@ class Runtime:
                     package = json.loads((self.source / 'packages/backend/package.json').read_bytes())
                     packages = set(package.get('dependencies', {}))
                     logs = self.docker('logs', '--tail', '100', identifier)
-                    records[-1]['startup'] = startup_signals(logs.stdout + logs.stderr, packages)
+                    configuration = (self.root / '.env').read_text().splitlines()
+                    private_values = [line.split('=', 1)[1] for line in configuration if '=' in line]
+                    private_values.extend((str(self.root), str(self.folder), str(self.source)))
+                    records[-1]['startup'] = startup_signals(logs.stdout + logs.stderr, packages, private_values)
             except (Refused, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
                 records.append({'service': identity[0], 'status': 'unavailable'})
         return records
