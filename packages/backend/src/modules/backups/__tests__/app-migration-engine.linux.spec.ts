@@ -190,7 +190,15 @@ async function prepare(exitCode = 0) {
   journal = await AppMigrationJournal.create(path.join(root, 'operations'), boundOperation, fixtureStorage);
   await journal.capture(fixtureStorage, data, archive);
   expect((await journal.read()).phase).toBe('ready');
-  return { runner: new AppMigrationRunner(journal, fixtureStorage), plans: [{ definition, image: pin }] };
+  return {
+    runner: new AppMigrationRunner(journal, fixtureStorage),
+    plans: [{ definition, image: pin }],
+    async reopen() {
+      await journal?.close();
+      journal = await AppMigrationJournal.open(path.join(root, 'operations'), boundOperation);
+      return new AppMigrationRunner(journal, fixtureStorage);
+    },
+  };
 }
 
 describe.skipIf(!enabled)('isolated Linux Engine migration and checkpoint', () => {
@@ -296,6 +304,39 @@ describe.skipIf(!enabled)('isolated Linux Engine migration and checkpoint', () =
     vi.restoreAllMocks();
     await startOriginal();
     expect(await sql('SELECT value FROM upgrade_fixture')).toBe('after');
+  }, 120_000);
+
+  it('reopens a completed real migration without executing its script again', async () => {
+    const { runner, plans, reopen } = await prepare();
+    await runner.run(plans);
+    const before = (await journal?.read())?.runners;
+    const restarted = await reopen();
+    const dial = docker.modem.dial.bind(docker.modem);
+    let mutations = 0;
+    vi.spyOn(docker.modem, 'dial').mockImplementation((options, callback) => {
+      if (options.method !== 'GET') mutations++;
+      return dial(options, callback);
+    });
+    await restarted.run([]);
+    expect(mutations).toBe(0);
+    expect((await journal?.read())?.runners).toEqual(before);
+    vi.restoreAllMocks();
+    await startOriginal();
+    expect(await sql('SELECT value FROM upgrade_fixture')).toBe('after');
+  }, 120_000);
+
+  it('refuses checkpoint rollback after the target could have accepted newer data', async () => {
+    const { runner, plans } = await prepare();
+    await runner.run(plans);
+    if (!journal) throw new Error('Missing migration fixture journal');
+    await journal.activationAttempted();
+    await startOriginal();
+    await sql("UPDATE upgrade_fixture SET value='newer-target-write'");
+    await stopOriginal();
+    await expect(runner.restoreCheckpoint(plans, data, archive)).rejects.toThrow('requires verified recovery');
+    expect((await journal.read()).targetWritesPossible).toBe(true);
+    await startOriginal();
+    expect(await sql('SELECT value FROM upgrade_fixture')).toBe('newer-target-write');
   }, 120_000);
 
   it('refuses checkpoint capture when another container can write the app data', async () => {
