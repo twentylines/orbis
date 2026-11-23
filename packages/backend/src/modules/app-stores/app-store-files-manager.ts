@@ -1,10 +1,11 @@
-import { copyAppPackage } from './app-package-copy';
-import { readAppPackageAsset } from './app-package-links';
+import { appUpdateStorage } from '@/modules/docker/app-image-pins';
+import { copyAppPackage } from '@/modules/app-stores/app-package-copy';
+import { readAppPackageAsset } from '@/modules/app-stores/app-package-links';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { loadUmbrelPackage, materializeUmbrelPackage } from './umbrel-package';
-import { withAppRepositoryCustody } from './app-store-lock';
+import { loadUmbrelPackage, materializeUmbrelPackage } from '@/modules/app-stores/umbrel-package';
+import { withAppRepositoryCustody } from '@/modules/app-stores/app-store-lock';
 import { APP_REL_COMPOSE_FILENAME } from '@/common/constants';
 import { extractAppUrn } from '@/common/helpers/app-helpers';
 import { execFileAsync } from '@/common/helpers/exec-helpers';
@@ -36,7 +37,17 @@ export class AppStoreFilesManager {
   }
 
   private async getAppRepoDirectory(appUrn: AppUrn) {
-    const { appName } = extractAppUrn(appUrn);
+    const { appName, appStoreId } = extractAppUrn(appUrn);
+    if (this.storeConfig.slug === '_user') {
+      if (appStoreId !== '_user') throw new Error('The custom app package namespace changed.');
+      const directory = path.join(this.getInstalledAppsFolder(), '_user', appName);
+      try {
+        await appUpdateStorage.noSymlinkParents(directory);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+      return directory;
+    }
     const native = path.join(this.getAppStoreFolder(), appName);
     if (await this.filesystem.isDirectory(native)) return native;
     return path.join(this.getRepoRoot(), appName);
@@ -183,6 +194,8 @@ export class AppStoreFilesManager {
         if (await this.filesystem.isDirectory(appInstalledDir)) return;
         throw new Error('The app package is not available in its catalogue.');
       }
+      // Custom definitions already live in this directory; never replace it with itself.
+      if (appRepoDir === appInstalledDir) return;
       if (!(await this.filesystem.createDirectory(path.dirname(appInstalledDir))))
         throw new Error('The installed app directory could not be created.');
       const staging = `${appInstalledDir}.package-stage-${crypto.randomUUID()}`;

@@ -1,3 +1,4 @@
+import { withAppRepositoryCustody } from '@/modules/app-stores/app-store-lock';
 import { APP_REL_COMPOSE_FILENAME } from '@/common/constants';
 import { TranslatableError } from '@/common/error/translatable-error';
 import { createAppUrn, extractAppUrn } from '@/common/helpers/app-helpers';
@@ -11,8 +12,8 @@ import type { AppUrn } from '@runtipi/common/types';
 import { type } from 'arktype';
 import path from 'node:path';
 import * as yaml from 'yaml';
-import { AppsRepository } from '../apps/apps.repository';
-import type { CreateCustomAppDto, UpdateCustomAppDto } from './dto/custom-apps.dto';
+import { AppsRepository } from '@/modules/apps/apps.repository';
+import type { CreateCustomAppDto, UpdateCustomAppDto } from '@/modules/custom-apps/dto/custom-apps.dto';
 
 const APPS_FOLDER = '_user';
 
@@ -24,6 +25,13 @@ export class CustomAppService {
     private readonly configService: ConfigurationService,
     private readonly appsRepository: AppsRepository,
   ) {}
+
+  private withSourceCustody<T>(appUrn: AppUrn | undefined, work: () => Promise<T>): Promise<T> {
+    if (appUrn && extractAppUrn(appUrn).appStoreId !== APPS_FOLDER)
+      throw new TranslatableError('CUSTOM_APP_ERROR_NOT_FOUND', { urn: appUrn }, HttpStatus.NOT_FOUND);
+    const { dataDir } = this.configService.get('directories');
+    return withAppRepositoryCustody(path.resolve(dataDir, 'repos', APPS_FOLDER), work);
+  }
 
   private getCustomAppPaths(appUrn: AppUrn) {
     const { appName, appStoreId } = extractAppUrn(appUrn);
@@ -45,6 +53,10 @@ export class CustomAppService {
   }
 
   async createCustomApp(dto: CreateCustomAppDto): Promise<{ appUrn: AppUrn; appName: string; storeId: string }> {
+    return this.withSourceCustody(undefined, () => this.createCustomAppLocked(dto));
+  }
+
+  private async createCustomAppLocked(dto: CreateCustomAppDto): Promise<{ appUrn: AppUrn; appName: string; storeId: string }> {
     if (this.configService.get('demoMode')) {
       throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
     }
@@ -88,6 +100,10 @@ export class CustomAppService {
   }
 
   async updateCustomApp(appUrn: AppUrn, config: UpdateCustomAppDto['config']) {
+    return this.withSourceCustody(appUrn, () => this.updateCustomAppLocked(appUrn, config));
+  }
+
+  private async updateCustomAppLocked(appUrn: AppUrn, config: UpdateCustomAppDto['config']) {
     if (this.configService.get('demoMode')) {
       throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
     }
@@ -177,6 +193,10 @@ export class CustomAppService {
   }
 
   async uploadAppImage(appUrn: AppUrn, imageBuffer: Buffer): Promise<void> {
+    return this.withSourceCustody(appUrn, () => this.uploadAppImageLocked(appUrn, imageBuffer));
+  }
+
+  private async uploadAppImageLocked(appUrn: AppUrn, imageBuffer: Buffer): Promise<void> {
     if (this.configService.get('demoMode')) {
       throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
     }
@@ -210,6 +230,10 @@ export class CustomAppService {
   }
 
   public async updateAppMetadata(appUrn: AppUrn, description: string): Promise<void> {
+    return this.withSourceCustody(appUrn, () => this.updateAppMetadataLocked(appUrn, description));
+  }
+
+  private async updateAppMetadataLocked(appUrn: AppUrn, description: string): Promise<void> {
     if (this.configService.get('demoMode')) {
       throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
     }
