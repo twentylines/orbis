@@ -68,7 +68,8 @@ export function AppJobProgress({ appUrn, owner }: { appUrn: string; owner: strin
       clock.current.observe(Date.parse(result.response.headers.get('date') ?? ''));
       return parsed.job;
     },
-    refetchInterval: 1000,
+    // Server hints and accepted mutations refresh immediately; polling also recovers missed hints.
+    refetchInterval: ({ state }) => (state.data && ['queued', 'running', 'cancelling'].includes(state.data.status) ? 1000 : 30_000),
     refetchIntervalInBackground: false,
     retry: false,
   });

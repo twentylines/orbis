@@ -34,7 +34,9 @@ export const SSEProvider = ({ children }: PropsWithChildren) => {
     if (taskRefresh.current !== undefined) return;
     taskRefresh.current = setTimeout(() => {
       taskRefresh.current = undefined;
-      void queryClient.invalidateQueries({ queryKey: ['tasks'], exact: true });
+      void queryClient.invalidateQueries({
+        predicate: ({ queryKey }) => (queryKey.length === 1 && queryKey[0] === 'tasks') || queryKey[0] === 'app-job',
+      });
     }, 100);
   };
   const refresh = (urn?: string, catalogue = false, reconnect = false) => {
