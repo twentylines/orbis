@@ -1,0 +1,90 @@
+name: Host storage runtime
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+      commit:
+        required: true
+        type: string
+      digest:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Previously qualified candidate tag'
+        required: true
+        type: string
+      commit:
+        description: 'Exact candidate source commit'
+        required: true
+        type: string
+      digest:
+        description: 'Exact qualified candidate index digest'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  host-storage:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      XDG_CACHE_HOME: ${{ github.workspace }}/.orbis-host-cache
+      BUN_INSTALL_CACHE_DIR: ${{ github.workspace }}/.orbis-host-cache/bun
+      BUN_RUNTIME_TRANSPILER_CACHE_PATH: ${{ github.workspace }}/.orbis-host-cache/transpiler
+      CANDIDATE_TAG: ${{ inputs.tag }}
+      CANDIDATE_SHA: ${{ inputs.commit }}
+      CANDIDATE_DIGEST: ${{ inputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prepare checkout-local temporary storage
+        run: |
+          umask 077
+          mkdir -p "$XDG_CACHE_HOME/tmp" "$XDG_CACHE_HOME/probe"
+          echo "TMPDIR=$XDG_CACHE_HOME/tmp" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies
+
+      - name: Verify runtime fixture boundaries
+        run: python3 -B packages/backend/scripts/test_orbis_host_storage_runtime.py
+
+      - name: Verify the public candidate and matching production sources
+        run: |
+          python3 -B packages/backend/scripts/orbis-host-storage-candidate.py \
+            --source "$GITHUB_WORKSPACE" --tag "$CANDIDATE_TAG" \
+            --commit "$CANDIDATE_SHA" --digest "$CANDIDATE_DIGEST" \
+            --output "$XDG_CACHE_HOME/verified-candidate.json"
+
+      - name: Build the exact source storage witness probe
+        working-directory: packages/backend
+        run: |
+          bun build src/modules/host-updates/__tests__/app-storage-controller.linux.probe.ts \
+            --target=node --format=esm --minify \
+            --outfile "$XDG_CACHE_HOME/probe/probe.mjs"
+          node --check "$XDG_CACHE_HOME/probe/probe.mjs"
+
+      - name: Verify actual Core and Host storage observations
+        run: |
+          fixture_parent="$(mktemp -d "${GITHUB_WORKSPACE:?}/.orbis-host-XXXXXX")"
+          sudo --non-interactive chown root:root "$fixture_parent"
+          sudo --non-interactive chmod 700 "$fixture_parent"
+          trap 'if sudo --non-interactive test -f "$fixture_parent/cleanup-complete"; then sudo --non-interactive rm -rf -- "$fixture_parent"; fi' EXIT
+          sudo --non-interactive env ORBIS_HOST_STORAGE_TEST=1 \
+            TMPDIR="$XDG_CACHE_HOME/tmp" \
+            python3 -B packages/backend/scripts/orbis-host-storage-runtime.py \
+            --source "$GITHUB_WORKSPACE" --fixture "$fixture_parent" \
+            --manifest "$XDG_CACHE_HOME/verified-candidate.json" \
+            --probe "$XDG_CACHE_HOME/probe/probe.mjs"

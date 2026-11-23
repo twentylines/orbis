@@ -23,6 +23,8 @@ jobs:
   publish:
     needs: [verify, integration]
     runs-on: ubuntu-latest
+    outputs:
+      image-digest: ${{ steps.identity.outputs.digest }}
     permissions:
       contents: read
       packages: write
@@ -123,3 +125,11 @@ jobs:
 
       - name: Report candidate product metadata
         run: cat release-manifest.json
+
+  host-storage:
+    needs: publish
+    uses: ./.github/workflows/host-storage-runtime.yml
+    with:
+      tag: ${{ inputs.tag }}
+      commit: ${{ github.sha }}
+      digest: ${{ needs.publish.outputs.image-digest }}

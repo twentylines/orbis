@@ -11,6 +11,9 @@ RUN node /usr/local/lib/orbis/verify-node-security.cjs
 # ---- BUILDER BASE ----
 FROM bun_base AS builder_base
 
+COPY --from=node_base /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_base /usr/local/lib/orbis/verify-node-security.cjs /usr/local/lib/orbis/verify-node-security.cjs
+
 WORKDIR /deps
 
 ENV DO_NOT_TRACK=1 \
@@ -20,7 +23,8 @@ ARG TARGETARCH
 ARG DOCKER_COMPOSE_VERSION="v2.40.0"
 ENV TARGETARCH=${TARGETARCH}
 
-RUN apk add --no-cache curl python3 make g++ git
+RUN apk add --no-cache curl python3 make g++ git && \
+    node /usr/local/lib/orbis/verify-node-security.cjs
 
 RUN echo "Building for ${TARGETARCH}"
 RUN if [ "${TARGETARCH}" = "arm64" ]; then \
