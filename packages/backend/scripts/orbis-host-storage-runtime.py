@@ -40,6 +40,31 @@ def require(value, code):
         raise Refused(code)
 
 
+def canonical_reference(value):
+    """Keep the exact digest while expanding Docker's familiar repository names."""
+    if not isinstance(value, str) or len(value) > 1024:
+        return None
+    match = re.fullmatch(r'([^@]+)@(sha256:[a-f0-9]{64})', value)
+    if match is None:
+        return None
+    parts, digest = match[1].split('/'), match[2]
+    registry = 'docker.io'
+    if len(parts) > 1 and (parts[0] == 'localhost' or '.' in parts[0] or ':' in parts[0]):
+        registry = parts.pop(0)
+        if not re.fullmatch(r'(?:localhost|[a-z0-9]+(?:[.-][a-z0-9]+)*)(?::[0-9]{1,5})?', registry):
+            return None
+        port = registry.split(':')[1:]
+        if port and not 1 <= int(port[0]) <= 65535:
+            return None
+    if registry == 'index.docker.io':
+        registry = 'docker.io'
+    if not parts or any(not re.fullmatch(r'[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*', part) for part in parts):
+        return None
+    if registry == 'docker.io' and len(parts) == 1:
+        parts.insert(0, 'library')
+    return registry + '/' + '/'.join(parts) + '@' + digest
+
+
 def load(file, name):
     spec = importlib.util.spec_from_file_location(name, file)
     module = importlib.util.module_from_spec(spec)
@@ -74,6 +99,7 @@ class Runtime:
         self.original_networks = None
         self.container_creation_started = False
         self.results = []
+        self.failure_role = None
 
     def docker(self, *arguments, timeout=60):
         return run(['docker', '--context', 'default', *arguments], self.source, timeout=timeout)
@@ -131,9 +157,13 @@ class Runtime:
         target.chmod(0o644)
         for reference in set(self.references.values()):
             self.docker('pull', '--quiet', reference, timeout=180)
-        for reference in set(self.references.values()):
+        for name, reference in self.references.items():
             item = self.inspect(reference, kind='image')
-            require(reference in (item.get('RepoDigests') or []), 'pulled-digest-mismatch')
+            self.failure_role = name
+            expected = canonical_reference(reference)
+            require(expected is not None and expected in
+                    {canonical_reference(value) for value in (item.get('RepoDigests') or [])}, 'pulled-digest-mismatch')
+        self.failure_role = None
         core = self.inspect(self.references['runtipi'], kind='image')
         labels = core['Config'].get('Labels') or {}
         require(labels.get('org.opencontainers.image.source') == 'https://github.com/twentylines/orbis'
@@ -181,9 +211,9 @@ class Runtime:
                 continue
             require(name in SERVICES and labels.get('com.docker.compose.service') == name
                     and labels.get('com.docker.compose.project.working_dir') == str(self.root)
-                    and item['Config'].get('Image') == self.references[name]
+                    and canonical_reference(item['Config'].get('Image')) == canonical_reference(self.references[name])
                     and re.fullmatch(r'sha256:[a-f0-9]{64}', item.get('Image', '')), 'unowned-fixture-container')
-            identity = (name, item['Image'], self.references[name])
+            identity = (name, item['Image'], item['Config']['Image'])
             require(identifier not in self.owned or self.owned[identifier] == identity, 'owned-container-changed')
             self.owned[identifier] = identity
         for identifier in self.identifiers('network') - self.original_networks:
@@ -348,6 +378,7 @@ def main():
     result = {'schema': 'orbis.host-storage-runtime-test.v1', 'passed': failure is None and cleaned,
               'cases': runtime.results, 'cleanup': cleaned, 'error': failure,
               'failurePhase': phase if failure is not None else None, 'runtimeStates': diagnostics,
+              'failureRole': runtime.failure_role if runtime.failure_role in SERVICES else None,
               'recoveryConfigured': False, 'productionTouched': False}
     # This receipt deliberately excludes raw Docker/Host/Core output and secrets.
     print(json.dumps(result, sort_keys=True))

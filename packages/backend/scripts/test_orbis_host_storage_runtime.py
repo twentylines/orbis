@@ -50,6 +50,28 @@ class RuntimeBoundaries(unittest.TestCase):
     def runtime(self):
         return R.Runtime(Path('/checkout'), Path('/checkout/.orbis-host-ABCDEF'), Path('/manifest'), Path('/probe'))
 
+    def test_official_repository_aliases_preserve_the_exact_digest(self):
+        digest = 'sha256:' + 'a' * 64
+        expected = 'docker.io/library/postgres@' + digest
+        for repository in ('postgres', 'library/postgres', 'docker.io/postgres', 'docker.io/library/postgres',
+                           'index.docker.io/library/postgres'):
+            with self.subTest(repository=repository):
+                self.assertEqual(R.canonical_reference(repository + '@' + digest), expected)
+
+    def test_other_registries_namespaces_and_digests_are_not_official_aliases(self):
+        expected = R.canonical_reference('postgres@sha256:' + 'a' * 64)
+        for value in ('other.invalid/library/postgres@sha256:' + 'a' * 64,
+                      'docker.io/other/postgres@sha256:' + 'a' * 64,
+                      'postgres@sha256:' + 'b' * 64):
+            self.assertNotEqual(R.canonical_reference(value), expected)
+        self.assertEqual(R.canonical_reference(R.IMAGE + '@sha256:' + 'a' * 64), R.IMAGE + '@sha256:' + 'a' * 64)
+
+    def test_unpinned_malformed_and_ambiguous_references_refuse(self):
+        for value in ('postgres:14', 'postgres', 'postgres@sha256:short', 'postgres@@sha256:' + 'a' * 64,
+                      '../postgres@sha256:' + 'a' * 64, 'postgres@sha256:' + 'a' * 64 + '\n'):
+            with self.subTest(value=value):
+                self.assertIsNone(R.canonical_reference(value))
+
     def test_no_engine_access_without_linux_root_and_explicit_gate(self):
         cases = [('darwin', 0, {'ORBIS_HOST_STORAGE_TEST': '1'}),
                  ('linux', 1000, {'ORBIS_HOST_STORAGE_TEST': '1'}), ('linux', 0, {})]
@@ -123,10 +145,14 @@ class CandidateBoundaries(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, 'production sources differ'):
                         C.validate_source(Path('/checkout'), 'a' * 40)
 
-    def test_only_exact_new_fixture_paths_are_allowed(self):
-        changes = ''.join('A\t' + name + '\n' for name in sorted(C.ADDITIONS)).encode()
-        with patch.object(C, 'git', side_effect=[b'', b'', changes]):
-            C.validate_source(Path('/checkout'), 'a' * 40)
+    def test_only_exact_fixture_additions_or_repairs_are_allowed(self):
+        for status in ('A', 'M'):
+            changes = ''.join(status + '\t' + name + '\n' for name in sorted(C.FIXTURE_PATHS)).encode()
+            with patch.object(C, 'git', side_effect=[b'', b'', changes]):
+                C.validate_source(Path('/checkout'), 'a' * 40)
+        with patch.object(C, 'git', side_effect=[b'', b'', b'D\t.github/workflows/host-storage-runtime.yml\n']):
+            with self.assertRaisesRegex(ValueError, 'production sources differ'):
+                C.validate_source(Path('/checkout'), 'a' * 40)
 
     def registry(self, *, missing_arm=False, wrong_commit=False, corrupt_blob=False):
         tag, commit = 'v0.9.2-rc.3', 'a' * 40

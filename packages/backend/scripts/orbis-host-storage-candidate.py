@@ -17,7 +17,7 @@ TYPES = ', '.join(('application/vnd.oci.image.index.v1+json',
     'application/vnd.oci.image.manifest.v1+json',
     'application/vnd.docker.distribution.manifest.list.v2+json',
     'application/vnd.docker.distribution.manifest.v2+json'))
-ADDITIONS = frozenset({
+FIXTURE_PATHS = frozenset({
     '.github/workflows/host-storage-runtime.yml',
     'packages/backend/scripts/orbis-host-storage-candidate.py',
     'packages/backend/scripts/orbis-host-storage-fixture.py',
@@ -41,13 +41,13 @@ def git(source, *arguments):
 
 def validate_source(source, commit):
     # The tested controller image and the Host/witness must have exactly the same
-    # production sources. The only admitted diff is these newly added tests.
+    # production sources. Only these exact test-harness paths may differ.
     if git(source, 'diff', '--name-only', 'HEAD').strip() or git(source, 'diff', '--cached', '--name-only').strip():
         raise ValueError('Tracked source must be clean')
     changes = git(source, 'diff', '--name-status', commit, 'HEAD').decode().splitlines()
     for change in changes:
         fields = change.split('\t')
-        if len(fields) != 2 or fields[0] != 'A' or fields[1] not in ADDITIONS:
+        if len(fields) != 2 or fields[0] not in ('A', 'M') or fields[1] not in FIXTURE_PATHS:
             raise ValueError('The image and fixture production sources differ')
 
 
