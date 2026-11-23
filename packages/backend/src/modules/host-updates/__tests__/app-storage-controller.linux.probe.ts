@@ -359,7 +359,8 @@ async function qualifyHostEngine() {
     assert.match(commit ?? '', /^[a-f0-9]{40}$/);
     phase = 'fixture-environment';
     assert.equal(process.env.ORBIS_COMMIT, commit);
-    assert.equal(process.env.NODE_ENV, 'production');
+    // Keep this runtime guard intact when Bun replaces direct NODE_ENV reads.
+    assert.equal(Reflect.get(process.env, 'NODE_ENV'), 'production');
     assert.equal(process.env.DEMO_MODE, 'false');
     assert.equal(process.argv[2] === 'host-engine-upgrade' || process.argv[2] === 'host-engine-rollback', true);
     appUrn = `engine-${mode}:fixture`;
