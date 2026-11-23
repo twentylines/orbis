@@ -52,7 +52,7 @@ test('user can backup and restore an app', async ({ page, isMobile }) => {
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByText('Review the new configuration of the app')).toBeVisible();
   await page.getByRole('button', { name: 'Next' }).click();
-  await expect(page.getByText('It is highly recommended to backup')).toBeVisible();
+  await expect(page.getByRole('switch', { name: 'Create backup before updating', exact: true })).toBeChecked();
   await page.getByRole('button', { name: 'Update' }).click();
 
   await expect(page.getByText('App whoami updated successfully')).toBeVisible({ timeout: 100000 });
