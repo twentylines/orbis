@@ -22,6 +22,18 @@ from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 
+def _container_definition_module():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location('orbis_container_definition', Path(__file__).with_name('orbis-container-definition.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CONTAINER_DEFINITION = _container_definition_module()
+
+
 def load(name, key):
     spec = importlib.util.spec_from_file_location(key, Path(__file__).with_name(name))
     module = importlib.util.module_from_spec(spec)
@@ -478,7 +490,7 @@ class DockerRestoreRuntime:
                 if (after['Id'] != raw['Id'] or after['State'].get('Pid') != pid
                         or after['State'].get('StartedAt') != raw['State'].get('StartedAt')
                         or not after['State'].get('Running') or after['State'].get('Restarting') or after['State'].get('Paused')
-                        or after['Mounts'] != raw['Mounts']
+                        or CONTAINER_DEFINITION.mounts(after['Mounts']) != CONTAINER_DEFINITION.mounts(raw['Mounts'])
                         or (process / 'cgroup').read_text() != cgroup or (process / 'mountinfo').read_text() != table):
                     raise ValueError(message)
             latest = os.stat(endpoint)

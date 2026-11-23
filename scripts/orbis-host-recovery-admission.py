@@ -32,6 +32,18 @@ from types import ModuleType, SimpleNamespace
 from urllib.parse import quote, urlsplit
 
 
+def _container_definition_module():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location('orbis_container_definition', Path(__file__).with_name('orbis-container-definition.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CONTAINER_DEFINITION = _container_definition_module()
+
+
 def load(name, key):
     spec = importlib.util.spec_from_file_location(key, Path(__file__).with_name(name))
     module = importlib.util.module_from_spec(spec)
@@ -114,7 +126,7 @@ class _OriginAdmission:
         try:
             raw = inspect(['container', 'inspect', dependencies['main']['id']])
             (_origin_stopped if self.reused else _origin_never_started)(raw)
-            definition = {key: raw[key] for key in ('Config', 'HostConfig', 'Mounts', 'Path', 'Args')}
+            definition = CONTAINER_DEFINITION.normalize({key: raw[key] for key in ('Config', 'HostConfig', 'Mounts', 'Path', 'Args')})
             networks = _origin_networks(raw, lambda name: inspect(['network', 'inspect', name]))
             if (raw['Name'] != '/runtipi' or raw['Id'] != self.successor['id']
                     or digest(definition) != self.successor['definitionSha256']
@@ -627,7 +639,7 @@ class Supervisor:
                 or origins!=[origin]
                 or state.get('Running') is not False or state.get('Paused') is not False or state.get('Restarting') is not False
                 or state.get('Dead') is not False or type(state.get('Pid')) is not int or state.get('Pid')!=0 or state.get('Status') not in ('exited','created')):raise fail()
-        definition = {key:value.get(key) for key in ('Config','HostConfig','Mounts','Path','Args')}
+        definition = CONTAINER_DEFINITION.normalize({key:value.get(key) for key in ('Config','HostConfig','Mounts','Path','Args')})
         if storage_transition:
             host_config = definition['HostConfig']
             restart = host_config.get('RestartPolicy', {}) if type(host_config) is dict else {}
@@ -1970,7 +1982,7 @@ def _origin_new_config(raw, before, origin):
 
 
 def _origin_definition(raw):
-    return digest({key: raw[key] for key in ('Config', 'HostConfig', 'Mounts', 'Path', 'Args')})
+    return digest(CONTAINER_DEFINITION.normalize({key: raw[key] for key in ('Config', 'HostConfig', 'Mounts', 'Path', 'Args')}))
 
 
 def _origin_canonical_host(value):
@@ -1997,7 +2009,7 @@ def _origin_candidate(raw, original, body, name, observe):
             or raw['Image'] != original['Image'] or raw['Config'] != config
             or _origin_canonical_host(raw['HostConfig']) != body['HostConfig']
             or set(raw['NetworkSettings']['Networks']) != set(body['NetworkingConfig']['EndpointsConfig'])
-            or raw['Path'] != original['Path'] or raw['Args'] != original['Args'] or raw['Mounts'] != original['Mounts']):
+            or raw['Path'] != original['Path'] or raw['Args'] != original['Args'] or CONTAINER_DEFINITION.mounts(raw['Mounts']) != CONTAINER_DEFINITION.mounts(original['Mounts'])):
         raise _origin_fail()
     networks = _origin_networks(raw, observe)
     if networks != _origin_networks(original, observe):

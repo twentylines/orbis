@@ -377,7 +377,7 @@ class Runtime:
                                  'diagnostic': safe})
             raise Refused('core-storage-probe-failed')
         require(record.get('case') == mode and record.get('passed') is True, 'core-storage-probe-failed')
-        if mode == 'positive':
+        if mode != 'directory-drift':
             require(record.get('observation', {}).get('controllerId') == self.core_id(), 'probe-controller-mismatch')
         after = self.inspect(self.core_id())
         require(after['State']['StartedAt'] == before['State']['StartedAt'] and after['Image'] == before['Image'], 'controller-changed-during-probe')
@@ -523,12 +523,15 @@ def main():
         original = runtime.enrollment_hash()
         phase = 'positive-storage-observation'
         runtime.probe_core('positive')
+        phase = 'custom-app-storage-observation'
+        runtime.probe_core('custom-app-positive')
         phase = 'outside-main-refusal'
         runtime.probe_outside()
         phase = 'directory-drift-refusal'
         runtime.probe_core('directory-drift')
         require(runtime.enrollment_hash() == original, 'enrollment-changed')
-        require((runtime.root / 'app-data/fixture/probe/marker').read_text() == 'scoped fixture\n', 'fixture-data-changed')
+        for store in ('fixture', '_user'):
+            require((runtime.root / 'app-data' / store / 'probe/marker').read_text() == 'scoped fixture\n', 'fixture-data-changed')
     except Refused as error:
         failure = str(error)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):

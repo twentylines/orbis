@@ -29,7 +29,7 @@ export const migrationOperationSchema = type({
   version: '1',
   requestId: uuid,
   stageId: uuid,
-  appUrn: type('string').narrow((value) => /^[a-z0-9][a-z0-9_.-]{0,127}:[a-z0-9][a-z0-9_.-]{0,127}$/.test(value)),
+  appUrn: type('string').narrow((value) => /^[a-zA-Z0-9_-][a-zA-Z0-9_.-]{0,127}:[a-zA-Z0-9_-][a-zA-Z0-9_.-]{0,127}(?![\s\S])/.test(value)),
   appId: 'number.integer > 0 & number <= 2147483647',
   // Immutable app-row creation time, not the time of this request.
   createdAt: '0 <= number.integer <= 2147483647',

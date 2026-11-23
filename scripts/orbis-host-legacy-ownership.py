@@ -21,6 +21,18 @@ import threading
 from types import SimpleNamespace
 
 
+def _container_definition_module():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location('orbis_container_definition', Path(__file__).with_name('orbis-container-definition.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CONTAINER_DEFINITION = _container_definition_module()
+
+
 def load(name, key):
     spec = importlib.util.spec_from_file_location(key, Path(__file__).with_name(name))
     module = importlib.util.module_from_spec(spec)
@@ -165,7 +177,7 @@ def _controller(root, reader, *, protected=()):
                 or matches[0].get('Source') != str(root / relative) or matches[0].get('RW') is not True):
             fail()
     return {'id': value['Id'], 'imageId': value['Image'],
-            'configurationSha256': K.digest({key: value[key] for key in ('Config', 'HostConfig', 'Mounts')}),
+            'configurationSha256': K.digest(CONTAINER_DEFINITION.normalize({key: value[key] for key in ('Config', 'HostConfig', 'Mounts')})),
             'epochSha256': K.digest({'pid': state['Pid'], 'startedAt': state['StartedAt'], 'restartCount': value['RestartCount']})}
 
 

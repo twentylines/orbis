@@ -17,6 +17,18 @@ import time
 from types import ModuleType
 import uuid
 
+
+def _container_definition_module():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location('orbis_container_definition', Path(__file__).with_name('orbis-container-definition.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CONTAINER_DEFINITION = _container_definition_module()
+
 SCHEMA = 'orbis.controller-recovery-handoff.v1'
 UUID = re.compile(r'[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}')
 HASH = re.compile(r'[a-f0-9]{64}')
@@ -178,8 +190,8 @@ class ControllerProvider:
         return {
             'boot': self.boot_id(), 'daemon': daemon, 'id': raw['Id'], 'origin': origin,
             'main': {'imageId': image_id, 'publicationSha256': self.product.digest(manifest),
-                     'creationSha256': self.product.digest({key: raw[key] for key in
-                                                           ('Config', 'HostConfig', 'Mounts', 'Path', 'Args')})},
+                     'creationSha256': self.product.digest(CONTAINER_DEFINITION.normalize({key: raw[key] for key in
+                                                           ('Config', 'HostConfig', 'Mounts', 'Path', 'Args')}))},
             'startedAt': state['StartedAt'], 'finishedAt': state['FinishedAt'],
             'restartCount': raw['RestartCount'], 'pid': state['Pid'],
             'state': 'stopped' if stopped else 'healthy' if (state.get('Health') or {}).get('Status') == 'healthy' else 'starting',
@@ -385,7 +397,7 @@ class ControllerProvider:
         state = raw['State']
         require(raw['Image'] == image and state['Status'] == 'created' and state['Pid'] == 0 and state['ExitCode'] == 0
                 and all(state[key] is False for key in ('Running', 'Paused', 'Restarting', 'Dead')))
-        require(self.product.digest({key: raw[key] for key in ('Id', 'Name', 'Image', 'Config', 'HostConfig', 'Mounts', 'Path', 'Args')})
+        require(self.product.digest(CONTAINER_DEFINITION.normalize({key: raw[key] for key in ('Id', 'Name', 'Image', 'Config', 'HostConfig', 'Mounts', 'Path', 'Args')}))
                 == current['authWorker']['anchorSha256'], 'The retained recovery sign-in worker is unavailable.')
 
     def effect(self, operation, core, *, before_dispatch):

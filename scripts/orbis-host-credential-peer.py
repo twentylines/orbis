@@ -21,6 +21,18 @@ import time
 from contextlib import contextmanager
 
 
+def _container_definition_module():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location('orbis_container_definition', Path(__file__).with_name('orbis-container-definition.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CONTAINER_DEFINITION = _container_definition_module()
+
+
 _PROC = Path('/proc')
 _OWNER = 0
 _HASH = re.compile(r'[a-f0-9]{64}\Z')
@@ -290,7 +302,7 @@ class ControllerPeer:
         daemon = _json(_run(self._service, ['info', '--format', '{{json .ID}}'], deadline))
         if type(daemon) is not str or not 1 <= len(daemon) <= 256 or any(ord(c) < 33 or ord(c) > 126 for c in daemon):
             _fail()
-        definition = {name: value.get(name) for name in ('Config', 'HostConfig', 'Mounts', 'Path', 'Args')}
+        definition = CONTAINER_DEFINITION.normalize({name: value.get(name) for name in ('Config', 'HostConfig', 'Mounts', 'Path', 'Args')})
         if (any(type(definition[name]) is not dict for name in ('Config', 'HostConfig'))
                 or type(definition['Mounts']) is not list or type(definition['Path']) is not str
                 or type(definition['Args']) is not list):

@@ -65,3 +65,50 @@ describe('private app storage metadata', () => {
     expect(() => decode(value)).toThrow();
   });
 });
+
+describe('app storage identifier compatibility', () => {
+  const forApp = (appUrn: string) => {
+    const [app, rawStore] = appUrn.split(':');
+    const store = rawStore?.replace(/[\r\n\u2028\u2029]+$/g, '');
+    return signed({ ...fixture(), appUrn, hostPath: `/fixture/app-data/${store}/${app}`, containerPath: `/app-data/${store}/${app}` });
+  };
+  it.each([
+    'demo:store',
+    'demo:_user',
+    'demo:_private',
+    'Demo:My_store',
+    '-demo:store',
+    'demo.v1:store-1',
+    'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:store',
+    'demo:ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss',
+  ])('preserves the complete supported identifier %s', (appUrn) => {
+    const decoded = decodeAppStorageObservation(forApp(appUrn), { appUrn, nonce: h('a') });
+    expect(decoded.appUrn).toBe(appUrn);
+    expect(decoded.containerPath).toBe(forApp(appUrn).containerPath);
+  });
+  it.each([
+    '.:store',
+    '..:store',
+    'demo:..',
+    'demo:.store',
+    'demo:store/other',
+    'demo:store\\other',
+    'demo:store:other',
+    'demo:/store',
+    'demo:store\u0000',
+    'demo:\nstore',
+    '\u00e9:store',
+    'demo:%2e%2e',
+    'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:store',
+    'demo:sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss',
+    'demo:',
+    ':store',
+    'demo:store\n',
+    'demo:store\r',
+    'demo:store\r\n',
+    'demo:store\u2028',
+    'demo:store\u2029',
+  ])('rejects traversal, ambiguous or oversized identifiers %s', (appUrn) => {
+    expect(() => decodeAppStorageObservation(forApp(appUrn), { appUrn, nonce: h('a') })).toThrow('could not be verified');
+  });
+});

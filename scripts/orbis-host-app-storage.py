@@ -17,6 +17,18 @@ import time
 from contextlib import ExitStack
 
 
+def _container_definition_module():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location('orbis_container_definition', Path(__file__).with_name('orbis-container-definition.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CONTAINER_DEFINITION = _container_definition_module()
+
+
 def _load():
     spec = importlib.util.spec_from_file_location('orbis_app_storage_process', Path(__file__).with_name('orbis-host-credential-peer.py'))
     module = importlib.util.module_from_spec(spec)
@@ -27,7 +39,7 @@ def _load():
 PEER = _load()
 SCHEMA = 'orbis.app-storage-observation.v1'
 HASH = re.compile(r'[a-f0-9]{64}\Z')
-URN = re.compile(r'([a-z0-9][a-z0-9_.-]{0,127}):([a-z0-9][a-z0-9_.-]{0,127})\Z')
+URN = re.compile(r'([a-zA-Z0-9_-][a-zA-Z0-9_.-]{0,127}):([a-zA-Z0-9_-][a-zA-Z0-9_.-]{0,127})\Z')
 DECIMAL = re.compile(r'(?:0|[1-9][0-9]{0,19})\Z')
 
 
@@ -231,7 +243,7 @@ class Witness:
                 or controller.get('startedAt') != state.get('StartedAt')): fail()
         daemon = self.command(['info', '--format', '{{json .ID}}'])
         if type(daemon) is not str or not 1 <= len(daemon) <= 256 or any(ord(c) < 33 or ord(c) > 126 for c in daemon): fail()
-        definition = {key: raw.get(key) for key in ('Config', 'HostConfig', 'Mounts', 'Path', 'Args')}
+        definition = CONTAINER_DEFINITION.normalize({key: raw.get(key) for key in ('Config', 'HostConfig', 'Mounts', 'Path', 'Args')})
         return {'controller': {'id': raw['Id'], 'imageId': raw['Image'], 'startedAt': state['StartedAt'],
                                'definitionSha256': digest(definition)}, 'pid': state['Pid'], 'raw': raw,
                 'daemonSha256': hashlib.sha256(daemon.encode()).hexdigest(),

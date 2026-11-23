@@ -289,4 +289,19 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(handler.send_json.call_args.args, (409, {'error': 'The app storage binding could not be verified.'}))
 
 
+class IdentifierCompatibilityTests(unittest.TestCase):
+    def test_supported_identifiers_keep_their_exact_data_paths(self):
+        value = {'Mounts': [{'Type': 'bind', 'Source': '/fixture/app-data', 'Destination': '/app-data', 'RW': True, 'Propagation': 'rprivate'}]}
+        for urn in ['demo:store', 'demo:_user', 'demo:_private', 'Demo:My_store', '-demo:store', 'demo.v1:store-1', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:store', 'demo:ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss']:
+            with self.subTest(urn=urn):
+                name, store = urn.split(':')
+                self.assertEqual(M._storage_paths(value, urn), ('/fixture/app-data', f'/fixture/app-data/{store}/{name}', f'/app-data/{store}/{name}'))
+
+    def test_traversal_ambiguous_and_oversized_identifiers_refuse(self):
+        value = {'Mounts': [{'Type': 'bind', 'Source': '/fixture/app-data', 'Destination': '/app-data', 'RW': True, 'Propagation': 'rprivate'}]}
+        for urn in ['.:store', '..:store', 'demo:..', 'demo:.store', 'demo:store/other', 'demo:store\\other', 'demo:store:other', 'demo:/store', 'demo:store\x00', 'demo:\nstore', 'é:store', 'demo:%2e%2e', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:store', 'demo:sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss', 'demo:', ':store', 'demo:store\n', 'demo:store\r', 'demo:store\r\n', 'demo:store\u2028', 'demo:store\u2029']:
+            with self.subTest(urn=urn), self.assertRaises(ValueError):
+                M._storage_paths(value, urn)
+
+
 if __name__ == '__main__': unittest.main()

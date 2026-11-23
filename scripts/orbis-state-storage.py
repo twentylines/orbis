@@ -9,6 +9,18 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
+
+def _container_definition_module():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location('orbis_container_definition', Path(__file__).with_name('orbis-container-definition.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CONTAINER_DEFINITION = _container_definition_module()
+
 OWNER = 0
 SCHEMA = 'orbis.state-permissions.v1'
 MAXIMUM = 1024 * 1024
@@ -71,7 +83,7 @@ def ancestry(path, *, private=False):
 def definition(row):
     host = dict(row['HostConfig'])
     host.pop('RestartPolicy', None)
-    return digest({key: row[key] for key in ('Id', 'Created', 'Image', 'Path', 'Args', 'Config', 'Mounts')} | {'host': host})
+    return digest(CONTAINER_DEFINITION.normalize({key: row[key] for key in ('Id', 'Created', 'Image', 'Path', 'Args', 'Config', 'Mounts')}) | {'host': host})
 
 
 def binding(root, row):

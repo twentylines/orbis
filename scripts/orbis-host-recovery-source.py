@@ -23,6 +23,18 @@ import sys
 import time
 
 
+def _container_definition_module():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location('orbis_container_definition', Path(__file__).with_name('orbis-container-definition.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CONTAINER_DEFINITION = _container_definition_module()
+
+
 def load(name,key):
     spec=importlib.util.spec_from_file_location(key,Path(__file__).with_name(name))
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
@@ -336,7 +348,7 @@ class Collector:
         return descriptor,main,database
 
     @staticmethod
-    def _definition(raw):return digest({k:raw.get(k) for k in ('Config','HostConfig','Mounts','Path','Args')})
+    def _definition(raw):return digest(CONTAINER_DEFINITION.normalize({k:raw.get(k) for k in ('Config','HostConfig','Mounts','Path','Args')}))
 
     def open(self,request,guard):
         root();request=issued(request)

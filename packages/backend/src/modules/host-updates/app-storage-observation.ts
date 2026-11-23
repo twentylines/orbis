@@ -9,7 +9,7 @@ import { controllerCaptureSocketIdentity } from './host-controller-config';
 
 const schemaName = 'orbis.app-storage-observation.v1';
 const invalid = () => new Error('The app storage binding could not be verified.');
-const urnPattern = /^([a-z0-9][a-z0-9_.-]{0,127}):([a-z0-9][a-z0-9_.-]{0,127})$/;
+const urnPattern = /^([a-zA-Z0-9_-][a-zA-Z0-9_.-]{0,127}):([a-zA-Z0-9_-][a-zA-Z0-9_.-]{0,127})(?![\s\S])/;
 const canonicalPath = (value: string) =>
   value.startsWith('/') && value !== '/' && path.posix.normalize(value) === value && Buffer.byteLength(value) <= 4096 && !/[\0\r\n\\]/.test(value);
 const hash = type('string').narrow((value) => /^[a-f0-9]{64}$/.test(value));

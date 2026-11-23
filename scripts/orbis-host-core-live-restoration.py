@@ -14,6 +14,18 @@ import time
 import uuid
 
 
+def _container_definition_module():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location('orbis_container_definition', Path(__file__).with_name('orbis-container-definition.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CONTAINER_DEFINITION = _container_definition_module()
+
+
 SCHEMA = 'orbis.core-live-restoration-job.v1'
 ADMISSION = 'orbis.core-live-restoration-admission.v1'
 CLAIM = 'orbis.core-live-restoration-claim.v1'
@@ -376,7 +388,7 @@ class CoreLiveRestorationService:
                 and state.get('Status') == 'running' and state.get('Running') is True
                 and all(state.get(key) is False for key in ('Restarting', 'Paused', 'Dead', 'OOMKilled'))
                 and (allow_restart or state.get('StartedAt') == expected['startedAt'])
-                and raw['Mounts'] == expected['mounts'])
+                and CONTAINER_DEFINITION.mounts(raw['Mounts']) == CONTAINER_DEFINITION.mounts(expected['mounts']))
         require({name: row.get('NetworkID') for name, row in raw['NetworkSettings']['Networks'].items()} == expected['networks'])
         network = record['network']
         live_network = self.runtime.reader._object(['network', 'inspect', '--format', '{{json .}}', network['id']])
@@ -695,7 +707,7 @@ class CoreLiveRestorationService:
         self._source_files(record)
         raw = self.runtime.inspect(expected['controllerId'])
         require(raw['Id'] == expected['controllerId'] and raw['Image'] == expected['imageId']
-                and self.runtime.definition(raw) == expected['definition'] and raw['Mounts'] == expected['container']['Mounts'])
+                and self.runtime.definition(raw) == expected['definition'] and CONTAINER_DEFINITION.mounts(raw['Mounts']) == CONTAINER_DEFINITION.mounts(expected['container']['Mounts']))
         self.runtime.verify_networks(record, raw)
         state = raw['State']
         require(all(state.get(key) is False for key in ('Restarting', 'Paused', 'Dead', 'OOMKilled')))

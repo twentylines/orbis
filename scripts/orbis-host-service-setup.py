@@ -44,6 +44,7 @@ SCRIPTS = (
     "orbis-host-layout.py",
     "orbis-host-credential-fence.py",
     "orbis-host-credential-peer.py",
+    "orbis-container-definition.py",
     "orbis-host-app-storage.py",
     "orbis-host-credential-service.py",
     "orbis-host-ownership-authority.py",

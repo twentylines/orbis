@@ -13,6 +13,18 @@ import subprocess
 import time
 from contextlib import contextmanager
 
+
+def _container_definition_module():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location('orbis_container_definition', Path(__file__).with_name('orbis-container-definition.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CONTAINER_DEFINITION = _container_definition_module()
+
 SOCKETS = ('/var/run/docker.sock', '/run/docker.sock')
 INTERVAL = 30
 COOLDOWN = 120
@@ -175,11 +187,11 @@ class LocalDocker:
         # lifecycle transitions during the local descriptor observations.
         latest = self.inspect(identifier)
         immutable = ('Id', 'Name', 'Image', 'Created', 'Config', 'HostConfig', 'Mounts', 'Path', 'Args')
-        require(all(latest[key] == raw[key] for key in immutable)
+        require(CONTAINER_DEFINITION.normalize({key: latest[key] for key in immutable}) == CONTAINER_DEFINITION.normalize({key: raw[key] for key in immutable})
                 and all(latest['State'][key] == state[key] for key in
                         ('Pid', 'StartedAt', 'Running', 'Status', 'Restarting', 'Paused', 'Dead')))
         return {
-            'id': identifier, 'creation': digest({key: raw[key] for key in immutable}),
+            'id': identifier, 'creation': digest(CONTAINER_DEFINITION.normalize({key: raw[key] for key in immutable})),
             'incarnation': (pid, started, process_generation, digest(table)),
             'socket': bound, 'binding': 'fresh' if fresh and probe == 'ready' else
             'stale' if not fresh and probe == 'refused' else 'unverified',

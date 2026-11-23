@@ -21,6 +21,18 @@ import subprocess
 import threading
 
 
+def _container_definition_module():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location('orbis_container_definition', Path(__file__).with_name('orbis-container-definition.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CONTAINER_DEFINITION = _container_definition_module()
+
+
 def load(name, key):
     spec = importlib.util.spec_from_file_location(key, Path(__file__).with_name(name))
     module = importlib.util.module_from_spec(spec)
@@ -230,7 +242,7 @@ def _controller(service, publication, saved, daemon, *, protected=()):
     if (type(enrolled) is not dict or enrolled.get('id') != raw['Id'] or enrolled.get('imageId') != raw['Image']
             or enrolled.get('releaseTag') != publication['tag'] or enrolled.get('releaseDigest') != publication['digest']
             or enrolled.get('startedAt') != state['StartedAt']): fail()
-    definition = {name: raw.get(name) for name in ('Config', 'HostConfig', 'Mounts', 'Path', 'Args')}
+    definition = CONTAINER_DEFINITION.normalize({name: raw.get(name) for name in ('Config', 'HostConfig', 'Mounts', 'Path', 'Args')})
     if (any(type(definition[name]) is not dict for name in ('Config', 'HostConfig'))
             or type(definition['Mounts']) is not list or type(definition['Path']) is not str
             or type(definition['Args']) is not list): fail()

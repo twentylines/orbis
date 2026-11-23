@@ -38,8 +38,9 @@ def prepare(manifest_path, folder, dependencies):
         (root / suffix).mkdir(mode=0o700, parents=True, exist_ok=True)
     for name in ['host-state', 'snapshots', 'socket', 'public-probe']:
         (folder / name).mkdir(mode=0o700)
-    (root / 'app-data/fixture/probe').mkdir(mode=0o700, parents=True)
-    (root / 'app-data/fixture/probe/marker').write_text('scoped fixture\n')
+    for store in ('fixture', '_user'):
+        (root / 'app-data' / store / 'probe').mkdir(mode=0o700, parents=True)
+        (root / 'app-data' / store / 'probe/marker').write_text('scoped fixture\n')
     (root / 'state/seed').write_text(secrets.token_hex(32))
     os.chmod(root / 'state/seed', 0o600)
     environment = {

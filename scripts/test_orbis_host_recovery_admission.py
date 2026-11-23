@@ -987,9 +987,9 @@ class QualificationTests(unittest.TestCase):
 
     def test_main_mount_cannot_expose_independent_runtime_or_recovery_state(self):
         for source in (self.runtime_root,self.runtime_root.parent,self.state,self.state/'child'):
-            self.main['Mounts']=[{'Type':'bind','Source':str(source),'RW':False}]
+            self.main['Mounts']=[{'Type':'bind','Source':str(source),'Destination':'/data','RW':False}]
             with self.subTest(source=source),self.assertRaises(ValueError):self.supervisor._main('https://recovery.example')
-        self.main['Mounts']=[{'Type':'bind','Source':str(self.root),'RW':True}]
+        self.main['Mounts']=[{'Type':'bind','Source':str(self.root),'Destination':'/data','RW':True}]
         self.supervisor._main('https://recovery.example')
 
     def test_capability_requires_new_counter_and_effective_contracts_with_exact_types(self):

@@ -16,6 +16,18 @@ import re
 from types import SimpleNamespace
 
 
+def _container_definition_module():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location('orbis_container_definition', Path(__file__).with_name('orbis-container-definition.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CONTAINER_DEFINITION = _container_definition_module()
+
+
 def load(name, key):
     spec = importlib.util.spec_from_file_location(key, Path(__file__).with_name(name))
     module = importlib.util.module_from_spec(spec)
@@ -487,7 +499,7 @@ class Issuer:
             if controllers != [plan['controller']['id']]:
                 fail()
             raw = self.reader._object(['container', 'inspect', '--format', '{{json .}}', controllers[0]])
-            definition = {key: raw[key] for key in ('Config', 'HostConfig', 'Mounts')}
+            definition = CONTAINER_DEFINITION.normalize({key: raw[key] for key in ('Config', 'HostConfig', 'Mounts')})
             if L.K.digest(definition) != plan['controller']['configurationSha256']:
                 fail()
             quiescent = copy.deepcopy(definition)
@@ -666,7 +678,7 @@ class Permit:
                 state = raw.get('State', {})
                 if (raw.get('Id') != plan['controller']['id'] or raw.get('Image') != plan['controller']['imageId']
                         or raw.get('Name') not in ('/runtipi', '/orbis-previous-' + transaction)
-                        or L.K.digest({key: raw[key] for key in ('Config', 'HostConfig', 'Mounts')}) != value['quiescentConfigurationSha256']
+                        or L.K.digest(CONTAINER_DEFINITION.normalize({key: raw[key] for key in ('Config', 'HostConfig', 'Mounts')})) != value['quiescentConfigurationSha256']
                         or state.get('Status') not in ('exited', 'created') or state.get('Running') is not False
                         or type(state.get('Pid')) is not int or state['Pid'] != 0
                         or state.get('Paused') is not False or state.get('Restarting') is not False or state.get('Dead') is not False):
@@ -795,7 +807,7 @@ class Permit:
                 state = raw.get('State', {})
                 if (raw.get('Id') != plan['controller']['id'] or raw.get('Image') != plan['controller']['imageId']
                         or raw.get('Name') not in ('/runtipi', '/orbis-previous-' + record['id'])
-                        or L.K.digest({key: raw[key] for key in ('Config', 'HostConfig', 'Mounts')}) != value['quiescentConfigurationSha256']
+                        or L.K.digest(CONTAINER_DEFINITION.normalize({key: raw[key] for key in ('Config', 'HostConfig', 'Mounts')})) != value['quiescentConfigurationSha256']
                         or state.get('Status') not in ('exited', 'created') or state.get('Running') is not False
                         or type(state.get('Pid')) is not int or state['Pid'] != 0
                         or state.get('Paused') is not False or state.get('Restarting') is not False or state.get('Dead') is not False):
@@ -1162,7 +1174,7 @@ class Permit:
             fail()
         self._rollback_manifest(record, intent)
         raw = reader._object(['container', 'inspect', '--format', '{{json .}}', value['legacy']['controller']['id']])
-        configuration = L.K.digest({key: raw[key] for key in ('Config', 'HostConfig', 'Mounts')})
+        configuration = L.K.digest(CONTAINER_DEFINITION.normalize({key: raw[key] for key in ('Config', 'HostConfig', 'Mounts')}))
         restored = os.path.lexists(phase_path(root, self.reference['operationId'], 'restored', self.issuer.host))
         accepted = [value['quiescentConfigurationSha256']]
         if restored: accepted.append(value['legacy']['controller']['configurationSha256'])
@@ -1392,7 +1404,7 @@ class Permit:
                     fail()
                 pin.verify()
         raw = reader._object(['container', 'inspect', '--format', '{{json .}}', value['legacy']['controller']['id']])
-        configuration = L.K.digest({key: raw[key] for key in ('Config', 'HostConfig', 'Mounts')})
+        configuration = L.K.digest(CONTAINER_DEFINITION.normalize({key: raw[key] for key in ('Config', 'HostConfig', 'Mounts')}))
         if (raw.get('Id') != value['legacy']['controller']['id'] or raw.get('Image') != value['legacy']['controller']['imageId']
                 or raw.get('Name') != '/' + record['review']['controllerName']
                 or configuration not in (value['legacy']['controller']['configurationSha256'], value['quiescentConfigurationSha256'])):
