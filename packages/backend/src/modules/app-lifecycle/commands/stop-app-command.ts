@@ -35,7 +35,7 @@ export class StopAppCommand extends AppLifecycleCommand {
 
       return { success: true, message: `App ${appUrn} stopped successfully` };
     } catch (err) {
-      return this.handleAppError(err, appUrn, 'stop');
+      return this.handleAppError(err);
     }
   }
 }

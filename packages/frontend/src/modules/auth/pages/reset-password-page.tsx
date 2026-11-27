@@ -9,7 +9,9 @@ export default function ResetPasswordPage() {
       <h2 className="desktop-auth-heading" data-auth-focus="" tabIndex={-1}>
         Reset your password
       </h2>
-      <p className="desktop-auth-help">Run this command on the server to request a password reset.</p>
+      <p className="desktop-auth-help">
+        If your server was migrated from Runtipi and still has its CLI, a server administrator can run this command from the installation folder.
+      </p>
       <pre className="desktop-auth-recovery-command">
         <code>./runtipi-cli reset-password</code>
       </pre>

@@ -10,7 +10,6 @@ import type { AppEventFormInput } from '@/modules/queue/entities/app-events';
 import type { ModuleRef } from '@nestjs/core';
 import type { DynamicComposeSchemaYaml } from '@runtipi/common/schemas';
 import type { AppUrn } from '@runtipi/common/types';
-import * as Sentry from '@sentry/nestjs';
 import { type } from 'arktype';
 import Dockerode from 'dockerode';
 import { backupAppWithRuntime } from './backup-app-runtime';
@@ -52,7 +51,6 @@ export class AppLifecycleCommand {
       backup: (snapshotReady) => this.captureStoppedAppBackup(appUrn, snapshotReady),
       job: this.job,
     });
-    if (!result.success) Sentry.captureException(new Error(result.message), { tags: { appId: appUrn, event: 'backup' } });
     return result;
   }
 
@@ -105,18 +103,11 @@ export class AppLifecycleCommand {
       }
 
       logger.error(err);
-      Sentry.captureException(err, {
-        tags: { appId: appUrn, event: 'ensure_app_dir' },
-      });
       throw new Error(`Error generating docker-compose.generated.yml file for app ${appUrn}.`);
     }
   }
 
-  protected handleAppError = async (err: unknown, appId: string, event: string): Promise<{ success: false; message: string }> => {
-    Sentry.captureException(err, {
-      tags: { appId, event },
-    });
-
+  protected handleAppError = async (err: unknown): Promise<{ success: false; message: string }> => {
     if (err instanceof Error) {
       return { success: false, message: err.message };
     }

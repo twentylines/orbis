@@ -144,7 +144,7 @@ export function OrbisDowngrade({
     <section className="desktop-downgrade" aria-label="Downgrade">
       <h3>Downgrade</h3>
       <div className="desktop-downgrade-content">
-        <p>Choose an earlier release, back to the most recent Runtipi upgrade. Compatibility is checked before installation.</p>
+        <p>Choose an earlier Orbis release on this server’s compatibility base. Orbis checks compatibility before installation.</p>
         <p>A downgrade removes newer features and security fixes.</p>
         {enabled ? null : <p>The server must be healthy and idle to downgrade.</p>}
         {enabled && releases.isPending ? <p>Reading previous releases…</p> : null}

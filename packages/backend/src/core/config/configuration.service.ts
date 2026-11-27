@@ -6,7 +6,6 @@ import { APP_DATA_DIR, APP_DIR, ARCHITECTURES, DATA_DIR } from '@/common/constan
 import { TranslatableError } from '@/common/error/translatable-error';
 import { EnvUtils } from '@/modules/env/env.utils';
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import * as Sentry from '@sentry/nestjs';
 import { type } from 'arktype';
 import dotenv from 'dotenv';
 import validator from 'validator';
@@ -39,7 +38,6 @@ const envSchema = type({
   RUNTIPI_FORWARD_AUTH_URL: 'string',
   DEMO_MODE: 'string',
   GUEST_DASHBOARD: 'string',
-  ALLOW_ERROR_MONITORING: 'string',
   ALLOW_AUTO_THEMES: 'string',
   PERSIST_TRAEFIK_CONFIG: 'string',
   RUNTIPI_TRUSTED_PROXY_IPS: 'string = ""',
@@ -153,7 +151,6 @@ export class ConfigurationService {
       isProduction: NODE_ENV === 'production',
       userSettings: {
         allowAutoThemes: env.ALLOW_AUTO_THEMES.toLowerCase() === 'true',
-        allowErrorMonitoring: env.ALLOW_ERROR_MONITORING.toLowerCase() === 'true' && NODE_ENV === 'production',
         demoMode: env.DEMO_MODE.toLowerCase() === 'true',
         guestDashboard: env.GUEST_DASHBOARD.toLowerCase() === 'true',
         timeZone: env.TZ,
@@ -210,22 +207,20 @@ export class ConfigurationService {
       }
 
       try {
-        if (typeof settings.allowErrorMonitoring === 'boolean') {
-          this.initSentry({ release: this.config.version, allowSentry: settings.allowErrorMonitoring });
-        }
-
         const settingsPath = path.join(DATA_DIR, 'state', 'settings.json');
 
         const fileContent = await fs.promises.readFile(settingsPath, 'utf8');
         const parsedContent = JSON.parse(fileContent);
+        if (parsedContent && typeof parsedContent === 'object') delete parsedContent.allowErrorMonitoring;
+        const updatedSettings = settingsSchema.partial().onUndeclaredKey('delete').assert(settings);
         const currentSettingsResult = settingsSchema.partial()(parsedContent);
         if (currentSettingsResult instanceof type.errors) {
           throw currentSettingsResult.summary;
         }
         const currentSettings = currentSettingsResult;
 
-        await fs.promises.writeFile(settingsPath, `${JSON.stringify({ ...currentSettings, ...settings }, null, 2)}`, 'utf8');
-        this.config.userSettings = { ...this.config.userSettings, ...settings };
+        await fs.promises.writeFile(settingsPath, `${JSON.stringify({ ...currentSettings, ...updatedSettings }, null, 2)}`, 'utf8');
+        this.config.userSettings = { ...this.config.userSettings, ...updatedSettings };
       } catch {
         this.logger.error('Failed to set user settings');
         throw new InternalServerErrorException('Failed to set user settings');
@@ -235,29 +230,14 @@ export class ConfigurationService {
 
   public async adoptRestoredUserSettingsRuntime(value: unknown) {
     return credentialWriters.run(async () => {
-      const parsed = runtimeUserSettingsSchema.assert(structuredClone(value));
-      await this.initSentry({ release: this.config.version, allowSentry: parsed.allowErrorMonitoring });
+      const restored = structuredClone(value);
+      if (restored && typeof restored === 'object' && 'allowErrorMonitoring' in restored) delete restored.allowErrorMonitoring;
+      const parsed = runtimeUserSettingsSchema.assert(restored);
       this.config.userSettings = {
         ...parsed,
         themeBase: parsed.themeBase ?? 'light',
         themeColor: parsed.themeColor ?? 'blue',
       };
     });
-  }
-
-  public async initSentry(params: { release: string; allowSentry: boolean }) {
-    const { allowSentry } = params;
-
-    const client = Sentry.getClient();
-
-    if (!client) {
-      return;
-    }
-
-    if (allowSentry) {
-      client.getOptions().enabled = true;
-    } else {
-      await client.close();
-    }
   }
 }

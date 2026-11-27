@@ -413,10 +413,6 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   overflow-wrap: anywhere;
   font-weight: 600;
 }
-.orbis-setup-reporting {
-  display: grid;
-  gap: 10px;
-}
 .orbis-setup-footer {
   display: flex;
   flex-wrap: wrap;

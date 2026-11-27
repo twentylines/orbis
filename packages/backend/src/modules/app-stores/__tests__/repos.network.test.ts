@@ -12,7 +12,6 @@ import { mock } from 'vitest-mock-extended';
 import { ReposHelpers } from '../repos.helpers';
 
 vi.mock('node:child_process', () => ({ execFileSync: vi.fn() }));
-vi.mock('@sentry/nestjs', () => ({ captureException: vi.fn() }));
 vi.mock('../git-http', async () => {
   const original = await vi.importActual<typeof import('../git-http')>('../git-http');
   return {

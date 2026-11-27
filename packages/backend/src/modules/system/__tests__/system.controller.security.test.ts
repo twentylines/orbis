@@ -1,5 +1,4 @@
 import { LoggerService } from '@/core/logger/logger.service';
-import { cleanseErrorData, isRecoveryKeyHandoffEvent } from '@/common/helpers/error-helpers';
 import { Test } from '@nestjs/testing';
 import { type INestApplication, type NestMiddleware, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import request from 'supertest';
@@ -164,18 +163,6 @@ describe('SystemController certificate security', () => {
       ['save', {}],
       ['confirm', {}],
     ]);
-  });
-
-  it('retains ordinary error reporting without attaching secret-bearing handoff requests', () => {
-    for (const route of ['save-key', 'confirm-key']) {
-      const event = {
-        type: undefined,
-        request: { url: `https://main.example/api/system/sentinel/enrollment/${route}`, data: { handoff: 'synthetic-only' } },
-      };
-      expect(isRecoveryKeyHandoffEvent(event)).toBe(true);
-      expect(cleanseErrorData(event, {})).toBeNull();
-    }
-    expect(isRecoveryKeyHandoffEvent({ transaction: 'GET /api/system/sentinel/recovery-access' })).toBe(false);
   });
 
   it('authenticates independent Sentinel release discovery before any upstream request', async () => {

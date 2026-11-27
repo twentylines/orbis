@@ -166,10 +166,7 @@ export const generateSystemEnvFile = async (options: { readOnly?: boolean } = {}
     'ALLOW_AUTO_THEMES',
     typeof settings.allowAutoThemes === 'boolean' ? String(settings.allowAutoThemes) : envMap.get('ALLOW_AUTO_THEMES') || 'true',
   );
-  envMap.set(
-    'ALLOW_ERROR_MONITORING',
-    typeof settings.allowErrorMonitoring === 'boolean' ? String(settings.allowErrorMonitoring) : envMap.get('ALLOW_ERROR_MONITORING') || 'false',
-  );
+  envMap.delete('ALLOW_ERROR_MONITORING');
   envMap.set(
     'PERSIST_TRAEFIK_CONFIG',
     typeof settings.persistTraefikConfig === 'boolean' ? String(settings.persistTraefikConfig) : envMap.get('PERSIST_TRAEFIK_CONFIG') || 'false',

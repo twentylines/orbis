@@ -39,7 +39,7 @@ export class StartAppCommand extends AppLifecycleCommand {
 
       return { success: true, message: `App ${appUrn} started successfully` };
     } catch (err) {
-      return this.handleAppError(err, appUrn, 'start');
+      return this.handleAppError(err);
     }
   }
 }

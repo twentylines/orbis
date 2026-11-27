@@ -677,7 +677,7 @@ function LocalUpdates() {
                     restoreFocusTo={coreReviewButton}
                   >
                     <DialogHeader>
-                      <DialogTitle>{coreReview?.crossesRuntipiBoundary ? 'Runtipi version changes' : 'Update Orbis?'}</DialogTitle>
+                      <DialogTitle>{coreReview?.crossesRuntipiBoundary ? 'Compatibility base changes' : 'Update Orbis?'}</DialogTitle>
                       <DialogDescription>
                         {build.data?.version ? formatOrbisVersion(build.data.version) : 'Installed version'} →{' '}
                         {coreReview?.tag ? formatOrbisVersion(coreReview.tag) : 'Selected release'}

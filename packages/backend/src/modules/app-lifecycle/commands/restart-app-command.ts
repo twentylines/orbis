@@ -41,7 +41,7 @@ export class RestartAppCommand extends AppLifecycleCommand {
 
       return { success: true, message: `App ${appUrn} restarted successfully` };
     } catch (err) {
-      return this.handleAppError(err, appUrn, 'restart');
+      return this.handleAppError(err);
     }
   }
 }

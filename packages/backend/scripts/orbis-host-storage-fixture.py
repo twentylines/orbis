@@ -63,7 +63,7 @@ def prepare(manifest_path, folder, dependencies, *, before_populate=None, creden
         'DOMAIN': 'fixture.invalid', 'LOCAL_DOMAIN': 'fixture.lan',
         'RUNTIPI_FORWARD_AUTH_URL': 'http://runtipi:3000/api/auth/traefik',
         'DEMO_MODE': 'false', 'GUEST_DASHBOARD': 'false',
-        'ALLOW_ERROR_MONITORING': 'false', 'ALLOW_AUTO_THEMES': 'false',
+        'ALLOW_AUTO_THEMES': 'false',
         'PERSIST_TRAEFIK_CONFIG': 'false', 'ADVANCED_SETTINGS': 'false',
         'THEME_BASE': 'gray', 'THEME_COLOR': 'green', 'TZ': 'UTC',
         'EXPERIMENTAL_INSECURE_COOKIE': 'false', 'LOG_LEVEL': 'info',

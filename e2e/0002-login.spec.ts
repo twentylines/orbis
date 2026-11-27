@@ -26,7 +26,7 @@ test('user can logout', async ({ page, context }) => {
   await expect(page.getByText('Login to your account')).toBeVisible();
 });
 
-test('reset password page only shows the CLI instructions', async ({ page }) => {
+test('reset password page identifies the retained CLI as a migration-only option', async ({ page }) => {
   await unsetPasswordChangeRequest();
   await createTestUser();
   await page.goto('/login');
@@ -35,6 +35,7 @@ test('reset password page only shows the CLI instructions', async ({ page }) => 
   await page.getByRole('link', { name: 'Forgot password?' }).click();
 
   await expect(page.getByText('./runtipi-cli reset-password')).toBeVisible();
+  await expect(page.getByText(/migrated from Runtipi and still has its CLI/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Reset password' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Cancel password change request' })).toHaveCount(0);
   await expect(page.getByPlaceholder('Your new password', { exact: true })).toHaveCount(0);

@@ -210,7 +210,7 @@ describe('reviewed Orbis downgrades', () => {
       expect(() => migrationFingerprint(rows)).toThrow();
   });
   it('rejects runtime, state contract and migration identity mismatches', () => {
-    expect(() => downgradeManifest({ ...manifest, runtipiCompatibility: '4.11.0' }, target, '4.10.1')).toThrow('different Runtipi');
+    expect(() => downgradeManifest({ ...manifest, runtipiCompatibility: '4.11.0' }, target, '4.10.1')).toThrow('different compatibility base');
     expect(() => downgradeManifest({ ...manifest, dataCompatibility: 'orbis.data.v2' }, target, '4.10.1')).toThrow('data contract');
     expect(() => downgradeManifest({ ...manifest, migrationFingerprint: undefined }, target, '4.10.1')).toThrow('data contract');
     expect(() => downgradeManifest({ ...manifest, tag: 'other' }, target, '4.10.1')).toThrow('verified Orbis downgrade');
@@ -225,7 +225,7 @@ describe('reviewed Orbis downgrades', () => {
   });
   it('reviews and rechecks before using the existing verified host transaction once', async () => {
     const plan = await service.plan(target);
-    expect(plan.compatibility).toContain('Same Runtipi');
+    expect(plan.compatibility).toContain('Same compatibility base');
     expect(plan.forced).toBe(false);
     expect(plan.warnings).toEqual([]);
     expect(host.plan).toHaveBeenCalledWith(target, true, false);
@@ -389,7 +389,7 @@ describe('reviewed Orbis downgrades', () => {
 
   it('keeps runtime, release identity, host health, active-job and nightly guards hard when forced', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ...manifest, runtipiCompatibility: '4.11.0' }));
-    await expect(service.plan(target, true)).rejects.toThrow('different Runtipi');
+    await expect(service.plan(target, true)).rejects.toThrow('different compatibility base');
     for (const field of ['image', 'commit', 'digest', 'installationProtocol', 'tag']) {
       vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ...manifest, [field]: 'wrong' }));
       await expect(service.plan(target, true)).rejects.toThrow('verified Orbis');
@@ -415,7 +415,7 @@ describe('reviewed Orbis downgrades', () => {
     await expect(service.apply(id, true)).rejects.toThrow('new downgrade review');
   });
 
-  it('reports an upcoming Runtipi boundary and the actual host-updater limit without making a host plan', async () => {
+  it('reports an upcoming change to the compatibility base and the actual host-updater limit without making a host plan', async () => {
     expect(await service.releaseCompatibility(target)).toEqual({
       tag: target,
       currentRuntipiVersion: '4.10.1',

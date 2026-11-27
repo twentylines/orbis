@@ -29,7 +29,7 @@ export function InstalledVersions({
         </div>
       ) : null}
       <div>
-        <dt>Runtipi</dt>
+        <dt>Compatibility base</dt>
         <dd>{runtipi || 'Not reported'}</dd>
       </div>
       {host ? (

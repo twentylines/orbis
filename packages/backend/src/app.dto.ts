@@ -9,7 +9,6 @@ import { AppInfoSimpleDto } from './modules/marketplace/dto/marketplace.dto';
 export const settingsSchema = type({
   advancedSettings: 'boolean',
   allowAutoThemes: 'boolean',
-  allowErrorMonitoring: 'boolean',
   appDataPath: 'string.trim',
   appsRepoUrl: 'string.url',
   demoMode: 'boolean',
@@ -66,7 +65,6 @@ const userContextDto = type({
   isConfigured: 'boolean',
   isGuestDashboardEnabled: 'boolean',
   allowAutoThemes: 'boolean',
-  allowErrorMonitoring: 'boolean',
   themeColor: 'string',
   themeBase: 'string',
   localDomain: 'string',
@@ -74,5 +72,3 @@ const userContextDto = type({
 });
 
 export class UserContextDto extends createArkDto(userContextDto, { name: 'UserContextDto' }) {}
-
-export class AcknowledgeWelcomeBody extends createArkDto(type({ allowErrorMonitoring: 'boolean' }), { name: 'AcknowledgeWelcomeBody' }) {}

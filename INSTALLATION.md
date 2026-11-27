@@ -42,7 +42,7 @@ A stopped controller remains discoverable while its container exists. If its con
 
 ## First sign-in
 
-An existing account or saved login session still opens Orbis setup on first use. Confirm the server name, display mode and optional error reporting, and choose whether to open server pairing next. Completing setup preserves the account and installed apps. Completion is stored on the server for that account, independently of the inherited welcome flag and browser appearance cache. It persists across browsers, logins and appearance resets.
+An existing account or saved login session still opens Orbis setup on first use. Confirm the server name and display mode, and choose whether to open server pairing next. Completing setup preserves the account and installed apps. Completion is stored on the server for that account, independently of the inherited welcome flag and browser appearance cache. It persists across browsers, logins and appearance resets.
 
 For replacement requirements and recovery procedures, see the sections below.
 

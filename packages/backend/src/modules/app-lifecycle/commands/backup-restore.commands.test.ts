@@ -6,12 +6,10 @@ import { DockerService } from '@/modules/docker/docker.service';
 import type { ModuleRef } from '@nestjs/core';
 import type { AppUrn } from '@runtipi/common/types';
 import type Dockerode from 'dockerode';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import { BackupAppCommand } from './backup-app-command';
 import { RestoreAppCommand } from './restore-app-command';
-
-vi.mock('@sentry/nestjs', () => ({ captureException: vi.fn() }));
 
 describe.each(['backup', 'restore'] as const)('%s requires a stopped application', (action) => {
   const appUrn = 'demo:store' as AppUrn;

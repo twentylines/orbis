@@ -39,7 +39,6 @@ const settingsSchema = type({
   localDomain: 'string?',
   guestDashboard: 'boolean?',
   allowAutoThemes: 'boolean?',
-  allowErrorMonitoring: 'boolean?',
   timeZone: 'string?',
   advancedSettings: 'boolean?',
   internalIp: 'string.ip.v4?',
@@ -62,7 +61,6 @@ export type SettingsFormValues = {
   localDomain?: string;
   guestDashboard?: boolean;
   allowAutoThemes?: boolean;
-  allowErrorMonitoring?: boolean;
   timeZone?: string;
   advancedSettings?: boolean;
   internalIp?: string;
@@ -106,13 +104,7 @@ export const UserSettingsForm = (props: IProps) => {
     return errors;
   };
 
-  const {
-    guestDashboard: guestDashboardEnabled,
-    allowErrorMonitoring: _reporting,
-    advancedSettings: _advanced,
-    persistTraefikConfig: _proxy,
-    ...draftValues
-  } = initialValues ?? {};
+  const { guestDashboard: guestDashboardEnabled, advancedSettings: _advanced, persistTraefikConfig: _proxy, ...draftValues } = initialValues ?? {};
   const {
     register,
     getValues,
@@ -204,21 +196,6 @@ export const UserSettingsForm = (props: IProps) => {
           </div>
           <div>
             <AutosavedSettingSwitch
-              id="setting-allowErrorMonitoring"
-              toggle={toggles['error-monitoring']}
-              label={
-                <>
-                  {t('SETTINGS_GENERAL_ALLOW_ERROR_MONITORING')}
-                  <Tooltip className="tooltip" anchorSelect=".allow-errors-hint">
-                    {t('SETTINGS_GENERAL_ALLOW_ERROR_MONITORING_HINT')}
-                  </Tooltip>
-                  <span className={clsx('ms-1 form-help allow-errors-hint')}>?</span>
-                </>
-              }
-            />
-          </div>
-          <div>
-            <AutosavedSettingSwitch
               id="setting-advancedSettings"
               toggle={toggles['advanced-settings']}
               label={
@@ -285,7 +262,7 @@ export const UserSettingsForm = (props: IProps) => {
               </>
             }
             error={errors.localDomain?.message}
-            placeholder="tipi.lan"
+            placeholder="orbis.lan"
             disabled={!advancedSettings || pending.has('localDomain')}
           />
           <Button id="setting-certificate" className="mt-2 mb-2" onClick={downloadCertificate}>

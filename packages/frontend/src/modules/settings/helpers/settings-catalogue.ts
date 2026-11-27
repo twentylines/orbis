@@ -223,14 +223,6 @@ export const settingsCatalogue: readonly SettingEntry[] = [
     operator: true,
   },
   {
-    id: 'error-monitoring',
-    label: 'Error reporting',
-    section: 'general',
-    anchor: 'setting-allowErrorMonitoring',
-    aliases: 'monitoring diagnostics error telemetry',
-    operator: true,
-  },
-  {
     id: 'advanced-settings',
     label: 'Advanced settings',
     section: 'general',
@@ -448,7 +440,7 @@ export const settingsCatalogue: readonly SettingEntry[] = [
     label: 'Installed software',
     section: 'about',
     anchor: 'about-software-title',
-    aliases: 'orbis runtipi version build software license',
+    aliases: 'orbis version build software compatibility license',
   },
   {
     id: 'server-hardware',

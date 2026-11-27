@@ -36,23 +36,20 @@ describe('configuration diagnostics', () => {
   });
 });
 
-it('keeps the error reporting setting when an unrelated partial save is applied', async () => {
+it('discards retired reporting settings from saved preferences and older client submissions', async () => {
   const service: ConfigurationService = Object.assign(Object.create(ConfigurationService.prototype), {
-    config: { version: 'fixture', demoMode: false, userSettings: { allowErrorMonitoring: true, guestDashboard: false } },
+    config: { version: 'fixture', demoMode: false, userSettings: { guestDashboard: false } },
   });
   const read = vi.spyOn(fs.promises, 'readFile').mockResolvedValue(JSON.stringify({ allowErrorMonitoring: true, guestDashboard: false }));
   const write = vi.spyOn(fs.promises, 'writeFile').mockResolvedValue(undefined);
-  const applyReporting = vi.spyOn(service, 'initSentry').mockResolvedValue(undefined);
   try {
-    await service.setUserSettings({ guestDashboard: true });
-    expect(applyReporting).not.toHaveBeenCalled();
-    expect(JSON.parse(String(write.mock.calls[0]?.[1]))).toEqual({ allowErrorMonitoring: true, guestDashboard: true });
-    await service.setUserSettings({ allowErrorMonitoring: false });
-    expect(applyReporting).toHaveBeenCalledExactlyOnceWith({ release: 'fixture', allowSentry: false });
+    const legacy = { guestDashboard: true, allowErrorMonitoring: true };
+    await service.setUserSettings(legacy);
+    expect(JSON.parse(String(write.mock.calls[0]?.[1]))).toEqual({ guestDashboard: true });
+    expect(service.get('userSettings')).toEqual({ guestDashboard: true });
   } finally {
     read.mockRestore();
     write.mockRestore();
-    applyReporting.mockRestore();
   }
 });
 

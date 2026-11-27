@@ -1,6 +1,5 @@
 import path from 'node:path';
 import { Inject, Injectable } from '@nestjs/common';
-import * as Sentry from '@sentry/nestjs';
 import { LocalTlsService } from './core/local-tls/local-tls.service';
 import { CacheService, ONE_DAY_IN_SECONDS } from './core/cache/cache.service';
 import { ConfigurationService } from './core/config/configuration.service';
@@ -88,8 +87,6 @@ export class AppService {
       this.logger.info('Log level', userSettings.logLevel);
       this.logger.debug('Starting server', { version, architecture, logLevel: userSettings.logLevel });
 
-      this.configuration.initSentry({ release: version, allowSentry: userSettings.allowErrorMonitoring });
-
       await this.logger.flush();
 
       this.logger.info(`Running version: ${process.env.TIPI_VERSION}`);
@@ -137,7 +134,6 @@ export class AppService {
       if (restoreStartupRole() !== 'candidate') await this.queueFactory.completeInstallationResume();
     } catch (e) {
       this.logger.error(e);
-      Sentry.captureException(e, { tags: { source: 'bootstrap' } });
       if (installation.phase === 'resume' || preserveControllerNetwork) throw e;
     }
   }
@@ -149,9 +145,6 @@ export class AppService {
 
   public prepareCoreCapturePresentation(): Promise<void> {
     this.coreCapturePreparation ??= Promise.resolve().then(async () => {
-      this.requireCoreCaptureHold();
-      const { version, userSettings } = this.configuration.getConfig();
-      this.configuration.initSentry({ release: version, allowSentry: userSettings.allowErrorMonitoring });
       this.requireCoreCaptureHold();
       await this.marketplaceService.initialize({ refreshRepositories: false });
       this.requireCoreCaptureHold();

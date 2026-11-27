@@ -287,7 +287,6 @@ export class ResetService {
         await this.config.setUserSettings({
           advancedSettings: false,
           allowAutoThemes: true,
-          allowErrorMonitoring: false,
           guestDashboard: false,
           themeBase: 'light',
           themeColor: 'blue',

@@ -21,7 +21,6 @@ const git = vi.hoisted(() => ({
 
 vi.mock('isomorphic-git', () => ({ default: git }));
 vi.mock('node:child_process', () => ({ execFileSync: vi.fn() }));
-vi.mock('@sentry/nestjs', () => ({ captureException: vi.fn() }));
 
 const repoUrl = 'https://example.com/owned-fixture.git';
 const slug = 'owned-fixture';

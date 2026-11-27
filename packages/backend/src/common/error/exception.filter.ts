@@ -1,6 +1,5 @@
 import type { LoggerService } from '@/core/logger/logger.service';
 import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
-import * as Sentry from '@sentry/nestjs';
 import { type } from 'arktype';
 import { timeMachineIssueSchema } from '@runtipi/common/schemas/time-machine';
 import { timeMachineRestoreIssueSchema } from '@runtipi/common/schemas/time-machine-restore';
@@ -55,16 +54,6 @@ export class MainExceptionFilter implements ExceptionFilter {
         // @ts-expect-error
         intlParams = response.intlParams;
       }
-    }
-
-    if (status >= 500 && !(exception instanceof TranslatableError) && !keyHandoff) {
-      Sentry.captureException(exception, {
-        tags: {
-          cause: String(cause),
-          url: request.url,
-          status,
-        },
-      });
     }
 
     response.status(status).json({

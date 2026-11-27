@@ -21,8 +21,6 @@ import { TasksService } from '@/modules/tasks/tasks.service';
 import { AppLifecycleCommandFactory } from '../app-lifecycle-command.factory';
 import type { AppJobContext } from '../services/app-job.service';
 
-vi.mock('@sentry/nestjs', () => ({ captureException: vi.fn() }));
-
 const appUrn = 'app:test' as AppUrn;
 const architecture = 'arm64';
 const targetImage = 'example.test/target:fixture-only';

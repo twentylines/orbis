@@ -54,11 +54,11 @@ function render({
   return markup;
 }
 
-test('About reports installed Sentinel, OS and Docker alongside the existing Orbis and Runtipi versions', () => {
+test('About reports installed Sentinel, OS and Docker alongside the Orbis version and compatibility base', () => {
   const markup = render({ software: installed, status: sentinel });
   expect(markup).toContain('<h3 id="about-software-title">Installed software</h3>');
   expect(markup).toContain('<dt>Orbis</dt><dd>0.1.2</dd>');
-  expect(markup).toContain('<dt>Runtipi</dt><dd>4.10.1</dd>');
+  expect(markup).toContain('<dt>Compatibility base</dt><dd>4.10.1</dd>');
   expect(markup).toContain('<dt>Sentinel</dt><dd>0.8.5</dd>');
   expect(markup).not.toContain('0.9.0');
   expect(markup).toContain('<dt>Operating system</dt><dd>Ubuntu 24.04.4 LTS</dd>');

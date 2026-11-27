@@ -284,7 +284,7 @@ export class UpdateAppCommand extends AppLifecycleCommand {
 
       return { success: true, message: `App ${appUrn} updated successfully`, updateStatus };
     } catch (error) {
-      if (recoveryRequired) return this.handleAppError(recovery(), appUrn, 'update_error');
+      if (recoveryRequired) return this.handleAppError(recovery());
       try {
         await this.reportProgress('recovering');
         if (migrations && transaction instanceof AppUpdateStage) {
@@ -294,9 +294,9 @@ export class UpdateAppCommand extends AppLifecycleCommand {
           if (runtimeTouched && previous) await resumeAppContainers(previous.entries);
         }
       } catch (rollbackError) {
-        return this.handleAppError(rollbackError, appUrn, 'update_error');
+        return this.handleAppError(rollbackError);
       }
-      const failure = await this.handleAppError(error, appUrn, 'update_error');
+      const failure = await this.handleAppError(error);
       return { ...failure, statePreserved: true, updateStatus: previous?.status };
     } finally {
       await migrations?.close().catch(() => undefined);

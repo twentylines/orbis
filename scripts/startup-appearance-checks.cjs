@@ -61,7 +61,6 @@ module.exports = async function inspectStartup({ page, base, preferences, captur
           isConfigured: true,
           isGuestDashboardEnabled: false,
           allowAutoThemes: false,
-          allowErrorMonitoring: false,
           themeColor: 'blue',
           themeBase: 'slate',
         }),

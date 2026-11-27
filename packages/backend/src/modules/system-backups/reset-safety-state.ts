@@ -72,7 +72,7 @@ const stateSchema = type({
     server: {
       advancedSettings: 'boolean',
       allowAutoThemes: 'boolean',
-      allowErrorMonitoring: 'boolean',
+      allowErrorMonitoring: 'boolean?',
       guestDashboard: 'boolean',
       themeBase: 'string <= 1024 | null',
       themeColor: 'string <= 1024 | null',

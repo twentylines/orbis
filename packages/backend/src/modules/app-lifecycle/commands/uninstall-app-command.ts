@@ -42,7 +42,7 @@ export class UninstallAppCommand extends AppLifecycleCommand {
 
       return { success: true, message: `App ${appUrn} uninstalled successfully` };
     } catch (err) {
-      return this.handleAppError(err, appUrn, 'uninstall');
+      return this.handleAppError(err);
     }
   }
 }

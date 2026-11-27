@@ -81,7 +81,6 @@ beforeEach(async () => {
   await fs.writeFile(path.join(root, 'state/settings.json'), JSON.stringify({ timeZone: 'UTC', guestDashboard: false }), { mode: 0o600 });
   config = Object.assign(Object.create(ConfigurationService.prototype), {
     config: { directories: { dataDir: root }, userSettings: runtimeUserSettingsSchema.assert(runtime()), version: 'fixture', architecture: 'amd64' },
-    initSentry: vi.fn().mockResolvedValue(undefined),
   });
   desktop = new DesktopPreferencesService(config);
   wallpapers = new DesktopWallpaperService(config, desktop);

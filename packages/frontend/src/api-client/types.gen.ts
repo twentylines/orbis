@@ -6,7 +6,6 @@ export type ClientOptions = {
 
 export type UserContextDto = {
     allowAutoThemes: boolean;
-    allowErrorMonitoring: boolean;
     isConfigured: boolean;
     isGuestDashboardEnabled: boolean;
     isLoggedIn: boolean;
@@ -57,7 +56,6 @@ export type AppContextDto = {
     userSettings: {
         advancedSettings: boolean;
         allowAutoThemes: boolean;
-        allowErrorMonitoring: boolean;
         appDataPath: string;
         appsRepoUrl: string;
         demoMode: boolean;
@@ -95,7 +93,6 @@ export type AppContextDto = {
 export type UserSettingsBody = {
     advancedSettings?: boolean;
     allowAutoThemes?: boolean;
-    allowErrorMonitoring?: boolean;
     appDataPath?: string;
     appsRepoUrl?: string;
     demoMode?: boolean;
@@ -118,10 +115,6 @@ export type UserSettingsBody = {
     themeColor?: string;
     timeZone?: string;
     trustedProxyIps?: string;
-};
-
-export type AcknowledgeWelcomeBody = {
-    allowErrorMonitoring: boolean;
 };
 
 export type GetAppConfigDto = {
@@ -1000,7 +993,7 @@ export type UpdateUserSettingsResponses = {
 };
 
 export type AcknowledgeWelcomeData = {
-    body: AcknowledgeWelcomeBody;
+    body?: never;
     path?: never;
     query?: never;
     url: '/api/acknowledge-welcome';

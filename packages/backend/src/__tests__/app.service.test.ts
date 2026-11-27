@@ -125,7 +125,7 @@ describe('AppService', () => {
       vi.spyOn(maintenance, 'backupMaintenanceActive').mockReturnValue(true);
       vi.spyOn(maintenance, 'coreCaptureRecoveryRequired').mockReturnValue(false);
       vi.spyOn(installation, 'installationMode').mockReturnValue({ phase: 'normal' } as ReturnType<typeof installation.installationMode>);
-      configurationService.getConfig.mockReturnValue(fromPartial({ version: '5.0.0', userSettings: { allowErrorMonitoring: true }, __prod__: true }));
+      configurationService.getConfig.mockReturnValue(fromPartial({ version: '5.0.0', userSettings: {}, __prod__: true }));
     });
     afterEach(() => vi.restoreAllMocks());
 
@@ -137,7 +137,6 @@ describe('AppService', () => {
       await first;
       appService.activateCoreCaptureTimers();
       appService.activateCoreCaptureTimers();
-      expect(configurationService.initSentry).toHaveBeenCalledExactlyOnceWith({ release: '5.0.0', allowSentry: true });
       expect(marketplace.initialize).toHaveBeenCalledExactlyOnceWith({ refreshRepositories: false });
       expect(appStatusSyncService.syncAllAppStatuses).toHaveBeenCalledOnce();
       expect(repoQueue.publishRepeatable).toHaveBeenCalledExactlyOnceWith({ command: 'update_all' }, '*/15 * * * *');
@@ -180,9 +179,7 @@ describe('AppService', () => {
     });
 
     it('rechecks the hold before activating and does not register production repo timers outside production', async () => {
-      configurationService.getConfig.mockReturnValue(
-        fromPartial({ version: '5.0.0', userSettings: { allowErrorMonitoring: false }, __prod__: false }),
-      );
+      configurationService.getConfig.mockReturnValue(fromPartial({ version: '5.0.0', userSettings: {}, __prod__: false }));
       await appService.prepareCoreCapturePresentation();
       vi.mocked(maintenance.backupMaintenanceActive).mockReturnValue(false);
       expect(() => appService.activateCoreCaptureTimers()).toThrow();
@@ -210,7 +207,7 @@ describe('AppService', () => {
       fromPartial({
         version: '4.10.1',
         architecture: 'arm64',
-        userSettings: { logLevel: 'debug', allowErrorMonitoring: false, localDomain: 'local.test' },
+        userSettings: { logLevel: 'debug', localDomain: 'local.test' },
         database: { password: privateValue },
         jwtSecret: privateValue,
         rootFolderHost: privateValue,
@@ -226,7 +223,7 @@ describe('AppService', () => {
 
   it('reconciles persisted application states before serving the dashboard', async () => {
     configurationService.getConfig.mockReturnValue(
-      fromPartial({ version: '4.10.1', userSettings: { logLevel: 'info', allowErrorMonitoring: false, localDomain: 'local.test' }, __prod__: false }),
+      fromPartial({ version: '4.10.1', userSettings: { logLevel: 'info', localDomain: 'local.test' }, __prod__: false }),
     );
     vi.spyOn(appService, 'copyAssets').mockResolvedValue();
     vi.spyOn(appService, 'generateTlsCertificates').mockResolvedValue();
@@ -264,7 +261,7 @@ describe('AppService', () => {
   it('uses ordinary startup without requiring empty retained queues after settlement', async () => {
     const retained = vi.spyOn(restoreStartup, 'retainedBootstrapStartup').mockReturnValue(false);
     configurationService.getConfig.mockReturnValue(
-      fromPartial({ version: '5.0.0', userSettings: { logLevel: 'info', allowErrorMonitoring: false, localDomain: 'local.test' }, __prod__: false }),
+      fromPartial({ version: '5.0.0', userSettings: { logLevel: 'info', localDomain: 'local.test' }, __prod__: false }),
     );
     vi.spyOn(appService, 'copyAssets').mockResolvedValue();
     vi.spyOn(appService, 'generateTlsCertificates').mockResolvedValue();
@@ -353,7 +350,7 @@ describe('AppService', () => {
     vi.stubEnv('ORBIS_INSTALLER_TRANSACTION', 'f92e8862-38b5-4e81-bc84-f9131944872d');
     vi.stubEnv('ORBIS_INSTALLER_PHASE', 'resume');
     configurationService.getConfig.mockReturnValue(
-      fromPartial({ version: '4.10.1', userSettings: { logLevel: 'info', allowErrorMonitoring: false, localDomain: 'local.test' }, __prod__: true }),
+      fromPartial({ version: '4.10.1', userSettings: { logLevel: 'info', localDomain: 'local.test' }, __prod__: true }),
     );
     vi.spyOn(appService, 'copyAssets').mockResolvedValue();
     vi.spyOn(appService, 'generateTlsCertificates').mockResolvedValue();
@@ -405,7 +402,7 @@ describe('AppService', () => {
         version: '4.10.1',
         __prod__: false,
         directories: { appDir: APP_DIR, dataDir: DATA_DIR, appDataDir: APP_DATA_DIR },
-        userSettings: { logLevel: 'info', allowErrorMonitoring: false, localDomain: 'target.lan', persistTraefikConfig: false },
+        userSettings: { logLevel: 'info', localDomain: 'target.lan', persistTraefikConfig: false },
       }),
     );
     configurationService.get.calledWith('traefik').mockReturnValue({ trustedProxyIps: [] });
@@ -445,9 +442,7 @@ describe('AppService', () => {
   it('does not advertise a healthy controller update when app status reconciliation fails', async () => {
     vi.stubEnv('ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS', '1');
     controllerPolicy.mockReturnValue(true);
-    configurationService.getConfig.mockReturnValue(
-      fromPartial({ version: 'nightly', userSettings: { logLevel: 'info', allowErrorMonitoring: false }, __prod__: true }),
-    );
+    configurationService.getConfig.mockReturnValue(fromPartial({ version: 'nightly', userSettings: { logLevel: 'info' }, __prod__: true }));
     vi.spyOn(appService as unknown as { initializeAssets: () => Promise<void> }, 'initializeAssets').mockResolvedValue();
     appStatusSyncService.syncAllAppStatuses.mockResolvedValue({
       success: false,
@@ -466,7 +461,7 @@ describe('AppService', () => {
     vi.stubEnv('ORBIS_INSTALLER_TRANSACTION', 'f92e8862-38b5-4e81-bc84-f9131944872d');
     vi.stubEnv('ORBIS_INSTALLER_PHASE', 'resume');
     configurationService.getConfig.mockReturnValue(
-      fromPartial({ version: '4.10.1', userSettings: { logLevel: 'info', allowErrorMonitoring: false, localDomain: 'local.test' }, __prod__: true }),
+      fromPartial({ version: '4.10.1', userSettings: { logLevel: 'info', localDomain: 'local.test' }, __prod__: true }),
     );
     vi.spyOn(appService, 'copyAssets').mockRejectedValue(new Error('Asset initialization failed'));
     await expect(appService.bootstrap()).rejects.toThrow('Asset initialization failed');
@@ -499,9 +494,7 @@ describe('AppService', () => {
   it('keeps app consumption held when status reconciliation reports failure', async () => {
     vi.stubEnv('ORBIS_INSTALLER_TRANSACTION', 'f92e8862-38b5-4e81-bc84-f9131944872d');
     vi.stubEnv('ORBIS_INSTALLER_PHASE', 'resume');
-    configurationService.getConfig.mockReturnValue(
-      fromPartial({ version: '4.10.1', userSettings: { logLevel: 'info', allowErrorMonitoring: false }, __prod__: true }),
-    );
+    configurationService.getConfig.mockReturnValue(fromPartial({ version: '4.10.1', userSettings: { logLevel: 'info' }, __prod__: true }));
     vi.spyOn(appService, 'copyAssets').mockResolvedValue();
     vi.spyOn(appService, 'generateTlsCertificates').mockResolvedValue();
     appStatusSyncService.syncAllAppStatuses.mockResolvedValue({

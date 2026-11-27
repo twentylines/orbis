@@ -223,7 +223,7 @@ function SetupStepPanel({
   );
 }
 
-export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolean }) => {
+export const Welcome = () => {
   const { preferences, completeOnboarding, syncState, onboardingOrigin, onboardingGeneration } = useDesktopPreferences();
   const { user } = useAppContext();
   const { sessionAbortSignal } = useUserContext();
@@ -245,7 +245,6 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   const [entry, setEntry] = useState<SetupEntry>(resumingCapture ? 'fresh' : onboardingOrigin === 'runtipi' ? 'migration' : null);
   const [restoreBusy, setRestoreBusy] = useState(false);
   const [direction, setDirection] = useState(1);
-  const [errorMonitoring, setErrorMonitoring] = useState(allowErrorMonitoring);
   const [automatic, setAutomatic] = useState(defaultAutomatic);
   const [automaticEdited, setAutomaticEdited] = useState(false);
   const [protectionDraft, setProtectionDraft] = useState<boolean | null>(null);
@@ -380,8 +379,8 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     const tasks: SetupSaveStep[] = [
       {
         id: 'Saving preferences',
-        value: errorMonitoring,
-        save: () => acknowledgeWelcome({ body: { allowErrorMonitoring: errorMonitoring }, signal: AbortSignal.timeout(20_000), throwOnError: true }),
+        value: true,
+        save: () => acknowledgeWelcome({ signal: AbortSignal.timeout(20_000), throwOnError: true }),
       },
     ];
     if (canManageUpdates && automaticEdited && automaticToSave)
@@ -863,68 +862,62 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                         />
                       ) : null}
                       {step === 'ready' ? (
-                        <>
-                          <dl className="orbis-setup-review">
-                            <div>
-                              <dt>Server</dt>
-                              <dd>{name.trim()}</dd>
-                            </div>
-                            <div>
-                              <dt>Appearance</dt>
-                              <dd>
-                                {presetLabels[draft.preset]} ·{' '}
-                                {draft.mode === 'system' ? 'System' : draft.mode === 'dark' ? (draft.appearance.oledDark ? 'OLED' : 'Dark') : 'Light'}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt>Wallpaper</dt>
-                              <dd>
-                                {draft.wallpaperMode === 'theme'
-                                  ? 'Match palette'
-                                  : draft.appearance.wallpaperImage
-                                    ? 'Your image'
-                                    : draft.wallpaperPreset
-                                      ? presetLabels[draft.wallpaperPreset]
-                                      : draft.wallpaper}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt>Performance</dt>
-                              <dd>
-                                {draft.appearance.lowEffects ? 'Save resources' : 'Full experience'}
-                                {!draft.appearance.lowEffects && !glassEnabled ? ' · Solid panels' : ''}
-                                {draft.appearance.motion === 'reduced' ? ' · Reduced movement' : ''}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt>Open apps</dt>
-                              <dd>{draft.appLaunch.mode === 'window' ? 'Window layout' : 'Open apps in new tabs'}</dd>
-                            </div>
-                            <div>
-                              <dt>Automatic updates</dt>
-                              <dd>
-                                {automaticEdited ? (automatic.orbis.enabled ? 'Orbis enabled' : 'Orbis manual') : 'Existing preferences kept'} ·{' '}
-                                {automatic.apps?.enabled
-                                  ? 'Apps enabled'
-                                  : appChoices.length
-                                    ? `${appChoices.length} ${appChoices.length === 1 ? 'app' : 'apps'} selected`
-                                    : 'Apps manual'}
-                              </dd>
-                            </div>
-                            {sharedScheduleNeeded ? (
-                              <div>
-                                <dt>Daily schedule</dt>
-                                <dd>
-                                  {automatic.schedule.time} · {automatic.schedule.timezone}
-                                </dd>
-                              </div>
-                            ) : null}
-                          </dl>
-                          <div className="orbis-setup-reporting">
-                            <Switch checked={errorMonitoring} onCheckedChange={setErrorMonitoring} label="Send error reports" />
-                            <p className="orbis-setup-help">Optional. Reports are sent to the upstream Sentry service.</p>
+                        <dl className="orbis-setup-review">
+                          <div>
+                            <dt>Server</dt>
+                            <dd>{name.trim()}</dd>
                           </div>
-                        </>
+                          <div>
+                            <dt>Appearance</dt>
+                            <dd>
+                              {presetLabels[draft.preset]} ·{' '}
+                              {draft.mode === 'system' ? 'System' : draft.mode === 'dark' ? (draft.appearance.oledDark ? 'OLED' : 'Dark') : 'Light'}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Wallpaper</dt>
+                            <dd>
+                              {draft.wallpaperMode === 'theme'
+                                ? 'Match palette'
+                                : draft.appearance.wallpaperImage
+                                  ? 'Your image'
+                                  : draft.wallpaperPreset
+                                    ? presetLabels[draft.wallpaperPreset]
+                                    : draft.wallpaper}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Performance</dt>
+                            <dd>
+                              {draft.appearance.lowEffects ? 'Save resources' : 'Full experience'}
+                              {!draft.appearance.lowEffects && !glassEnabled ? ' · Solid panels' : ''}
+                              {draft.appearance.motion === 'reduced' ? ' · Reduced movement' : ''}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Open apps</dt>
+                            <dd>{draft.appLaunch.mode === 'window' ? 'Window layout' : 'Open apps in new tabs'}</dd>
+                          </div>
+                          <div>
+                            <dt>Automatic updates</dt>
+                            <dd>
+                              {automaticEdited ? (automatic.orbis.enabled ? 'Orbis enabled' : 'Orbis manual') : 'Existing preferences kept'} ·{' '}
+                              {automatic.apps?.enabled
+                                ? 'Apps enabled'
+                                : appChoices.length
+                                  ? `${appChoices.length} ${appChoices.length === 1 ? 'app' : 'apps'} selected`
+                                  : 'Apps manual'}
+                            </dd>
+                          </div>
+                          {sharedScheduleNeeded ? (
+                            <div>
+                              <dt>Daily schedule</dt>
+                              <dd>
+                                {automatic.schedule.time} · {automatic.schedule.timezone}
+                              </dd>
+                            </div>
+                          ) : null}
+                        </dl>
                       ) : null}
                     </fieldset>
                   </form>

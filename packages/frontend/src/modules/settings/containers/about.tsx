@@ -136,7 +136,7 @@ export function About() {
             <span className="settings-about-link-icon" aria-hidden="true">
               <img src="/tipi.png" alt="" />
             </span>
-            <span>Runtipi repository</span>
+            <span>Upstream Runtipi repository</span>
           </a>
         </Button>
       </footer>

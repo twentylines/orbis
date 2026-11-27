@@ -18,7 +18,6 @@ const fixture = (): AppContextDto => ({
   userSettings: {
     advancedSettings: false,
     allowAutoThemes: false,
-    allowErrorMonitoring: false,
     appDataPath: '/fixture',
     appsRepoUrl: 'https://example.invalid/apps',
     demoMode: false,

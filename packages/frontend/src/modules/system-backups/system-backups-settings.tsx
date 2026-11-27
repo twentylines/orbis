@@ -275,7 +275,7 @@ export function BackupArchiveKeyFields({
 
 function Review({ review }: { review: BackupReview }) {
   const reasons = {
-    'runtipi-version': 'Runtipi version differs',
+    'runtipi-version': 'Compatibility base differs',
     'newer-orbis': 'Backup needs a newer Orbis version',
     'unknown-orbis-version': 'Orbis version could not be compared',
     'volume-restore-support': 'This version of Orbis cannot restore all the app data in this backup.',
@@ -290,7 +290,7 @@ function Review({ review }: { review: BackupReview }) {
         <div>
           <dt>Versions</dt>
           <dd>
-            Orbis {review.orbisVersion} · Runtipi {review.runtipiVersion}
+            Orbis {review.orbisVersion} · Compatibility base {review.runtipiVersion}
           </dd>
         </div>
         <div>

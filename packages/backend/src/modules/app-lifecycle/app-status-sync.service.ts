@@ -4,7 +4,6 @@ import type { AsyncMutex } from '@/utils/mutex/async-mutex';
 import { APP_ASYNC_MUTEX } from '@/utils/mutex/mutex.module';
 import { Inject, Injectable } from '@nestjs/common';
 import type { AppUrn } from '@runtipi/common/types';
-import * as Sentry from '@sentry/nestjs';
 import type Dockerode from 'dockerode';
 import { DOCKERODE } from '../docker/docker.module';
 import { AppsRepository } from '../apps/apps.repository';
@@ -162,7 +161,6 @@ export class AppStatusSyncService {
       };
     } catch (error) {
       this.logger.error('Error during app status sync:', error);
-      Sentry.captureException(error, { tags: { source: 'app-status-sync' } });
 
       return {
         success: false,

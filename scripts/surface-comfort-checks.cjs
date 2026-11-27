@@ -42,7 +42,6 @@ module.exports = async function inspectSurfaceComfort({ page, base, capture, mod
       isConfigured: true,
       isGuestDashboardEnabled: false,
       allowAutoThemes: false,
-      allowErrorMonitoring: false,
       themeColor: 'blue',
       themeBase: 'slate',
       localDomain: 'local.test',

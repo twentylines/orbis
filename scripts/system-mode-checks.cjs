@@ -271,7 +271,6 @@ module.exports = async function inspectSystemMode({ page, base, preferences, cap
         isConfigured: true,
         isGuestDashboardEnabled: phase.scenario === 'guest',
         allowAutoThemes: false,
-        allowErrorMonitoring: false,
         themeColor: 'blue',
         themeBase: 'slate',
         localDomain: 'local.test',

@@ -30,7 +30,6 @@ module.exports = async function inspectAuthFields({ page, base, preferences, cap
             isConfigured: screen !== 'register',
             isGuestDashboardEnabled: false,
             allowAutoThemes: false,
-            allowErrorMonitoring: false,
             themeColor: 'blue',
             themeBase: 'slate',
             localDomain: 'local.test',

@@ -35,7 +35,7 @@ export function publishedReleaseManifest(raw: unknown, tag: string): PublishedRe
   if ('updatePriority' in value && !['normal', 'critical'].includes(value.updatePriority as string))
     throw new BadRequestException('The published update priority is invalid.');
   if (typeof value.runtipiCompatibility !== 'string' || !valid(value.runtipiCompatibility)) {
-    throw new BadRequestException('The published Runtipi version could not be verified.');
+    throw new BadRequestException('The published compatibility base could not be verified.');
   }
   return {
     tag,

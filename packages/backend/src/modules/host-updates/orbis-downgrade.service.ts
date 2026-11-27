@@ -70,7 +70,7 @@ export function migrationFingerprint(rows: Array<{ created_at: unknown; hash: un
 
 function manifestCompatibility(value: PublishedReleaseManifest, runtime: string, forced: boolean) {
   if (value.runtipiCompatibility !== runtime.replace(/^v/, '')) {
-    throw new BadRequestException('This release requires a different Runtipi version. Runtipi cannot be downgraded here.');
+    throw new BadRequestException('This release requires a different compatibility base. This operation cannot downgrade the compatibility base.');
   }
   const legacy = value.tag === LEGACY_90.tag && value.commit === LEGACY_90.commit && value.digest === LEGACY_90.digest;
   const migrations = legacy ? LEGACY_90.migrations : value.migrationFingerprint;
@@ -113,7 +113,7 @@ export class OrbisDowngradeService {
 
   async releaseCompatibility(tag: unknown) {
     const runtime = process.env.TIPI_VERSION;
-    if (!runtime || !valid(runtime)) throw new BadRequestException('The installed Runtipi version is unavailable.');
+    if (!runtime || !valid(runtime)) throw new BadRequestException('The installed compatibility base is unavailable.');
     const manifest = await fetchPublishedReleaseManifest(tag);
     const currentRuntipiVersion = runtime.replace(/^v/, '');
     const targetRuntipiVersion = manifest.runtipiCompatibility;
@@ -126,10 +126,10 @@ export class OrbisDowngradeService {
       crossesRuntipiBoundary,
       hostUpdateSupported,
       warning: crossesRuntipiBoundary
-        ? `This release requires Runtipi ${targetRuntipiVersion}; this server runs ${currentRuntipiVersion}. Crossing a Runtipi version boundary prevents downgrading to releases that require the previous version. The current host updater supports Runtipi 4.10.1 only and cannot apply this update.`
+        ? `This release requires compatibility base ${targetRuntipiVersion}. This server uses ${currentRuntipiVersion}. Changing the base prevents downgrading to releases that require the previous base. The current host updater cannot apply this transition.`
         : hostUpdateSupported
           ? null
-          : 'The current host updater supports Runtipi 4.10.1 only and cannot apply this update.',
+          : 'The current host updater supports compatibility base 4.10.1 only and cannot apply this update.',
     };
   }
 
@@ -148,7 +148,7 @@ export class OrbisDowngradeService {
       if (!downgrading && forced) throw new BadRequestException('A Stable update does not require a forced downgrade.');
     } else if (!downgradeAllowedOnChannel(tag, installed, channel.channel))
       throw new BadRequestException('Choose an allowed earlier release on this update channel.');
-    if (!runtime) throw new BadRequestException('The installed Runtipi version is unavailable.');
+    if (!runtime) throw new BadRequestException('The installed compatibility base is unavailable.');
     const status = await this.host.status();
     if (
       !status.available ||
@@ -226,15 +226,16 @@ export class OrbisDowngradeService {
       expiresAt: Date.now() + 15 * 60_000,
       migrationFingerprint: checked.fingerprint,
       compatibility: forced
-        ? 'Same Runtipi version. Data compatibility checks are overridden; current data or settings may stop working.'
-        : 'Same Runtipi version and database schema. Applications and current data are retained.',
+        ? 'Same compatibility base. Data compatibility checks are overridden. Current data or settings may stop working.'
+        : 'Same compatibility base and database schema. Applications and current data are retained.',
       forced,
       warnings: checked.warnings,
       returnToStable,
       operation: checked.operation,
     };
     if (returnToStable && checked.operation === 'update')
-      review.compatibility = 'Installs the reviewed Stable release on the same Runtipi version. The channel changes only after healthy verification.';
+      review.compatibility =
+        'Installs the reviewed Stable release on the same compatibility base. The channel changes only after healthy verification.';
     if (returnToStable && checked.operation === 'downgrade')
       review.warnings.push('Automatic Orbis and system updates are paused for a downgrade. Your schedules and per-app rules are retained.');
     for (const [id, previous] of this.reviews) if (previous.expiresAt < Date.now()) this.reviews.delete(id);

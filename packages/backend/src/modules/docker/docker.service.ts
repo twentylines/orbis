@@ -13,7 +13,6 @@ import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import type { AppUrn } from '@runtipi/common/types';
-import * as Sentry from '@sentry/nestjs';
 import type Dockerode from 'dockerode';
 import { parse } from 'yaml';
 import {
@@ -880,7 +879,6 @@ export class DockerService {
     } catch (error) {
       await frozen?.release();
       this.logger.error('Error getting log stream', error);
-      Sentry.captureException(error, { tags: { source: 'docker log stream', appUrn } });
       throw new InternalServerErrorException('Error getting log stream');
     }
   };

@@ -2,7 +2,7 @@ import { ConfigurationService } from '@/core/config/configuration.service';
 import { UserRepository } from '@/modules/user/user.repository';
 import { Body, Controller, ForbiddenException, Get, Patch, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
-import { AcknowledgeWelcomeBody, AppContextDto, UserSettingsBody, UserContextDto } from './app.dto';
+import { AppContextDto, UserSettingsBody, UserContextDto } from './app.dto';
 import { AppService } from './app.service';
 import { AppsService } from './modules/apps/apps.service';
 import { AuthGuard } from './modules/auth/auth.guard';
@@ -23,8 +23,7 @@ export class AppController {
   @Get('/user-context')
   @ApiResponse({ type: UserContextDto })
   async userContext(@Req() req: Request) {
-    const { guestDashboard, allowAutoThemes, themeColor, themeBase, allowErrorMonitoring, localDomain, sslPort } =
-      this.configuration.get('userSettings');
+    const { guestDashboard, allowAutoThemes, themeColor, themeBase, localDomain, sslPort } = this.configuration.get('userSettings');
     const version = await this.appService.getVersion();
     const operator = await this.userRepository.getFirstOperator();
 
@@ -34,7 +33,6 @@ export class AppController {
         isConfigured: Boolean(operator),
         isGuestDashboardEnabled: guestDashboard,
         allowAutoThemes,
-        allowErrorMonitoring,
         themeColor,
         themeBase,
         version,
@@ -76,19 +74,11 @@ export class AppController {
 
   @Patch('/acknowledge-welcome')
   @UseGuards(AuthGuard)
-  async acknowledgeWelcome(@Req() req: Request, @Body() body: AcknowledgeWelcomeBody) {
+  async acknowledgeWelcome(@Req() req: Request) {
     if (!req.user) {
       return;
     }
 
-    const version = await this.appService.getVersion();
-    this.configuration.initSentry({ release: version.current, allowSentry: body.allowErrorMonitoring });
     await this.userRepository.updateUser(req.user.id, { hasSeenWelcome: true });
-
-    if (this.configuration.get('demoMode')) {
-      return;
-    }
-
-    await this.configuration.setUserSettings({ allowErrorMonitoring: body.allowErrorMonitoring });
   }
 }

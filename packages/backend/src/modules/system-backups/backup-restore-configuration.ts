@@ -17,7 +17,6 @@ const portable = {
   themeColor: 'THEME_COLOR',
 } as const;
 const preserved = [
-  'allowErrorMonitoring',
   'appDataPath',
   'demoMode',
   'dnsIp',
@@ -81,6 +80,7 @@ function encode(key: string, value: string) {
 function sourceSettings(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw failed();
   const input = { ...(value as Record<string, unknown>) };
+  delete input.allowErrorMonitoring;
   if (Object.hasOwn(input, 'experimental')) {
     const experiment = input.experimental;
     if (
@@ -172,7 +172,6 @@ function rebase(options: RebaseOptions, core: boolean) {
       timeZone: decoded.TZ,
       themeBase: decoded.THEME_BASE ?? 'gray',
       themeColor: decoded.THEME_COLOR ?? 'blue',
-      allowErrorMonitoring: boolean('ALLOW_ERROR_MONITORING', false),
       appDataPath: decoded.RUNTIPI_APP_DATA_PATH,
       demoMode: boolean('DEMO_MODE', false),
       dnsIp: decoded.DNS_IP ?? '9.9.9.9',

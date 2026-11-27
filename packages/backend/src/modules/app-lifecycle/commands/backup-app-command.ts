@@ -15,7 +15,7 @@ export class BackupAppCommand extends AppLifecycleCommand {
 
       return { success: true, message: `App ${appUrn} backed up successfully`, statePreserved: true };
     } catch (err) {
-      return this.handleAppError(err, appUrn, 'backup');
+      return this.handleAppError(err);
     }
   }
 }

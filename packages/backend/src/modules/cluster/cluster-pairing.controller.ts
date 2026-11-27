@@ -43,7 +43,7 @@ export class ClusterPairingExceptionFilter implements ExceptionFilter {
     const supplied = error instanceof HttpException ? error.getResponse() : undefined;
     const message =
       typeof supplied === 'string' ? supplied : supplied && typeof supplied === 'object' && 'message' in supplied ? supplied.message : undefined;
-    // Account requests never enter general error reporting with their request body.
+    // Keep private pairing errors out of the client response.
     response.status(status).json({
       statusCode: status,
       message:

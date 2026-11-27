@@ -53,7 +53,7 @@ export class ResetAppCommand extends AppLifecycleCommand {
 
       return { success: true, message: `App ${appUrn} reset successfully` };
     } catch (err) {
-      return this.handleAppError(err, appUrn, 'reset');
+      return this.handleAppError(err);
     }
   }
 }

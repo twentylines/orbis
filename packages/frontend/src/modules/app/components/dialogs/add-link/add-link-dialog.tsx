@@ -179,7 +179,7 @@ export const AddLinkDialog: React.FC<AddLinkDialogProps> = ({ isOpen, onClose, l
               {...register('url')}
               className="mt-3"
               label={t('LINKS_FORM_LINK_URL')}
-              placeholder="https://demo.runtipi.io"
+              placeholder="https://example.com"
               error={errors.url?.message}
             />
 

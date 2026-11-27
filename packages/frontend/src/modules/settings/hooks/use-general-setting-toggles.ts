@@ -7,7 +7,6 @@ import { useAutosavedToggle } from './use-autosaved-toggle';
 
 const fields = {
   'guest-dashboard': 'guestDashboard',
-  'error-monitoring': 'allowErrorMonitoring',
   'advanced-settings': 'advancedSettings',
   'persist-proxy': 'persistTraefikConfig',
 } as const;
@@ -44,7 +43,6 @@ function useGeneralSettingToggle(id: GeneralToggleId, enabled: boolean) {
 export function useGeneralSettingToggles(enabled = true) {
   return {
     'guest-dashboard': useGeneralSettingToggle('guest-dashboard', enabled),
-    'error-monitoring': useGeneralSettingToggle('error-monitoring', enabled),
     'advanced-settings': useGeneralSettingToggle('advanced-settings', enabled),
     'persist-proxy': useGeneralSettingToggle('persist-proxy', enabled),
   };

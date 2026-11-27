@@ -24,7 +24,7 @@ An interrupted update must be inspected or recovered before another update start
 
 Settings shows the server's **Stable** or **Nightly** channel. Stable receives final releases. Nightly also receives beta and release-candidate builds, which may contain unfinished features or regressions. Selecting Nightly opens a warning and requires confirmation; it does not immediately install an update. Channel changes require an operator and a current host service.
 
-To leave Nightly while running a prerelease, choose **Review stable install**. Orbis reviews the latest Stable release and asks for confirmation before installing it. The channel changes only after that release is healthy. Cancelling or a failed installation keeps Nightly selected. Runtipi and data compatibility checks still apply. A server already running a final release can switch channels without reinstalling it.
+To leave Nightly while running a prerelease, choose **Review stable install**. Orbis reviews the latest Stable release and asks for confirmation before installing it. The channel changes only after that release is healthy. Cancelling or a failed installation keeps Nightly selected. Compatibility base and data checks still apply. A server already running a final release can switch channels without reinstalling it.
 
 The downgrade list on Stable contains final releases only. On Nightly, it also contains older beta or release-candidate builds of the currently installed version, but never prereleases of an earlier version. For example, `1.2.0 beta 3` can offer `1.2.0 beta 2` and older final releases, but not `1.1.0 beta 4`.
 

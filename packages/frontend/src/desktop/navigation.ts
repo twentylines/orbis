@@ -87,5 +87,5 @@ export const desktopSearchSections = [
   { path: '/settings?tab=backups', label: 'Backup & recovery', Icon: IconSettings, keywords: 'backup restore archive transfer' },
   { path: '/settings?tab=cluster', label: 'Cluster', Icon: IconSettings, keywords: 'pairing paired servers sync' },
   { path: '/settings?tab=about', label: 'About', Icon: IconSettings, keywords: 'software hardware version licenses' },
-  { path: '/settings?tab=logs', label: 'System logs', Icon: IconActivity, keywords: 'orbis runtipi diagnostics' },
+  { path: '/settings?tab=logs', label: 'System logs', Icon: IconActivity, keywords: 'orbis diagnostics' },
 ];

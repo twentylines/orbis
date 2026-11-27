@@ -1,5 +1,4 @@
 import './common/controller-overlay-startup';
-import './instrument';
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -46,8 +45,8 @@ async function setupSwagger(app: INestApplication) {
   const { DocumentBuilder, SwaggerModule } = await import('@nestjs/swagger');
   const { normalizeOpenApiOperationIds } = await import('./common/openapi-operation-id');
   const config = new DocumentBuilder()
-    .setTitle('Runtipi API')
-    .setDescription('API specs for Runtipi')
+    .setTitle('Orbis API')
+    .setDescription('API specification for Orbis')
     .setVersion('1.0')
     .setOpenAPIVersion('3.1.0')
     .build();

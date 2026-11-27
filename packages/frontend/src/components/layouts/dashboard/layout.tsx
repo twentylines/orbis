@@ -61,7 +61,7 @@ export const DashboardLayoutSuspense = () => {
 };
 
 export const DashboardLayout = ({ children }: PropsWithChildren) => {
-  const { userSettings, apps } = useAppContext();
+  const { apps } = useAppContext();
   const { isLoggedIn, isGuestDashboardEnabled, endSession } = useUserContext();
   const startupSession = useStartupSession();
   const navigate = useNavigate();
@@ -209,7 +209,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   if (requiresOnboarding)
     return (
       <Suspense fallback={<DashboardLayoutSuspense />}>
-        <Welcome allowErrorMonitoring={userSettings.allowErrorMonitoring} />
+        <Welcome />
       </Suspense>
     );
 

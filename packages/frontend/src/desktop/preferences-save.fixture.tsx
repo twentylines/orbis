@@ -107,7 +107,6 @@ mock.module('@/context/user-context', () => ({
 }));
 for (const [path, name] of [
   ['@/components/providers/i18n/i18n-provider', 'I18nProvider'],
-  ['@/components/providers/sentry/sentry-provider', 'SentryProvider'],
   ['@/components/providers/theme/auto-theme-provider', 'AutoThemeProvider'],
   ['@/components/providers/theme/theme-provider', 'ThemeProvider'],
 ] as const)

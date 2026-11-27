@@ -30,7 +30,6 @@ import type Dockerode from 'dockerode';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 
-vi.mock('@sentry/nestjs', () => ({ captureException: vi.fn() }));
 vi.mock('@/modules/docker/builders/compose.builder', () => ({
   DockerComposeBuilder: class {
     getDockerCompose = () => 'services: {}';

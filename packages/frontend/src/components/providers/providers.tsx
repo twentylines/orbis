@@ -5,7 +5,6 @@ import { type PropsWithChildren, Suspense, useLayoutEffect, useState } from 'rea
 import { ErrorBoundary } from 'react-error-boundary';
 import { ErrorPage } from '../error/error-page';
 import { I18nProvider } from './i18n/i18n-provider';
-import { SentryProvider } from './sentry/sentry-provider';
 import { AutoThemeProvider } from './theme/auto-theme-provider';
 import { ThemeProvider } from './theme/theme-provider';
 import { DebugPanel } from '../debug-panel/debug-panel';
@@ -47,12 +46,10 @@ export const Providers = ({ children }: PropsWithChildren) => {
           <ErrorBoundary fallbackRender={({ error, resetErrorBoundary }) => <ErrorPage error={error} onReset={resetErrorBoundary} />} onReset={reset}>
             <Suspense fallback={<ProviderLoadingBridge />}>
               <UserContextProvider>
-                <SentryProvider>
-                  <DesktopPreferencesProvider>
-                    <StartupOnboardingBridge />
-                    <ThemedProviders>{children}</ThemedProviders>
-                  </DesktopPreferencesProvider>
-                </SentryProvider>
+                <DesktopPreferencesProvider>
+                  <StartupOnboardingBridge />
+                  <ThemedProviders>{children}</ThemedProviders>
+                </DesktopPreferencesProvider>
               </UserContextProvider>
             </Suspense>
           </ErrorBoundary>

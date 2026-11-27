@@ -9,7 +9,6 @@ import { type MiddlewareConsumer, Module, type NestModule, type ModuleMetadata }
 import { APP_FILTER, APP_GUARD, APP_PIPE, APP_INTERCEPTOR } from '@nestjs/core';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { SentryModule } from '@sentry/nestjs/setup';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { LocalTlsService } from './core/local-tls/local-tls.service';
@@ -57,7 +56,6 @@ const DEFAULT_THROTTLE_TTL = 60_000;
 const DEFAULT_THROTTLE_LIMIT = 300;
 
 const imports: NonNullable<ModuleMetadata['imports']> = [
-  SentryModule.forRoot(),
   ThrottlerModule.forRoot([{ ttl: DEFAULT_THROTTLE_TTL, limit: DEFAULT_THROTTLE_LIMIT }]),
   SystemModule,
   I18nModule,

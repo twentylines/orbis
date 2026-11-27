@@ -65,7 +65,7 @@ export class InstallAppCommand extends AppLifecycleCommand {
           ownership: this.ownership,
           form,
           report: (phase) => this.reportProgress(phase),
-          error: (error) => this.handleAppError(error, appUrn, 'install'),
+          error: (error) => this.handleAppError(error),
         });
         if (fresh !== undefined) return fresh;
       }
@@ -130,7 +130,7 @@ export class InstallAppCommand extends AppLifecycleCommand {
       await dockerService.composeApp(appUrn, `up --detach --force-recreate --remove-orphans ${forcePull ? '--pull always' : ''}`);
       return { success: true, message: `App ${appUrn} installed successfully` };
     } catch (err) {
-      return { ...(await this.handleAppError(err, appUrn, 'install')), statePreserved: !installationStarted };
+      return { ...(await this.handleAppError(err)), statePreserved: !installationStarted };
     }
   }
 }

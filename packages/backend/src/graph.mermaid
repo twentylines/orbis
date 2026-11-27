@@ -1,23 +1,16 @@
 graph LR
-  AppModule-->SentryModule
-  SentryModule-->ConfigurationModule
   ConfigurationModule-->EnvModule
-  EnvModule-->SentryModule
   EnvModule-->ConfigurationModule
   EnvModule-->DatabaseModule
-  DatabaseModule-->SentryModule
   DatabaseModule-->ConfigurationModule
   DatabaseModule-->CacheModule
-  CacheModule-->SentryModule
   CacheModule-->ConfigurationModule
   CacheModule-->DatabaseModule
   CacheModule-->LoggerModule
-  LoggerModule-->SentryModule
   LoggerModule-->ConfigurationModule
   LoggerModule-->DatabaseModule
   LoggerModule-->CacheModule
   LoggerModule-->FilesystemModule
-  FilesystemModule-->SentryModule
   FilesystemModule-->ConfigurationModule
   FilesystemModule-->DatabaseModule
   FilesystemModule-->CacheModule
@@ -28,24 +21,17 @@ graph LR
   EnvModule-->CacheModule
   EnvModule-->LoggerModule
   EnvModule-->FilesystemModule
-  ConfigurationModule-->SentryModule
   ConfigurationModule-->DatabaseModule
   ConfigurationModule-->CacheModule
   ConfigurationModule-->LoggerModule
   ConfigurationModule-->FilesystemModule
-  SentryModule-->DatabaseModule
-  SentryModule-->CacheModule
-  SentryModule-->LoggerModule
-  SentryModule-->FilesystemModule
   AppModule-->SystemModule
-  SystemModule-->SentryModule
   SystemModule-->ConfigurationModule
   SystemModule-->DatabaseModule
   SystemModule-->CacheModule
   SystemModule-->LoggerModule
   SystemModule-->FilesystemModule
   AppModule-->I18nModule
-  I18nModule-->SentryModule
   I18nModule-->ConfigurationModule
   I18nModule-->DatabaseModule
   I18nModule-->CacheModule
@@ -53,20 +39,17 @@ graph LR
   I18nModule-->FilesystemModule
   AppModule-->AuthModule
   AuthModule-->UserModule
-  UserModule-->SentryModule
   UserModule-->ConfigurationModule
   UserModule-->DatabaseModule
   UserModule-->CacheModule
   UserModule-->LoggerModule
   UserModule-->FilesystemModule
   AuthModule-->EncryptionModule
-  EncryptionModule-->SentryModule
   EncryptionModule-->ConfigurationModule
   EncryptionModule-->DatabaseModule
   EncryptionModule-->CacheModule
   EncryptionModule-->LoggerModule
   EncryptionModule-->FilesystemModule
-  AuthModule-->SentryModule
   AuthModule-->ConfigurationModule
   AuthModule-->DatabaseModule
   AuthModule-->CacheModule
@@ -80,13 +63,11 @@ graph LR
   AppModule-->AppsModule
   AppsModule-->QueueModule
   QueueModule-->TerminusModule
-  TerminusModule-->SentryModule
   TerminusModule-->ConfigurationModule
   TerminusModule-->DatabaseModule
   TerminusModule-->CacheModule
   TerminusModule-->LoggerModule
   TerminusModule-->FilesystemModule
-  QueueModule-->SentryModule
   QueueModule-->ConfigurationModule
   QueueModule-->DatabaseModule
   QueueModule-->CacheModule
@@ -96,19 +77,16 @@ graph LR
   AppsModule-->MarketplaceModule
   MarketplaceModule-->AppStoreModule
   AppStoreModule-->QueueModule
-  AppStoreModule-->SentryModule
   AppStoreModule-->ConfigurationModule
   AppStoreModule-->DatabaseModule
   AppStoreModule-->CacheModule
   AppStoreModule-->LoggerModule
   AppStoreModule-->FilesystemModule
-  MarketplaceModule-->SentryModule
   MarketplaceModule-->ConfigurationModule
   MarketplaceModule-->DatabaseModule
   MarketplaceModule-->CacheModule
   MarketplaceModule-->LoggerModule
   MarketplaceModule-->FilesystemModule
-  AppsModule-->SentryModule
   AppsModule-->ConfigurationModule
   AppsModule-->DatabaseModule
   AppsModule-->CacheModule
@@ -124,7 +102,6 @@ graph LR
   AppLifecycleModule-->DockerModule
   DockerModule-->AppsModule
   DockerModule-->AppStoreModule
-  DockerModule-->SentryModule
   DockerModule-->ConfigurationModule
   DockerModule-->DatabaseModule
   DockerModule-->CacheModule
@@ -134,7 +111,6 @@ graph LR
   AppLifecycleModule-->BackupManagerModule
   BackupManagerModule-->AppsModule
   BackupManagerModule-->ArchiveModule
-  ArchiveModule-->SentryModule
   ArchiveModule-->ConfigurationModule
   ArchiveModule-->DatabaseModule
   ArchiveModule-->CacheModule
@@ -144,27 +120,23 @@ graph LR
   BackupsModule-->AppsModule
   BackupsModule-->BackupManagerModule
   SSEModule-->DockerModule
-  SSEModule-->SentryModule
   SSEModule-->ConfigurationModule
   SSEModule-->DatabaseModule
   SSEModule-->CacheModule
   SSEModule-->LoggerModule
   SSEModule-->FilesystemModule
-  BackupsModule-->SentryModule
   BackupsModule-->ConfigurationModule
   BackupsModule-->DatabaseModule
   BackupsModule-->CacheModule
   BackupsModule-->LoggerModule
   BackupsModule-->FilesystemModule
   AppLifecycleModule-->SSEModule
-  AppLifecycleModule-->SentryModule
   AppLifecycleModule-->ConfigurationModule
   AppLifecycleModule-->DatabaseModule
   AppLifecycleModule-->CacheModule
   AppLifecycleModule-->LoggerModule
   AppLifecycleModule-->FilesystemModule
   AppModule-->LinksModule
-  LinksModule-->SentryModule
   LinksModule-->ConfigurationModule
   LinksModule-->DatabaseModule
   LinksModule-->CacheModule
@@ -174,7 +146,6 @@ graph LR
   AppModule-->HealthModule
   HealthModule-->TerminusModule
   HealthModule-->QueueModule
-  HealthModule-->SentryModule
   HealthModule-->ConfigurationModule
   HealthModule-->DatabaseModule
   HealthModule-->CacheModule

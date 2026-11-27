@@ -44,7 +44,7 @@ export class GenerateAppEnvCommand extends AppLifecycleCommand {
 
       return { success: true, message: `App ${appUrn} env file regenerated successfully` };
     } catch (err) {
-      return this.handleAppError(err, appUrn, 'generate_env_error');
+      return this.handleAppError(err);
     }
   }
 }

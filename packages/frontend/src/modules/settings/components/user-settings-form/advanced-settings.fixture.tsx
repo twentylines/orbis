@@ -109,7 +109,6 @@ function Probe() {
     },
     toggles: {
       'guest-dashboard': choice('guest-dashboard'),
-      'error-monitoring': choice('error-monitoring'),
       'persist-proxy': choice('persist-proxy'),
       'advanced-settings': choice('advanced-settings', advanced, (checked) => {
         changes.push(checked);

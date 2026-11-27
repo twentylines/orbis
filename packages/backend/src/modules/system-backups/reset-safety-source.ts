@@ -158,7 +158,6 @@ async function readResetSafetyState<T>(
     const server = {
       advancedSettings: settings.advancedSettings,
       allowAutoThemes: settings.allowAutoThemes,
-      allowErrorMonitoring: settings.allowErrorMonitoring,
       guestDashboard: settings.guestDashboard,
       themeBase: settings.themeBase ?? null,
       themeColor: settings.themeColor ?? null,

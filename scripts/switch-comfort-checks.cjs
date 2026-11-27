@@ -19,7 +19,6 @@ module.exports = async function inspectSwitchComfort({ page, base, capture, mode
       version: { current: '4.10.1', latest: '4.10.1', body: '', releases: [] },
       userSettings: {
         allowAutoThemes: false,
-        allowErrorMonitoring: false,
         localDomain: 'homelab.example.test',
         sslPort: 443,
         maxBackups: 5,
@@ -284,14 +283,14 @@ module.exports = async function inspectSwitchComfort({ page, base, capture, mode
         await page.keyboard.press('Escape');
         await open('/settings?tab=settings');
         const guest = page.getByRole('switch', { name: /Enable guest dashboard/ });
-        const monitoring = page.getByRole('switch', { name: /Allow anonymous error monitoring/ });
+        const advanced = page.getByRole('switch', { name: /Advanced settings/ });
         await guest.waitFor();
         await settle(guest);
         const nativeGuest = await inspect(guest);
-        const nativeMonitoring = await inspect(monitoring);
+        const nativeAdvanced = await inspect(advanced);
         await scaleText(scale);
         sample.controls.guest = await exercise(guest, nativeGuest, 'guest', prefix);
-        sample.controls.monitoring = await exercise(monitoring, nativeMonitoring, 'monitoring', prefix);
+        sample.controls.advanced = await exercise(advanced, nativeAdvanced, 'advanced', prefix);
         forceExpose = false;
         await open('/app-store/official/photos');
         await page.locator('.app-actions').getByRole('button', { name: 'Install', exact: true }).click();

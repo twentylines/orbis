@@ -1,12 +1,14 @@
 # Local account recovery
 
-Orbis installations based on a Runtipi CLI-v4 tree retain its local CLI. From that installation folder, a server administrator can run:
+A server administrator can reset the operator password on an Orbis installation migrated from Runtipi CLI v4 if it still has the upstream CLI. From that installation folder, run:
 
 ```sh
 sudo ./runtipi-cli reset-password
 ```
 
 The CLI prompts for a new password and confirmation without echoing either. Recovery replaces the operator password, disables its previous two-factor enrollment and revokes its dashboard sessions. Sign in with the new password and set up two-factor authentication again in Security. Orbis core releases are managed through Update Center and the pinned host tools.
+
+Fresh Orbis installations currently ship without a local password reset command. If you still have a signed-in operator session and know the current password, you can change it in Security.
 
 The [upstream CLI](https://github.com/runtipi/cli/blob/develop/internal/commands/reset_password.go) writes a local Unix-second request timestamp and uses its signed CLI authorization. The backend retains that contract: browser sessions, app-host sessions and unauthenticated requests cannot use the reset endpoint. There is no public reset-status or cancellation endpoint.
 

@@ -116,12 +116,12 @@ it('restores portable preferences and account encryption while preserving every 
     sslPort: 8443,
     postgresPort: 5544,
     trustedProxyIps: target.RUNTIPI_TRUSTED_PROXY_IPS,
-    allowErrorMonitoring: false,
     guestDashboard: false,
     demoMode: false,
     experimental_insecureCookie: false,
     persistTraefikConfig: true,
   });
+  expect(settings).not.toHaveProperty('allowErrorMonitoring');
   expect(result.review.restored).toHaveLength(9);
   expect(result.review.preserved).toContain('appDataPath');
   expect(JSON.stringify(result.review)).not.toContain('declared-');
@@ -229,8 +229,11 @@ it.each(
     await fs.writeFile(path.join(testState.directory, 'state/seed'), 'declared source seed fixture', { mode: 0o600 });
     const generated = await generateSystemEnvFile({ readOnly: true });
     const actual = dotenv.parse(Array.from(generated, ([key, value]) => `${key}=${value}`).join('\n'));
-    for (const [key, value] of Object.entries(dotenv.parse(result.environment)))
+    expect(actual).not.toHaveProperty('ALLOW_ERROR_MONITORING');
+    for (const [key, value] of Object.entries(dotenv.parse(result.environment))) {
+      if (key === 'ALLOW_ERROR_MONITORING') continue;
       expect(actual[key]).toBe(key === 'ARCHITECTURE' ? (architecture === 'arm64' ? 'arm64' : 'amd64') : value);
+    }
     expect(await fs.readFile(path.join(testState.directory, '.env'), 'utf8')).toBe(result.environment);
     expect(await fs.readFile(path.join(testState.directory, 'state/settings.json'), 'utf8')).toBe(result.settings);
   } finally {

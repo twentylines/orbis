@@ -1,7 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import type { LoggerService } from '@/core/logger/logger.service';
-import * as Sentry from '@sentry/nestjs';
 import { AMQPConnectionError, AMQPError, ConsumerStatus, type Connection, type RPCClient, type Consumer } from 'rabbitmq-client';
 import { type } from 'arktype';
 import { scheduleCron, validateCronPattern, type ScheduledCronTask } from './cron-scheduler';
@@ -251,7 +250,6 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
       );
     } catch (error) {
       this.logger.error(`Failed to create consumer for queue ${this.queueName}:`, error);
-      Sentry.captureException(error, { tags: { queueName: this.queueName, action: 'onEvent' } });
       throw error;
     }
   }
@@ -344,7 +342,6 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
         return { success: false, message: err.message };
       }
 
-      Sentry.captureException(err, { tags: { queueName: this.queueName } });
       return { success: false, message: String(err) };
     }
   }
@@ -368,7 +365,6 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
       try {
         await this.publish(eventData);
       } catch (e) {
-        Sentry.captureException(e, { tags: { queueName: this.queueName } });
         this.logger.error('Error in cron job:', e);
       }
     });

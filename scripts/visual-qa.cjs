@@ -625,7 +625,6 @@ async function main() {
           isConfigured: true,
           isGuestDashboardEnabled: false,
           allowAutoThemes: false,
-          allowErrorMonitoring: false,
           themeColor: 'blue',
           themeBase: 'slate',
           localDomain: 'local.test',

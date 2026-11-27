@@ -31,14 +31,7 @@ export const updateUserSettings = <ThrowOnError extends boolean = false>(options
     }
 });
 
-export const acknowledgeWelcome = <ThrowOnError extends boolean = false>(options: Options<AcknowledgeWelcomeData, ThrowOnError>) => (options.client ?? client).patch<AcknowledgeWelcomeResponses, unknown, ThrowOnError>({
-    url: '/api/acknowledge-welcome',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
+export const acknowledgeWelcome = <ThrowOnError extends boolean = false>(options?: Options<AcknowledgeWelcomeData, ThrowOnError>) => (options?.client ?? client).patch<AcknowledgeWelcomeResponses, unknown, ThrowOnError>({ url: '/api/acknowledge-welcome', ...options });
 
 export const check = <ThrowOnError extends boolean = false>(options?: Options<CheckData, ThrowOnError>) => (options?.client ?? client).get<CheckResponses, CheckErrors, ThrowOnError>({ url: '/api/health', ...options });
 

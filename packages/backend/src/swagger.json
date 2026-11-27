@@ -71,16 +71,6 @@
       "patch": {
         "operationId": "acknowledgeWelcome",
         "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AcknowledgeWelcomeBody"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": ""
@@ -6533,8 +6523,8 @@
     }
   },
   "info": {
-    "title": "Runtipi API",
-    "description": "API specs for Runtipi",
+    "title": "Orbis API",
+    "description": "API specification for Orbis",
     "version": "1.0",
     "contact": {}
   },
@@ -6546,9 +6536,6 @@
         "type": "object",
         "properties": {
           "allowAutoThemes": {
-            "type": "boolean"
-          },
-          "allowErrorMonitoring": {
             "type": "boolean"
           },
           "isConfigured": {
@@ -6613,7 +6600,6 @@
         },
         "required": [
           "allowAutoThemes",
-          "allowErrorMonitoring",
           "isConfigured",
           "isGuestDashboardEnabled",
           "isLoggedIn",
@@ -6781,9 +6767,6 @@
               "allowAutoThemes": {
                 "type": "boolean"
               },
-              "allowErrorMonitoring": {
-                "type": "boolean"
-              },
               "appDataPath": {
                 "type": "string",
                 "pattern": "^\\S.*\\S$|^\\S?$"
@@ -6882,7 +6865,6 @@
             "required": [
               "advancedSettings",
               "allowAutoThemes",
-              "allowErrorMonitoring",
               "appDataPath",
               "appsRepoUrl",
               "demoMode",
@@ -6957,9 +6939,6 @@
             "type": "boolean"
           },
           "allowAutoThemes": {
-            "type": "boolean"
-          },
-          "allowErrorMonitoring": {
             "type": "boolean"
           },
           "appDataPath": {
@@ -7083,17 +7062,6 @@
             "type": "string"
           }
         }
-      },
-      "AcknowledgeWelcomeBody": {
-        "type": "object",
-        "properties": {
-          "allowErrorMonitoring": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "allowErrorMonitoring"
-        ]
       },
       "GetAppConfigDto": {
         "type": "object",

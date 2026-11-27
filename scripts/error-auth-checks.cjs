@@ -30,7 +30,6 @@ module.exports = async function inspectErrorAuth({ page, base, capture }) {
       isConfigured: scenario !== 'register',
       isGuestDashboardEnabled: false,
       allowAutoThemes: false,
-      allowErrorMonitoring: false,
       themeColor: 'blue',
       themeBase: 'slate',
       localDomain: 'local.test',

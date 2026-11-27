@@ -33,7 +33,7 @@ export class RestoreAppCommand extends AppLifecycleCommand {
       logger.info(`App ${appUrn} restored!`);
       return { success: true, message: `App ${appUrn} restored successfully`, appStopped };
     } catch (err) {
-      return { ...(await this.handleAppError(err, appUrn, 'restore')), appStopped };
+      return { ...(await this.handleAppError(err)), appStopped };
     }
   }
 }
