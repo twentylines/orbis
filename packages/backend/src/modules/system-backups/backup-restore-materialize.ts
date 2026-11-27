@@ -64,7 +64,7 @@ function settingsOverride(value: RestoreSettingsOverride | undefined) {
     !parsed ||
     typeof parsed !== 'object' ||
     Array.isArray(parsed) ||
-    settingsSchema.partial().onUndeclaredKey('reject')(parsed) instanceof type.errors
+    settingsSchema.merge({ allowErrorMonitoring: 'boolean?' }).partial().onUndeclaredKey('reject')(parsed) instanceof type.errors
   )
     throw failed();
   return { original: { ...value.original }, replacement, sha256: createHash('sha256').update(replacement).digest('hex') };

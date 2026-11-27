@@ -50,7 +50,6 @@ const build = () => new SettingsBackupApplyService(config, auth as never, import
 const runtime = () => ({
   advancedSettings: false,
   allowAutoThemes: true,
-  allowErrorMonitoring: false,
   appDataPath: '/fixture/apps',
   appsRepoUrl: 'https://example.test/apps',
   demoMode: false,

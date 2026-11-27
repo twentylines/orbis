@@ -434,8 +434,9 @@ it('materializes host-rebased settings only after authenticating the original an
   await expect(fs.lstat(path.join(test.roots.state, '.env'))).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
-it('snapshots replacement bytes and their original identity before asynchronous source validation', async () => {
+it('snapshots previously prepared settings and their original identity before asynchronous source validation', async () => {
   const test = await settingsFixture();
+  test.override.replacement = Buffer.from(JSON.stringify({ ...JSON.parse(test.override.replacement.toString()), allowErrorMonitoring: true }));
   const expected = Buffer.from(test.override.replacement);
   const pending = run(test, undefined, signal(), test.override);
   test.override.replacement.fill(0);
