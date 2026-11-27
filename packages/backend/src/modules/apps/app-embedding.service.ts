@@ -169,7 +169,7 @@ export async function embeddingHeaders(url: URL): Promise<HeaderObservation> {
     const location = locations.length === 1 ? locations[0] : undefined;
     if (!location || !APP_REDIRECTS.includes(headers.statusCode) || redirects === 2 || Date.now() >= deadline) return headers;
     // Keep every request on the original, registered app origin and pinned IP.
-    const parsed = URL.parse(location, destination);
+    const parsed = URL.parse(location, destination.href);
     const next = parsed && embeddingUrl(parsed.href);
     if (!next || next.origin !== url.origin) return headers;
     const path = next.pathname + next.search;
