@@ -60,6 +60,19 @@ class OrbisHostTests(unittest.TestCase):
             self.assertEqual(result.stdout.strip(), expected)
         self.assertIsNone(HOST.LOCK_DESCRIPTOR.get())
 
+    def test_component_borrows_the_existing_lease_without_unlocking_its_parent(self):
+        with HOST.host_lock_lease(self.root) as lease:
+            with HOST.host_lock(self.root,inherited=lease) as descriptor:
+                self.assertNotEqual(descriptor,lease[0])
+                self.assertEqual(os.fstat(descriptor).st_ino,os.fstat(lease[0]).st_ino)
+            with self.assertRaisesRegex(ValueError,'in progress'):
+                with HOST.host_lock(self.root):self.fail('Parent lease was released')
+            with mock.patch.object(HOST,'require_no_capture_fence',side_effect=ValueError('capture hold')):
+                with self.assertRaisesRegex(ValueError,'capture hold'):
+                    with HOST.host_lock(self.root,inherited=lease):self.fail('Capture hold was bypassed')
+        self.assertIsNone(HOST.LOCK_DESCRIPTOR.get())
+        with HOST.host_lock(self.root):pass
+
     def test_start_requires_enrollment_and_uses_final_pinned_override(self):
         calls = []
 

@@ -279,6 +279,12 @@ class HostServiceTests(unittest.TestCase):
             (self.root / name).write_text("fixture\n")
         SERVICE.save_channel(self.root, "nightly", str(uuid.uuid4()))
         self.service = SERVICE.HostService(self.root, "test-daemon", self.snapshots, self.state)
+        # These controller-transaction tests replace the process boundary;
+        # the fixed systemd dispatcher is exercised by its own worker tests.
+        self.worker_dispatch = mock.patch.object(self.service, '_start_update_worker',
+                                                 side_effect=self.service._run_update_job)
+        self.worker_dispatch.start()
+        self.addCleanup(self.worker_dispatch.stop)
         self.service.core_overlay_manager = mock.Mock()
         self.service.core_overlay_manager.begin.side_effect = lambda identifier, *_: identifier
         self.current = mock.patch.object(self.service, "current_manifest", return_value=CURRENT)
@@ -311,6 +317,107 @@ class HostServiceTests(unittest.TestCase):
         SERVICE.write_private(self.service.job_file, {"state": "running", "message": "original operation"})
         restarted = SERVICE.HostService(self.root, "test-daemon", self.snapshots, self.state)
         self.assertEqual(SERVICE.read_private(restarted.job_file)["state"], "interrupted")
+
+    def test_daemon_restart_asks_for_positive_independent_worker_ownership(self):
+        job = {'state': 'running', 'id': str(uuid.uuid4()), 'worker': {'schema': 'fixture'}}
+        SERVICE.write_private(self.service.job_file, job)
+        worker = mock.Mock()
+        original = SERVICE.load_script
+        def module(name, key):
+            return worker if name == 'orbis-host-upgrade-launcher.py' else original(name, key)
+        with mock.patch.object(SERVICE, 'load_script', side_effect=module):
+            restarted = SERVICE.HostService(self.root, 'test-daemon', self.snapshots, self.state)
+        worker.live_worker.assert_called_once_with(restarted, job)
+        worker.interrupt_unowned_worker.assert_not_called()
+        self.assertEqual(SERVICE.read_private(self.service.job_file), job)
+        worker.reset_mock()
+        worker.live_worker.side_effect = ValueError('No live kernel proof')
+        with mock.patch.object(SERVICE, 'load_script', side_effect=module):
+            restarted = SERVICE.HostService(self.root, 'test-daemon', self.snapshots, self.state)
+        worker.interrupt_unowned_worker.assert_called_once_with(restarted, job)
+
+    def test_apply_dispatches_accepted_job_through_independent_process_boundary(self):
+        self.worker_dispatch.stop()
+        planned = self.service.plan(TARGET['tag'])
+        worker = mock.Mock()
+        original = SERVICE.load_script
+        def module(name, key):
+            return worker if name == 'orbis-host-upgrade-launcher.py' else original(name, key)
+        def immediate(**options):
+            return type('Immediate', (), {'start': lambda _: options['target'](*options.get('args', ()))})()
+        def dispatch(service, job):
+            self.assertEqual(SERVICE.read_private(service.job_file), job)
+            self.assertEqual(job['state'], 'running')
+            self.assertEqual(job['id'], planned['planId'])
+            self.assertTrue(service.busy)
+        worker.launch_worker.side_effect = dispatch
+        with mock.patch.object(SERVICE, 'load_script', side_effect=module), \
+                mock.patch.object(SERVICE.threading, 'Thread', side_effect=immediate), \
+                mock.patch.object(SERVICE.UPDATE, 'apply_update') as effect:
+            accepted, launch = self.service.apply(planned['planId'])
+            self.assertEqual(accepted['jobId'], planned['planId'])
+            worker.launch_worker.assert_not_called()
+            launch()
+        worker.launch_worker.assert_called_once()
+        effect.assert_not_called()
+        self.assertFalse(self.service.busy)
+        self.assertEqual(SERVICE.read_private(self.service.job_file)['state'], 'running')
+
+    def test_worker_loss_of_admission_cannot_publish_a_terminal_job(self):
+        planned = self.service.plan(TARGET['tag'])
+        self.service.apply(planned['planId'])
+        job = SERVICE.read_private(self.service.job_file)
+        admission = mock.Mock()
+        admission.verify_bootstrap.side_effect = ValueError('worker source changed')
+        with mock.patch.object(SERVICE.UPDATE, 'apply_update') as effect:
+            with self.assertRaises(ValueError):
+                self.service._run_update_job(job, admission=admission)
+        effect.assert_not_called()
+        self.assertEqual(SERVICE.read_private(self.service.job_file)['state'], 'running')
+        self.assertFalse(self.service.busy)
+
+    def test_independent_interrupted_job_cannot_enter_the_legacy_recovery_worker(self):
+        identifier = str(uuid.uuid4())
+        job = {'schema': 'orbis.host-service-job.v1', 'id': identifier,
+               'state': 'interrupted', 'worker': {'schema': 'fixture'},
+               'snapshot': str(self.snapshots / f"orbis-{TARGET['tag']}-{identifier}"),
+               'current': CURRENT, 'target': TARGET}
+        SERVICE.write_private(self.service.job_file, job)
+        worker = mock.Mock()
+        with mock.patch.object(SERVICE.UPDATE, 'read_journal') as journal, \
+                mock.patch.object(SERVICE.UPDATE, 'recover') as recover, \
+                mock.patch.object(SERVICE, 'component_launcher', return_value=worker), \
+                mock.patch.object(SERVICE.threading, 'Thread') as thread:
+            thread.side_effect = lambda *, target, daemon: mock.Mock(start=target)
+            accepted, launch = self.service.recover(identifier)
+            self.assertEqual(accepted, {'jobId': identifier, 'state': 'recovering'})
+            self.assertTrue(self.service.busy)
+            worker.launch_reconciliation.assert_not_called()
+            launch()
+            worker.launch_reconciliation.assert_called_once_with(self.service, job)
+            self.assertEqual(SERVICE.read_private(self.service.job_file), job)
+            self.assertFalse(self.service.busy)
+            journal.assert_not_called()
+            recover.assert_not_called()
+
+    def test_core_only_status_cannot_finalize_an_interrupted_independent_transaction(self):
+        identifier = str(uuid.uuid4())
+        snapshot = self.snapshots / f"orbis-{TARGET['tag']}-{identifier}"
+        job = {'schema': 'orbis.host-service-job.v1', 'id': identifier, 'state': 'interrupted',
+               'targetTag': TARGET['tag'], 'snapshot': str(snapshot), 'current': CURRENT, 'target': TARGET,
+               'worker': {'schema': 'fixture'}}
+        SERVICE.write_private(self.service.job_file, job)
+        original = self.service.job_file.read_bytes()
+        for phase, expected in (('complete', TARGET), ('rolled-back', CURRENT)):
+            with self.subTest(phase=phase), mock.patch.object(self.service, 'state_matches', return_value=True), \
+                    mock.patch.object(SERVICE.HOST, 'saved_state', return_value=expected), \
+                    mock.patch.object(SERVICE.HOST, 'current_core', return_value={
+                        'state': 'running', 'health': 'healthy', 'image': f"{expected['image']}@{expected['digest']}"}), \
+                    mock.patch.object(self.service, 'complete_channel_change') as finalize:
+                SERVICE.write_private(SERVICE.UPDATE.journal_path(snapshot), {'stage': phase})
+                self.assertEqual(self.service.status()['job']['state'], 'interrupted')
+                finalize.assert_not_called()
+                self.assertEqual(self.service.job_file.read_bytes(), original)
 
     def test_cold_restore_status_initializes_while_update_admission_holds_its_lock(self):
         manager = mock.Mock()

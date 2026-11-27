@@ -21,10 +21,45 @@ SPEC = importlib.util.spec_from_file_location("orbis_host_service_setup", Path(_
 assert SPEC and SPEC.loader
 SETUP = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SETUP)
+ENABLE_SPEC = importlib.util.spec_from_file_location('setup_verified_enable', Path(__file__).with_name('orbis-host-service-enable.py'))
+ENABLE = importlib.util.module_from_spec(ENABLE_SPEC)
+ENABLE_SPEC.loader.exec_module(ENABLE)
 
 
 class OrbisHostServiceSetupTests(unittest.TestCase):
     def test_verified_selection_journals_actual_copy_and_refuses_unit_or_environment_drift(self):
+        self.verified_source_copy(full=False)
+
+    def test_full_installed_closure_copies_once_with_real_selection_and_copy_receipts(self):
+        self.verified_source_copy(full=True)
+
+    def test_source_inventory_rejects_duplicates_before_driver_inputs_are_combined(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            for names in (("orbis-host-service.py",)*2,("../outside.py",),([],),["orbis-host-service.py"]):
+                with mock.patch.object(SETUP,'SCRIPTS',names),self.assertRaisesRegex(ValueError,'inventory'):
+                    SETUP.source_files(Path(temporary))
+
+    def test_full_host_membership_and_fixed_installer_drivers_have_separate_bounds(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            files=[]
+            for index in range(128):
+                path=root/('orbis-probe-'+chr(97+index//26)+chr(97+index%26)+'.py')
+                path.write_bytes(b'# source\n');files.append(path)
+            unit=root/'orbis-host.service';unit.write_bytes(b'[Service]\n')
+            driver=root/'orbis-host-service-enable.py';driver.write_bytes(b'# driver\n')
+            with SETUP._SetupSources(files,unit,drivers=[driver]) as pinned:
+                self.assertEqual(pinned.body(driver),b'# driver\n')
+                self.assertEqual(len(pinned.files),130)
+            extra=root/'orbis-extra.py';extra.write_bytes(b'# extra\n')
+            with self.assertRaisesRegex(ValueError,'inventory'):
+                SETUP._SetupSources([*files,extra],unit)
+            with self.assertRaisesRegex(ValueError,'driver inventory'):
+                SETUP._SetupSources(files,unit,drivers=[extra])
+            with self.assertRaisesRegex(ValueError,'driver inventory'):
+                SETUP._SetupSources(files,unit,drivers=[driver,driver])
+
+    def verified_source_copy(self, *, full):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary).resolve()
             root = base / "server"
@@ -38,7 +73,9 @@ class OrbisHostServiceSetupTests(unittest.TestCase):
                        "image": "ghcr.io/twentylines/orbis", "digest": "sha256:" + "b" * 64,
                        "installationProtocol": "orbis.installation-state.v1", "runtipiCompatibility": "4.10.1"}
             core = json.dumps(release).encode()
-            files = {name: b"# verified test source\n" for name in BUILD.REQUIRED}
+            names = SETUP.SCRIPTS if full else ("orbis-host-service.py",)
+            required = BUILD.REQUIRED | {"scripts/" + name for name in names}
+            files = {name: b"# verified test source\n" for name in required}
             files["scripts/install-orbis.py"] = Path(BOOT.__file__).read_bytes()
             assets = BUILD.build(files, core)
             identity = {"tag": release["tag"], "commit": release["commit"],
@@ -60,12 +97,13 @@ class OrbisHostServiceSetupTests(unittest.TestCase):
                 return os.stat_result(values)
 
             with (mock.patch.multiple(SETUP, INSTALL_DIR=install, UNIT_FILE=unit, ENV_FILE=environment,
-                                      SCRIPTS=("orbis-host-service.py",)),
+                                      SCRIPTS=names),
                   mock.patch.object(SETUP.HOST.AUTHORITY, "OWNER", os.geteuid()),
                   mock.patch.object(SETUP.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as systemd,
                   mock.patch.object(Path, "stat", autospec=True, side_effect=root_owned)):
                 source = extraction / "scripts"
-                receipt = SETUP._stage_service_files(root, "test", source, source_custody=digest)
+                expected = ENABLE.source_hashes(source) if full else None
+                receipt = SETUP._stage_service_files(root, "test", source, source_custody=digest, expected_sources=expected)
                 systemd.assert_called_once_with(["/usr/bin/systemd-analyze", "verify", str(unit)],
                                                capture_output=True, check=False)
                 copy = extraction / BOOT.SOURCE_COPIES / f"host-copy-{receipt}.json"
@@ -73,7 +111,7 @@ class OrbisHostServiceSetupTests(unittest.TestCase):
                 self.assertEqual(receipt, BUILD.sha(copy.read_bytes()))
                 self.assertEqual(document["selection"]["selectionSha256"], digest)
                 self.assertEqual(document["installed"], {
-                    "inventory": {"orbis-host-service.py": BUILD.sha((install / "orbis-host-service.py").read_bytes())},
+                    "inventory": {name: BUILD.sha((install / name).read_bytes()) for name in names},
                     "unitSha256": BUILD.sha(unit.read_bytes()),
                     "environmentSha256": BUILD.sha(environment.read_bytes()),
                 })

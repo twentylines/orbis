@@ -128,7 +128,7 @@ def stop_service(profile):
             raise ValueError('Sentinel observer helper stop has not completed')
 
 
-def job_identity() -> tuple[str, str] | None:
+def job_identity(root=None, context=None, *, preparing=False, returning=None) -> tuple[str, str] | None:
     restart_job = SERVICE.read_private(STATE_DIR / "restart-job.json")
     if restart_job and restart_job.get("state") == "restarting":
         if not isinstance(restart_job.get("bootId"), str):
@@ -145,7 +145,17 @@ def job_identity() -> tuple[str, str] | None:
     if not isinstance(identifier, str) or not isinstance(state, str):
         raise ValueError("host helper job record is invalid")
     if state not in TERMINAL_JOBS:
+        if (root is not None and context is not None and job.get('worker') is not None
+                and (state == 'running' or returning is not None and state == 'interrupted')):
+            launcher = SETUP.load_script('orbis-host-upgrade-launcher.py', 'orbis_helper_owned_worker')
+            options = {'preparing': preparing}
+            if returning is not None:
+                options['returning'] = returning
+            with launcher.hold_owned_helper_job(STATE_DIR, job, root, context, **options) as owned:
+                return owned if returning is None else owned['job']
         raise ValueError("resolve the running or interrupted core update before upgrading the helper")
+    if returning is not None:
+        raise ValueError('Coordinated helper return requires its original live worker')
     return identifier, state
 
 
@@ -169,7 +179,7 @@ def preflight(root: Path, context: str, source: Path) -> dict:
         HOST.resolve_current_identity(root, context)
         for name in ("orbis-host-identity.py", "orbis-host-retained-authority.py"):
             require_root_owned(SETUP.INSTALL_DIR / name, directory=False, private=True)
-    job_identity()
+    job_identity(root, context, preparing=True)
     source_files, source_unit = SETUP.source_files(source)
     validate_candidate_scripts(source_files)
     environment = SETUP.ENV_FILE.read_bytes()
@@ -404,7 +414,59 @@ def retain_previous(workspace, binding):
             'workspace': str(workspace), 'sha256': hashlib.sha256(body).hexdigest()}
 
 
-def rollback_retained(root, context, confirmation, retained):
+def find_retained(root, context, binding):
+    """Read a lost reply from real retained custody; never manufacture it.
+
+    The caller still needs live coordinated return admission before changing
+    anything. Both retained/current copies and genuine source execution are
+    checked here; a matching JSON binding alone is insufficient.
+    """
+    if os.geteuid() != 0:
+        raise ValueError('Helper retention observation requires root privileges')
+    binding = retention_binding(binding)
+    matches = []
+    with HOST.AUTHORITY.protected_directory(SETUP.INSTALL_DIR.parent) as parent:
+        names = [name for name in os.listdir(parent) if name.startswith(WORKSPACE_PREFIX)]
+        if len(names) > 64:
+            raise ValueError('Too many retained helper workspaces require review')
+        for name in sorted(names):
+            workspace = SETUP.INSTALL_DIR.parent / name
+            with HOST.AUTHORITY.protected_directory(workspace) as directory:
+                try:
+                    with HOST.AUTHORITY.protected_file(directory, 'retained.json', 131072) as body:
+                        value = json.loads(body)
+                except FileNotFoundError:
+                    continue
+                if type(value) is not dict or value.get('binding') != binding:
+                    continue
+                if (set(value) != {'schema', 'binding', 'maintenance'}
+                        or value['schema'] != 'orbis.helper-upgrade-retained.v1'
+                        or SETUP._receipt_bytes(value) != body):
+                    raise ValueError('The retained helper receipt changed')
+                record = value['maintenance']
+                if (type(record) is not dict or record.get('stage') != 'verified'
+                        or workspace_from_record(record, root, context) != workspace
+                        or record.get('sourceCustody') is None):
+                    raise ValueError('The helper retention is not a completed verified replacement')
+                custody = record['sourceCustody']
+                selection = custody['selection']
+                with SETUP.hold_source_selection(Path(selection['directory']) / 'scripts', selection['selectionSha256']) as current:
+                    if current is None or {key: item for key, item in current.items() if key != 'inventory'} != selection:
+                        raise ValueError('The retained helper source execution changed')
+                    _require_custodied_copy(custody, 'prior', workspace / 'previous', workspace / 'previous-unit')
+                    _require_custodied_copy(custody, 'candidate', SETUP.INSTALL_DIR, SETUP.UNIT_FILE)
+                    require_maintenance_identity(root, context)
+                    matches.append({'retainedRollback': {'schema': 'orbis.helper-upgrade-retention.v1', **binding,
+                        'workspace': str(workspace), 'sha256': hashlib.sha256(body).hexdigest()},
+                        'previous': custody['prior'], 'candidate': custody['candidate'],
+                        'previousDigest': record.get('previousDigest'),
+                        'environmentSha256': record.get('environmentSha256')})
+    if len(matches) != 1:
+        raise ValueError('One exact retained helper replacement is required')
+    return matches[0]
+
+
+def rollback_retained(root, context, confirmation, retained, *, lock_fds=None, coordinated=False):
     """Restore retained helper bytes only after the original Core is healthy.
 
     The independent coordinator must restore/verify Core first. Uncertain or
@@ -412,6 +474,8 @@ def rollback_retained(root, context, confirmation, retained):
     """
     if os.geteuid() != 0:
         raise ValueError('Helper rollback requires root privileges')
+    if type(coordinated) is not bool or (lock_fds is not None and not coordinated):
+        raise ValueError('Inherited helper return locks require coordinated admission')
     root = root.resolve(strict=True)
     if confirmation != str(root):
         raise ValueError('Helper rollback requires the exact confirmed installation')
@@ -426,7 +490,20 @@ def rollback_retained(root, context, confirmation, retained):
     if (workspace.parent != SETUP.INSTALL_DIR.parent or not workspace.name.startswith(WORKSPACE_PREFIX)
             or workspace != workspace.resolve(strict=True)):
         raise ValueError('Helper rollback retention workspace is invalid')
-    with HOST.host_lock(root):
+    lock_options = {} if lock_fds is None else {'inherited': lock_fds}
+    with ExitStack() as resources:
+        resources.enter_context(HOST.host_lock(root, **lock_options))
+        owned = None
+        if coordinated:
+            # This is the original live worker with held source, kernel frame,
+            # an unchanged accepted job and ordered return receipts. The old
+            # profile comes from its immutable plan, never a caller override.
+            job_identity(root, context, returning=retained)
+            launcher = SETUP.load_script('orbis-host-upgrade-launcher.py', 'orbis_helper_return_worker')
+            owned = resources.enter_context(launcher.hold_owned_helper_job(
+                STATE_DIR, SERVICE.read_private(STATE_DIR / 'job.json'), root, context, returning=retained))
+        def current_job():
+            return job_identity(root, context, returning=retained) if coordinated else job_identity()
         if MAINTENANCE.exists() or MAINTENANCE.is_symlink():
             raise ValueError('Resolve existing helper maintenance before retained rollback')
         with HOST.AUTHORITY.protected_directory(workspace) as directory:
@@ -452,21 +529,25 @@ def rollback_retained(root, context, confirmation, retained):
                     if current is None or {key: item for key, item in current.items() if key != 'inventory'} != selection:
                         raise ValueError('Helper rollback source execution custody changed')
                     profile = require_installed(root, context)
-                    if profile != record.get('observerProfile'):
+                    expected_profile = record.get('observerProfile') if owned is None else owned['profile']
+                    if profile != expected_profile:
                         raise ValueError('Helper rollback observer profile changed')
-                    previous_job = job_identity()
+                    previous_job = current_job()
                     _require_custodied_copy(custody, 'prior', workspace / 'previous', workspace / 'previous-unit')
                     _require_custodied_copy(custody, 'candidate', SETUP.INSTALL_DIR, SETUP.UNIT_FILE)
                     verify_service(digest, root, context)
                     # A restart must resume restoration, rather than treating
                     # the earlier verified candidate as the requested outcome.
                     record = {**record, 'stage': 'retained-rollback', 'retention': retained}
+                    if owned is not None:
+                        record.update(schema='orbis.helper-upgrade.v1' if profile is None else 'orbis.helper-upgrade.v2',
+                                      upgradeObserverProfile=record.get('observerProfile'), observerProfile=profile)
                     SERVICE.write_private(MAINTENANCE, record)
         require_maintenance_identity(root, context)
-        if job_identity() != previous_job:
+        if current_job() != previous_job:
             raise ValueError('A Core operation changed before stopping the helper; preserve rollback custody')
         stop_service(profile)
-        if job_identity() != previous_job:
+        if current_job() != previous_job:
             raise ValueError('A Core operation changed while stopping the helper; preserve rollback custody')
         restore_previous(workspace, digest, root, context)
         finish(workspace)
@@ -481,7 +562,7 @@ def finish(workspace: Path) -> None:
     sync_directory(workspace.parent)
 
 
-def upgrade(root: Path, context: str, source: Path, confirmation: str | None, *, source_custody=None, retain=None) -> dict:
+def upgrade(root: Path, context: str, source: Path, confirmation: str | None, *, source_custody=None, retain=None, lock_fds=None) -> dict:
     if os.geteuid() != 0:
         raise ValueError("helper upgrade requires root privileges")
     root = root.resolve(strict=True)
@@ -491,14 +572,15 @@ def upgrade(root: Path, context: str, source: Path, confirmation: str | None, *,
         retain = retention_binding(retain)
         if source_custody is None:
             raise ValueError('Coordinated helper rollback requires verified installer execution custody')
-    with HOST.host_lock(root), SETUP.hold_source_selection(source, source_custody) as selection:
+    lock_options = {} if lock_fds is None else {'inherited': lock_fds}
+    with HOST.host_lock(root, **lock_options), SETUP.hold_source_selection(source, source_custody) as selection:
         ready = preflight(root, context, source)
         if (
             ready["installedScriptsSha256"] == ready["candidateScriptsSha256"]
             and ready["installedUnitSha256"] == ready["candidateUnitSha256"]
         ):
             return {**ready, "service": "active", "socket": str(SETUP.SOCKET_FILE), "upgraded": False}
-        previous_job = job_identity()
+        previous_job = job_identity(root, context)
         workspace = Path(tempfile.mkdtemp(prefix=WORKSPACE_PREFIX, dir=SETUP.INSTALL_DIR.parent))
         os.chmod(workspace, 0o700)
         new = workspace / "new"
@@ -515,7 +597,7 @@ def upgrade(root: Path, context: str, source: Path, confirmation: str | None, *,
             else:
                 drivers = [source / name for name in ("orbis-host-service-setup.py",
                     "orbis-host-service-enable.py", "orbis-host-service-upgrade.py")]
-                with SETUP._SetupSources([*files, *drivers], unit) as pinned:
+                with SETUP._SetupSources(files, unit, drivers=drivers) as pinned:
                     SETUP.require_selection_files(source, selection, pinned, [*files, *drivers, unit])
                     candidate = {"inventory": {file.name: SETUP._hash(pinned.body(file)) for file in files},
                                  "unitSha256": SETUP._hash(pinned.body(unit))}
@@ -545,6 +627,8 @@ def upgrade(root: Path, context: str, source: Path, confirmation: str | None, *,
                 record['environmentSha256'] = ready['installedEnvironmentSha256']
             if copy_custody is not None:
                 record["sourceCustody"] = copy_custody
+            if retain is not None:
+                record['componentUpgrade'] = retain
             if HOST.retained_state(root):
                 record["retainedSource"] = HOST.retained_descriptor(root, context)
             SERVICE.write_private(MAINTENANCE, record)
@@ -552,7 +636,7 @@ def upgrade(root: Path, context: str, source: Path, confirmation: str | None, *,
             require_profile(ready['observerProfile'], new)
             _require_custodied_copy(copy_custody, "prior", SETUP.INSTALL_DIR, SETUP.UNIT_FILE)
             stop_service(ready['observerProfile'])
-            if job_identity() != previous_job:
+            if job_identity(root, context) != previous_job:
                 raise ValueError("a core update was accepted while stopping the old helper; retry after resolving it")
             record["stage"] = "stopped"
             SERVICE.write_private(MAINTENANCE, record)
@@ -593,6 +677,63 @@ def upgrade(root: Path, context: str, source: Path, confirmation: str | None, *,
         else:
             finish(workspace)
         return {**ready, "service": "active", "socket": str(SETUP.SOCKET_FILE), "upgraded": True}
+
+
+def restore_interrupted_component_copy(root, context, record, binding, target, original_copy, original_digest,
+                                       environment_sha, *, lock_fds, returning=None):
+    """Restore the exact prior copy established by the admitted component runner."""
+    if os.geteuid() != 0:
+        raise ValueError('Coordinated helper maintenance recovery requires root privileges')
+    binding = retention_binding(binding)
+    with HOST.host_lock(root, inherited=lock_fds):
+        if (record != SERVICE.read_private(MAINTENANCE)
+                or record.get('componentUpgrade') != binding or record.get('previousDigest') != original_digest
+                or record.get('environmentSha256') != environment_sha):
+            raise ValueError('Interrupted helper maintenance does not belong to this component transaction')
+        workspace = workspace_from_record(record, root, context)
+        if returning is None:
+            if record.get('stage') not in ('prepared', 'stopped', 'replaced', 'verified', 'restored') or 'retention' in record:
+                raise ValueError('Interrupted helper maintenance is not a forward copy')
+        else:
+            retained, profile = returning
+            if (record.get('stage') not in ('retained-rollback', 'restored') or record.get('retention') != retained
+                    or retained['workspace'] != str(workspace)):
+                raise ValueError('Interrupted helper return differs from its retained workspace')
+            with HOST.AUTHORITY.protected_directory(workspace) as directory:
+                with HOST.AUTHORITY.protected_file(directory, 'retained.json', 131072) as body:
+                    retained_record = json.loads(body)
+                    if (type(retained_record) is not dict or SETUP._hash(body) != retained['sha256'] or retained_record != {
+                            'schema': 'orbis.helper-upgrade-retained.v1', 'binding': binding,
+                            'maintenance': retained_record.get('maintenance')} or SETUP._receipt_bytes(retained_record) != body):
+                        raise ValueError('Interrupted helper return custody changed')
+                    verified = retained_record['maintenance']
+                    if type(verified) is not dict or verified.get('stage') != 'verified' or record != {**verified, 'retention': retained,
+                            'stage': record['stage'], 'schema': 'orbis.helper-upgrade.v1' if profile is None else 'orbis.helper-upgrade.v2',
+                            'observerProfile': profile, 'upgradeObserverProfile': verified.get('observerProfile')}:
+                        raise ValueError('Interrupted helper return differs from its original verified copy')
+        custody = record.get('sourceCustody') or {}
+        candidate = {'inventory': target['host']['inventory'], 'unitSha256': target['host']['unitSha256']}
+        if custody.get('prior') != original_copy or custody.get('candidate') != candidate:
+            raise ValueError('Interrupted helper maintenance has a different prior or candidate copy')
+        source = Path(target['selectionDirectory']) / 'scripts'
+        with SETUP.hold_source_selection(source, target['sourceSelectionSha256']) as current:
+            selection = {key: item for key, item in current.items() if key != 'inventory'} if current else None
+            if (selection is None or selection != custody.get('selection')
+                    or selection['executionSha256'] != target['sourceExecutionSha256']):
+                raise ValueError('Interrupted helper maintenance has different execution custody')
+            require_maintenance_identity(root, context)
+            if record['stage'] == 'restored':
+                _require_custodied_copy(custody, 'prior', SETUP.INSTALL_DIR, SETUP.UNIT_FILE)
+                require_profile(record['observerProfile'], SETUP.INSTALL_DIR)
+                verify_service(original_digest, root, context)
+                SETUP.record_source_copy_transition(root, context, custody, outcome='prior-restored')
+            else:
+                restore_previous(workspace, original_digest, root, context)
+            if SERVICE.read_private(MAINTENANCE) != {**record, 'stage': 'restored'}:
+                raise ValueError('Interrupted helper maintenance changed while returning the prior copy')
+            # Keep the original workspace and copy evidence available for review.
+            MAINTENANCE.unlink()
+            sync_directory(STATE_DIR)
 
 
 def recover(root: Path, context: str, confirmation: str | None) -> dict[str, str]:

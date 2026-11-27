@@ -8,6 +8,7 @@ import time
 import unittest
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 
@@ -112,6 +113,26 @@ class ReleaseChannelFileTests(unittest.TestCase):
 
 
 class HostReleaseChannelTests(unittest.TestCase):
+    def simulate_component_outcome(self, service, job, phase):
+        self.assertIs(service, self.service)
+        reference = {'schema': 'orbis.host-upgrade-worker.v1', 'requestSha256': 'a' * 64}
+        bootstrap = SimpleNamespace(reference=reference, accepted_job=lambda: job)
+        original = {**job, 'worker': reference}
+        SERVICE.write_private(service.job_file, original)
+        if phase == 'complete':
+            service.complete_channel_change(original)
+        with mock.patch.object(SERVICE.HOST.AUTHORITY, 'OWNER', os.geteuid()):
+            service.publish_component_outcome(bootstrap, original, {**original, 'state': phase,
+                'finishedAt': time.time(), 'componentReceiptSha256': 'b' * 64})
+
+    def independent_launcher(self, launch):
+        actual = SERVICE.load_script
+        def load(name, key):
+            if name == 'orbis-host-upgrade-launcher.py':
+                return SimpleNamespace(launch_worker=launch)
+            return actual(name, key)
+        return mock.patch.object(SERVICE, 'load_script', side_effect=load)
+
     def finished_job(self):
         deadline = time.monotonic() + 3
         while time.monotonic() < deadline:
@@ -234,15 +255,14 @@ class HostReleaseChannelTests(unittest.TestCase):
         self.assertEqual(SERVICE.read_channel(self.root)["channel"], "nightly")
         started, finish = threading.Event(), threading.Event()
 
-        def apply_update(*_args, controller_state_dir, **_kwargs):
-            self.assertEqual(controller_state_dir, self.service.state_dir)
+        def component_update(service, job):
             started.set()
             if not finish.wait(2):
                 raise RuntimeError("test update timed out")
+            self.simulate_component_outcome(service, job, 'complete')
 
-        with mock.patch.object(SERVICE, "latest_stable_tag", return_value=self.latest_stable["tag"]), mock.patch.object(
-            SERVICE.UPDATE, "apply_update", side_effect=apply_update
-        ):
+        with (mock.patch.object(SERVICE, "latest_stable_tag", return_value=self.latest_stable["tag"]),
+              self.independent_launcher(component_update)):
             self._verified_installation(self.current)
             with mock.patch.object(self.service, "current_manifest", return_value=self.current):
                 _, launch = self.service.apply(plan["planId"])
@@ -265,34 +285,94 @@ class HostReleaseChannelTests(unittest.TestCase):
         ), mock.patch.object(SERVICE, "latest_stable_tag", return_value=self.latest_stable["tag"]):
             plan = self.service.plan(self.latest_stable["tag"], return_to_stable=True)
         self._verified_installation(self.current)
-        terminal_written, finish_cleanup = threading.Event(), threading.Event()
+        terminal_written, finish_cleanup, cleaned = threading.Event(), threading.Event(), threading.Event()
         maintenance = self.service.core_operation_maintenance
 
         def cleanup():
             job = SERVICE.read_private(self.service.job_file)
-            if not job or job.get('state') != 'failed':
+            if not job or job.get('state') != 'rolled-back':
                 return maintenance()
             terminal_written.set()
             if not finish_cleanup.wait(3):
                 raise RuntimeError('Test did not release update cleanup')
-            return maintenance()
+            try:
+                return maintenance()
+            finally:
+                cleaned.set()
 
         with mock.patch.object(self.service, "current_manifest", return_value=self.current), mock.patch.object(
             SERVICE, "latest_stable_tag", return_value=self.latest_stable["tag"]
-        ), mock.patch.object(SERVICE.UPDATE, "apply_update", side_effect=RuntimeError("synthetic update failure")), mock.patch.object(
+        ), self.independent_launcher(lambda service, job: self.simulate_component_outcome(service, job, 'rolled-back')), mock.patch.object(
             self.service, 'core_operation_maintenance', side_effect=cleanup
         ):
             _, launch = self.service.apply(plan["planId"])
             launch()
             try:
                 self.assertTrue(terminal_written.wait(3))
-                self.assertEqual(SERVICE.read_private(self.service.job_file)['state'], 'failed')
-                self.assertTrue(self.service.busy)
+                self.assertEqual(SERVICE.read_private(self.service.job_file)['state'], 'rolled-back')
+                self.assertEqual(SERVICE.read_channel(self.root)['channel'], 'nightly')
             finally:
                 finish_cleanup.set()
+                self.assertTrue(cleaned.wait(3))
                 job = self.finished_job()
-        self.assertEqual(job["state"], "failed")
+        self.assertEqual(job["state"], "rolled-back")
         self.assertEqual(SERVICE.read_channel(self.root)["channel"], "nightly")
+
+    def test_reviewed_immutable_stable_uses_existing_core_update_and_overlay(self):
+        tag, commit, digest, base = SERVICE.LEGACY_STABLE_RELEASE
+        target = {**manifest(tag, "b"), "commit": commit, "digest": digest,
+                  "runtipiCompatibility": base, "installationProtocol": SERVICE.PLAN.INSTALLATION_PROTOCOL}
+        SERVICE.save_channel(self.root, "nightly", str(uuid.uuid4()))
+        launcher = mock.Mock()
+        with mock.patch.object(self.service, "current_manifest", return_value=self.current), \
+                mock.patch.object(SERVICE, "manifest_for_tag", return_value=target), \
+                mock.patch.object(SERVICE, "latest_stable_tag", return_value=tag), \
+                mock.patch.object(SERVICE.UPDATE, "update_plan", return_value={"snapshotBytes": 0, "backupPolicy": "none"}), \
+                mock.patch.object(SERVICE.UPDATE, "apply_update", return_value={"result": "healthy"}) as apply, \
+                mock.patch.object(self.service, "read_core_operation_record", side_effect=SERVICE.read_private), \
+                mock.patch.object(SERVICE, "load_script", return_value=launcher), \
+                mock.patch.object(SERVICE.threading, "Thread", side_effect=lambda *, target, args, daemon: mock.Mock(start=lambda: target(*args))):
+            reviewed = self.service.plan(tag, True)
+            _, launch = self.service.apply(reviewed["planId"])
+            job = SERVICE.read_private(self.service.job_file)
+            self.assertTrue(job["legacyStableReturn"])
+            self.assertNotIn("worker", job)
+            apply.assert_not_called()
+            launch()
+        launcher.launch_worker.assert_not_called()
+        self.service.core_overlay_manager.resume.assert_called_once()
+        apply.assert_called_once_with(self.root, self.current, target, "test-daemon", Path(job["snapshot"]),
+                                      controller_state_dir=self.state, expected_backup_policy="none")
+        result = SERVICE.read_private(self.service.job_file)
+        self.assertEqual(result["id"], reviewed["planId"])
+        self.assertEqual(result["state"], "complete")
+        self.assertEqual(SERVICE.read_channel(self.root)["channel"], "stable")
+
+    def test_stable_core_only_route_requires_an_exact_same_base_explicit_return(self):
+        tag, commit, digest, base = SERVICE.LEGACY_STABLE_RELEASE
+        target = {**manifest(tag, "b"), "commit": commit, "digest": digest,
+                  "runtipiCompatibility": base, "installationProtocol": SERVICE.PLAN.INSTALLATION_PROTOCOL}
+        for current, replacement, confirmed in (
+            (self.current, target, False),
+            ({**self.current, "runtipiCompatibility": "4.12.0"}, target, True),
+            (self.current, {**target, "digest": "sha256:" + "0" * 64}, True),
+            (self.current, {**target, "commit": "0" * 40}, True),
+        ):
+            with self.subTest(current=current["runtipiCompatibility"], target=replacement["digest"], confirmed=confirmed):
+                self.assertFalse(self.service.reviewed_legacy_stable_return(current, replacement, confirmed))
+
+        SERVICE.save_channel(self.root, "nightly", str(uuid.uuid4()))
+        with mock.patch.object(self.service, "current_manifest", return_value=self.current), \
+                mock.patch.object(SERVICE, "manifest_for_tag", return_value=self.latest_stable), \
+                mock.patch.object(SERVICE, "latest_stable_tag", return_value=self.latest_stable["tag"]):
+            reviewed = self.service.plan(self.latest_stable["tag"], True)
+            plan_file = self.state / f"plan-{reviewed['planId']}.json"
+            plan = SERVICE.read_private(plan_file)
+            SERVICE.write_private(plan_file, {**plan, "legacyStableReturn": True})
+            with self.assertRaisesRegex(ValueError, "reviewed update route changed"):
+                self.service.apply(reviewed["planId"])
+        self.service.core_overlay_manager.begin.assert_not_called()
+        self.assertIsNone(SERVICE.read_private(self.service.job_file))
 
     def test_completed_stable_install_retries_channel_commit_after_restart(self):
         SERVICE.save_channel(self.root, "nightly", str(uuid.uuid4()))

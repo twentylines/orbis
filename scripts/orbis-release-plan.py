@@ -240,32 +240,42 @@ def read_review_file(file: Path) -> bytes:
         return body
 
 
-def review_412(root: Path, current: dict, target: dict) -> dict:
-    """Review a forward version change on a retained installation copy without staging it."""
+def configuration_412(current: dict, target: dict, env: bytes, version: bytes) -> tuple[dict, str]:
+    """Render the exact forward version files and candidate override without writing them."""
     current, target = validate_manifest(current), require_installation_protocol(target)
     if (current["runtipiCompatibility"].removeprefix("v") != LEGACY_BASE
             or target["runtipiCompatibility"] != RUNTIPI_412_BASE
             or POLICY.version_order(current["tag"], target["tag"]) != -1
             or current["digest"] == target["digest"]):
         raise ValueError("Review only a forward Orbis release from Runtipi 4.10.1 to 4.12.0")
-    root = root.resolve(strict=True)
-    files = compose_files(root)
-    pinned = {file: read_review_file(file) for file in [*files, root / "VERSION", root / ".env"]}
-    version, env = pinned[root / "VERSION"], pinned[root / ".env"]
     if version.strip().removeprefix(b"v") != LEGACY_BASE.encode():
         raise ValueError("The retained VERSION does not match the current release")
     matches = list(VERSION_ASSIGNMENT.finditer(env))
     value = VERSION_VALUE.match(env, matches[0].end()) if len(matches) == 1 else None
     if value is None or value["value"].removeprefix(b"v") != LEGACY_BASE.encode():
         raise ValueError("The retained .env must declare the current TIPI_VERSION exactly once")
+    return {
+        ".env": env[:value.start("value")] + RUNTIPI_412_BASE.encode() + env[value.end("value"):],
+        "VERSION": (RUNTIPI_412_BASE + "\n").encode(),
+    }, value["value"].decode("ascii")
+
+
+def override_412(target: dict) -> str:
+    return override_yaml(target) + f"      TIPI_VERSION: {RUNTIPI_412_BASE}\n"
+
+
+def review_412(root: Path, current: dict, target: dict) -> dict:
+    """Review a forward version change on a retained installation copy without staging it."""
+    root = root.resolve(strict=True)
+    files = compose_files(root)
+    pinned = {file: read_review_file(file) for file in [*files, root / "VERSION", root / ".env"]}
+    prospective_files, current_version = configuration_412(current, target, pinned[root / ".env"], pinned[root / "VERSION"])
     # Validate the literal is an actual dotenv assignment, rather than text
     # inside a multiline value. The synthetic service interpolates only this key.
     env_probe = compose_config(root, [], "services:\n  runtipi:\n    image: busybox\n"
                                "    environment:\n      TIPI_VERSION: ${TIPI_VERSION:-}\n", from_install_env=True)
-    if env_probe["services"]["runtipi"]["environment"].get("TIPI_VERSION") != value["value"].decode("ascii"):
+    if env_probe["services"]["runtipi"]["environment"].get("TIPI_VERSION") != current_version:
         raise ValueError("The retained .env does not resolve to the reviewed TIPI_VERSION")
-    next_env = env[:value.start("value")] + RUNTIPI_412_BASE.encode() + env[value.end("value"):]
-    next_version = (RUNTIPI_412_BASE + "\n").encode()
 
     original = compose_config(root, files, all_profiles=True)
     inventory = PREFLIGHT.inspect(root, compose_config=original)
@@ -290,7 +300,7 @@ def review_412(root: Path, current: dict, target: dict) -> dict:
             ))):
         raise ValueError("The retained controller configuration does not match the current release")
 
-    override = override_yaml(target) + f"      TIPI_VERSION: {RUNTIPI_412_BASE}\n"
+    override = override_412(target)
     prospective = compose_config(root, files, override, runtipi_base=RUNTIPI_412_BASE, all_profiles=True)
     next_core = prospective["services"]["runtipi"]
     if next_core.get("image") != f"{IMAGE}@{target['digest']}" or next_core.get("environment", {}).get("TIPI_VERSION") != RUNTIPI_412_BASE:
@@ -308,7 +318,7 @@ def review_412(root: Path, current: dict, target: dict) -> dict:
         "currentRuntipiVersion": LEGACY_BASE,
         "targetRuntipiVersion": RUNTIPI_412_BASE,
         "retainedFileSha256": {str(file.relative_to(root)): hashlib.sha256(body).hexdigest() for file, body in pinned.items()},
-        "prospectiveFileSha256": {".env": hashlib.sha256(next_env).hexdigest(), "VERSION": hashlib.sha256(next_version).hexdigest()},
+        "prospectiveFileSha256": {name: hashlib.sha256(body).hexdigest() for name, body in prospective_files.items()},
         "prospectiveOverrideSha256": hashlib.sha256(override.encode()).hexdigest(),
         "currentComposeSha256": hashlib.sha256(json.dumps(original, sort_keys=True).encode()).hexdigest(),
         "prospectiveComposeSha256": hashlib.sha256(json.dumps(prospective, sort_keys=True).encode()).hexdigest(),

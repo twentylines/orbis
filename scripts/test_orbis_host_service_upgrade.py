@@ -4,8 +4,9 @@ import os
 import tempfile
 import unittest
 import uuid
-from contextlib import ExitStack, nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 
@@ -20,6 +21,41 @@ class OrbisHostServiceUpgradeTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
+
+    def test_interrupted_component_copy_uses_exact_bound_maintenance_and_leaves_workspace(self):
+        root = self.base / 'install'
+        workspace = self.base / 'workspace'
+        workspace.mkdir(mode=0o700)
+        file = self.base / 'helper-maintenance.json'
+        binding = {'operationId': str(uuid.uuid4()), 'planSha256': 'a' * 64, 'targetDigest': 'sha256:' + 'b' * 64}
+        selection = {'directory': str(self.base / 'source'), 'selectionSha256': 'c' * 64, 'executionSha256': 'd' * 64}
+        prior = {'inventory': {'prior.py': 'e' * 64}, 'unitSha256': 'f' * 64}
+        candidate = {'inventory': {'target.py': '1' * 64}, 'unitSha256': '2' * 64}
+        target = {'host': candidate, 'selectionDirectory': selection['directory'],
+                  'sourceSelectionSha256': selection['selectionSha256'], 'sourceExecutionSha256': selection['executionSha256']}
+        record = {'componentUpgrade': binding, 'stage': 'stopped', 'environmentSha256': '3' * 64,
+                  'previousDigest': 'sha256:' + '4' * 64, 'sourceCustody': {'selection': selection,
+                  'prior': prior, 'candidate': candidate}}
+        UPGRADE.SERVICE.write_private(file, record)
+        def returned(*args):
+            UPGRADE.SERVICE.write_private(file, {**record, 'stage': 'restored'})
+        with (mock.patch.multiple(UPGRADE, MAINTENANCE=file, STATE_DIR=self.base),
+              mock.patch.object(UPGRADE.os, 'geteuid', return_value=0),
+              mock.patch.object(UPGRADE.HOST, 'host_lock', return_value=nullcontext()),
+              mock.patch.object(UPGRADE.SETUP, 'hold_source_selection', return_value=nullcontext({**selection, 'inventory': {}})),
+              mock.patch.object(UPGRADE, 'workspace_from_record', return_value=workspace),
+              mock.patch.object(UPGRADE, 'require_maintenance_identity'),
+              mock.patch.object(UPGRADE, 'restore_previous', side_effect=returned) as restore):
+            with self.assertRaisesRegex(ValueError, 'different execution custody'):
+                UPGRADE.restore_interrupted_component_copy(root, 'ctx', record, binding,
+                    {**target, 'sourceExecutionSha256': '9' * 64}, prior, record['previousDigest'],
+                    record['environmentSha256'], lock_fds=(9, 10))
+            restore.assert_not_called()
+            UPGRADE.restore_interrupted_component_copy(root, 'ctx', record, binding, target, prior,
+                record['previousDigest'], record['environmentSha256'], lock_fds=(9, 10))
+            restore.assert_called_once_with(workspace, record['previousDigest'], root, 'ctx')
+        self.assertFalse(file.exists())
+        self.assertTrue(workspace.is_dir())
 
     def test_custodied_rollback_refuses_crossed_prior_and_persists_exact_restored_copy(self):
         root = self.base / "installation"
@@ -359,6 +395,48 @@ class RetainedHelperRollbackTests(unittest.TestCase):
         self.assertTrue(result['recovered'])
         self.assertEqual((self.installed / 'orbis-host-service.py').read_bytes(), b'# prior\n')
         self.assertFalse(self.workspace.exists())
+
+    def test_coordinated_return_uses_held_original_profile_and_keeps_source_custody(self):
+        self.record.update(schema='orbis.helper-upgrade.v2', observerProfile={'managed': 'new'})
+        UPGRADE.SERVICE.write_private(self.maintenance, self.record)
+        retained = self.retain()
+        held = []
+        @contextmanager
+        def admission(*args, **options):
+            self.assertEqual(options, {'returning': retained})
+            held.append(True)
+            try:
+                yield {'job': (self.binding['operationId'], 'running'), 'profile': None}
+            finally:
+                held.pop()
+        launcher = SimpleNamespace(hold_owned_helper_job=admission)
+        original = UPGRADE.SETUP.load_script
+        self.patch(UPGRADE.SETUP, 'load_script', side_effect=lambda name, key:
+                   launcher if name == 'orbis-host-upgrade-launcher.py' else original(name, key))
+        self.patch(UPGRADE.HOST, 'host_lock', side_effect=lambda _, **kwargs: nullcontext())
+        def stop(profile):
+            self.assertTrue(held)
+            self.assertIsNone(profile)
+            record = UPGRADE.SERVICE.read_private(self.maintenance)
+            self.assertEqual(record['schema'], 'orbis.helper-upgrade.v1')
+            self.assertEqual(record['upgradeObserverProfile'], {'managed': 'new'})
+            self.assertIsNone(record['observerProfile'])
+        self.stop.side_effect = stop
+        with mock.patch.object(UPGRADE.os, 'geteuid', return_value=0):
+            result = UPGRADE.rollback_retained(self.root, 'test', str(self.root), retained,
+                                               lock_fds=(7, 8), coordinated=True)
+        self.assertTrue(result['restored'])
+        self.assertFalse(held)
+        self.assertEqual((self.installed / 'orbis-host-service.py').read_bytes(), b'# prior\n')
+
+    def test_coordinated_flag_alone_cannot_admit_a_helper_return(self):
+        retained = self.retain()
+        self.jobs.side_effect = ValueError('live kernel/source admission failed')
+        with mock.patch.object(UPGRADE.os, 'geteuid', return_value=0), self.assertRaises(ValueError):
+            UPGRADE.rollback_retained(self.root, 'test', str(self.root), retained, coordinated=True)
+        self.stop.assert_not_called()
+        self.assertFalse(self.maintenance.exists())
+        self.assertTrue((self.workspace / 'previous').exists())
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ import os
 import secrets
 import stat
 import time
+import uuid
 from pathlib import Path
 
 
@@ -22,6 +23,14 @@ def load(name, key):
 DRIVER = load('orbis-host-retained-restore-runtime.py', 'orbis_driver_for_core_overlay')
 SCHEMA = 'orbis.core-maintenance-overlay.v1'
 ACCEPTANCE = 'orbis.core-maintenance-acceptance.v1'
+CORE_DATA_DIRECTORIES = ('/app-data', '/data/apps', '/data/user-config', '/data/state', '/data/repos')
+
+
+def boot_identity():
+    value = Path('/proc/sys/kernel/random/boot_id').read_text(encoding='ascii').strip()
+    if str(uuid.UUID(value)) != value:
+        raise ValueError('Core maintenance boot identity is invalid')
+    return value
 
 
 class CoreOverlay:
@@ -33,7 +42,6 @@ class CoreOverlay:
         self.runtime = DRIVER.DockerRestoreRuntime(self)
 
     def directory(self, identifier):
-        import uuid
         if str(uuid.UUID(identifier)) != identifier or uuid.UUID(identifier).version != 4:
             raise ValueError('Core maintenance identity is invalid')
         with self.authority.protected_directory(self.state):
@@ -133,6 +141,48 @@ class CoreOverlay:
                 or raw['HostConfig'].get('RestartPolicy') != source['container']['HostConfig'].get('RestartPolicy')
                 or (raw['State'].get('Health') or {}).get('Status') != 'healthy'):
             raise ValueError('The original controller changed before progress acceptance')
+
+    def pre_effect_custody(self, source):
+        """Collect optional mount identities for recovery after a distinct boot."""
+        try:
+            boot = boot_identity()
+            directories = {}
+            for target in CORE_DATA_DIRECTORIES:
+                path = self.runtime.map_path(source['container'], target)
+                with self.authority.protected_directory(path, private=False) as descriptor:
+                    item = os.fstat(descriptor)
+                    directories[target] = {'device': item.st_dev, 'inode': item.st_ino}
+            if boot_identity() == boot:
+                return {'bootId': boot, 'directories': directories}
+        except (OSError, ValueError, KeyError, TypeError):
+            # Existing installations can lack a suitable volume observation.
+            # Such records continue to require the original start timestamp.
+            pass
+        return None
+
+    def verify_pre_effect_source(self, record, current_boot):
+        source = record['source']
+        custody = source.get('preEffectCustody')
+        if custody is None or custody['bootId'] == current_boot:
+            return self.unchanged_source(record)
+        if str(uuid.UUID(custody['bootId'])) != custody['bootId']:
+            raise ValueError('Core pre-effect recovery has no original boot identity')
+        if self.receipt(record)['phase'] not in {'allocating', 'accepted'} or not self.accepted_job(record):
+            raise ValueError('Core pre-effect recovery has no durable acceptance')
+        observed = self.runtime.source_snapshot(policy='controller-overlay.v1')
+        observed_custody = self.pre_effect_custody(observed)
+        observed_container = observed['container']
+        prior_container = source['container']
+        state = observed_container['State']
+        stable = {key: value for key, value in source.items() if key not in {'container', 'preEffectCustody'}}
+        if (observed_custody != {**custody, 'bootId': current_boot}
+                or {key: value for key, value in observed.items() if key != 'container'} != stable
+                or observed_container.get('Name') != '/runtipi' or observed_container.get('Id') != source['controllerId']
+                or observed_container.get('Image') != source['imageId'] or state.get('Running') is not True
+                or state.get('Paused') or state.get('Restarting') or (state.get('Health') or {}).get('Status') != 'healthy'
+                or observed_container['HostConfig'].get('RestartPolicy') != prior_container['HostConfig'].get('RestartPolicy')):
+            raise ValueError('The original controller or enrolled storage changed across the reboot')
+        self.runtime.verify_networks(record, observed_container)
 
     def ready(self, identifier):
         with self.host.host_lock(self.root):
@@ -264,8 +314,15 @@ class CoreOverlay:
             try:
                 record = self.read(identifier)
             except FileNotFoundError:
+                record = None
+            if record is None or 'preEffectCustody' in record['source']:
+                custody = self.pre_effect_custody(source)
+                if custody is not None:
+                    source = {**source, 'preEffectCustody': custody}
+            if record is None:
                 record = dict(schema=SCHEMA, id=identifier, nonce=secrets.token_hex(32), root=str(self.root), context=self.context,
-                              source=source, current=current, target=target, phase='allocating', decision=None)
+                              source=source, current=current, target=target, phase='allocating', decision=None,
+                              componentProgress='orbis.component-browser-progress.v1')
                 self.save(record)
                 self.save_receipt(record, {**self.acceptance_binding(record), 'phase': 'allocating', 'retirement': None})
             receipt = self.receipt(record)
@@ -287,10 +344,11 @@ class CoreOverlay:
                 raise
         return identifier
 
-    def resume(self, job):
+    def resume(self, job, *, lock_fds=None):
         if job.get('overlayId') != job['id']:
             raise ValueError('This interrupted operation lacks protected progress routing')
-        with self.host.host_lock(self.root):
+        options = {} if lock_fds is None else {'inherited': lock_fds}
+        with self.host.host_lock(self.root, **options):
             record = self.read(job['id'])
             if record['current'] != job['current'] or record['target'] != job['target']:
                 raise ValueError('Core maintenance source changed')

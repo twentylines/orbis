@@ -311,3 +311,65 @@ test('progress socket transport enforces a body cap, absolute deadline and stabl
   await expect(readRootCoreProgress({ socket, identity, deadlineMs: 40 })).rejects.toThrow();
   expect(Date.now() - started).toBeLessThan(1000);
 });
+
+test('bound maintenance progress follows the same worker during Host downtime', async () => {
+  const endpoint = 'f'.repeat(64);
+  const binding = [progress.job.id, progress.job.targetTag, endpoint].join(':');
+  const directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'ow-')));
+  cleanups.push(() => fs.rm(directory, { recursive: true, force: true }));
+  const socket = path.join(directory, 'p.sock');
+  let worker = progress;
+  const unix = http.createServer((request, response) => {
+    expect(request.method).toBe('GET');
+    expect(request.url).toBe('/v1/core-operation/progress');
+    response.end(JSON.stringify(worker));
+  });
+  await new Promise<void>((resolve) => unix.listen(socket, resolve));
+  cleanups.push(() => new Promise<void>((resolve) => unix.close(() => resolve())));
+  let host: typeof progress | null = null;
+  let seal = 0;
+  let replaced = false;
+  let workerReads = 0;
+  const server = createMaintenanceServer({
+    coreProgressBinding: binding,
+    readProgress: async () => {
+      if (!host) throw new Error('Host is unavailable');
+      return host;
+    },
+    readWorkerProgress: async (options) => {
+      workerReads++;
+      expect(options.socket).toBe(`/run/orbis/upgrade-progress/${endpoint}.sock`);
+      return readRootCoreProgress({
+        ...options,
+        socket,
+        identity: async () => String(replaced ? seal++ : seal),
+      });
+    },
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  cleanups.push(
+    () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      }),
+  );
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('No fixture port');
+  const url = `http://127.0.0.1:${address.port}/api/system/core-update-progress`;
+  const active = await fetch(url);
+  expect(active.status).toBe(200);
+  expect(await active.json()).toEqual(progress);
+  for (const change of [{ id: '22222222-2222-4222-8222-222222222222' }, { targetTag: 'v0.2.0' }, { state: 'complete' }]) {
+    worker = { ...progress, job: { ...progress.job, ...change } };
+    expect((await fetch(url)).status).toBe(503);
+  }
+  worker = progress;
+  replaced = true;
+  expect((await fetch(url)).status).toBe(503);
+  expect(workerReads).toBe(5);
+  host = { ...progress, job: { ...progress.job, state: 'complete' } };
+  expect(await (await fetch(url)).json()).toEqual(host);
+  expect(workerReads).toBe(5);
+  expect(() => createMaintenanceServer({ coreProgressBinding: `${binding}\n` })).toThrow();
+});

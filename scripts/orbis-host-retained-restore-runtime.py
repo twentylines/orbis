@@ -712,8 +712,20 @@ class DockerRestoreRuntime:
         with self.a.protected_directory(code_file.parent, private=False) as directory:
             with self.a.protected_file(directory, code_file.name, 32768, private=False) as code:
                 code = code.decode('utf8')
+        environment = ['NODE_ENV=production', 'ORBIS_MAINTENANCE_RESPONDER=1']
+        if record.get('componentProgress') == 'orbis.component-browser-progress.v1':
+            source, target = record['current'], record['target']
+            operation, target_tag = record['id'], target['tag']
+            if (record.get('schema') != 'orbis.core-maintenance-overlay.v1'
+                    or record['source']['publication'] != source
+                    or not re.fullmatch(r'[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}', operation)
+                    or len(target_tag) > 100 or not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?', target_tag)
+                    or any(not re.fullmatch(r'sha256:[a-f0-9]{64}', release['digest']) for release in (source, target))):
+                raise fail()
+            binding = '\n'.join((operation, source['digest'], target['digest'])).encode('ascii')
+            environment.append(f'ORBIS_CORE_PROGRESS_BINDING={operation}:{target_tag}:{hashlib.sha256(binding).hexdigest()}')
         return {'Image': record['source']['imageId'], 'Entrypoint': ['node'], 'Cmd': ['--input-type=module', '-e', code], 'User': '0',
-                'Env': ['NODE_ENV=production', 'ORBIS_MAINTENANCE_RESPONDER=1'], 'WorkingDir': '/app', 'Labels': labels,
+                'Env': environment, 'WorkingDir': '/app', 'Labels': labels,
                 'Healthcheck': {'Test': ['NONE']},
                 'HostConfig': {'NetworkMode': configuration['network'], 'RestartPolicy': {'Name': 'unless-stopped', 'MaximumRetryCount': 0},
                                'ReadonlyRootfs': True, 'Privileged': False, 'AutoRemove': False, 'PublishAllPorts': False, 'PortBindings': {},

@@ -67,12 +67,12 @@ def literal_dependencies(path):
         function = node.func
         name = function.id if isinstance(function, ast.Name) else (
             function.attr if isinstance(function, ast.Attribute) else '')
-        if name not in {'load', 'load_script', 'with_name'}:
+        if name not in {'load', 'load_script', 'load_sibling', 'with_name'}:
             continue
         value = node.args[0]
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
             candidate = value.value
-            if candidate.startswith(('orbis-', 'migration-')) and candidate.endswith(('.py', '.mjs')):
+            if candidate.startswith(('orbis-', 'migration-', 'install-orbis')) and candidate.endswith(('.py', '.mjs')):
                 result.add(candidate)
     return result
 
@@ -89,8 +89,6 @@ class HostDependencyClosure(unittest.TestCase):
         unit_dir = self.root / 'packaging/systemd'
         unit_dir.mkdir(parents=True)
         shutil.copyfile(UNIT, unit_dir / UNIT.name)
-        # Setup is the installer entrypoint, not itself an installed daemon dependency.
-        shutil.copyfile(SETUP, self.stage / SETUP.name)
 
     def child(self, program):
         env = dict(os.environ, PYTHONPATH='', PYTHONDONTWRITEBYTECODE='1')
@@ -146,6 +144,7 @@ def load(filename):
     return module
 service = load('orbis-host-service.py')
 assert service.HostService
+assert load('orbis-host-service-upgrade.py').upgrade
 for name in ('orbis-host-core-capture-reader.py', 'orbis-host-core-capture-service.py',
              'orbis-host-core-capture-worker.py', 'orbis-host-core-capture-lease.py',
              'orbis-host-core-capture-reservation.py', 'orbis-host-core-capture-reserved.py',

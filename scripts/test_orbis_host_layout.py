@@ -4,6 +4,8 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -176,6 +178,79 @@ class LayoutTests(unittest.TestCase):
         marker = L.legacy_path(self.root, 'restore-selector')
         marker.write_text('preserve')
         with self.selection(), self.assertRaises(L.LayoutError): L.selected_path(self.root, 'host-lock')
+
+    def test_borrowed_joint_locks_remain_exclusive_after_component_exit(self):
+        self.enroll()
+        with self.selection():
+            parents=tuple(L.open_locks(self.root))
+            try:
+                borrowed=L.borrow_locks(self.root,parents)
+                self.assertTrue(all(a!=b for a,b in zip(parents,borrowed)))
+                for descriptor in borrowed:os.close(descriptor)
+                for path in L.lock_paths(self.root):
+                    observer=os.open(path,os.O_RDWR)
+                    try:
+                        with self.assertRaises(BlockingIOError):fcntl.flock(observer,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                    finally:os.close(observer)
+                L.verify_locks(self.root,parents)
+            finally:
+                for descriptor in parents:os.close(descriptor)
+
+    def test_incomplete_reversed_readonly_and_foreign_leases_cannot_enter(self):
+        self.enroll()
+        with self.selection():
+            parents=tuple(L.open_locks(self.root))
+            readonly=os.open(L.lock_paths(self.root)[0],os.O_RDONLY)
+            try:
+                for supplied in (parents[:1],tuple(reversed(parents)),list(parents),(True,parents[1]),
+                                 (readonly,parents[1]),(parents[0],-1)):
+                    with self.subTest(supplied=type(supplied)),self.assertRaises((L.LayoutError,OSError)):
+                        L.borrow_locks(self.root,supplied)
+                L.verify_locks(self.root,parents)
+            finally:
+                os.close(readonly)
+                for descriptor in parents:os.close(descriptor)
+
+    def test_equal_byte_lock_replacement_revokes_the_whole_lease(self):
+        self.enroll()
+        with self.selection():
+            parents=tuple(L.open_locks(self.root))
+            try:
+                path=L.lock_paths(self.root)[1]
+                path.rename(path.with_name('old-host.lock'))
+                path.write_bytes(b'');path.chmod(0o600)
+                with self.assertRaises(L.LayoutError):L.borrow_locks(self.root,parents)
+                with self.assertRaises(L.LayoutError):L.verify_locks(self.root,parents)
+            finally:
+                for descriptor in parents:os.close(descriptor)
+
+    def test_joint_parent_lock_lifetime_is_visible_to_an_actual_child(self):
+        self.enroll()
+        code='''import fcntl,os,sys
+fd=os.open(sys.argv[1],os.O_RDWR)
+try:
+    fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+except BlockingIOError:
+    sys.exit(73)
+finally:
+    os.close(fd)
+'''
+        with self.selection():
+            paths=L.lock_paths(self.root)
+            parents=tuple(L.open_locks(self.root))
+            try:
+                borrowed=L.borrow_locks(self.root,parents)
+                for descriptor in borrowed:os.close(descriptor)
+                for path in paths:
+                    result=subprocess.run([sys.executable,'-I','-B','-c',code,str(path)],
+                        stdin=subprocess.DEVNULL,capture_output=True,timeout=10,cwd=self.base)
+                    self.assertEqual(result.returncode,73)
+            finally:
+                for descriptor in parents:os.close(descriptor)
+            for path in paths:
+                result=subprocess.run([sys.executable,'-I','-B','-c',code,str(path)],
+                    stdin=subprocess.DEVNULL,capture_output=True,timeout=10,cwd=self.base)
+                self.assertEqual(result.returncode,0,result.stderr.decode())
 
     def test_joint_locks_serialize_old_helpers_and_pin_legacy_inode(self):
         self.enroll()

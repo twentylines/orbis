@@ -24,6 +24,7 @@ def load(name, key):
 
 M = load('orbis-host-maintenance-overlay.py', 'overlay_acceptance_fixture')
 H = load('orbis-host.py', 'overlay_acceptance_host')
+REAL_HOST_LOCK = H.host_lock
 D = M.DRIVER
 
 
@@ -88,12 +89,73 @@ class OverlayAcceptanceTests(unittest.TestCase):
                 'startedAt': 1793814360.3561795,
                 'snapshot': str(self.snapshots / ('orbis-target-' + self.identifier))}
 
+    def test_resume_borrows_the_coordinators_actual_lock_without_unlocking_its_description(self):
+        self.begin()
+        job = self.job()
+        self.service.job_file.write_text(json.dumps(job))
+        self.service.job_file.chmod(0o600)
+        with mock.patch.object(H, 'host_lock', REAL_HOST_LOCK), \
+                mock.patch.object(H, 'require_no_capture_fence'):
+            with H.host_lock_lease(self.root) as locks:
+                self.overlay.resume(job, lock_fds=locks)
+                H.AUTHORITY.LAYOUT.verify_locks(self.root, locks)
+                with self.assertRaises(ValueError):
+                    self.overlay.resume(job)
+
     def test_stale_socket_rejection_precedes_overlay_allocation(self):
         self.runtime.live_docker_sockets.side_effect = ValueError('stale Docker connection')
         with self.assertRaisesRegex(ValueError, 'stale Docker connection'):
             self.begin()
         self.assertFalse((self.state / 'core-overlays').exists())
         self.runtime.prepare_overlay.assert_not_called()
+
+    def test_older_acceptance_still_requires_the_exact_original_start_after_a_reboot(self):
+        with mock.patch.object(M, 'boot_identity', side_effect=FileNotFoundError):
+            record = self.begin()
+        self.assertNotIn('preEffectCustody', record['source'])
+        self.overlay.verify_pre_effect_source(record, str(uuid.uuid4()))
+        self.source['State']['StartedAt'] = 'restarted'
+        with self.assertRaisesRegex(ValueError, 'original controller changed'):
+            self.overlay.verify_pre_effect_source(record, str(uuid.uuid4()))
+
+    def reboot_fixture(self):
+        directories = {target: self.root / target.strip('/').replace('/', '-') for target in M.CORE_DATA_DIRECTORIES}
+        for path in directories.values():
+            path.mkdir(mode=0o700)
+        self.runtime.map_path.side_effect = lambda _source, target: directories[target]
+        original_boot = str(uuid.uuid4())
+        with mock.patch.object(M, 'boot_identity', return_value=original_boot):
+            record = self.begin()
+        self.service.job_file.write_text(json.dumps(self.job()))
+        self.service.job_file.chmod(0o600)
+        self.overlay.accept(self.job())
+        self.assertEqual(record['source']['preEffectCustody']['bootId'], original_boot)
+        return record, original_boot, directories
+
+    def test_same_boot_restart_never_uses_reboot_authority(self):
+        record, original_boot, _ = self.reboot_fixture()
+        self.source['State']['StartedAt'] = 'restarted'
+        with self.assertRaisesRegex(ValueError, 'original controller changed'):
+            self.overlay.verify_pre_effect_source(record, original_boot)
+
+    def test_distinct_boot_preserves_exact_authority_and_rejects_replaced_data(self):
+        record, _, directories = self.reboot_fixture()
+        current_boot = str(uuid.uuid4())
+        self.source['State']['StartedAt'] = 'restarted'
+        self.runtime.source_snapshot.return_value['container'] = copy.deepcopy(self.source)
+        with mock.patch.object(M, 'boot_identity', return_value=current_boot):
+            with self.assertRaisesRegex(ValueError, 'enrolled storage changed'):
+                self.overlay.verify_pre_effect_source(record, str(uuid.uuid4()))
+            self.overlay.verify_pre_effect_source(record, current_boot)
+            self.runtime.verify_networks.assert_called_once_with(record, self.runtime.source_snapshot.return_value['container'])
+            with mock.patch.dict(self.runtime.source_snapshot.return_value['container']['State'], Health={'Status': 'starting'}):
+                with self.assertRaisesRegex(ValueError, 'enrolled storage changed'):
+                    self.overlay.verify_pre_effect_source(record, current_boot)
+            moved = directories['/data/state']
+            moved.rename(moved.with_name('prior-data-state'))
+            moved.mkdir(mode=0o700)
+            with self.assertRaisesRegex(ValueError, 'enrolled storage changed'):
+                self.overlay.verify_pre_effect_source(record, current_boot)
 
     def test_begin_failure_aborts_only_owned_responder_and_preserves_error(self):
         prepare = self.runtime.prepare_overlay.side_effect

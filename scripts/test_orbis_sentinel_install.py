@@ -1,4 +1,5 @@
 import hashlib
+import fcntl
 import io
 import importlib.util
 import json
@@ -148,6 +149,372 @@ class PreparationTests(unittest.TestCase):
 
     def retained_binding(self):
         return {'operationId': str(uuid.uuid4()), 'planSha256': '2' * 64, 'targetDigest': 'sha256:' + '3' * 64}
+
+    def lease_state(self):
+        state = self.root / 'installed-state'
+        state.mkdir(mode=0o700)
+        lock = state / 'activation.lock'
+        lock.write_bytes(b'')
+        lock.chmod(0o600)
+        patch = mock.patch.object(INSTALL, 'INSTALLED_STATE', state)
+        patch.start()
+        self.addCleanup(patch.stop)
+        return state, lock
+
+    def lease_preparation(self, body=None):
+        body = body if body is not None else b"ACTIVATION_LEASE_PROTOCOL='orbis-sentinel.activation-lease.v1'\n"
+        self.payloads['activate_release.py'] = body
+        self.toolkit['activate_release.py'] = (len(body), digest(body))
+        return self.prepare_selected(self.release)
+
+    def test_activation_lease_is_opaque_exclusive_and_expires_when_closed(self):
+        _state, lock = self.lease_state()
+        other = os.open(lock, os.O_RDWR)
+        try:
+            with INSTALL.activation_lease() as lease:
+                lease.verify()
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with self.assertRaises(BlockingIOError):
+                    with INSTALL.activation_lease():
+                        self.fail('A second lease must not be admitted')
+                with self.assertRaises(INSTALL.SentinelInstallError):
+                    INSTALL.ActivationLease().verify()
+            fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaises(INSTALL.SentinelInstallError):
+                lease.verify()
+        finally:
+            os.close(other)
+
+    def test_lease_never_creates_or_adopts_a_missing_unprotected_or_aliased_lock(self):
+        state, lock = self.lease_state()
+        lock.unlink()
+        with self.assertRaises(FileNotFoundError):
+            with INSTALL.activation_lease():
+                self.fail('Missing lock cannot be created')
+        self.assertFalse(lock.exists())
+        for change in ('public', 'symlink', 'hardlink'):
+            with self.subTest(change=change):
+                lock.write_bytes(b'')
+                lock.chmod(0o600)
+                if change == 'public':
+                    lock.chmod(0o644)
+                elif change == 'symlink':
+                    lock.rename(state / 'original')
+                    lock.symlink_to(state / 'original')
+                else:
+                    os.link(lock, state / 'alias')
+                with self.assertRaises((OSError, INSTALL.SentinelInstallError)):
+                    with INSTALL.activation_lease():
+                        self.fail('Untrusted lock cannot be adopted')
+                lock.unlink()
+
+    def test_lock_replacement_or_permission_change_revokes_lease_before_dispatch(self):
+        state, lock = self.lease_state()
+        prepared = self.lease_preparation()
+        with self.assertRaises(INSTALL.SentinelInstallError):
+            with INSTALL.activation_lease() as lease:
+                lock.chmod(0o644)
+                with self.assertRaises(INSTALL.SentinelInstallError):
+                    lease.verify()
+                lock.chmod(0o600)
+                lock.rename(state / 'held')
+                lock.write_bytes(b'')
+                lock.chmod(0o600)
+                with mock.patch.object(INSTALL, '_run') as run:
+                    with self.assertRaises(INSTALL.SentinelInstallError):
+                        INSTALL.activate(prepared, retain=self.retained_binding(), lease=lease)
+                    run.assert_not_called()
+                # Successful context exit also revalidates the original inode.
+        self.assertFalse(prepared.used)
+
+    def test_unsupported_toolkit_is_refused_before_consuming_preparation(self):
+        self.lease_state()
+        for body in (b'def activate_release(): pass\n', b'ACTIVATION_LEASE_PROTOCOL="other"\n',
+                     b'ACTIVATION_LEASE_PROTOCOL="orbis-sentinel.activation-lease.v1"\nACTIVATION_LEASE_PROTOCOL="other"\n'):
+            with self.subTest(body=body), INSTALL.activation_lease() as lease:
+                prepared = self.lease_preparation(body)
+                with mock.patch.object(INSTALL, '_run') as run:
+                    with self.assertRaises(INSTALL.SentinelInstallError):
+                        INSTALL.activate(prepared, retain=self.retained_binding(), lease=lease)
+                    run.assert_not_called()
+                self.assertFalse(prepared.used)
+
+    def test_coordinated_child_receives_only_registered_lease_for_activation_and_return(self):
+        self.lease_state()
+        prepared = self.lease_preparation()
+        binding = self.retained_binding()
+        ticket = self.retained_ticket(binding)
+        with INSTALL.activation_lease() as lease:
+            def command(work, name, code, arguments, **options):
+                descriptor = INSTALL._activation_lease_descriptor(lease)
+                self.assertEqual(options['descriptors'], (descriptor,))
+                if name == 'activate-sentinel':
+                    self.assertEqual(json.loads(arguments[1])['activation_lock_fd'], descriptor)
+                    return json.dumps({**self.release, 'publisherVerified': True, 'activated': True,
+                        'retainedVersionsRemoved': 0, 'activationId': ticket['activationId'],
+                        'retainedRollback': ticket}).encode()
+                self.assertEqual(name, 'restore-sentinel')
+                self.assertEqual(arguments[-1], str(descriptor))
+                return json.dumps(self.restored_result(ticket)).encode()
+            with mock.patch.object(INSTALL, '_run', side_effect=command):
+                self.assertTrue(INSTALL.activate(prepared, retain=binding, lease=lease)['activated'])
+                self.assertTrue(INSTALL.restore_retained(prepared, ticket, binding=binding, lease=lease)['restored'])
+            lease.verify()
+
+    def observer_preparation(self):
+        return self.lease_preparation(b"ACTIVATION_LEASE_PROTOCOL='orbis-sentinel.activation-lease.v1'\n"
+            b"OBSERVER_CHANGE_PROTOCOL='orbis-sentinel.observer-change.v1'\n")
+
+    def observer_ticket(self, retained):
+        return {'schema':'orbis-sentinel.observer-change-ticket.v1','id':'a'*32,
+                'activationId':retained['activationId'],'binding':retained['binding'],'sha256':'b'*64}
+
+    def observer_profile(self):
+        return {'schema':'orbis-sentinel.observer-profile.v1','profile':'orbis-observer-v2','groupId':1234,
+                'files':{role:'c'*64 for role in ('collector','host','socket','sysusers')}}
+
+    def test_observer_spec_is_authenticated_and_does_not_consume_preparation(self):
+        prepared=self.observer_preparation()
+        expected={'schema':'orbis-sentinel.observer-spec.v1','profile':'orbis-observer-v2',
+                  'groupName':'orbis-observer','files':self.observer_profile()['files']}
+        def command(work,name,code,arguments,**options):
+            self.assertEqual(name,'observer-spec');self.assertEqual(code,INSTALL._OBSERVER_COMMAND)
+            self.assertEqual(arguments[1],'spec');self.assertEqual(options['descriptors'],())
+            return json.dumps(expected).encode()
+        with mock.patch.object(INSTALL,'_run',side_effect=command):
+            self.assertEqual(INSTALL.observer_profile_spec(prepared),expected)
+        self.assertFalse(prepared.used)
+
+    def installed_observation_fixture(self):
+        self.lease_state()
+        prepared = self.observer_preparation()
+        files = {'release.json': {'bytes': 3, 'sha256': 'd' * 64}}
+        installed = {'schema': 'orbis-sentinel.installation.v1', **self.release, 'files': files}
+        path = INSTALL.INSTALLED_STATE / 'installed.json'
+        path.write_text(json.dumps(installed))
+        path.chmod(0o600)
+        observed = {'release': dict(self.release),
+            'inventorySha256': digest((json.dumps(files, sort_keys=True, separators=(',', ':')) + '\n').encode()),
+            'profile': None, 'host': {'MainPID': '123', 'InvocationID': 'a' * 32,
+                                    'ControlGroup': '/system.slice/orbis-host.service'}}
+        return prepared, path, observed
+
+    def test_installed_observation_rechecks_full_payload_and_same_receipt_without_consuming_preparation(self):
+        prepared, path, observed = self.installed_observation_fixture()
+        with INSTALL.activation_lease() as lease:
+            def command(work, name, code, arguments, **options):
+                self.assertEqual(name, 'observer-observe')
+                self.assertEqual(code, INSTALL._OBSERVER_COMMAND)
+                self.assertEqual(arguments[1], 'observe')
+                self.assertEqual(options['descriptors'], (INSTALL._activation_lease_descriptor(lease),))
+                return json.dumps(observed).encode()
+            with mock.patch.object(INSTALL, '_installed_payload') as payload, \
+                    mock.patch.object(INSTALL, '_run', side_effect=command):
+                self.assertEqual(INSTALL.observe_installation(prepared, lease=lease), observed)
+                self.assertEqual(payload.call_count, 2)
+            lease.verify()
+        self.assertFalse(prepared.used)
+        self.assertEqual(len(list(prepared.work.glob('observer-observe-*'))), 1)
+
+    def test_installed_observation_rejects_changed_inventory_receipt_host_frame_and_fake_lease(self):
+        prepared, path, observed = self.installed_observation_fixture()
+        original = path.read_bytes()
+        with mock.patch.object(INSTALL, '_installed_payload'), INSTALL.activation_lease() as lease:
+            mutations = [({**observed, 'inventorySha256': '0' * 64}, False),
+                         ({**observed, 'host': {**observed['host'], 'InvocationID': ''}}, False),
+                         (observed, True)]
+            for response, replace in mutations:
+                def command(*args, **options):
+                    if replace:
+                        path.write_bytes(original + b' ')
+                    return json.dumps(response).encode()
+                with self.subTest(replace=replace, response=response), \
+                        mock.patch.object(INSTALL, '_run', side_effect=command), \
+                        self.assertRaises(INSTALL.SentinelInstallError):
+                    INSTALL.observe_installation(prepared, lease=lease)
+                path.write_bytes(original)
+            with mock.patch.object(INSTALL, '_run') as run, self.assertRaises(INSTALL.SentinelInstallError):
+                INSTALL.observe_installation(prepared, lease=INSTALL.ActivationLease())
+            run.assert_not_called()
+        self.assertFalse(prepared.used)
+
+    def reconciled_result(self, binding, *, phase='complete'):
+        retained = self.retained_ticket(binding)
+        return {'retainedRollback': retained, 'candidateRelease': self.release,
+                'previousRelease': {**self.release, 'version': '0.1.0-dev.23'},
+                'activation': 'candidate',
+                'restoration': None,
+                'observer': {'ticket': self.observer_ticket(retained), 'phase': phase,
+                             'profile': self.observer_profile(), 'originalProfile': None}}
+
+    def test_fresh_reconciliation_registers_only_verified_existing_receipts_and_spends_enrollment(self):
+        prepared, path, observed = self.installed_observation_fixture()
+        binding = self.retained_binding()
+        result = self.reconciled_result(binding)
+        with INSTALL.activation_lease() as lease, mock.patch.object(INSTALL, '_installed_payload') as inventory:
+            def command(work, name, code, arguments, **options):
+                self.assertEqual(name, 'observer-reconcile')
+                self.assertEqual(code, INSTALL._RECONCILE_RETAINED)
+                self.assertEqual(json.loads(arguments[3]), {'binding': binding})
+                self.assertEqual(options['descriptors'], (INSTALL._activation_lease_descriptor(lease),))
+                return json.dumps(result).encode()
+            with mock.patch.object(INSTALL, '_run', side_effect=command) as run:
+                self.assertEqual(INSTALL.reconcile_retained(prepared, binding=binding, lease=lease), result)
+                self.assertEqual(inventory.call_count, 2)
+                self.assertTrue(prepared.used)
+                with self.assertRaises(INSTALL.SentinelInstallError):
+                    INSTALL.enroll_observer(prepared, result['retainedRollback'], binding=binding,
+                                            lease=lease, ready=lambda *_: None)
+                with self.assertRaises(INSTALL.SentinelInstallError):
+                    INSTALL.reconcile_retained(prepared, binding=binding, lease=lease)
+                self.assertEqual(run.call_count, 1)
+
+    def test_failed_or_crossed_reconciliation_cannot_supply_live_return_authority(self):
+        prepared, path, observed = self.installed_observation_fixture()
+        binding = self.retained_binding()
+        result = self.reconciled_result(binding)
+        result['retainedRollback']['binding'] = self.retained_binding()
+        with INSTALL.activation_lease() as lease, mock.patch.object(INSTALL, '_installed_payload'), \
+                mock.patch.object(INSTALL, '_run', return_value=json.dumps(result).encode()):
+            with self.assertRaises(INSTALL.SentinelInstallError):
+                INSTALL.reconcile_retained(prepared, binding=binding, lease=lease)
+        self.assertFalse(prepared.used)
+        self.assertNotIn(prepared, INSTALL._RETENTIONS)
+        self.assertNotIn(prepared, INSTALL._OBSERVERS)
+
+    def test_confirmed_returned_observer_is_observed_without_replaying_return(self):
+        prepared, path, observed = self.installed_observation_fixture()
+        binding = self.retained_binding()
+        result = self.reconciled_result(binding, phase='returned')
+        with INSTALL.activation_lease() as lease, mock.patch.object(INSTALL, '_installed_payload'), \
+                mock.patch.object(INSTALL, '_run', return_value=json.dumps(result).encode()) as run:
+            INSTALL.reconcile_retained(prepared, binding=binding, lease=lease)
+            with self.assertRaises(INSTALL.SentinelInstallError):
+                INSTALL.return_observer(prepared, result['retainedRollback'], result['observer']['ticket'],
+                                        binding=binding, lease=lease)
+            self.assertEqual(run.call_count, 1)
+
+    def test_observer_enrollment_and_return_bind_the_retained_activation_and_real_lease(self):
+        self.lease_state();prepared=self.observer_preparation();binding=self.retained_binding()
+        retained=self.retained_activation(prepared,binding)['retainedRollback']
+        ticket=self.observer_ticket(retained)
+        calls=[]
+        ready=mock.Mock()
+        with INSTALL.activation_lease() as lease:
+            def command(work,name,code,arguments,**options):
+                descriptor=INSTALL._activation_lease_descriptor(lease)
+                self.assertEqual(options['descriptors'],(descriptor,))
+                self.assertEqual(arguments[-1],str(descriptor))
+                self.assertEqual(json.loads(arguments[2]),self.release)
+                self.assertEqual(json.loads(arguments[3]),retained)
+                self.assertEqual(code,INSTALL._OBSERVER_COMMAND)
+                calls.append((name,work))
+                if name=='observer-prepare':
+                    ready.assert_not_called()
+                    return json.dumps({'ticket':ticket,'profile':self.observer_profile(),'prepared':True}).encode()
+                if name=='observer-activate':
+                    ready.assert_called_once_with(self.observer_profile(),ticket)
+                    return json.dumps({'ticket':ticket,'profile':self.observer_profile(),'enrolled':True}).encode()
+                self.assertEqual(name,'observer-return');self.assertEqual(json.loads(arguments[4]),ticket)
+                return json.dumps({'ticket':ticket,'profile':None,'restored':True}).encode()
+            with mock.patch.object(INSTALL,'_run',side_effect=command):
+                result=INSTALL.enroll_observer(prepared,retained,binding=binding,lease=lease,ready=ready)
+                self.assertTrue(result['enrolled'])
+                self.assertTrue(INSTALL.return_observer(prepared,retained,ticket,binding=binding,lease=lease)['restored'])
+                for action in ('enroll','return'):
+                    with self.assertRaises(INSTALL.SentinelInstallError):
+                        if action=='enroll':INSTALL.enroll_observer(prepared,retained,binding=binding,lease=lease,ready=ready)
+                        else:INSTALL.return_observer(prepared,retained,ticket,binding=binding,lease=lease)
+            self.assertEqual(len(calls),3);self.assertEqual(len({call[1] for call in calls}),3);lease.verify()
+
+    def test_observer_changes_refuse_unretained_preparation_fake_lease_and_wrong_binding(self):
+        self.lease_state();prepared=self.observer_preparation();binding=self.retained_binding()
+        retained=self.retained_ticket(binding)
+        with INSTALL.activation_lease() as lease,mock.patch.object(INSTALL,'_run') as run:
+            with self.assertRaises(INSTALL.SentinelInstallError):
+                INSTALL.enroll_observer(prepared,retained,binding=binding,lease=lease)
+            run.assert_not_called()
+        self.retained_activation(prepared,binding)
+        with mock.patch.object(INSTALL,'_run') as run:
+            with self.assertRaises(INSTALL.SentinelInstallError):
+                INSTALL.enroll_observer(prepared,retained,binding=binding,lease=INSTALL.ActivationLease())
+            with INSTALL.activation_lease() as lease:
+                with self.assertRaises(INSTALL.SentinelInstallError):
+                    INSTALL.enroll_observer(prepared,retained,binding=self.retained_binding(),lease=lease)
+                with self.assertRaisesRegex(INSTALL.SentinelInstallError,'independent update progress'):
+                    INSTALL.enroll_observer(prepared,retained,binding=binding,lease=lease)
+            run.assert_not_called()
+
+    def test_progress_start_failure_returns_prepared_profile_without_activating_collector(self):
+        self.lease_state();prepared=self.observer_preparation();binding=self.retained_binding()
+        retained=self.retained_activation(prepared,binding)['retainedRollback'];ticket=self.observer_ticket(retained)
+        ready=mock.Mock(side_effect=RuntimeError('progress listener unavailable'))
+        calls=[]
+        def command(work,name,code,arguments,**options):
+            calls.append(name)
+            if name=='observer-prepare':
+                return json.dumps({'ticket':ticket,'profile':self.observer_profile(),'prepared':True}).encode()
+            self.assertEqual(name,'observer-return')
+            return json.dumps({'ticket':ticket,'profile':None,'restored':True}).encode()
+        with INSTALL.activation_lease() as lease,mock.patch.object(INSTALL,'_run',side_effect=command):
+            with self.assertRaises(RuntimeError):
+                INSTALL.enroll_observer(prepared,retained,binding=binding,lease=lease,ready=ready)
+            ready.assert_called_once_with(self.observer_profile(),ticket)
+            self.assertTrue(INSTALL.return_observer(prepared,retained,ticket,binding=binding,lease=lease)['restored'])
+        self.assertEqual(calls,['observer-prepare','observer-return'])
+
+    def test_lost_observer_reply_cannot_replay_and_preserves_attempt_directory(self):
+        self.lease_state();prepared=self.observer_preparation();binding=self.retained_binding()
+        retained=self.retained_activation(prepared,binding)['retainedRollback']
+        with INSTALL.activation_lease() as lease,mock.patch.object(INSTALL,'_run',side_effect=RuntimeError('lost reply')) as run:
+            with self.assertRaises(RuntimeError):INSTALL.enroll_observer(prepared,retained,binding=binding,lease=lease,ready=lambda *_:None)
+            with self.assertRaises(INSTALL.SentinelInstallError):INSTALL.enroll_observer(prepared,retained,binding=binding,lease=lease,ready=lambda *_:None)
+            self.assertEqual(run.call_count,1)
+        self.assertEqual(len(list(prepared.work.glob('observer-prepare-*'))),1)
+
+    def test_missing_or_ambiguous_observer_protocol_stops_before_child_dispatch(self):
+        bodies=(b"ACTIVATION_LEASE_PROTOCOL='orbis-sentinel.activation-lease.v1'\n",
+                b"ACTIVATION_LEASE_PROTOCOL='orbis-sentinel.activation-lease.v1'\nOBSERVER_CHANGE_PROTOCOL='other'\n",
+                b"ACTIVATION_LEASE_PROTOCOL='orbis-sentinel.activation-lease.v1'\nOBSERVER_CHANGE_PROTOCOL='orbis-sentinel.observer-change.v1'\nOBSERVER_CHANGE_PROTOCOL='other'\n")
+        for body in bodies:
+            prepared=self.lease_preparation(body)
+            with mock.patch.object(INSTALL,'_run') as run,self.assertRaises(INSTALL.SentinelInstallError):
+                INSTALL.observer_profile_spec(prepared)
+            run.assert_not_called();self.assertFalse(prepared.used)
+
+    def test_observer_child_binds_installed_candidate_before_api_dispatch(self):
+        state=self.root/'child-state';state.mkdir(mode=0o700)
+        toolkit=self.root/'observer-toolkit.py';effect=self.root/'effect'
+        toolkit.write_text("ACTIVATION_LEASE_PROTOCOL='orbis-sentinel.activation-lease.v1'\n"
+            "OBSERVER_CHANGE_PROTOCOL='orbis-sentinel.observer-change.v1'\n"
+            "from pathlib import Path\nimport json\nSTATE=Path(__file__).parent/'child-state'\n"
+            "class RecoveryRequired(ValueError): pass\n"
+            "class _Parent:\n def __init__(self,path): self.path=path\n def close(self): pass\n"
+            "def _read(parent,name,mode): return (parent.path/name).read_bytes()\n"
+            "def _json(body): return json.loads(body)\n"
+            "def prepare_observer_profile(ticket,**options):\n Path(__file__).with_name('effect').write_text('called')\n return {'prepared':True}\n")
+        retained=self.retained_ticket(self.retained_binding())
+        command=[os.sys.executable,'-I','-B','-c',INSTALL._OBSERVER_COMMAND,str(toolkit),'prepare',
+                 json.dumps(self.release),json.dumps(retained),'null','3']
+        def run():return subprocess.run(command,cwd=self.root,stdin=subprocess.DEVNULL,capture_output=True,timeout=10)
+        (state/'installed.json').write_text(json.dumps({**self.release,'version':'9.9.9'}))
+        self.assertNotEqual(run().returncode,0);self.assertFalse(effect.exists())
+        (state/'installed.json').write_text(json.dumps(self.release))
+        result=run();self.assertEqual(result.returncode,0,result.stderr.decode());self.assertTrue(effect.exists())
+
+    def test_fake_raw_or_unretained_lease_never_consumes_preparation(self):
+        self.lease_state()
+        prepared = self.lease_preparation()
+        with mock.patch.object(INSTALL, '_run') as run:
+            for lease in (INSTALL.ActivationLease(), {}, 3, object()):
+                with self.subTest(lease=type(lease)), self.assertRaises(INSTALL.SentinelInstallError):
+                    INSTALL.activate(prepared, retain=self.retained_binding(), lease=lease)
+            with INSTALL.activation_lease() as lease:
+                with self.assertRaises(INSTALL.SentinelInstallError):
+                    INSTALL.activate(prepared, lease=lease)
+            run.assert_not_called()
+        self.assertFalse(prepared.used)
 
     def retained_ticket(self, binding):
         return {'schema': 'orbis-sentinel.upgrade-retention-ticket.v1', 'activationId': '4' * 32,

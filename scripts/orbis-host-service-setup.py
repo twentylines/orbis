@@ -34,6 +34,7 @@ SERVICE = load_script("orbis-host-service.py", "orbis_host_service_for_setup")
 HOST = SERVICE.HOST
 PLAN = SERVICE.PLAN
 SCRIPTS = (
+    "orbis-host-upgrade-target.py",
     "migration-preflight.py",
     "orbis-release-plan.py",
     "orbis-release-policy.py",
@@ -148,6 +149,13 @@ SCRIPTS = (
     "orbis-host-core-capture-progress.py",
     "orbis-host-packages.py",
     "orbis-host-package-worker.py",
+    "orbis-host-upgrade-launcher.py",
+    "orbis-host-upgrade-supervision.py",
+    "orbis-host-upgrade-runner.py",
+    "install-orbis.py",
+    "orbis-host-service-setup.py",
+    "orbis-host-service-upgrade.py",
+    "orbis-host-observer-profile.py",
     "orbis-host-telemetry.py",
     "orbis-host-processes.py",
     "orbis-host-sensors.py",
@@ -209,6 +217,10 @@ def systemd_quote(value: str) -> str:
 
 
 def source_files(source: Path) -> tuple[list[Path], Path]:
+    if (type(SCRIPTS) is not tuple or not 1 <= len(SCRIPTS) <= 128
+            or any(type(name) is not str or not re.fullmatch(r'(?:[a-z-]+\.py|orbis-[a-z-]+\.mjs)', name) for name in SCRIPTS)
+            or len(set(SCRIPTS)) != len(SCRIPTS)):
+        raise ValueError('Host source script inventory is invalid')
     if source.is_symlink() or not source.is_dir():
         raise ValueError("source scripts directory must be a real directory")
     files = [source / name for name in SCRIPTS]
@@ -222,13 +234,25 @@ def source_files(source: Path) -> tuple[list[Path], Path]:
 class _SetupSources:
     """Hold the reviewed copy inputs; this is custody, not publisher authority."""
 
-    def __init__(self, files: list[Path], unit: Path):
+    def __init__(self, files: list[Path], unit: Path, *, drivers=()):
         self.directories = {}
         self.files = {}
         self.descriptors = []
         try:
             if not 1 <= len(files) <= 128 or len({file.name for file in files}) != len(files) or unit in files:
                 raise ValueError("host service source inventory is invalid")
+            allowed_drivers = {'orbis-host-service-setup.py', 'orbis-host-service-enable.py',
+                               'orbis-host-service-upgrade.py'}
+            if (type(drivers) not in (tuple, list) or len(drivers) > len(allowed_drivers)
+                    or any(not isinstance(path, Path) or path.name not in allowed_drivers
+                           or path.parent != files[0].parent for path in drivers)
+                    or len(set(drivers)) != len(drivers)):
+                raise ValueError('Host source driver inventory is invalid')
+            # Installer-only drivers are separately bounded; they do not use
+            # installed Host-script membership. Shared inputs are pinned once.
+            files = list(dict.fromkeys([*files, *drivers]))
+            if len({file.name for file in files}) != len(files) or unit in files:
+                raise ValueError('Host source inputs have conflicting identities')
             total = 0
             for path in [*files, unit]:
                 if not path.is_absolute() or ".." in path.parts:
@@ -348,13 +372,11 @@ def hold_source_selection(source, expected):
                 "launcherSha256": observed[boot.SOURCE_LAUNCHER]["sha256"], "channel": selection["channel"]}:
             raise ValueError("Installer execution receipt differs from the exact selection")
         identity = selection["installer"]
+        manifest, files = boot.verify_source_package(proof_bytes[boot.MANIFEST], identity,
+            proof_bytes[boot.ARCHIVE], mode=selection['mode'])
         if selection["mode"] == "release":
-            manifest = boot.verify_manifest(proof_bytes[boot.MANIFEST], identity)
             if _hash(proof_bytes["release-manifest.json"]) != manifest["releaseManifestSha256"]:
                 raise ValueError("Core manifest differs from the release-bound selection")
-        else:
-            manifest = boot.verify_installer_manifest(proof_bytes[boot.MANIFEST], identity)
-        files = boot.verify_files(proof_bytes[boot.ARCHIVE], manifest)
         if proof_bytes[boot.SOURCE_LAUNCHER] != boot._render_installer(
                 selection["mode"], identity, files["scripts/install-orbis.py"]):
             raise ValueError("Installer launcher differs from the verified template")
@@ -625,9 +647,10 @@ def _stage_service_files(root: Path, context: str, source: Path, *, resume: bool
     if type(credentials_only) is not bool:
         raise ValueError('Host service role must be explicit')
     files, unit = source_files(source)
-    checked_files = files if expected_sources is None and source_custody is None else [
-        *files, source / "orbis-host-service-setup.py", source / "orbis-host-service-enable.py"]
-    with hold_source_selection(source, source_custody) as selection, _SetupSources(checked_files, unit) as inputs:
+    drivers = [] if expected_sources is None and source_custody is None else [
+        source / "orbis-host-service-setup.py", source / "orbis-host-service-enable.py"]
+    checked_files = list(dict.fromkeys([*files, *drivers]))
+    with hold_source_selection(source, source_custody) as selection, _SetupSources(files, unit, drivers=drivers) as inputs:
         require_role_unit(inputs.body(unit), credentials_only=credentials_only)
         if expected_sources is not None:
             actual = {str(path.relative_to(source.parent)): _hash(inputs.body(path)) for path in [*checked_files, unit]}

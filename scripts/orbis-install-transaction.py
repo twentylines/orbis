@@ -7,8 +7,10 @@ storage and the original containers, running states and restart policies.
 """
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -26,6 +28,8 @@ APPS = STORAGE.APPS
 SCHEMA = "orbis.installation-transaction.v1"
 STAGES = {"prepared", "quiescing", "snapshotting", "ready", "recovering", "restoring", "starting", "recovered"}
 NO_BACKUP_SCHEMA = "orbis.controller-update-handoff.v1"
+RUNTIPI_CONFIGURATION_SCHEMA = "orbis.update-runtipi-configuration.v1"
+RUNTIPI_CONFIGURATION_FILES = frozenset({".env", "VERSION", "orbis-compose.yml"})
 NO_RESTART = {"Name": "no", "MaximumRetryCount": 0}
 
 
@@ -226,6 +230,114 @@ def read_record(path: Path, root: Path, reader) -> dict:
     if value["root"] != str(root) or value["dockerContext"] != reader.context or private_paths(root, value["storage"], path) != Path(value["journal"]):
         raise TransactionError("The installation journal belongs to another root or Docker context")
     return record
+
+
+def _runtipi_configuration_record(root, record, path, current, target, binding, compatibility):
+    """Derive the approved file set from the already sealed root backup."""
+    plan = APPS.HOST.PLAN
+    current, target = plan.validate_manifest(current), plan.require_installation_protocol(target)
+    fields = {"operationId", "approvedReviewSha256", "sourceReceiptSha256", "targetReceiptSha256"}
+    if type(binding) is not dict or set(binding) != fields or type(compatibility) is not dict:
+        raise TransactionError("The Runtipi configuration operation binding is invalid")
+    try:
+        operation = uuid.UUID(binding["operationId"])
+        checkpoint_id = uuid.UUID(record["id"])
+    except (ValueError, TypeError, AttributeError, KeyError):
+        raise TransactionError("The Runtipi configuration operation binding is invalid") from None
+    if (operation.version != 4 or str(operation) != binding["operationId"]
+            or checkpoint_id.version != 4 or str(checkpoint_id) != record["id"]
+            or any(type(binding[name]) is not str or not re.fullmatch(r"[a-f0-9]{64}", binding[name])
+                   for name in fields - {"operationId"})
+            or binding["approvedReviewSha256"] != APPS.digest(compatibility)):
+        raise TransactionError("The Runtipi configuration review does not match this operation")
+
+    checkpoint = record["review"]
+    storage = checkpoint["storage"]
+    snapshot = Path(storage["bundle"])
+    if (checkpoint.get("backupPolicy") == "none" or not record.get("backupFingerprint")
+            or snapshot.name != f"orbis-{target['tag']}-{operation}"
+            or path != snapshot.with_name(snapshot.name + ".checkpoint.json")):
+        raise TransactionError("Runtipi configuration requires this operation's verified backup")
+    backup = STORAGE.verified_manifest(snapshot)
+    if backup["plan"] != storage or APPS.digest(backup) != record["backupFingerprint"]:
+        raise TransactionError("The Runtipi configuration backup no longer matches the checkpoint")
+    retained = compatibility.get("retainedFileSha256")
+    allowed = set(APPS.HOST.AUTHORITY.CONFIG_PATHS) | {"VERSION"}
+    if (type(retained) is not dict or not (RUNTIPI_CONFIGURATION_FILES | {"docker-compose.yml"}) <= retained.keys() <= allowed
+            or any(type(value) is not str or not re.fullmatch(r"[a-f0-9]{64}", value) for value in retained.values())
+            or compatibility.get("currentTag") != current["tag"] or compatibility.get("currentDigest") != current["digest"]
+            or compatibility.get("targetTag") != target["tag"] or compatibility.get("targetDigest") != target["digest"]):
+        raise TransactionError("The reviewed Runtipi files or releases do not match the approved change")
+    indexes = [index for index, resource in enumerate(storage["resources"])
+               if resource["kind"] == "directory" and resource["source"] == str(root)]
+    if len(indexes) != 1:
+        raise TransactionError("The Runtipi configuration backup must contain the retained installation root")
+    copy = snapshot / f"resource-{indexes[0]:04d}"
+    before = {name: plan.read_review_file(copy / name) for name in retained}
+    sha = lambda body: hashlib.sha256(body).hexdigest()
+    if {name: sha(body) for name, body in before.items()} != retained:
+        raise TransactionError("The backed-up configuration differs from the approved Runtipi review")
+    after, _ = plan.configuration_412(current, target, before[".env"], before["VERSION"])
+    override = plan.override_412(target)
+    if ({name: sha(body) for name, body in after.items()} != compatibility.get("prospectiveFileSha256")
+            or sha(override.encode()) != compatibility.get("prospectiveOverrideSha256")):
+        raise TransactionError("The target Runtipi configuration differs from the approved review")
+    after["orbis-compose.yml"] = (APPS.HOST.STAGE.HEADER + override).encode()
+    receipt = {
+        "schema": RUNTIPI_CONFIGURATION_SCHEMA, "binding": dict(binding),
+        "checkpointId": record["id"], "backupFingerprint": record["backupFingerprint"],
+        "sourceManifestSha256": APPS.digest(current), "targetManifestSha256": APPS.digest(target),
+        "compatibility": compatibility, "stagedFileSha256": {name: sha(body) for name, body in after.items()},
+    }
+    states = {}
+    for name in sorted(allowed):
+        file = root / name
+        if name not in before:
+            if os.path.lexists(file):
+                raise TransactionError("An unreviewed configuration file appeared during the Runtipi change")
+            continue
+        actual = plan.read_review_file(file)
+        if actual == before[name]:
+            if name in after:
+                states[name] = "source"
+        elif name in after and actual == after[name]:
+            states[name] = "target"
+        else:
+            raise TransactionError("A configuration file differs from both approved Runtipi states")
+    return receipt, states
+
+
+def prepare_runtipi_configuration(root, reader, path, current, target, binding):
+    """Record the reviewed 4.12 file pair after the enclosing producer seals its backup."""
+    record = read_record(path, root, reader)
+    if record["stage"] != "ready":
+        raise TransactionError("Runtipi configuration preparation requires a completed stopped checkpoint")
+    compatibility = APPS.HOST.PLAN.review_412(root, current, target)
+    receipt, states = _runtipi_configuration_record(root, record, path, current, target, binding, compatibility)
+    if any(state != "source" for state in states.values()):
+        raise TransactionError("Runtipi configuration staging has already started")
+    STORAGE.require_quiet_existing(root, reader, record["review"]["storage"])
+    previous = record.get("runtipiConfiguration")
+    if previous is not None and previous != receipt:
+        raise TransactionError("Another Runtipi configuration preparation already owns this checkpoint")
+    if previous is None:
+        if read_record(path, root, reader) != record:
+            raise TransactionError("The Runtipi checkpoint changed during preparation")
+        record["runtipiConfiguration"] = receipt
+        save(record)
+    return receipt
+
+
+def runtipi_configuration_recovery_state(root, reader, path, current, target, binding):
+    """Verify exact source/target file bytes before the producer restores its backup."""
+    record = read_record(path, root, reader)
+    saved = record.get("runtipiConfiguration")
+    if record["stage"] not in {"ready", "recovering", "restoring", "starting"} or type(saved) is not dict:
+        raise TransactionError("No active Runtipi configuration preparation is available")
+    receipt, states = _runtipi_configuration_record(root, record, path, current, target, binding, saved.get("compatibility"))
+    if saved != receipt:
+        raise TransactionError("The saved Runtipi configuration preparation has changed")
+    return states
 
 
 def recover(root: Path, reader, path: Path, *, host_writers_stopped: bool, before_controller_start=None, before_originals_start=None) -> dict:

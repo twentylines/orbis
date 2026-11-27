@@ -86,7 +86,13 @@ REQUIRED |= {
 }
 
 REQUIRED |= {"scripts/orbis-sentinel-install.py"}
-REQUIRED_V5 = REQUIRED | {"scripts/orbis-host-docker-socket-recovery.py"}
+REQUIRED_V5 = REQUIRED | {"scripts/orbis-host-docker-socket-recovery.py",
+    "scripts/orbis-host-upgrade-launcher.py", "scripts/orbis-host-upgrade-supervision.py",
+    "scripts/orbis-host-upgrade-target.py", "scripts/orbis-host-service-setup.py",
+    "scripts/orbis-host-service.py", "scripts/orbis-host-service-upgrade.py"}
+SOURCE_CUSTODY_REQUIRED = frozenset({'scripts/install-orbis.py', 'scripts/orbis-install.py',
+    'scripts/orbis-host-service-setup.py', 'scripts/orbis-host-service.py', 'scripts/orbis-host-service-upgrade.py',
+    'scripts/orbis-sentinel-install.py', 'packaging/systemd/orbis-host.service'})
 FILE_LIMITS = {"orbis.installer-bundle.v1": 66, "orbis.installer-bundle.v2": 66,
                "orbis.installer-bundle.v3": 128, "orbis.installer-bundle.v4": 128,
                "orbis.installer-bundle.v5": 160, "orbis.installer-bundle.v6": 160}
@@ -221,6 +227,61 @@ def verify_files_manifest(value, required=None):
         total += record["size"]
     if total > 8 * 1024 * 1024:
         raise ValueError("Installer files exceed their total size limit")
+
+
+def source_requirements(template, schema):
+    """Read the embedded reader's closed requirement sets without executing it."""
+    import ast
+    names = {'REQUIRED', 'LEGACY_REQUIRED', 'REQUIRED_V5'}
+    values = {}
+    def evaluate(node):
+        if isinstance(node, ast.Set):
+            value = ast.literal_eval(node)
+        elif isinstance(node, ast.Name) and node.id in values:
+            value = set(values[node.id])
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+            value = evaluate(node.left) | evaluate(node.right)
+        elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'frozenset'
+              and len(node.args) == 1 and not node.keywords):
+            value = evaluate(node.args[0])
+        else:
+            raise ValueError('Unsupported embedded installer requirement declaration')
+        if type(value) is not set or not value or any(type(name) is not str or not ALLOWED.fullmatch(name) for name in value):
+            raise ValueError('Invalid embedded installer requirements')
+        return value
+    for node in ast.parse(template).body:
+        if isinstance(node, ast.Assign) and any(isinstance(item, ast.Name) and item.id in names for item in node.targets):
+            if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name) or node.targets[0].id in values:
+                raise ValueError('Ambiguous embedded installer requirements')
+            values[node.targets[0].id] = evaluate(node.value)
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)) and isinstance(node.target, ast.Name) and node.target.id in names:
+            if not isinstance(node, ast.AugAssign) or not isinstance(node.op, ast.BitOr) or node.target.id not in values:
+                raise ValueError('Ambiguous embedded installer requirements')
+            values[node.target.id] |= evaluate(node.value)
+    selected = ('LEGACY_REQUIRED' if schema in {'orbis.installer-bundle.v1', 'orbis.installer-bundle.v2'} else
+                'REQUIRED_V5' if schema in {'orbis.installer-bundle.v5', 'orbis.installer-bundle.v6'} else 'REQUIRED')
+    required = values.get(selected)
+    if (schema not in FILE_LIMITS or required is None
+            or len(required) > FILE_LIMITS[schema]):
+        raise ValueError('Embedded installer requirements do not preserve their format contract')
+    return required
+
+
+def verify_source_package(data, identity, archive, *, mode='release'):
+    """Validate source custody against its own reader and fixed source inputs.
+
+    This grants no execution or publisher authority. The caller separately
+    authenticates source publication or holds an actual executed selection.
+    Default download/manifest verification keeps its current requirements.
+    """
+    if mode not in ('release', 'modular'):
+        raise ValueError('Unsupported source selection mode')
+    verify = verify_manifest if mode == 'release' else verify_installer_manifest
+    initial = verify(data, identity, required=SOURCE_CUSTODY_REQUIRED)
+    files = verify_files(archive, initial)
+    required = source_requirements(files['scripts/install-orbis.py'], initial['schema'])
+    manifest = verify(data, identity, required=required | SOURCE_CUSTODY_REQUIRED)
+    return manifest, files
 
 
 def verify_manifest(data, identity, *, required=None):

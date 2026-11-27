@@ -2,6 +2,7 @@ import copy
 import importlib.util
 import json
 import os
+import shutil
 import tempfile
 import subprocess
 import sys
@@ -149,6 +150,98 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(self.docker.calls, [])
         with self.assertRaises(TX.TransactionError):
             TX.review(self.root, self.docker, self.bundle, self.journal, backup=False)
+
+    def runtipi_configuration_fixture(self):
+        plan = TX.APPS.HOST.PLAN
+        current = {"schema": "orbis.release.v1", "image": plan.IMAGE, "tag": "v0.9.1",
+                   "commit": "a" * 40, "digest": "sha256:" + "b" * 64, "runtipiCompatibility": "4.10.1",
+                   "installationProtocol": plan.INSTALLATION_PROTOCOL}
+        target = {**current, "tag": "v0.9.2-rc.1", "commit": "c" * 40, "digest": "sha256:" + "d" * 64,
+                  "runtipiCompatibility": "4.12.0"}
+        operation = "00000000-0000-4000-8000-000000000001"
+        self.bundle = self.private / f"orbis-{target['tag']}-{operation}"
+        self.journal = self.bundle.with_name(self.bundle.name + ".checkpoint.json")
+        for folder in plan.PREFLIGHT.DATA_PATHS:
+            (self.root / folder).mkdir(exist_ok=True)
+        (self.root / "data/postgres").mkdir(parents=True)
+        (self.root / "docker-compose.yml").write_text(json.dumps({"services": {
+            "runtipi": {"image": "example/placeholder:1", "env_file": [".env"], "volumes": ["./.env:/data/.env"]},
+            "runtipi-db": {"image": "postgres:14", "volumes": ["./data/postgres:/var/lib/postgresql/data"]},
+            "runtipi-queue": {"image": "rabbitmq:4-alpine"},
+            "runtipi-reverse-proxy": {"image": "traefik:v3.6"},
+        }}))
+        (self.root / ".env").write_text(f"ROOT_FOLDER_HOST='{self.root}'\nTIPI_VERSION='4.10.1'\nEXAMPLE=synthetic-fixture-value\n")
+        (self.root / "VERSION").write_text("4.10.1\n")
+        (self.root / "orbis-compose.yml").write_text(TX.APPS.HOST.STAGE.staged_content(current))
+        approval = plan.review_412(self.root, current, target)
+        binding = {"operationId": operation, "approvedReviewSha256": TX.APPS.digest(approval),
+                   "sourceReceiptSha256": "e" * 64, "targetReceiptSha256": "f" * 64}
+        return current, target, binding
+
+    @unittest.skipUnless(shutil.which("docker"), "Docker Compose is unavailable")
+    def test_runtipi_pair_is_prepared_only_from_its_sealed_backup_and_reconciles_mixed_files(self):
+        current, target, binding = self.runtipi_configuration_fixture()
+        originals = {name: (self.root / name).read_bytes() for name in TX.RUNTIPI_CONFIGURATION_FILES}
+        reviewed = self.review()
+        TX.checkpoint(self.root, self.docker, reviewed, host_writers_stopped=True)
+        self.docker.calls.clear()
+        args = (self.root, self.docker, self.journal, current, target, binding)
+        receipt = TX.prepare_runtipi_configuration(*args)
+        self.assertEqual(TX.prepare_runtipi_configuration(*args), receipt)
+        self.assertEqual(TX.read_record(self.journal, self.root, self.docker)["runtipiConfiguration"], receipt)
+        self.assertNotIn("synthetic-fixture-value", self.journal.read_text())
+        self.assertEqual({name: (self.root / name).read_bytes() for name in originals}, originals)
+        self.assertEqual(self.docker.calls, [])
+        with self.assertRaisesRegex(TX.TransactionError, "has changed"):
+            TX.runtipi_configuration_recovery_state(*args[:-1], {**binding, "sourceReceiptSha256": "1" * 64})
+        (self.root / ".env").write_bytes(originals[".env"].replace(b"4.10.1", b"4.12.0"))
+        self.assertEqual(TX.runtipi_configuration_recovery_state(*args),
+                         {".env": "target", "VERSION": "source", "orbis-compose.yml": "source"})
+        (self.root / "VERSION").write_text("unreviewed\n")
+        with self.assertRaisesRegex(TX.TransactionError, "differs from both approved"):
+            TX.runtipi_configuration_recovery_state(*args)
+
+    @unittest.skipUnless(sys.platform == "linux" and shutil.which("docker"), "requires Linux rsync and Docker Compose")
+    def test_runtipi_configuration_is_back_to_source_before_original_writers_restart(self):
+        current, target, binding = self.runtipi_configuration_fixture()
+        originals = {name: (self.root / name).read_bytes() for name in TX.RUNTIPI_CONFIGURATION_FILES}
+        TX.checkpoint(self.root, self.docker, self.review(), host_writers_stopped=True)
+        args = (self.root, self.docker, self.journal, current, target, binding)
+        TX.prepare_runtipi_configuration(*args)
+        for name, body in TX.APPS.HOST.PLAN.configuration_412(current, target, originals[".env"], originals["VERSION"])[0].items():
+            (self.root / name).write_bytes(body)
+        override = TX.APPS.HOST.STAGE.HEADER + TX.APPS.HOST.PLAN.override_412(target)
+        (self.root / "orbis-compose.yml").write_text(override)
+        self.assertEqual(TX.runtipi_configuration_recovery_state(*args), {name: "target" for name in originals})
+
+        def verify_before_originals_start():
+            self.assertEqual(self.docker.controller_state, "exited")
+            self.assertEqual(TX.runtipi_configuration_recovery_state(*args), {name: "source" for name in originals})
+        TX.recover(self.root, self.docker, self.journal, host_writers_stopped=True,
+                   before_originals_start=verify_before_originals_start)
+        with self.assertRaisesRegex(TX.TransactionError, "No active"):
+            TX.runtipi_configuration_recovery_state(*args)
+        self.assertEqual({name: (self.root / name).read_bytes() for name in originals}, originals)
+
+    @unittest.skipUnless(shutil.which("docker"), "Docker Compose is unavailable")
+    def test_runtipi_pair_refuses_unready_or_different_operation_and_changed_backup(self):
+        current, target, binding = self.runtipi_configuration_fixture()
+        record = self.prepare()
+        args = (self.root, self.docker, self.journal, current, target, binding)
+        with self.assertRaisesRegex(TX.TransactionError, "completed stopped checkpoint"):
+            TX.prepare_runtipi_configuration(*args)
+        self.journal.unlink()
+        TX.checkpoint(self.root, self.docker, record["review"], host_writers_stopped=True)
+        self.docker.calls.clear()
+        other = {**binding, "operationId": "00000000-0000-4000-8000-000000000002"}
+        with self.assertRaisesRegex(TX.TransactionError, "this operation's verified backup"):
+            TX.prepare_runtipi_configuration(*args[:-1], other)
+        backup_root = self.bundle / "resource-0000"
+        (backup_root / "VERSION").write_text("4.12.0\n")
+        with self.assertRaises(ValueError):
+            TX.prepare_runtipi_configuration(*args)
+        self.assertEqual(self.docker.calls, [])
+        self.assertNotIn("runtipiConfiguration", TX.read_record(self.journal, self.root, self.docker))
 
     def test_incomplete_no_backup_handoff_is_not_ready_or_recoverable_as_a_backup(self):
         value = self.no_backup_review()

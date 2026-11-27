@@ -80,6 +80,9 @@ REQUIRED |= {"scripts/orbis-sentinel-install.py", "scripts/orbis-host-docker-soc
              "scripts/orbis-host-ownership-authority.py", "scripts/orbis-host-ownership-bootstrap.py",
              "scripts/orbis-host-existing-ownership.py",
              "scripts/orbis-host-legacy-ownership.py", "scripts/orbis-host-fresh-ownership.py"}
+REQUIRED |= {"scripts/orbis-host-upgrade-launcher.py", "scripts/orbis-host-upgrade-supervision.py", "scripts/orbis-host-upgrade-target.py",
+             "scripts/orbis-host-upgrade-runner.py"}
+REQUIRED |= {"scripts/orbis-host-service-setup.py", "scripts/orbis-host-service.py", "scripts/orbis-host-service-upgrade.py"}
 
 BUILD_ONLY = {"scripts/orbis-installer-bundle.py", "scripts/orbis-migration-fingerprint.py",
               "scripts/orbis-release-metadata.py", "scripts/orbis-release-watermark.py"}

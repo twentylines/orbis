@@ -37,6 +37,7 @@ BOOT = load("install-orbis.py", "orbis_guided_platform")
 PREREQUISITES = load("orbis-install-prerequisites.py", "orbis_guided_prerequisites")
 SENTINEL = load("orbis-sentinel-install.py", "orbis_guided_sentinel")
 OWNERSHIP = load("orbis-host-ownership-bootstrap.py", "orbis_guided_ownership_storage")
+UPGRADE_SOURCE_CHECK_PROTOCOL = 'orbis.component-upgrade-source-check.v1'
 
 
 DOCKER_INSTALL_HELP = "Install Docker Engine and the Docker Compose plugin first, then rerun this installer. For 64-bit Raspberry Pi OS or Debian: https://docs.docker.com/engine/install/debian/ ; for Ubuntu: https://docs.docker.com/engine/install/ubuntu/ . Automatic setup supports the local default Docker context on 64-bit Debian 12/13 and Ubuntu 22.04/24.04; other layouts need a separate review."
@@ -566,11 +567,40 @@ def update_existing(root, reader, target, display, *, without_host_service=False
         raise ValueError(f"Update {job_id} is still running. Follow it in Updates; do not start another update")
 
 
+def verify_upgrade_source(args, custody):
+    """A source-only acknowledgement after the genuine launcher continuation."""
+    SENTINEL.require_host()
+    if custody is None:
+        raise ValueError('Upgrade source checking requires genuine installer execution custody')
+    source = Path(__file__).resolve(strict=True).parent
+    setup = load('orbis-host-service-setup.py', 'orbis_source_check_setup')
+    with setup.hold_source_selection(source, custody) as selected:
+        if selected is None or selected['mode'] != 'release':
+            raise ValueError('Upgrade source checking requires a release-bound selection')
+        with setup.HOST.AUTHORITY.protected_directory(source.parent) as folder:
+            with setup.HOST.AUTHORITY.protected_file(folder, BOOT.SOURCE_SELECTION, 16384) as selection_body:
+                if hashlib.sha256(selection_body).hexdigest() != custody:
+                    raise ValueError('Upgrade source selection changed')
+                selected_channel = json.loads(selection_body)['channel']
+            with setup.HOST.AUTHORITY.protected_file(folder, 'release-manifest.json', 16384) as body:
+                core = HOST.PLAN.validate_manifest(json.loads(body))
+                if (hashlib.sha256(body).hexdigest() != selected['coreSha256']
+                        or selected['installer']['tag'] != core['tag']
+                        or selected['installer']['commit'] != core['commit']
+                        or args.channel != selected_channel):
+                    raise ValueError('Upgrade source differs from its executed selection')
+        print(json.dumps({'schema': UPGRADE_SOURCE_CHECK_PROTOCOL, 'selectionSha256': custody,
+            'executionSha256': selected['executionSha256'], 'coreSha256': selected['coreSha256'],
+            'core': core}, sort_keys=True))
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--installer-custody-sha256", help=argparse.SUPPRESS)
+    parser.add_argument('--verify-upgrade-source', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument("--docker-context", default="default")
     parser.add_argument("--root", type=Path)
     parser.add_argument("--mode", choices=("keep", "fresh"))
@@ -598,6 +628,8 @@ def main():
     custody_options = {"source_custody": custody} if custody is not None else {}
 
     BOOT.require_supported_host()
+    if args.verify_upgrade_source:
+        return verify_upgrade_source(args, custody)
     manifest = HOST.PLAN.require_installation_protocol(json.loads(args.manifest.read_text()))
     channel = args.channel or ("stable" if HOST.PLAN.POLICY.is_stable_release_tag(manifest["tag"]) else "nightly")
     if not HOST.PLAN.POLICY.release_allowed_on_channel(manifest["tag"], channel):

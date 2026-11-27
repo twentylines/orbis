@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const socketPath = '/run/orbis/host.sock';
+const upgradeProgressPath = '/run/orbis/upgrade-progress';
 const assets = '/app/assets/frontend';
 const states = new Set(['idle', 'restoring', 'updating', 'downgrading', 'recovery', 'checking']);
 const progressStates = new Set(['queued', 'running', 'recovering', 'complete', 'failed', 'interrupted']);
@@ -143,11 +144,14 @@ export function validateCoreUpdateProgress(value) {
   return value;
 }
 
-export async function coreProgressSocketIdentity(socket) {
+export async function coreProgressSocketIdentity(socket, observer = false) {
   const parent = path.dirname(socket);
   if (path.resolve(socket) !== socket || (await fs.realpath(parent)) !== parent) throw new Error('Unavailable');
   const directory = await fs.lstat(parent, { bigint: true });
   const endpoint = await fs.lstat(socket, { bigint: true });
+  const permittedMode = observer
+    ? (directory.mode & 0o777n) === 0o700n && (endpoint.mode & 0o777n) === 0o660n && endpoint.gid > 0n
+    : (endpoint.mode & 0o077n) === 0n;
   if (
     !directory.isDirectory() ||
     directory.uid !== 0n ||
@@ -155,7 +159,7 @@ export async function coreProgressSocketIdentity(socket) {
     !endpoint.isSocket() ||
     endpoint.uid !== 0n ||
     endpoint.nlink !== 1n ||
-    endpoint.mode & 0o077n
+    !permittedMode
   )
     throw new Error('Unavailable');
   return [directory, endpoint].map((stat) => [stat.dev, stat.ino, stat.uid, stat.gid, stat.mode, stat.ctimeNs].join(':')).join('/');
@@ -190,6 +194,38 @@ export async function readRootCoreProgress(options = {}) {
   });
   if ((await identity(socket)) !== before) throw new Error('Unavailable');
   return validateCoreUpdateProgress(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
+}
+
+function progressBinding(value) {
+  if (value === undefined) return null;
+  const parts =
+    typeof value === 'string' &&
+    value.match(
+      /^([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}):(v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?):([a-f0-9]{64})$/,
+    );
+  if (!parts || parts[0] !== value || parts[2].length > 100) throw new Error('Unavailable');
+  return { id: parts[1], targetTag: parts[2], socket: path.join(upgradeProgressPath, `${parts[3]}.sock`) };
+}
+
+async function readBoundCoreProgress(binding, hostProgress, workerProgress) {
+  const match = (value) => {
+    const progress = validateCoreUpdateProgress(value);
+    if (progress.job?.id !== binding.id || progress.job.targetTag !== binding.targetTag) throw new Error('Unavailable');
+    return progress;
+  };
+  try {
+    return match(await hostProgress({ deadlineMs: 650 }));
+  } catch {
+    const progress = match(
+      await workerProgress({
+        socket: binding.socket,
+        identity: (socket) => coreProgressSocketIdentity(socket, true),
+        deadlineMs: 1200,
+      }),
+    );
+    if (!['queued', 'running', 'recovering', 'interrupted'].includes(progress.job.state)) throw new Error('Unavailable');
+    return progress;
+  }
 }
 const types = {
   '.html': 'text/html; charset=utf-8',
@@ -332,6 +368,9 @@ export function createMaintenanceServer(options = {}) {
   const read = options.readState ?? maintenanceState;
   const directory = options.assets ?? assets;
   const forward = options.proxy ?? proxyToOrbis;
+  const binding = progressBinding(options.coreProgressBinding);
+  const hostProgress = options.readProgress ?? readRootCoreProgress;
+  const workerProgress = options.readWorkerProgress ?? readRootCoreProgress;
   return http.createServer(async (request, response) => {
     try {
       const pathname = new URL(request.url, 'http://localhost').pathname;
@@ -356,7 +395,10 @@ export function createMaintenanceServer(options = {}) {
       if (/^\/api\/system\/core-update-progress\/?$/.test(pathname)) {
         if (request.method !== 'GET') return json(response, 405, { code: 'CORE_UPDATE_PROGRESS_UNAVAILABLE' });
         try {
-          return json(response, 200, validateCoreUpdateProgress(await (options.readProgress ?? readRootCoreProgress)()));
+          const progress = binding
+            ? await readBoundCoreProgress(binding, hostProgress, workerProgress)
+            : validateCoreUpdateProgress(await hostProgress());
+          return json(response, 200, progress);
         } catch {
           return json(response, 503, { code: 'CORE_UPDATE_PROGRESS_UNAVAILABLE' });
         }
@@ -391,7 +433,7 @@ export function createMaintenanceServer(options = {}) {
 }
 
 if (process.env.ORBIS_MAINTENANCE_RESPONDER === '1') {
-  const server = createMaintenanceServer();
+  const server = createMaintenanceServer({ coreProgressBinding: process.env.ORBIS_CORE_PROGRESS_BINDING });
   server.requestTimeout = 0;
   server.headersTimeout = 5000;
   server.maxHeadersCount = 64;

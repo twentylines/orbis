@@ -1,6 +1,7 @@
 """Prepare trusted Sentinel tooling and activate its independently signed package."""
 
 import argparse
+import ast
 import fcntl
 import hashlib
 import json
@@ -24,18 +25,23 @@ PYTHON = Path('/usr/bin/python3')
 INSTALLED_ROOT = Path('/opt/orbis-sentinel')
 INSTALLED_STATE = Path('/var/lib/orbis-sentinel')
 HOST_SOURCE_PLAN = 'orbis.host-source-publication-plan.v2'
-TOOLKIT_COMMIT = '6318c989eb060ae022ef9a631cd7fe5d40f882a9'
+TOOLKIT_COMMIT = '16b2aa6158ab38d961e0d3f6a2d489b702ab63e3'
 TOOLKIT = {
-    'activate_release.py': (45277, 'e3c5036f0b481b15c7d9954ffafe89a92edca49c29b3c0684b550d58d25543e6'),
+    'activate_release.py': (74274, '4441b23930193edf184756a6de12350a8aadff4685ecebe1792229ce9ab080a2'),
     'verify_release.py': (14462, '9461fb041d055bbae13cc3ce48f3daf09ff8835ceedb8a77c4bf15c237137629'),
     'stage_release.py': (23385, '4d4d52bfbfcc5891d6b1d17da9e14c7ff6c1559aa59e19db7aec5ae28adc50b2'),
     'bootstrap_verifier.py': (13977, '965002f855e940446951d27a2bd44a37043efa692d3e4ba56473bd5525de6e6c'),
     'LICENSE': (35149, '3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986'),
 }
-RELEASE = {'version': '0.1.0-dev.23', 'sha256': 'b6f019a135887d2725962f94d823fc43ce764e9e80f29da50859489f8f129518', 'sourceCommit': '6318c989eb060ae022ef9a631cd7fe5d40f882a9'}
+RELEASE = {'version': '0.1.0-dev.24', 'sha256': 'c9373a394c306524b2e37b76afa9eec42272507faf45657d7f46d1b9f8fb565f', 'sourceCommit': '16b2aa6158ab38d961e0d3f6a2d489b702ab63e3'}
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 _PREPARATIONS = weakref.WeakKeyDictionary()
 _RETENTIONS = weakref.WeakKeyDictionary()
+_LEASES = weakref.WeakKeyDictionary()
+_OBSERVERS = weakref.WeakKeyDictionary()
+_OBSERVER_ATTEMPTS = weakref.WeakKeyDictionary()
+ACTIVATION_LEASE_PROTOCOL = 'orbis-sentinel.activation-lease.v1'
+OBSERVER_CHANGE_PROTOCOL = 'orbis-sentinel.observer-change.v1'
 
 
 class SentinelInstallError(ValueError):
@@ -628,6 +634,109 @@ def _json(body):
     return json.loads(body, object_pairs_hook=pairs)
 
 
+class ActivationLease:
+    """Opaque live serialization lease, never package or operation authority."""
+    def verify(self):
+        _activation_lease_descriptor(self)
+
+
+def _activation_lease_descriptor(lease):
+    require_host()
+    registered = _LEASES.get(lease) if type(lease) is ActivationLease else None
+    if registered is None:
+        raise SentinelInstallError('The Sentinel activation lease is not held')
+    directory, namespace, descriptor, identity = registered
+    directory.check()
+    if (directory.path != INSTALLED_STATE or directory.identity() != namespace
+            or _seal(os.fstat(descriptor)) != identity
+            or _seal(os.stat('activation.lock', dir_fd=directory.fd, follow_symlinks=False)) != identity):
+        raise SentinelInstallError('The Sentinel activation lease changed')
+    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    directory.check()
+    if _seal(os.stat('activation.lock', dir_fd=directory.fd, follow_symlinks=False)) != identity:
+        raise SentinelInstallError('The Sentinel activation lease changed')
+    return descriptor
+
+
+@contextmanager
+def activation_lease():
+    """Hold the existing managed collector's normal update lock across stages.
+
+    No lock file or installation is created here. The caller must separately
+    establish its source, accepted operation and component effect authority.
+    """
+    require_host()
+    with Directory(INSTALLED_STATE, private=True) as directory:
+        descriptor = os.open('activation.lock', os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
+                             dir_fd=directory.fd)
+        lease = ActivationLease()
+        try:
+            info = os.fstat(descriptor)
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != OWNER or info.st_nlink != 1
+                    or stat.S_IMODE(info.st_mode) != 0o600):
+                raise SentinelInstallError('The Sentinel activation lock is untrusted')
+            _LEASES[lease] = (directory, directory.identity(), descriptor, _seal(info))
+            lease.verify()
+            yield lease
+            lease.verify()
+        finally:
+            _LEASES.pop(lease, None)
+            # Never LOCK_UN: a verified child may still hold the same open
+            # description after an interrupted reply. Closing is sufficient.
+            os.close(descriptor)
+
+
+def _require_toolkit_protocol(prepared, name, expected, failure):
+    require_host()
+    sealed = _PREPARATIONS.get(prepared) if type(prepared) is Prepared else None
+    if sealed is None and type(prepared) is Prepared:
+        retained = _RETENTIONS.get(prepared)
+        sealed = retained[0] if retained else None
+    try:
+        current = _preparation_identity(prepared) if sealed is not None else None
+    except (TypeError, KeyError, AttributeError):
+        raise SentinelInstallError('Prepared Sentinel identity changed') from None
+    if (sealed is None or current != sealed[0]
+            or sealed[1] and prepared.release != RELEASE):
+        raise SentinelInstallError('Prepared Sentinel identity changed')
+    with Directory(prepared.work, private=True) as directory:
+        if directory.identity() != prepared.identity:
+            raise SentinelInstallError('Prepared Sentinel namespace changed')
+        _check_files(prepared.files)
+        selected = [entry for entry in prepared.files if entry['path'] == prepared.work / 'toolkit/activate_release.py']
+        if len(selected) != 1:
+            raise SentinelInstallError('The verified Sentinel toolkit is missing')
+        entry = selected[0]
+        body = _file(entry['path'], entry['bytes'], entry['sha256'], mode=entry['mode'],
+                     expected=entry['identity'], read_body=True)
+        try:
+            syntax = ast.parse(body)
+        except SyntaxError:
+            raise SentinelInstallError('The verified Sentinel toolkit protocol is invalid') from None
+        declarations = [node for node in syntax.body if
+                        isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)) and
+                        any(isinstance(target, ast.Name) and target.id == name
+                            for target in (node.targets if isinstance(node, ast.Assign) else [node.target]))]
+        if (len(declarations) != 1 or not isinstance(declarations[0], ast.Assign)
+                or len(declarations[0].targets) != 1 or not isinstance(declarations[0].value, ast.Constant)
+                or declarations[0].value.value != expected):
+            raise SentinelInstallError(failure)
+        _check_files(prepared.files)
+        directory.check()
+
+
+def require_activation_lease_support(prepared):
+    """Check the authenticated toolkit before committing component intents."""
+    _require_toolkit_protocol(prepared, 'ACTIVATION_LEASE_PROTOCOL', ACTIVATION_LEASE_PROTOCOL,
+        'The verified Sentinel toolkit does not support coordinated activation leases')
+
+
+def require_observer_change_support(prepared):
+    require_activation_lease_support(prepared)
+    _require_toolkit_protocol(prepared, 'OBSERVER_CHANGE_PROTOCOL', OBSERVER_CHANGE_PROTOCOL,
+        'The verified Sentinel toolkit does not support managed observer changes')
+
+
 class Prepared:
     def __init__(self, work, identity, files, release, verifier):
         self.work, self.identity, self.files = work, identity, files
@@ -778,12 +887,18 @@ def _consume_preparation(prepared):
     return sealed
 
 
-def activate(prepared, *, retain=None):
+def activate(prepared, *, retain=None, lease=None):
     require_host()
     binding = _retention_binding(retain) if retain is not None else None
+    if lease is not None:
+        if binding is None:
+            raise SentinelInstallError('A coordinated Sentinel activation requires retained return custody')
+        _activation_lease_descriptor(lease)
+        require_activation_lease_support(prepared)
     sealed = _consume_preparation(prepared)
     with _observe_update(prepared.release['version'], 'installing', previous=getattr(prepared, 'progress', None)):
-        result = _activate_files(prepared, retain=binding) if binding is not None else _activate_files(prepared)
+        result = (_activate_files(prepared, retain=binding, lease=lease) if lease is not None else
+                  _activate_files(prepared, retain=binding) if binding is not None else _activate_files(prepared))
         if binding is not None:
             ticket = _retention_ticket(result.get('retainedRollback'), binding, activation_id=result.get('activationId'))
             if result.get('activationId') != ticket['activationId']:
@@ -799,6 +914,8 @@ sys.argv=sys.argv[1:]
 sys.path.insert(0,str(pathlib.Path(sys.argv[0]).parent))
 api=runpy.run_path(sys.argv[0])
 options=json.loads(sys.argv[1])
+if 'activation_lock_fd' in options and api.get('ACTIVATION_LEASE_PROTOCOL')!='orbis-sentinel.activation-lease.v1':
+    raise ValueError('The verified Sentinel toolkit lacks activation lease support')
 for key in ('artifact','bundle','workspace','verifier'):
     options[key]=pathlib.Path(options[key])
 print(json.dumps(api['activate_release'](**options),sort_keys=True))
@@ -823,12 +940,17 @@ candidate=record['activation']['candidate']
 if {key:candidate[key] for key in expected}!=expected:
     raise api['RecoveryRequired']('The verified preparation differs from the retained activation')
 previous={key:record['activation']['previous'][key] for key in expected}
-result=api['restore_retained'](ticket)
+lease={}
+if len(sys.argv)==4:
+    if api.get('ACTIVATION_LEASE_PROTOCOL')!='orbis-sentinel.activation-lease.v1':
+        raise ValueError('The verified Sentinel toolkit lacks activation lease support')
+    lease={'activation_lock_fd':int(sys.argv[3])}
+result=api['restore_retained'](ticket,**lease)
 print(json.dumps({**result,'previousRelease':previous},sort_keys=True))
 '''
 
 
-def _activate_files(prepared, *, retain=None):
+def _activate_files(prepared, *, retain=None, lease=None):
     with Directory(prepared.work, private=True) as directory:
         if directory.identity() != prepared.identity:
             raise SentinelInstallError('Prepared Sentinel namespace changed')
@@ -847,14 +969,19 @@ def _activate_files(prepared, *, retain=None):
                        'workspace': str(prepared.work / 'verification'), 'verifier': str(prepared.verifier),
                        'sha256': prepared.release['sha256'], 'version': prepared.release['version'],
                        'source_commit': prepared.release['sourceCommit'], 'retain': retain}
+            if lease is not None:
+                options['activation_lock_fd'] = _activation_lease_descriptor(lease)
             arguments = [prepared.work / 'toolkit' / 'activate_release.py', json.dumps(options)]
-        result = _json(_run(prepared.work, 'activate-sentinel', code, arguments, timeout=None))
+        descriptors = {'descriptors': (_activation_lease_descriptor(lease),)} if lease is not None else {}
+        result = _json(_run(prepared.work, 'activate-sentinel', code, arguments, timeout=None, **descriptors))
+        if lease is not None:
+            lease.verify()
         directory.check()
         _confirmed(result, prepared.release, activated=True)
         return result
 
 
-def restore_retained(prepared, ticket, *, binding):
+def restore_retained(prepared, ticket, *, binding, lease=None):
     """Use the verified toolkit's exact return API; never select a version here.
 
     The coordinator must separately hold its source and operation admission.
@@ -864,6 +991,9 @@ def restore_retained(prepared, ticket, *, binding):
     require_host()
     binding = _retention_binding(binding)
     ticket = _retention_ticket(ticket, binding)
+    if lease is not None:
+        _activation_lease_descriptor(lease)
+        require_activation_lease_support(prepared)
     retained = _RETENTIONS.get(prepared) if isinstance(prepared, Prepared) else None
     if retained is None:
         sealed = _consume_preparation(prepared)
@@ -889,8 +1019,15 @@ def restore_retained(prepared, ticket, *, binding):
             with Directory(attempt, private=True) as output:
                 for name in ('tmp', 'cache', 'config', 'state', 'data'):
                     output.mkdir(name)
-                result = _json(_run(attempt, 'restore-sentinel', _RESTORE_RETAINED,
-                    [prepared.work / 'toolkit' / 'activate_release.py', json.dumps(ticket), json.dumps(prepared.release)], timeout=None))
+                arguments = [prepared.work / 'toolkit' / 'activate_release.py', json.dumps(ticket), json.dumps(prepared.release)]
+                descriptors = {}
+                if lease is not None:
+                    descriptor = _activation_lease_descriptor(lease)
+                    arguments.append(str(descriptor))
+                    descriptors['descriptors'] = (descriptor,)
+                result = _json(_run(attempt, 'restore-sentinel', _RESTORE_RETAINED, arguments, timeout=None, **descriptors))
+                if lease is not None:
+                    lease.verify()
                 output.check()
             _check_files(prepared.files)
             directory.check()
@@ -904,6 +1041,420 @@ def restore_retained(prepared, ticket, *, binding):
         _RETENTIONS[prepared] = (sealed, ticket)
         _progress_phase('rolled-back')
         return result
+
+
+_OBSERVER_COMMAND = '''
+import hashlib,json,os,pathlib,runpy,sys
+tool,action,expected,retained,returned,descriptor=sys.argv[1:]
+sys.path.insert(0,str(pathlib.Path(tool).parent))
+api=runpy.run_path(tool)
+if (api.get('ACTIVATION_LEASE_PROTOCOL')!='orbis-sentinel.activation-lease.v1'
+        or api.get('OBSERVER_CHANGE_PROTOCOL')!='orbis-sentinel.observer-change.v1'):
+    raise ValueError('The verified toolkit lacks managed observer support')
+if action=='spec':
+    result={'schema':'orbis-sentinel.observer-spec.v1','profile':'orbis-observer-v2',
+            'groupName':'orbis-observer','files':api['OBSERVER_PROFILES']['orbis-observer-v2']}
+elif action=='observe':
+    api['_operator']()
+    parents=[]
+    lock=None
+    try:
+        for path in (api['ROOT'],api['STATE'],api['UNITS']):
+            parents.append(api['_Parent'](path))
+        root,state,units=parents
+        lock=api['_activation_lock'](state,int(descriptor))
+        installed=api['_receipt'](api['_json'](api['_read'](state,'installed.json',0o600)))
+        activation=api['_json'](api['_read'](state,'activation.json',0o600))
+        if (activation.get('phase')!='complete' or activation.get('candidate')!=installed
+                or api['_read'](state,'admission-'+activation['id']+'.json',0o600)
+                   !=api['_encoded']({**activation,'phase':'prepared'})
+                or (api['_selector'](root) or {}).get('target')!='releases/'+installed['version']):
+            raise api['RecoveryRequired']('The installed collector has no completed activation')
+        for name,digest in api['UNIT_HASHES'].items():
+            body=api['_read'](units,name,0o644)
+            if body is None or hashlib.sha256(body).hexdigest()!=digest:
+                raise api['RecoveryRequired']('The collector unit bytes changed')
+        systemd=api['Systemd']()
+        observed=api['_profile'](systemd,True)
+        if any(not observed[name]['active'] for name in api['UNIT_HASHES']):
+            raise api['RecoveryRequired']('The collector units are not active')
+        host=api['_observer_host'](systemd,observed.get('observerProfile'))
+        api['_health'](installed['version'],10)
+        result={'release':{key:installed[key] for key in ('version','sha256','sourceCommit')},
+                'inventorySha256':hashlib.sha256(api['_encoded'](installed['files'])).hexdigest(),
+                'profile':observed.get('observerProfile'),'host':host}
+        for parent in parents:
+            parent.assert_current()
+    finally:
+        if lock is not None:
+            os.close(lock)
+        for parent in reversed(parents):
+            parent.close()
+else:
+    expected=json.loads(expected)
+    parent=api['_Parent'](api['STATE'])
+    try:
+        installed=api['_json'](api['_read'](parent,'installed.json',0o600))
+    finally:
+        parent.close()
+    if {key:installed[key] for key in expected}!=expected:
+        raise api['RecoveryRequired']('The observer differs from the authenticated Sentinel preparation')
+    if action=='prepare':
+        result=api['prepare_observer_profile'](json.loads(retained),activation_lock_fd=int(descriptor))
+    elif action=='activate':
+        result=api['activate_observer_profile'](json.loads(returned),activation_lock_fd=int(descriptor))
+    elif action=='return':
+        result=api['restore_observer_profile'](json.loads(returned),activation_lock_fd=int(descriptor))
+    else:
+        raise ValueError('Unsupported managed observer action')
+print(json.dumps(result,sort_keys=True))
+'''
+
+
+_RECONCILE_RETAINED = '''
+import hashlib,json,os,pathlib,runpy,sys
+tool,action,expected,retained,returned,descriptor=sys.argv[1:]
+sys.path.insert(0,str(pathlib.Path(tool).parent))
+api=runpy.run_path(tool)
+api['_operator']()
+if (action!='reconcile' or api.get('ACTIVATION_LEASE_PROTOCOL')!='orbis-sentinel.activation-lease.v1'
+        or api.get('OBSERVER_CHANGE_PROTOCOL')!='orbis-sentinel.observer-change.v1'):
+    raise ValueError('The verified toolkit lacks retained observer support')
+expected=json.loads(expected)
+request=json.loads(retained)
+binding=api['_retention_binding'](request['binding'])
+parents=[]
+lock=None
+try:
+    for path in (api['ROOT'],api['STATE'],api['UNITS']):
+        parents.append(api['_Parent'](path))
+    root,state,units=parents
+    lock=api['_activation_lock'](state,int(descriptor))
+    if set(request)=={'binding'}:
+        activation=api['_json'](api['_read'](state,'activation.json',0o600))
+        if (type(activation) is not dict or activation.get('schema')!='orbis-sentinel.activation.v1'
+                or activation.get('phase')!='complete' or type(activation.get('id')) is not str
+                or len(activation['id'])!=32 or any(c not in '0123456789abcdef' for c in activation['id'])):
+            raise api['RecoveryRequired']('The interrupted collector has no completed activation')
+        retained_body=api['_read'](state,'retention-'+activation['id']+'.json',0o600)
+        if retained_body is None:
+            raise api['RecoveryRequired']('The collector has no retained activation for this operation')
+        ticket={'schema':'orbis-sentinel.upgrade-retention-ticket.v1','activationId':activation['id'],
+                'sha256':hashlib.sha256(retained_body).hexdigest(),'binding':binding}
+    else:
+        ticket=request
+    retained_body=api['_read'](state,'retention-'+ticket['activationId']+'.json',0o600)
+    if retained_body is None or hashlib.sha256(retained_body).hexdigest()!=ticket['sha256']:
+        raise api['RecoveryRequired']('The retained collector admission changed')
+    retained_value=api['_json'](retained_body)
+    if (type(retained_value) is not dict or set(retained_value)!={'schema','binding','activation'}
+            or retained_value['schema']!='orbis-sentinel.upgrade-retention.v1' or retained_value['binding']!=binding):
+        raise api['RecoveryRequired']('The retained collector belongs to another operation')
+    original=retained_value['activation']
+    if (type(original) is not dict or set(original)!={'schema','id','phase','candidate','previous','previousUnits'}
+            or original['schema']!='orbis-sentinel.activation.v1' or original['phase']!='prepared'
+            or original['id']!=ticket['activationId'] or original['previous'] is None
+            or api['_retention_ticket'](original,binding)!=(retained_body,ticket)
+            or api['_read'](state,'admission-'+original['id']+'.json',0o600)!=api['_encoded'](original)):
+        raise api['RecoveryRequired']('The retained collector original admission changed')
+    candidate=api['_receipt'](original['candidate'])
+    previous=api['_receipt'](original['previous'])
+    if {key:candidate[key] for key in expected}!=expected:
+        raise api['RecoveryRequired']('The retained collector differs from the verified target')
+    restoration=api['_read'](state,'restoration-'+original['id']+'.json',0o600)
+    if restoration is None:
+        installed=api['_current_retention'](root,state,ticket)
+        activation_state='candidate'
+        restoration_result=None
+    else:
+        # This API's existing-restoration branch only observes an exact
+        # completed restoration; incomplete or superseded records refuse.
+        # Its admission is already present under the same held lease, so this
+        # cannot enter the branch which creates a restoration or has effects.
+        result=api['restore_retained'](ticket,activation_lock_fd=int(descriptor))
+        if result.get('restored') is not True or result.get('restoredActivationId')!=original['id']:
+            raise api['RecoveryRequired']('The collector restoration is not positively reconciled')
+        installed=previous
+        activation_state='returned'
+        restoration_result={**result,'previousRelease':{key:previous[key] for key in expected}}
+    for name,digest in api['UNIT_HASHES'].items():
+        body=api['_read'](units,name,0o644)
+        if body is None or hashlib.sha256(body).hexdigest()!=digest:
+            raise api['RecoveryRequired']('The retained collector unit bytes changed')
+    systemd=api['Systemd']()
+    observer=None
+    observer_body=api['_read'](state,'observer-change.json',0o600,32768)
+    if observer_body is not None:
+        record=api['_json'](observer_body)
+        if (type(record) is not dict or set(record)!={'schema','ticket','phase','profile'}
+                or record['schema']!=api['OBSERVER_CHANGE_PROTOCOL'] or type(record['ticket']) is not dict):
+            raise api['RecoveryRequired']('The retained observer receipt is invalid')
+        if record['ticket'].get('binding')==binding:
+            observed_ticket=record['ticket']
+            admission=api['_observer_admission'](state,observed_ticket)
+            if (admission['retainedActivation']!=ticket or record['phase'] not in ('installed','complete','returned')
+                    or activation_state=='returned' and record['phase']!='returned'):
+                raise api['RecoveryRequired']('The observer effect is not positively reconciled')
+            supplied=json.loads(returned)
+            if supplied is not None and supplied!=observed_ticket:
+                raise api['RecoveryRequired']('The retained observer ticket changed')
+            if record['phase']=='installed':
+                api['_observer_pending'](systemd,admission,installed['version'])
+                expected_files={role:body.hex() for role,body in api['_observer_bodies'](installed['version']).items()}
+            else:
+                observed=api['_profile'](systemd,True)
+                desired=record['profile'] if record['phase']=='complete' else admission['originalProfile']
+                if observed.get('observerProfile')!=desired:
+                    raise api['RecoveryRequired']('The retained observer loaded profile changed')
+                if record['phase']=='complete':
+                    host=api['_observer_host'](systemd,desired)
+                    api['_observer_socket'](systemd,admission['originalProfile'] is not None or host!=admission['originalHost'])
+                    expected_files={role:body.hex() for role,body in api['_observer_bodies'](installed['version']).items()}
+                else:
+                    expected_files=admission['originalFiles']
+                api['_ready'](systemd,installed['version'])
+            if api['_observer_files']()!=expected_files:
+                raise api['RecoveryRequired']('The retained observer file bytes changed')
+            observer={'ticket':observed_ticket,'phase':record['phase'],'profile':record['profile'],
+                      'originalProfile':admission['originalProfile']}
+        elif record['phase'] not in ('complete','returned'):
+            raise api['RecoveryRequired']('Another observer change requires reconciliation')
+    if observer is None:
+        if json.loads(returned) is not None:
+            raise api['RecoveryRequired']('The recorded observer change disappeared')
+        observed=api['_profile'](systemd,True)
+        if observed.get('observerProfile')!=original['previousUnits'].get('observerProfile'):
+            raise api['RecoveryRequired']('The original observer profile changed before enrollment')
+        api['_ready'](systemd,installed['version'])
+    result={'retainedRollback':ticket,'candidateRelease':{key:candidate[key] for key in expected},
+            'previousRelease':{key:previous[key] for key in expected},'observer':observer,'activation':activation_state,
+            'restoration':restoration_result}
+    if activation_state=='candidate':
+        api['_current_retention'](root,state,ticket)
+    elif api['_read'](state,'restoration-'+original['id']+'.json',0o600)!=restoration:
+        raise api['RecoveryRequired']('The collector restoration receipt changed')
+    for parent in parents:
+        parent.assert_current()
+finally:
+    if lock is not None:
+        os.close(lock)
+    for parent in reversed(parents):
+        parent.close()
+print(json.dumps(result,sort_keys=True))
+'''
+
+
+def _observer_profile(value, *, optional=False):
+    if value is None and optional:
+        return None
+    if (type(value) is not dict or set(value) != {'schema', 'profile', 'groupId', 'files'}
+            or value['schema'] != 'orbis-sentinel.observer-profile.v1'
+            or value['profile'] not in {'orbis-observer-v1', 'orbis-observer-v2'}
+            or type(value['groupId']) is not int or not 0 < value['groupId'] < 2**31):
+        raise SentinelInstallError('The verified toolkit returned an invalid observer profile')
+    _observer_hashes(value['files'])
+    return value
+
+
+def _observer_hashes(value):
+    if (type(value) is not dict or set(value) != {'collector', 'host', 'socket', 'sysusers'}
+            or any(type(digest) is not str or not re.fullmatch(r'[a-f0-9]{64}', digest) for digest in value.values())):
+        raise SentinelInstallError('The verified toolkit returned invalid observer file identities')
+    return value
+
+
+def _observer_ticket(value, retained):
+    if (type(value) is not dict or set(value) != {'schema', 'id', 'activationId', 'binding', 'sha256'}
+            or value['schema'] != 'orbis-sentinel.observer-change-ticket.v1'
+            or type(value['id']) is not str or not re.fullmatch(r'[a-f0-9]{32}', value['id'])
+            or value['activationId'] != retained['activationId'] or value['binding'] != retained['binding']
+            or type(value['sha256']) is not str or not re.fullmatch(r'[a-f0-9]{64}', value['sha256'])):
+        raise SentinelInstallError('The verified toolkit returned an invalid observer retention ticket')
+    return json.loads(json.dumps(value))
+
+
+def _observer_call(prepared, action, *, retained=None, returned=None, lease=None):
+    require_observer_change_support(prepared)
+    descriptors = () if action == 'spec' else (_activation_lease_descriptor(lease),)
+    with Directory(prepared.work, private=True) as directory:
+        if directory.identity() != prepared.identity:
+            raise SentinelInstallError('Prepared Sentinel namespace changed')
+        _check_files(prepared.files)
+        attempt = directory.mkdir('observer-' + action + '-' + uuid.uuid4().hex)
+        with Directory(attempt, private=True) as output:
+            for name in ('tmp', 'cache', 'config', 'state', 'data'):
+                output.mkdir(name)
+            arguments = [prepared.work / 'toolkit/activate_release.py', action, json.dumps(prepared.release),
+                         json.dumps(retained), json.dumps(returned), str(descriptors[0]) if descriptors else '']
+            code = _RECONCILE_RETAINED if action == 'reconcile' else _OBSERVER_COMMAND
+            result = _json(_run(attempt, 'observer-' + action, code, arguments,
+                                timeout=30 if action == 'spec' else None, descriptors=descriptors))
+            output.check()
+        _check_files(prepared.files)
+        directory.check()
+    if lease is not None:
+        lease.verify()
+    return result
+
+
+def observer_profile_spec(prepared):
+    """Read the authenticated toolkit's static target before component effects."""
+    result = _observer_call(prepared, 'spec')
+    if (type(result) is not dict or set(result) != {'schema', 'profile', 'groupName', 'files'}
+            or result['schema'] != 'orbis-sentinel.observer-spec.v1'
+            or result['profile'] != 'orbis-observer-v2' or result['groupName'] != 'orbis-observer'):
+        raise SentinelInstallError('The verified toolkit returned an invalid observer specification')
+    _observer_hashes(result['files'])
+    return result
+
+
+def observe_installation(prepared, *, lease):
+    """Re-read the real installed inventory, loaded profile and exact health.
+
+    The authenticated toolkit is only an observer here. This never consumes a
+    preparation, changes a selector, creates an admission or restarts a unit.
+    The caller still owns the accepted operation and installation locks.
+    """
+    require_observer_change_support(prepared)
+    _activation_lease_descriptor(lease)
+    _installed_payload(INSTALLED_STATE, INSTALLED_ROOT)
+    before = _file(INSTALLED_STATE / 'installed.json', None, None, maximum=1024 * 1024, read_body=True)
+    installed = _json(before)
+    result = _observer_call(prepared, 'observe', lease=lease)
+    if (type(result) is not dict or set(result) != {'release', 'inventorySha256', 'profile', 'host'}
+            or _release_identity(result['release']) != {key: installed[key] for key in RELEASE}
+            or result['inventorySha256'] != hashlib.sha256(
+                (json.dumps(installed['files'], sort_keys=True, separators=(',', ':'), ensure_ascii=True) + '\n').encode('ascii')).hexdigest()
+            or type(result['host']) is not dict or set(result['host']) != {'MainPID', 'InvocationID', 'ControlGroup'}
+            or type(result['host']['MainPID']) is not str or not result['host']['MainPID'].isascii()
+            or not result['host']['MainPID'].isdecimal() or int(result['host']['MainPID']) <= 0
+            or type(result['host']['InvocationID']) is not str or not re.fullmatch(r'[a-f0-9]{32}', result['host']['InvocationID'])
+            or result['host']['ControlGroup'] != '/system.slice/orbis-host.service'):
+        raise SentinelInstallError('The installed collector observation is not bound to its inventory and live Host')
+    _observer_profile(result['profile'], optional=True)
+    _installed_payload(INSTALLED_STATE, INSTALLED_ROOT)
+    if _file(INSTALLED_STATE / 'installed.json', None, None, maximum=1024 * 1024, read_body=True) != before:
+        raise SentinelInstallError('The installed collector changed during observation')
+    _activation_lease_descriptor(lease)
+    return json.loads(json.dumps(result))
+
+
+def _observer_retention(prepared, retained, binding):
+    binding = _retention_binding(binding)
+    retained = _retention_ticket(retained, binding)
+    known = _RETENTIONS.get(prepared) if type(prepared) is Prepared else None
+    if known is None or not prepared.used or known[1] != retained:
+        raise SentinelInstallError('Managed observer changes require this retained Sentinel activation')
+    require_observer_change_support(prepared)
+    return retained
+
+
+def reconcile_retained(prepared, *, binding, lease, retained=None, observer=None):
+    """Authenticate existing Root receipts in a fresh preparation without effects.
+
+    Registration follows verified toolkit observation, never supplied JSON.
+    Activation and enrollment are spent; a confirmed remaining return may run
+    once under this lease. Uncertain or returned effects are not replayed.
+    """
+    require_host()
+    binding = _retention_binding(binding)
+    if type(prepared) is not Prepared or prepared.used or prepared not in _PREPARATIONS:
+        raise SentinelInstallError('Retained reconciliation requires a fresh verified preparation')
+    request = {'binding': binding} if retained is None else _retention_ticket(retained, binding)
+    if observer is not None and retained is not None:
+        observer = _observer_ticket(observer, retained)
+    _activation_lease_descriptor(lease)
+    _installed_payload(INSTALLED_STATE, INSTALLED_ROOT)
+    before = _file(INSTALLED_STATE / 'installed.json', None, None, maximum=1024 * 1024, read_body=True)
+    result = _observer_call(prepared, 'reconcile', retained=request, returned=observer, lease=lease)
+    if (type(result) is not dict or set(result) != {'retainedRollback', 'candidateRelease', 'previousRelease', 'observer', 'activation', 'restoration'}
+            or result['activation'] not in ('candidate', 'returned')
+            or _release_identity(result['candidateRelease']) != prepared.release):
+        raise SentinelInstallError('The retained collector observation differs from the authenticated target')
+    ticket = _retention_ticket(result['retainedRollback'], binding)
+    if retained is not None and ticket != retained:
+        raise SentinelInstallError('The retained collector ticket changed during reconciliation')
+    _release_identity(result['previousRelease'])
+    restoration = result['restoration']
+    if result['activation'] == 'returned':
+        if (type(restoration) is not dict or restoration.get('restored') is not True
+                or restoration.get('restoredActivationId') != ticket['activationId']
+                or restoration.get('previousRelease') != result['previousRelease']
+                or restoration.get('version') != result['previousRelease']['version']
+                or type(restoration.get('activationId')) is not str
+                or not re.fullmatch(r'[a-f0-9]{32}', restoration['activationId'])
+                or restoration['activationId'] == ticket['activationId']
+                or restoration.get('retainedVersionsRemoved') != 0):
+            raise SentinelInstallError('The existing collector restoration is not positively verified')
+    elif restoration is not None:
+        raise SentinelInstallError('The active collector cannot claim an existing restoration')
+    observed = result['observer']
+    if observed is not None:
+        if (type(observed) is not dict or set(observed) != {'ticket', 'phase', 'profile', 'originalProfile'}
+                or observed['phase'] not in ('installed', 'complete', 'returned')):
+            raise SentinelInstallError('The retained observer state is not positively reconciled')
+        _observer_ticket(observed['ticket'], ticket)
+        _observer_profile(observed['profile'])
+        _observer_profile(observed['originalProfile'], optional=True)
+        if observer is not None and observed['ticket'] != observer:
+            raise SentinelInstallError('The retained observer ticket changed during reconciliation')
+    elif observer is not None:
+        raise SentinelInstallError('The recorded observer change disappeared during reconciliation')
+    _installed_payload(INSTALLED_STATE, INSTALLED_ROOT)
+    if _file(INSTALLED_STATE / 'installed.json', None, None, maximum=1024 * 1024, read_body=True) != before:
+        raise SentinelInstallError('The retained collector changed during reconciliation')
+    sealed = _consume_preparation(prepared)
+    _RETENTIONS[prepared] = (sealed, ticket)
+    _OBSERVER_ATTEMPTS[prepared] = {'enroll'}
+    if observed is not None:
+        _OBSERVERS[prepared] = json.dumps(observed['ticket'], sort_keys=True)
+        if observed['phase'] == 'returned' or result['activation'] == 'returned':
+            _OBSERVER_ATTEMPTS[prepared].add('return')
+    lease.verify()
+    return json.loads(json.dumps(result))
+
+
+def enroll_observer(prepared, retained, *, binding, lease, ready=None):
+    retained = _observer_retention(prepared, retained, binding)
+    _activation_lease_descriptor(lease)
+    if not callable(ready):
+        raise SentinelInstallError('Start independent update progress before reloading the collector')
+    attempts = _OBSERVER_ATTEMPTS.setdefault(prepared, set())
+    if 'enroll' in attempts:
+        raise SentinelInstallError('The observer enrollment requires reconciliation before any retry')
+    attempts.add('enroll')
+    result = _observer_call(prepared, 'prepare', retained=retained, lease=lease)
+    if type(result) is not dict or set(result) != {'ticket', 'profile', 'prepared'} or result['prepared'] is not True:
+        raise SentinelInstallError('The verified toolkit did not confirm observer preparation')
+    ticket = _observer_ticket(result['ticket'], retained)
+    profile = _observer_profile(result['profile'])
+    if profile['profile'] != 'orbis-observer-v2':
+        raise SentinelInstallError('The verified toolkit did not enroll independent update progress')
+    _OBSERVERS[prepared] = json.dumps(ticket, sort_keys=True)
+    ready(json.loads(json.dumps(profile)), json.loads(json.dumps(ticket)))
+    result = _observer_call(prepared, 'activate', retained=retained, returned=ticket, lease=lease)
+    if (type(result) is not dict or set(result) != {'ticket', 'profile', 'enrolled'}
+            or result['enrolled'] is not True or result['ticket'] != ticket or result['profile'] != profile):
+        raise SentinelInstallError('The verified toolkit did not confirm observer enrollment')
+    return result
+
+
+def return_observer(prepared, retained, ticket, *, binding, lease):
+    retained = _observer_retention(prepared, retained, binding)
+    ticket = _observer_ticket(ticket, retained)
+    if _OBSERVERS.get(prepared) != json.dumps(ticket, sort_keys=True):
+        raise SentinelInstallError('The observer return differs from this completed enrollment')
+    _activation_lease_descriptor(lease)
+    attempts = _OBSERVER_ATTEMPTS.setdefault(prepared, set())
+    if 'return' in attempts:
+        raise SentinelInstallError('The observer return requires reconciliation before any retry')
+    attempts.add('return')
+    result = _observer_call(prepared, 'return', retained=retained, returned=ticket, lease=lease)
+    if (type(result) is not dict or set(result) != {'ticket', 'profile', 'restored'}
+            or result['restored'] is not True or result['ticket'] != ticket):
+        raise SentinelInstallError('The verified toolkit did not confirm observer return')
+    _observer_profile(result['profile'], optional=True)
+    return result
 
 
 def _installed_payload(state, root):

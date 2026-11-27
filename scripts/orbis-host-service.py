@@ -43,6 +43,24 @@ def load_script(name: str, module_name: str):
     return module
 
 
+_COMPONENT_RUNNER = None
+_COMPONENT_LAUNCHER = None
+
+
+def component_runner():
+    global _COMPONENT_RUNNER
+    if _COMPONENT_RUNNER is None:
+        _COMPONENT_RUNNER = load_script('orbis-host-upgrade-runner.py', 'orbis_component_progress_for_service')
+    return _COMPONENT_RUNNER
+
+
+def component_launcher():
+    global _COMPONENT_LAUNCHER
+    if _COMPONENT_LAUNCHER is None:
+        _COMPONENT_LAUNCHER = load_script('orbis-host-upgrade-launcher.py', 'orbis_component_progress_namespace')
+    return _COMPONENT_LAUNCHER
+
+
 UPDATE = load_script("orbis-host-update.py", "orbis_update_for_service")
 PACKAGES = load_script("orbis-host-packages.py", "orbis_packages_for_service")
 TELEMETRY = load_script("orbis-host-telemetry.py", "orbis_telemetry_for_service").HostTelemetry()
@@ -61,6 +79,13 @@ PLAN = HOST.PLAN
 CHECK = UPDATE.CHECK
 POLICY = PLAN.POLICY
 PLAN_TTL_SECONDS = 15 * 60
+# Immutable Stable installer released before coordinated source custody.
+LEGACY_STABLE_RELEASE = (
+    "v0.9.1",
+    "6b627e1939e11e91fbd5c6ed419e1e90a71cf281",
+    "sha256:fcd6ddadf52d19aedc428cae04aea98f0baf4e36c12edab9a1239fa75c8248d2",
+    "4.10.1",
+)
 BODY_LIMIT = 64 * 1024
 CREDENTIAL_BODY_TIMEOUT = 5
 PACKAGE_OUTPUT_BYTES = 8192
@@ -495,8 +520,15 @@ class HostService:
         self.discovery = DISCOVERY.Discovery(policy_path=self.state_dir / "discovery-policy.json")
         previous = read_private(self.job_file)
         if recover_interrupted_job and not credentials_only and previous and previous.get("state") in {"running", "recovering"}:
-            previous["state"] = "interrupted"
-            write_private(self.job_file, previous)
+            if previous.get('worker') is not None:
+                worker = load_script('orbis-host-upgrade-launcher.py', 'orbis_startup_worker_observer')
+                try:
+                    worker.live_worker(self, previous)
+                except (OSError, ValueError, RuntimeError):
+                    worker.interrupt_unowned_worker(self, previous)
+            else:
+                previous["state"] = "interrupted"
+                write_private(self.job_file, previous)
 
     def retained_restores(self):
         if self.retained_restore_manager is None:
@@ -1594,6 +1626,12 @@ class HostService:
         if order < 0 and not POLICY.downgrade_allowed_on_channel(target["tag"], current["tag"], record["channel"]):
             raise ValueError("Nightly downgrades are limited to the same version's beta revisions and earlier Stable releases")
 
+    def reviewed_legacy_stable_return(self, current, target, return_to_stable):
+        return (return_to_stable is True
+                and tuple(target.get(key) for key in ('tag', 'commit', 'digest', 'runtipiCompatibility')) == LEGACY_STABLE_RELEASE
+                and current['runtipiCompatibility'].removeprefix('v') == LEGACY_STABLE_RELEASE[-1]
+                and target.get('installationProtocol') == PLAN.INSTALLATION_PROTOCOL)
+
     def complete_channel_change(self, job: dict) -> None:
         if not job.get("returnToStable"):
             return
@@ -2021,6 +2059,9 @@ class HostService:
             raise ValueError("Core progress is unavailable")
         return value
 
+    def component_recovery_live(self, job):
+        return component_launcher().live_reconciliation(self, job)
+
     def aborted_update_phase(self, job):
         if (not isinstance(job, dict) or job.get("schema") != "orbis.host-service-job.v1"
                 or job.get("state") != "failed"):
@@ -2058,6 +2099,11 @@ class HostService:
         snapshot = self.snapshots / f"orbis-{target['tag']}-{identifier}"
         if job.get("snapshot") != str(snapshot) or job.get("targetTag") != target["tag"]:
             raise ValueError("Core progress is unavailable")
+        if job.get('worker') is not None:
+            runner = component_runner()
+            progress = runner.read_progress(self, job)
+            if progress is not None:
+                return progress
         journal = self.read_core_operation_record(UPDATE.journal_path(snapshot), optional=True)
         phase = None
         if journal is not None:
@@ -2144,6 +2190,15 @@ class HostService:
         publication = retained.publication() if retained else (saved or {})
         expected_reference = retained.controller()["creationReference"] if retained else f"{PLAN.IMAGE}@{(saved or {}).get('digest')}"
         job = read_private(self.job_file)
+        if job and job.get('state') == 'running' and job.get('worker') is not None:
+            try:
+                worker = load_script('orbis-host-upgrade-launcher.py', 'orbis_status_worker_observer')
+                worker.observe_worker_exit(self, job)
+            except (OSError, ValueError, RuntimeError):
+                # An unavailable observation cannot finalize or replay an
+                # accepted operation. Its existing maintenance fences remain.
+                pass
+            job = read_private(self.job_file)
         phase = None
         journal = read_private(UPDATE.journal_path(Path(job["snapshot"]))) if job and isinstance(job.get("snapshot"), str) else None
         download = UPDATE.safe_download(journal)
@@ -2152,7 +2207,7 @@ class HostService:
             if phase not in UPDATE.FAILURE_STAGES | UPDATE.TERMINAL_STAGES | {"recovery-required"}:
                 phase = "preparing"
             phase = self.update_progress_phase(job, journal) or phase
-        if job and job.get("state") == "interrupted":
+        if job and job.get("state") == "interrupted" and job.get("worker") is None:
             stage = journal.get("stage") if journal else None
             expected_digest = job["target"]["digest"] if stage == "complete" else job["current"]["digest"]
             healthy_expected = (
@@ -2194,6 +2249,17 @@ class HostService:
         if (job and job.get("state") == "interrupted" and self.update_journal_matches(job, journal)
                 and journal.get("stage") == "recovery-required"):
             phase = "recovery-required"
+        if job and job.get("worker") is not None and job["state"] in ("running", "interrupted"):
+            try:
+                component = component_runner().read_progress(self, job)
+            except (OSError, ValueError, RuntimeError):
+                component = None
+            if component is not None:
+                public = component["job"]
+                job = {**job, "state": public["state"]}
+                phase = public["phase"] or phase
+                if "download" in public:
+                    download = {"download": public["download"]}
         return {
             "available": True,
             "serviceRole": "administration", "credentialProtocol": 1,
@@ -2241,6 +2307,8 @@ class HostService:
             "returnToStable": return_to_stable,
             "backupPolicy": result["backupPolicy"],
         }
+        if self.reviewed_legacy_stable_return(current, target, return_to_stable):
+            record["legacyStableReturn"] = True
         if HOST.retained_state(self.root):
             record["retainedSource"] = HOST.retained_descriptor(self.root, self.context, current)
         write_private(self.state_dir / f"plan-{plan_id}.json", record)
@@ -2295,6 +2363,9 @@ class HostService:
             if plan.get("channelState") != read_channel(self.root):
                 raise ValueError("the release channel changed since the update plan")
             self.validate_channel_plan(plan["channelState"], current, target, plan.get("returnToStable", False))
+            legacy = self.reviewed_legacy_stable_return(current, target, plan.get("returnToStable", False))
+            if plan.get("legacyStableReturn", False) is not legacy:
+                raise ValueError("the reviewed update route changed; create a new plan")
             snapshot = Path(plan["snapshot"])
             if snapshot.parent != self.snapshots or snapshot.name != f"orbis-{target['tag']}-{plan_id}":
                 raise ValueError("update plan has an invalid snapshot destination")
@@ -2328,6 +2399,8 @@ class HostService:
                 "returnToStable": plan.get("returnToStable", False),
                 "backupPolicy": plan["backupPolicy"],
             }
+            if legacy:
+                job["legacyStableReturn"] = True
             if plan.get("retainedSource") is not None:
                 job["retainedSource"] = plan["retainedSource"]
             try:
@@ -2346,54 +2419,125 @@ class HostService:
                 # write. Resume can settle the separate acceptance receipt.
                 pass
 
-        def run() -> None:
-            try:
-                self.core_overlays().resume(job)
-                options = {"expected_backup_policy": job["backupPolicy"]}
-                if job.get("retainedSource") is not None:
-                    options["expected_source"] = job["retainedSource"]
-                UPDATE.apply_update(self.root, current, target, self.context, snapshot, controller_state_dir=self.state_dir, **options)
-                self.complete_channel_change(job)
-                job["state"] = "complete"
-                job["message"] = "Orbis reached the reviewed image and healthy state."
-            except Exception:
-                try:
-                    journal = read_private(UPDATE.journal_path(snapshot))
-                except (OSError, ValueError, json.JSONDecodeError):
-                    journal = None
-                stage = journal.get("stage") if journal else None
-                job.update(UPDATE.safe_failure(journal))
-                job["state"] = "rolled-back" if stage == "rolled-back" else "failed" if stage in {None, "aborted"} else "interrupted"
-                job["message"] = (
-                    f"{UPDATE.failure_message(journal)} The previous Orbis release was restored.".strip()
-                    if job["state"] == "rolled-back"
-                    else (f"{UPDATE.failure_message(journal)} The update stopped before restarting Orbis.".strip()
-                          if stage == "aborted" else "The update failed. Check Updates before trying again.")
-                    if job["state"] == "failed"
-                    else UPDATE.FAILURE_MESSAGES["recovery-required"] if stage == "recovery-required"
-                    else "Update needs local inspection or recovery."
-                )
-            finally:
-                job["finishedAt"] = time.time()
-                try:
-                    write_private(self.job_file, job)
-                    if job["state"] in {"complete", "rolled-back", "failed"}:
-                        self.core_operation_maintenance()
-                finally:
-                    with self.lock:
-                        self.busy = False
+        return {"jobId": plan_id, "state": "running"}, lambda: threading.Thread(
+            target=self._start_update_worker, args=(job,), daemon=True).start()
 
-        return {"jobId": plan_id, "state": "running"}, lambda: threading.Thread(target=run, daemon=True).start()
+    def _start_update_worker(self, job):
+        module = None
+        try:
+            module = load_script('orbis-host-upgrade-launcher.py', 'orbis_update_worker_launcher')
+            if job.get("legacyStableReturn") is True:
+                with self.lock:
+                    current, target = (PLAN.validate_manifest(job[key]) for key in ("current", "target"))
+                    if (self.read_core_operation_record(self.job_file) != job or job.get("worker") is not None
+                            or self.current_manifest() != current or read_channel(self.root) != job["channelState"]
+                            or not self.reviewed_legacy_stable_return(current, target, job.get("returnToStable"))):
+                        raise ValueError("the accepted Stable return changed")
+                    self.validate_channel_plan(job["channelState"], current, target, True)
+                self._run_update_job(job)
+            else:
+                module.launch_worker(self, job)
+        except (OSError, ValueError, RuntimeError):
+            # A lost systemctl reply must not overwrite a running or completed
+            # worker. The launcher serializes this observation with its writer.
+            if module is not None:
+                module.interrupt_unowned_worker(self, job)
+        finally:
+            with self.lock:
+                self.busy = False
+
+    def _run_update_job(self, job, *, admission=None):
+        current, target = (PLAN.validate_manifest(job[key]) for key in ('current', 'target'))
+        snapshot = Path(job['snapshot'])
+        try:
+            if admission is not None:
+                admission.verify_bootstrap()
+            self.core_overlays().resume(job)
+            options = {"expected_backup_policy": job["backupPolicy"]}
+            if job.get("retainedSource") is not None:
+                options["expected_source"] = job["retainedSource"]
+            UPDATE.apply_update(self.root, current, target, self.context, snapshot, controller_state_dir=self.state_dir, **options)
+            if admission is not None:
+                admission.verify_bootstrap()
+            self.complete_channel_change(job)
+            job["state"] = "complete"
+            job["message"] = "Orbis reached the reviewed image and healthy state."
+        except Exception:
+            try:
+                journal = read_private(UPDATE.journal_path(snapshot))
+            except (OSError, ValueError, json.JSONDecodeError):
+                journal = None
+            stage = journal.get("stage") if journal else None
+            job.update(UPDATE.safe_failure(journal))
+            job["state"] = "rolled-back" if stage == "rolled-back" else "failed" if stage in {None, "aborted"} else "interrupted"
+            job["message"] = (
+                f"{UPDATE.failure_message(journal)} The previous Orbis release was restored.".strip()
+                if job["state"] == "rolled-back"
+                else (f"{UPDATE.failure_message(journal)} The update stopped before restarting Orbis.".strip()
+                      if stage == "aborted" else "The update failed. Check Updates before trying again.")
+                if job["state"] == "failed"
+                else UPDATE.FAILURE_MESSAGES["recovery-required"] if stage == "recovery-required"
+                else "Update needs local inspection or recovery."
+            )
+        finally:
+            job["finishedAt"] = time.time()
+            try:
+                if admission is not None:
+                    admission.verify_bootstrap()
+                write_private(self.job_file, job)
+                if job["state"] in {"complete", "rolled-back", "failed"}:
+                    self.core_operation_maintenance()
+            finally:
+                with self.lock:
+                    self.busy = False
+
+    def write_component_progress(self, bootstrap, progress):
+        # Telemetry is separate from the immutable accepted job. It grants no
+        # maintenance, source, resume or terminal-completion authority.
+        observer = component_runner().progress_protocol()
+        progress = observer.validate_progress(progress)
+        accepted = self.read_core_operation_record(self.job_file)
+        if (accepted.get('worker') != bootstrap.reference
+                or {key: value for key, value in accepted.items() if key != 'worker'} != bootstrap.accepted_job()
+                or progress['job'] is None or progress['job']['id'] != accepted['id']
+                or progress['job']['targetTag'] != accepted['targetTag']):
+            raise ValueError('Component progress no longer matches the accepted operation')
+        directory = self.state_dir / 'component-upgrades' / accepted['id']
+        if directory != bootstrap.directory:
+            raise ValueError('Component progress belongs to another operation namespace')
+        # The launcher's writer namespace guard pins ancestor/leaf identity
+        # while permitting this atomic child replacement. The read-only
+        # retained-authority directory seal deliberately rejects such writes.
+        with component_launcher().directory(directory):
+            write_private(directory / 'component-progress.json', {
+                'schema': 'orbis.component-upgrade-progress.v1',
+                'requestSha256': bootstrap.request_sha, 'progress': progress})
+
+    def publish_component_outcome(self, bootstrap, original, final):
+        with self.lock:
+            if (self.read_core_operation_record(self.job_file) != original
+                    or original.get('worker') != bootstrap.reference
+                    or {key: value for key, value in original.items() if key != 'worker'} != bootstrap.accepted_job()
+                    or final.get('state') not in ('complete', 'rolled-back')
+                    or {key: value for key, value in final.items() if key not in {
+                        'state', 'finishedAt', 'message', 'componentReceiptSha256'}} != {
+                        key: value for key, value in original.items() if key not in {
+                            'state', 'finishedAt', 'message', 'componentReceiptSha256'}}
+                    or not re.fullmatch(r'[a-f0-9]{64}', str(final.get('componentReceiptSha256', '')))):
+                raise ValueError('Component completion no longer matches the accepted operation')
+            write_private(self.job_file, final)
+            self.busy = False
+        self.core_operation_maintenance()
 
     def recover(self, job_id: str) -> tuple[dict, Callable[[], None]]:
         with self.lock:
             self.require_restart_clear()
             self.require_package_clear()
-            if self.maintenance_file.exists() or self.maintenance_file.is_symlink():
-                raise ValueError("host helper maintenance is in progress")
             if self.busy:
                 raise ValueError("another host update is in progress")
             job = read_private(self.job_file)
+            if (not job or job.get('worker') is None) and (self.maintenance_file.exists() or self.maintenance_file.is_symlink()):
+                raise ValueError("host helper maintenance is in progress")
             if not job or job.get("id") != job_id or job.get("state") != "interrupted":
                 raise ValueError("there is no interrupted transaction for this job ID")
             current = PLAN.validate_manifest(job["current"])
@@ -2401,6 +2545,22 @@ class HostService:
             snapshot = Path(job["snapshot"])
             if snapshot.parent != self.snapshots or snapshot.name != f"orbis-{target['tag']}-{job_id}":
                 raise ValueError("interrupted job has an invalid snapshot destination")
+            journal_path = UPDATE.journal_path(snapshot)
+            if job.get('worker') is not None or (job.get('overlayId') == job_id and component_launcher().absent(journal_path)):
+                self.busy = True
+
+                def reconcile():
+                    try:
+                        component_launcher().launch_reconciliation(self, job)
+                    except (OSError, ValueError, RuntimeError):
+                        # The accepted job remains interrupted if dispatch cannot be confirmed.
+                        pass
+                    finally:
+                        with self.lock:
+                            self.busy = False
+
+                return {"jobId": job_id, "state": "recovering"}, lambda: threading.Thread(
+                    target=reconcile, daemon=True).start()
             journal = UPDATE.read_journal(snapshot, self.root, self.context, current, target)
             if UPDATE.unbacked_job(journal) != (job.get("backupPolicy") == "none"):
                 raise ValueError("interrupted update backup policy changed; preserve it for local inspection")

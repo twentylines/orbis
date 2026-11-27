@@ -152,10 +152,11 @@ def credential_fence_lock(root: Path, context: str):
 
 
 @contextmanager
-def host_lock(root: Path):
+def _host_locks(root: Path, inherited):
     require_no_capture_fence(root)
     try:
-        descriptors = AUTHORITY.LAYOUT.open_locks(root)
+        descriptors = (AUTHORITY.LAYOUT.open_locks(root) if inherited is None else
+                       AUTHORITY.LAYOUT.borrow_locks(root, inherited))
     except BlockingIOError as error:
         raise ValueError("another Orbis host operation is in progress") from error
     descriptor = descriptors[0]
@@ -163,12 +164,26 @@ def host_lock(root: Path):
         require_no_capture_fence(root)
         token = LOCK_DESCRIPTOR.set(descriptor)
         try:
-            yield descriptor
+            yield tuple(descriptors)
+            AUTHORITY.LAYOUT.verify_locks(root, tuple(descriptors))
         finally:
             LOCK_DESCRIPTOR.reset(token)
     finally:
         for item in reversed(descriptors):
             os.close(item)
+
+
+@contextmanager
+def host_lock(root: Path, *, inherited=None):
+    with _host_locks(root, inherited) as descriptors:
+        yield descriptors[0]
+
+
+@contextmanager
+def host_lock_lease(root: Path):
+    """Retain both legacy and selected locks across component replacements."""
+    with _host_locks(root, None) as descriptors:
+        yield descriptors
 
 
 def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:

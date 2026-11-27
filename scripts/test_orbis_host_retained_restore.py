@@ -1406,6 +1406,18 @@ class RetainedRestoreTests(unittest.TestCase):
         body = runtime.overlay_body(record)
         self.assertEqual(body['Image'], record['source']['imageId'])
         self.assertEqual(body['HostConfig']['Mounts'], [{'Type': 'bind', 'Source': '/run/orbis', 'Target': '/run/orbis', 'ReadOnly': True, 'BindOptions': {'Propagation': 'rprivate'}}])
+        self.assertEqual(body['Env'], ['NODE_ENV=production', 'ORBIS_MAINTENANCE_RESPONDER=1'])
+        source = {'tag': 'v0.9.1', 'digest': 'sha256:' + 'a' * 64}
+        target = {'tag': 'v0.9.2', 'digest': 'sha256:' + 'b' * 64}
+        core_overlay = {**record, 'schema': 'orbis.core-maintenance-overlay.v1', 'current': source, 'target': target,
+                        'source': {**record['source'], 'publication': source}}
+        self.assertEqual(runtime.overlay_body(core_overlay), body)
+        coordinated = {**core_overlay, 'componentProgress': 'orbis.component-browser-progress.v1'}
+        expected = D.hashed('\n'.join((record['id'], source['digest'], target['digest'])).encode('ascii'))
+        self.assertIn('ORBIS_CORE_PROGRESS_BINDING=' + record['id'] + ':v0.9.2:' + expected,
+                      runtime.overlay_body(coordinated)['Env'])
+        with self.assertRaises(ValueError):
+            runtime.overlay_body({**coordinated, 'current': target})
         self.assertTrue(body['HostConfig']['ReadonlyRootfs'])
         self.assertEqual(body['HostConfig']['CapDrop'], ['ALL'])
         self.assertEqual(body['HostConfig']['PortBindings'], {})

@@ -2326,7 +2326,7 @@ def _origin_retained_source(service, selection_sha, copy_sha):
     files, unit = setup.source_files(source)
     helpers = [source / name for name in ('install-orbis.py', 'orbis-host-service-setup.py')]
     with (setup.hold_source_selection(source, selection_sha) as selection,
-          setup._SetupSources([*files, *helpers], unit) as selected, ExitStack() as pins):
+          setup._SetupSources(list(dict.fromkeys([*files, *helpers])), unit) as selected, ExitStack() as pins):
         setup.require_selection_files(source, selection, selected, [*files, *helpers, unit])
         directory = Path(selection['directory'])
         receipt = C.PinnedFile(directory / 'host-copy-custody' / ('host-copy-' + copy_sha + '.json'),

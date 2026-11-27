@@ -101,6 +101,51 @@ def open_locks(root, *, create=True):
         raise
 
 
+def borrow_locks(root, inherited):
+    """Continue the exact named lock descriptions held by a Root coordinator.
+
+    This neither creates locks nor grants installation/recovery authority.
+    Close returned duplicates without LOCK_UN; their parent owns the lease.
+    """
+    paths = lock_paths(root)
+    if (type(inherited) is not tuple or len(inherited) != len(paths)
+            or any(type(descriptor) is not int or descriptor < 3 for descriptor in inherited)):
+        raise LayoutError('The complete installation lock lease is required')
+    descriptors = []
+    try:
+        for path, parent in zip(paths, inherited):
+            descriptor = os.dup(parent)
+            descriptors.append(descriptor)
+            if fcntl.fcntl(descriptor, fcntl.F_GETFL) & os.O_ACCMODE != os.O_RDWR:
+                raise LayoutError('The inherited installation lock is not writable')
+            before = _lock_identity(os.fstat(descriptor))
+            if before != _lock_identity(path.lstat()):
+                raise LayoutError('The inherited installation lock differs from its named file')
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if before != _lock_identity(path.lstat()) or before != _lock_identity(os.fstat(descriptor)):
+                raise LayoutError('The inherited installation lock changed')
+        if paths != lock_paths(root):
+            raise LayoutError('Installation authority changed while continuing its locks')
+        return descriptors
+    except BaseException:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+        raise
+
+
+def verify_locks(root, descriptors):
+    paths = lock_paths(root)
+    if type(descriptors) is not tuple or len(descriptors) != len(paths):
+        raise LayoutError('The complete installation lock lease changed')
+    for path, descriptor in zip(paths, descriptors):
+        if (type(descriptor) is not int or descriptor < 3
+                or fcntl.fcntl(descriptor, fcntl.F_GETFL) & os.O_ACCMODE != os.O_RDWR
+                or _lock_identity(os.fstat(descriptor)) != _lock_identity(path.lstat())):
+            raise LayoutError('The installation lock lease changed')
+    if paths != lock_paths(root):
+        raise LayoutError('Installation authority changed during its lock lease')
+
+
 def _operator():
     if os.geteuid() != 0:
         raise LayoutError('Installation layout review requires a root operator')

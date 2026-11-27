@@ -765,8 +765,9 @@ def rollback(root: Path, current: dict[str, str], context: str, snapshot: Path, 
     write_journal(snapshot, record)
 
 
-def apply_update(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path, *, expected_source=None, expected_backup_policy=None, controller_state_dir=Path("/var/lib/orbis/state")) -> dict[str, object]:
-    with HOST.host_lock(root) as lock_fd:
+def apply_update(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path, *, expected_source=None, expected_backup_policy=None, controller_state_dir=Path("/var/lib/orbis/state"), lock_fds=None) -> dict[str, object]:
+    lock_options = {} if lock_fds is None else {'inherited': lock_fds}
+    with HOST.host_lock(root, **lock_options) as lock_fd:
         planned = update_plan(root, current, target, context, snapshot)
         policy = 'none' if planned.get('checkpoint', {}).get('backupPolicy') == 'none' else 'automatic'
         if expected_backup_policy is not None and expected_backup_policy != policy:
@@ -899,8 +900,9 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
             raise RuntimeError("update failed; the previous release was restored and is healthy") from error
 
 
-def recover(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path, *, controller_state_dir=Path("/var/lib/orbis/state")) -> dict[str, object]:
-    with HOST.host_lock(root):
+def recover(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path, *, controller_state_dir=Path("/var/lib/orbis/state"), lock_fds=None) -> dict[str, object]:
+    lock_options = {} if lock_fds is None else {'inherited': lock_fds}
+    with HOST.host_lock(root, **lock_options):
         record = read_journal(snapshot, root, context, current, target)
         if unbacked_job(record):
             if record.get('stage') in TERMINAL_STAGES:

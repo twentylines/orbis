@@ -50,9 +50,10 @@ def journal_path(root, context):
 
 def source_hashes(source):
     files, unit = SETUP.source_files(source)
-    files = [*files, source / "orbis-host-service-setup.py", source / "orbis-host-service-enable.py"]
-    with SETUP._SetupSources(files, unit) as inputs:
-        return {str(file.relative_to(source.parent)): hashlib.sha256(inputs.body(file)).hexdigest() for file in [*files, unit]}
+    drivers = [source / "orbis-host-service-setup.py", source / "orbis-host-service-enable.py"]
+    with SETUP._SetupSources(files, unit, drivers=drivers) as inputs:
+        return {str(file.relative_to(source.parent)): hashlib.sha256(inputs.body(file)).hexdigest()
+                for file in [*dict.fromkeys([*files, *drivers]), unit]}
 
 
 def existing_owner(root, context):
