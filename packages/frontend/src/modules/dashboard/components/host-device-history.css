@@ -77,6 +77,10 @@
 .host-history-device-menu .orbis-select-item {
   padding-block: 12px;
 }
+.host-history-device-menu .host-history-choice bdi {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
 .host-history-ranges {
   flex: 0 1 auto;
   width: fit-content;

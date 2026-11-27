@@ -350,30 +350,23 @@ body:has(.orbis-theme) .desktop-search-surface .desktop-search-input #orbis-comm
   container-type: inline-size;
 }
 .desktop-search-app-tools {
-  display: contents;
-}
-.desktop-search-app-tools > .desktop-search-result-manage {
-  grid-column: 2;
-  grid-row: 1;
-  align-self: center;
-  margin-inline-end: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline-end: 16px;
 }
 .desktop-search-app-commands {
+  display: none;
   min-width: 0;
   margin: 0;
-  border: 0;
-  grid-column: 1 / -1;
-  grid-row: 2;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
   gap: 8px;
-  padding: 0 16px 12px;
+  padding: 0;
+  border: 0;
 }
-.desktop-search-app-commands [data-app-command="start"] {
+:is(.desktop-search-app-commands, .desktop-search-app-menu) [data-app-command="start"] {
   --search-command-ink: var(--desktop-positive);
 }
-.desktop-search-app-commands [data-app-command="stop"] {
+:is(.desktop-search-app-commands, .desktop-search-app-menu) [data-app-command="stop"] {
   --search-command-ink: var(--desktop-negative);
 }
 .desktop-search-app-commands .desktop-search-result-manage {
@@ -383,19 +376,22 @@ body:has(.orbis-theme) .desktop-search-surface .desktop-search-input #orbis-comm
   color: var(--search-command-ink, var(--desktop-ink));
   background: color-mix(in srgb, var(--search-command-ink, var(--desktop-ink)) 12%, transparent);
 }
+.desktop-search-app-menu {
+  pointer-events: auto;
+}
+.desktop-search-app-menu.orbis-dropdown-menu [data-app-command] {
+  gap: 8px;
+  min-height: 44px;
+}
+.desktop-search-app-menu [data-app-command] svg {
+  color: var(--search-command-ink, currentColor);
+}
 @container (min-width: 28em) {
-  .desktop-search-app-tools {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding-inline-end: 16px;
-  }
-  .desktop-search-app-tools > .desktop-search-result-manage {
-    margin: 0;
-  }
   .desktop-search-app-commands {
-    flex-wrap: nowrap;
-    padding: 0;
+    display: flex;
+  }
+  .desktop-search-app-tools > .desktop-search-app-menu-trigger {
+    display: none;
   }
 }
 .desktop-search-result-control .orbis-switch {

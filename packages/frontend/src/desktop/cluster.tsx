@@ -299,7 +299,7 @@ export function ServerSelector({
           <div className="cluster-selector-heading">
             <div>
               <span className="cluster-dialog-kicker">{purpose === 'install' ? 'Install on a server' : 'Switch server'}</span>
-              <Dialog.Title title={cluster.data?.name || preferences.serverName}>
+              <Dialog.Title>
                 <WrapWords text={cluster.data?.name || preferences.serverName} />
               </Dialog.Title>
             </div>

@@ -115,9 +115,7 @@
   min-width: 0;
 }
 .capsules-file span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 @media (max-width: 480px) {
   .capsules-file {

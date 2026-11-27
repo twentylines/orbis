@@ -19,7 +19,6 @@ const schema = type({
 });
 
 interface IProps {
-  active?: boolean;
   onSubmit: (values: FormValues) => void;
   loading: boolean;
   loginType: string;
@@ -32,7 +31,6 @@ interface IProps {
 }
 
 export const LoginForm: React.FC<IProps> = ({
-  active = true,
   loading,
   onSubmit,
   loginType,
@@ -99,14 +97,7 @@ export const LoginForm: React.FC<IProps> = ({
             {t('AUTH_LOGIN_SUBMIT')}
           </Button>
           <div className="desktop-login-passkey">
-            <PasskeySignIn
-              active={active}
-              available={passkeyAvailable}
-              loading={loading}
-              reason={passkeyReason}
-              onPasskey={onPasskey}
-              warmPasskey={warmPasskey}
-            />
+            <PasskeySignIn available={passkeyAvailable} loading={loading} reason={passkeyReason} onPasskey={onPasskey} warmPasskey={warmPasskey} />
           </div>
           <AuthError id="credentials-feedback" message={error} />
           <div className="form-text desktop-login-recovery">

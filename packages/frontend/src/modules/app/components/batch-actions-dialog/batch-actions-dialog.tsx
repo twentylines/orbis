@@ -98,13 +98,7 @@ export const StartAllButton = (_: Props) => {
   return (
     <>
       <BatchActionDialog isOpen={dialogDisclosure.isOpen} onClose={dialogDisclosure.close} onConfirm={handleConfirm} action={selectedAction} />
-      <Button
-        size="icon"
-        intent="default"
-        onClick={handleActionClick}
-        title={t('MY_APPS_START_ALL_FORM_SUBMIT')}
-        className="batch-action-desktop-button gap-2"
-      >
+      <Button size="icon" intent="default" onClick={handleActionClick} className="batch-action-desktop-button gap-2">
         <IconPlayerPlay size={18} />
         {t('MY_APPS_START_ALL_FORM_SUBMIT')}
       </Button>
@@ -142,13 +136,7 @@ export const StopAllButton = (_: Props) => {
   return (
     <>
       <BatchActionDialog isOpen={dialogDisclosure.isOpen} onClose={dialogDisclosure.close} onConfirm={handleConfirm} action={selectedAction} />
-      <Button
-        size="icon"
-        intent="default"
-        onClick={handleActionClick}
-        title={t('MY_APPS_STOP_ALL_FORM_SUBMIT')}
-        className="batch-action-desktop-button gap-2"
-      >
+      <Button size="icon" intent="default" onClick={handleActionClick} className="batch-action-desktop-button gap-2">
         <IconPlayerPause size={18} />
         {t('MY_APPS_STOP_ALL_FORM_SUBMIT')}
       </Button>

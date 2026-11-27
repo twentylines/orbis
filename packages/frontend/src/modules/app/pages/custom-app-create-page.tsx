@@ -19,6 +19,7 @@ import { previewPaneMotion } from './preview-motion';
 import './custom-app-create-page.css';
 
 const RESERVED_APP_NAMES = ['create'];
+const CREATE_EXIT_DURATION = 140;
 
 export default () => {
   const { t } = useTranslation();
@@ -41,7 +42,8 @@ export default () => {
     const style = getComputedStyle(element);
     const from = motion.current ? { opacity: style.opacity, transform: style.transform, filter: style.filter } : undefined;
     motion.current?.cancel();
-    const animation = previewPaneMotion(element, blocker.state !== 'blocked', from);
+    const closing = blocker.state === 'blocked';
+    const animation = previewPaneMotion(element, !closing, from, closing ? CREATE_EXIT_DURATION : undefined);
     motion.current = animation;
     const finish = () => {
       if (motion.current !== animation) return;
@@ -147,7 +149,6 @@ export default () => {
             onChange={(e) => setAppName(e.target.value)}
             error={appNameError}
             placeholder={t('CUSTOM_APP_NAME_PLACEHOLDER')}
-            title={t('CUSTOM_APP_NAME_VALIDATION_HELP')}
             disabled={createCustomApp.isPending}
           />
           <p className="custom-app-name-help form-text" id="custom-app-name-help">

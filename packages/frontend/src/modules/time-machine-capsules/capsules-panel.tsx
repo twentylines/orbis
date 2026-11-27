@@ -362,7 +362,7 @@ export function TimeMachineCapsules({
                   <Button type="button" variant="outline" disabled={busy} onClick={() => picker.current?.click()}>
                     Choose file
                   </Button>
-                  <span title={file?.name}>{file?.name ?? 'No file chosen'}</span>
+                  <span>{file?.name ?? 'No file chosen'}</span>
                 </div>
               </>
             ) : null}

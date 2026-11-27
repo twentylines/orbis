@@ -535,7 +535,9 @@ export function CommandSearch() {
 
   const handleResultKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-    const buttons = [...(panel.current?.querySelectorAll<HTMLButtonElement>('[data-search-result]') ?? [])];
+    const buttons = [...(panel.current?.querySelectorAll<HTMLButtonElement>('[data-search-result]') ?? [])].filter(
+      (button) => button.getClientRects().length > 0,
+    );
     const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
     if (index < 0) return;
     event.preventDefault();
@@ -734,6 +736,7 @@ export function CommandSearch() {
                                           commands={result.commands}
                                           onCommand={requestAppCommand}
                                           onKeyDown={handleResultKeyDown}
+                                          menuContainer={panelElement}
                                         />
                                       ) : null}
                                       <button

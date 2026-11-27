@@ -257,7 +257,6 @@ export default () => {
   ) : null;
   const credentials = (
     <LoginForm
-      active={stage === 'credentials'}
       onSubmit={(values) =>
         login.mutate({ body: { password: values.password, redirectUrl: redirect_url ?? undefined, username: values.username.trim() } })
       }

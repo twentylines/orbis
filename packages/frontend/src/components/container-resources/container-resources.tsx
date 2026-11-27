@@ -266,15 +266,11 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
               const reading = (
                 <>
                   <span className="container-resource-name">
-                    <strong title={label}>{label}</strong>
+                    <strong>{label}</strong>
                     <span className="container-resource-meta">
-                      {label !== item.name ? <small title={item.name}>{item.name}</small> : null}
+                      {label !== item.name ? <small>{item.name}</small> : null}
                       {compact ? null : (
-                        <span
-                          className="docker-health"
-                          data-health={health.state}
-                          title={item.health === 'not-configured' ? 'No Docker healthcheck is configured' : `Docker: ${health.label}`}
-                        >
+                        <span className="docker-health" data-health={health.state}>
                           <i aria-hidden="true" />
                           <span>{health.label}</span>
                         </span>

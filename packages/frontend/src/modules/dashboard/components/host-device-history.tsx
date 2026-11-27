@@ -283,7 +283,7 @@ function HostDeviceHistoryView({
       <div className="host-history-controls">
         <div className="host-history-device">
           <Select value={selectedKey} onValueChange={onDevice} disabled={!choices.length}>
-            <SelectTrigger label="Host device" value={selectedKey} title={selected ? `${kindLabel(selected.kind)}: ${selected.name}` : undefined}>
+            <SelectTrigger label="Host device" value={selectedKey}>
               <SelectValue placeholder={loading ? 'Loading devices…' : 'No recorded devices'} />
             </SelectTrigger>
             <SelectContent className="host-history-device-menu">
@@ -294,7 +294,7 @@ function HostDeviceHistoryView({
                   textValue={`${kindLabel(item.kind)} ${item.name}`}
                   aria-label={`${kindLabel(item.kind)} ${item.name}`}
                 >
-                  <span className="host-history-choice" title={`${kindLabel(item.kind)}: ${item.name}`}>
+                  <span className="host-history-choice">
                     <span>{kindLabel(item.kind)}</span>
                     <bdi>{item.name}</bdi>
                   </span>

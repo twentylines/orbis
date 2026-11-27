@@ -124,12 +124,7 @@ export function HistoricalHomePreview({ point, wallpaper, assetFailed = false, a
               aria-label={preview.appIcons ? 'Captured applications' : 'Captured applications; app icons were not captured'}
             >
               {layout.apps.map((app) => (
-                <li
-                  className="tm-saved-app"
-                  key={app.urn}
-                  aria-label={`${app.name}, ${app.running ? 'running' : 'stopped'} at capture`}
-                  title={app.name}
-                >
+                <li className="tm-saved-app" key={app.urn} aria-label={`${app.name}, ${app.running ? 'running' : 'stopped'} at capture`}>
                   <CapturedAppIcon url={icons[app.urn]} name={app.name} />
                   <span className="tm-saved-app-copy">
                     <strong>{app.name}</strong>

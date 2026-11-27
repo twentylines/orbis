@@ -26,9 +26,13 @@ export const DockerHealth = memo(
             : ''
         : '';
     return (
-      <span className="docker-health" data-health={normal ? 'running' : result.state} title={`Docker: ${result.label}${coverage}`}>
+      <span className="docker-health" data-health={normal ? 'running' : result.state}>
         <i aria-hidden="true" />
-        <span>{normal ? 'Running' : result.label}</span>
+        <span>
+          <span className="visually-hidden">Docker: </span>
+          {normal ? 'Running' : result.label}
+          {coverage ? <span className="visually-hidden">{coverage}</span> : null}
+        </span>
       </span>
     );
   },

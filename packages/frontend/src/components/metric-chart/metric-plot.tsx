@@ -186,9 +186,15 @@ export function MetricPlot({
       </div>
       {hasPlot && selected && summary ? (
         <output className="metric-chart-tooltip" aria-live="off">
-          <time dateTime={selected.at} title={`${new Date(selected.at).toLocaleString()} – ${new Date(selected.until).toLocaleString()}`}>
-            {new Date(selected.at).toLocaleString()}
-          </time>
+          <span className="metric-chart-sample-range">
+            <time dateTime={selected.at}>{new Date(selected.at).toLocaleString()}</time>
+            {selected.until !== selected.at ? (
+              <>
+                {' – '}
+                <time dateTime={selected.until}>{new Date(selected.until).toLocaleString()}</time>
+              </>
+            ) : null}
+          </span>
           {summary.average === null ? (
             <span>Unavailable</span>
           ) : (

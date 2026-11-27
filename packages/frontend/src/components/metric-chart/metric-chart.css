@@ -103,7 +103,7 @@ body:has(.orbis-theme) .metric-chart-plot:focus-visible {
 .metric-chart-tooltip strong {
   font-size: 1.0625rem;
 }
-.metric-chart-tooltip time,
+.metric-chart-sample-range,
 .metric-chart-tooltip small {
   color: var(--desktop-status-muted);
   font-size: 0.625rem;
