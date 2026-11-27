@@ -1011,6 +1011,7 @@ def recover(root: Path, current: dict[str, str], target: dict[str, str], context
                 or core.get("health") != "healthy"
             ):
                 raise RuntimeError("previous release is not healthy before service downtime")
+            record.setdefault("failureStage", record["stage"])
             record["stage"] = "aborted"
             write_journal(snapshot, record)
             return {"result": "aborted-before-downtime", "releaseTag": current["tag"]}

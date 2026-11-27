@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -292,6 +293,41 @@ class OrbisHostUpdateTests(unittest.TestCase):
                 UPDATE.apply_update(self.root, CURRENT, TARGET, 'test-daemon', self.snapshot, expected_backup_policy='automatic')
             pull.assert_not_called()
         self.assertFalse(UPDATE.journal_path(self.snapshot).exists())
+
+    def test_no_backup_abort_records_the_pre_downtime_boundary_for_component_return(self):
+        runner = UPDATE.load_script("orbis-host-upgrade-runner.py", "early_abort_recovery_consumer")
+        checkpoint = {'backupPolicy': 'none', 'storage': {'backupScope': UPDATE.CONTROLLER.SCOPE}}
+        job = {'snapshot': str(self.snapshot), 'current': CURRENT, 'target': TARGET}
+        for stage in ('preparing', 'downloading', 'pulled'):
+            with self.subTest(stage=stage):
+                fake = FakeDocker(self.root)
+                fake.states['runtipi'] = 'exited'
+                runtime = mock.Mock()
+                runtime.read.side_effect = FileNotFoundError
+                record = {'schema': UPDATE.NO_BACKUP_JOURNAL_SCHEMA, 'backupPolicy': 'none',
+                          'backupScope': UPDATE.CONTROLLER.SCOPE, 'checkpoint': checkpoint, 'root': str(self.root),
+                          'snapshot': str(self.snapshot), 'dockerContext': 'test-daemon', 'previousDigest': CURRENT['digest'],
+                          'targetDigest': TARGET['digest'], 'stage': stage}
+                UPDATE.write_journal(self.snapshot, record)
+                journal = UPDATE.journal_path(self.snapshot)
+                original = journal.read_bytes()
+                with (
+                    mock.patch.object(UPDATE.CONTROLLER, 'ControllerUpdate', return_value=runtime),
+                    mock.patch.object(UPDATE.HOST, 'docker', side_effect=fake),
+                    mock.patch.object(UPDATE.HOST.AUTHORITY, 'OWNER', os.geteuid()),
+                    mock.patch.object(UPDATE, 'rollback') as rollback,
+                ):
+                    with self.assertRaisesRegex(RuntimeError, 'not healthy before service downtime'):
+                        UPDATE.recover(self.root, CURRENT, TARGET, 'test-daemon', self.snapshot)
+                    self.assertEqual(journal.read_bytes(), original)
+                    fake.states['runtipi'] = 'running'
+                    result = UPDATE.recover(self.root, CURRENT, TARGET, 'test-daemon', self.snapshot)
+                    self.assertEqual(result['result'], 'aborted-before-downtime')
+                    self.assertEqual(runner.original_core_boundary(UPDATE, self.root, 'test-daemon', job, self.temp.name),
+                                     {'stage': 'aborted', 'journalSha256': runner.sha(journal.read_bytes())})
+                    rollback.assert_not_called()
+                self.assertEqual(json.loads(journal.read_text())['failureStage'], stage)
+                self.assertFalse(any(call[0] in {'compose', 'stop', 'start'} for call in fake.calls))
 
     def test_no_backup_recovery_never_uses_legacy_rollback_after_handoff(self):
         checkpoint = {'backupPolicy': 'none', 'storage': {'backupScope': UPDATE.CONTROLLER.SCOPE}}

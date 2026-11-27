@@ -196,7 +196,8 @@ class CoreNetwork:
             return
         if plan is None:
             source_networks = record['source']['NetworkSettings']['Networks']
-            common = set(source_networks) & set(record['proxy']['NetworkSettings']['Networks'])
+            proxy_networks = record['proxy']['NetworkSettings']['Networks']
+            common = set(source_networks) & set(proxy_networks)
             if len(common) != 1:
                 raise CapabilityError('The controller network migration requires one reviewed public network')
             main = next(iter(common))
@@ -206,11 +207,30 @@ class CoreNetwork:
             if any(not isinstance(value, str) or not re.fullmatch(r'[a-f0-9]{64}', value) for value in identities.values()):
                 raise ValueError('The source network identity is invalid')
             initial = CORE_NETWORK if CORE_NETWORK in source_networks else main
-            for peer in record['peers'].values():
+            body = record['body']
+            # Docker keeps the creation-time NetworkMode after moving a peer's
+            # endpoints to the private bridge during an earlier update.
+            reviewed_shared_mode = (
+                initial == CORE_NETWORK and identities[main] != identities[initial]
+                and proxy_networks[main].get('NetworkID') == identities[main]
+                and (body.get('Labels') or {}).get('traefik.docker.network') == main
+                and set(body['NetworkingConfig']['EndpointsConfig']) == {main, CORE_NETWORK}
+            )
+            for name, peer in record['peers'].items():
                 networks = peer['NetworkSettings']['Networks']
-                if (set(networks) != {initial} or networks[initial].get('NetworkID') != identities[initial]
-                        or peer['HostConfig'].get('NetworkMode') not in {initial, identities[initial]}):
+                if set(networks) != {initial} or networks[initial].get('NetworkID') != identities[initial]:
                     raise CapabilityError('The database or queue has an unsupported network topology')
+                mode = peer['HostConfig'].get('NetworkMode')
+                if mode in {initial, identities[initial]}:
+                    continue
+                if not reviewed_shared_mode or mode not in {main, identities[main]}:
+                    raise CapabilityError('The database or queue has an unsupported network topology')
+                live = self.r.inspect(peer['Id'])
+                live_networks = live['NetworkSettings']['Networks']
+                if (live['Id'] != peer['Id'] or live['Name'] != '/' + name
+                        or live['HostConfig'].get('NetworkMode') != mode or set(live_networks) != {initial}
+                        or live_networks[initial].get('NetworkID') != identities[initial]):
+                    raise CapabilityError('The previously isolated database or queue changed network identity')
             plan = {'schema': 'orbis.controller-core-network.v1', 'main': main, 'sourceIds': identities,
                     'rootSha256': hashlib.sha256(str(self.u.root).encode()).hexdigest(), 'id': None,
                     'definition': None, 'goal': 'source', 'active': None, 'retirement': None,

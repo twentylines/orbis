@@ -1055,7 +1055,7 @@ class CoreNetworkTests(unittest.TestCase):
         self.net.prepare(record)
         self.assertEqual(self.network_calls, [('create', C.CORE_NETWORK)])
 
-    def test_already_isolated_source_reuses_its_exact_network_and_preserves_custom_aliases(self):
+    def already_isolated_source(self, creation_modes=None):
         source = self.objects['1' * 64]
         source['NetworkSettings']['Networks'][C.CORE_NETWORK] = {'NetworkID': '7' * 64, 'Aliases': ['runtipi', 'operator-core']}
         self.record['source'] = copy.deepcopy(source)
@@ -1063,17 +1063,82 @@ class CoreNetworkTests(unittest.TestCase):
         self.record['body']['NetworkingConfig']['EndpointsConfig'][C.CORE_NETWORK] = {'Aliases': ['runtipi', 'operator-core']}
         for name, peer in self.record['peers'].items():
             raw = self.objects[peer['Id']]
-            raw['HostConfig']['NetworkMode'] = C.CORE_NETWORK
+            raw['HostConfig']['NetworkMode'] = (creation_modes or {}).get(name, C.CORE_NETWORK)
             raw['NetworkSettings']['Networks'] = {C.CORE_NETWORK: {'NetworkID': '7' * 64, 'Aliases': [name]}}
             self.record['peers'][name] = copy.deepcopy(raw)
             self.record['peerDefinitions'][name] = self.runtime.definition(raw)
         self.networks[C.CORE_NETWORK] = {'Name': C.CORE_NETWORK, 'Id': '7' * 64, 'Scope': 'local', 'Driver': 'bridge',
                                          'Internal': True, 'Labels': {'orbis.managed': 'true'}, 'Options': {}}
+
+    def test_already_isolated_source_reuses_its_exact_network_and_preserves_custom_aliases(self):
+        self.already_isolated_source()
         record = self.prepared()
         self.net.move(record, 'target')
         self.net.move(record, 'source')
         self.assertEqual(self.network_calls, [])
         self.assertEqual(record['body']['NetworkingConfig']['EndpointsConfig'][C.CORE_NETWORK]['Aliases'], ['runtipi', 'operator-core'])
+
+    def test_repeat_upgrade_accepts_unchanged_historical_shared_creation_modes(self):
+        original = copy.deepcopy(self.record)
+        # Docker can retain either the original mode name or its resolved ID.
+        original['peers']['runtipi-queue']['HostConfig']['NetworkMode'] = 'f' * 64
+        queue = self.objects[original['peers']['runtipi-queue']['Id']]
+        queue['HostConfig']['NetworkMode'] = 'f' * 64
+        original['peerDefinitions']['runtipi-queue'] = self.runtime.definition(queue)
+        self.record = copy.deepcopy(original)
+        first = self.prepared()
+        self.net.move(first, 'target')
+        modes = {}
+        for name, peer in first['peers'].items():
+            self.runtime.change(['start', peer['Id']])
+            raw = self.objects[peer['Id']]
+            self.assertEqual(set(raw['NetworkSettings']['Networks']), {C.CORE_NETWORK})
+            modes[name] = raw['HostConfig']['NetworkMode']
+        self.assertEqual(modes, {'runtipi-db': 'managed', 'runtipi-queue': 'f' * 64})
+        self.record = copy.deepcopy(original)
+        self.already_isolated_source(modes)
+        self.record['body']['Labels']['traefik.docker.network'] = 'managed'
+        previous_calls = list(self.network_calls)
+        second = self.prepared()
+        self.net.move(second, 'target')
+        self.net.move(second, 'source')
+        self.assertEqual(self.network_calls, previous_calls)
+        self.assertEqual(second['coreNetwork']['peers'], {name: [C.CORE_NETWORK] for name in modes})
+        self.assertEqual({name: self.objects[peer['Id']]['HostConfig']['NetworkMode']
+                          for name, peer in second['peers'].items()}, modes)
+
+    def test_historical_shared_creation_mode_requires_reviewed_candidate_and_live_private_endpoint(self):
+        self.already_isolated_source({'runtipi-db': 'managed', 'runtipi-queue': 'f' * 64})
+        self.record['body']['Labels']['traefik.docker.network'] = 'managed'
+        before = copy.deepcopy(self.record)
+        live_before = copy.deepcopy(self.objects)
+        for drift in ('unrelated-mode', 'proxy-id', 'candidate-label', 'candidate-endpoints',
+                      'saved-public-endpoint', 'live-private-id', 'live-public-endpoint', 'live-mode'):
+            with self.subTest(drift=drift):
+                record = copy.deepcopy(before)
+                self.objects = copy.deepcopy(live_before)
+                peer = record['peers']['runtipi-db']
+                live = self.objects[peer['Id']]
+                if drift == 'unrelated-mode':
+                    peer['HostConfig']['NetworkMode'] = 'bridge'
+                elif drift == 'proxy-id':
+                    record['proxy']['NetworkSettings']['Networks']['managed']['NetworkID'] = '0' * 64
+                elif drift == 'candidate-label':
+                    record['body']['Labels'].pop('traefik.docker.network')
+                elif drift == 'candidate-endpoints':
+                    record['body']['NetworkingConfig']['EndpointsConfig']['other'] = {}
+                elif drift == 'saved-public-endpoint':
+                    peer['NetworkSettings']['Networks']['managed'] = {'NetworkID': 'f' * 64}
+                elif drift == 'live-private-id':
+                    live['NetworkSettings']['Networks'][C.CORE_NETWORK]['NetworkID'] = '0' * 64
+                elif drift == 'live-public-endpoint':
+                    live['NetworkSettings']['Networks']['managed'] = {'NetworkID': 'f' * 64}
+                else:
+                    live['HostConfig']['NetworkMode'] = 'bridge'
+                with self.assertRaises(C.CapabilityError):
+                    self.net.prepare(record)
+                self.assertNotIn('coreNetwork', record)
+                self.assertEqual(self.network_calls, [])
 
     def test_rollback_reuses_reviewed_source_aliases_static_address_and_endpoint_options(self):
         prior = self.objects['4' * 64]
