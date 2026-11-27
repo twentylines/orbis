@@ -3,6 +3,7 @@ import json
 import subprocess
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 from unittest import mock
 
@@ -23,6 +24,7 @@ CURRENT = {
 TARGET = {**CURRENT, "tag": "v0.1.0-beta.5", "commit": "c" * 40, "digest": "sha256:" + "d" * 64}
 CURRENT_IMAGE = f"{CURRENT['image']}@{CURRENT['digest']}"
 TARGET_IMAGE = f"{TARGET['image']}@{TARGET['digest']}"
+TARGET_412 = {**TARGET, "runtipiCompatibility": "4.12.0", "installationProtocol": UPDATE.HOST.PLAN.INSTALLATION_PROTOCOL}
 
 
 class FakeDocker:
@@ -201,6 +203,86 @@ class OrbisHostUpdateTests(unittest.TestCase):
         tools.review.assert_called_once_with(self.root, reader, self.snapshot, UPDATE.checkpoint_path(self.snapshot), scope=UPDATE.CONTROLLER.SCOPE, backup=False)
         copy_review.assert_not_called()
         self.assertFalse(self.snapshot.exists())
+
+    def test_cross_base_plan_requires_a_backed_controller_and_binds_the_review(self):
+        fake = FakeDocker(self.root)
+        tools, reader = mock.Mock(), mock.Mock()
+        tools.review.return_value = {"storage": {"estimatedBytes": 256}}
+        tools.APPS.digest.return_value = "1" * 64
+        with mock.patch.object(UPDATE.HOST, "docker", side_effect=fake), \
+                mock.patch.object(UPDATE, "verify_release"), \
+                mock.patch.object(UPDATE, "controller_tools", return_value=(tools, reader)), \
+                mock.patch.object(UPDATE.HOST.PLAN, "review_412", return_value={"approved": True}), \
+                mock.patch.object(UPDATE.shutil, "which", return_value="/usr/bin/rsync"):
+            plan = UPDATE.update_plan(self.root, CURRENT, TARGET_412, "test-daemon", self.snapshot)
+        self.assertEqual(plan["backupPolicy"], "automatic")
+        self.assertEqual(plan["snapshotBytes"], 256)
+        self.assertFalse(plan["runningAppsMustBeStopped"])
+        self.assertEqual(plan["runtipiReviewSha256"], "1" * 64)
+        tools.review.assert_called_once_with(self.root, reader, self.snapshot, UPDATE.checkpoint_path(self.snapshot),
+                                             scope=UPDATE.CONTROLLER.SCOPE, backup=True)
+        tools.APPS.digest.assert_called_once_with({"approved": True})
+
+    def test_cross_base_producer_stages_only_after_a_backed_checkpoint(self):
+        fake = FakeDocker(self.root)
+        operation = str(uuid.uuid4())
+        snapshot = self.root.parent / f"orbis-{TARGET_412['tag']}-{operation}"
+        binding = {"operationId": operation, "approvedReviewSha256": "1" * 64,
+                   "sourceReceiptSha256": "2" * 64, "targetReceiptSha256": "3" * 64}
+        checkpoint = {"storage": {"backupScope": UPDATE.CONTROLLER.SCOPE}}
+        tools, reader, runtime = mock.Mock(), mock.Mock(), mock.Mock()
+        effects = mock.Mock()
+        for name in ("checkpoint", "prepare_runtipi_configuration", "stage_runtipi_configuration"):
+            effects.attach_mock(getattr(tools, name), name)
+        effects.attach_mock(runtime.start_target, "start_target")
+        runtime.start_target.side_effect = lambda **options: setattr(fake, 'image', TARGET_IMAGE)
+        runtime.commit.return_value = False
+        with mock.patch.object(UPDATE, "update_plan", return_value={"checkpoint": checkpoint, "runtipiReviewSha256": "1" * 64}), \
+                mock.patch.object(UPDATE, "controller_tools", return_value=(tools, reader)), \
+                mock.patch.object(UPDATE.CONTROLLER, "ControllerUpdate", return_value=runtime), \
+                mock.patch.object(UPDATE.HOST, "published_installation_fingerprint", return_value={}), \
+                mock.patch.object(UPDATE.HOST, "write_state"), \
+                mock.patch.object(UPDATE.HOST, "docker", side_effect=fake), \
+                mock.patch.object(UPDATE.HOST.STAGE, "stage") as ordinary_stage:
+            with self.assertRaisesRegex(ValueError, "coordinated configuration review"):
+                UPDATE.apply_update(self.root, CURRENT, TARGET_412, "test-daemon", snapshot)
+            self.assertFalse(UPDATE.journal_path(snapshot).exists())
+            result = UPDATE.apply_update(self.root, CURRENT, TARGET_412, "test-daemon", snapshot, runtipi_binding=binding)
+        self.assertEqual(result["result"], "healthy")
+        observed = UPDATE.read_journal(snapshot, self.root, "test-daemon", CURRENT, TARGET_412)
+        self.assertEqual(observed["runtipiBinding"], binding)
+        self.assertEqual([call[0] for call in effects.mock_calls],
+                         ["checkpoint", "prepare_runtipi_configuration", "stage_runtipi_configuration", "start_target"])
+        tools.prepare_runtipi_configuration.assert_called_once_with(
+            self.root, reader, UPDATE.checkpoint_path(snapshot), CURRENT, TARGET_412, binding)
+        ordinary_stage.assert_not_called()
+
+    def test_cross_base_rollback_requires_restored_original_configuration_before_restart(self):
+        operation = str(uuid.uuid4())
+        snapshot = self.root.parent / f"orbis-{TARGET_412['tag']}-{operation}"
+        journal = UPDATE.checkpoint_path(snapshot)
+        journal.touch()
+        checkpoint = {"storage": {"backupScope": UPDATE.CONTROLLER.SCOPE}}
+        binding = {"operationId": operation, "approvedReviewSha256": "1" * 64,
+                   "sourceReceiptSha256": "2" * 64, "targetReceiptSha256": "3" * 64}
+        tools, reader, runtime = mock.Mock(), mock.Mock(), mock.Mock()
+        runtime.read.return_value = {"checkpoint": checkpoint}
+        tools.read_record.return_value = {"review": checkpoint, "stage": "ready", "runtipiConfiguration": {}}
+        record = {"backupScope": UPDATE.CONTROLLER.SCOPE, "targetPublication": TARGET_412, "stage": "staged",
+                  "runtipiBinding": binding}
+        def recover(*args, before_originals_start, **options):
+            before_originals_start()
+        tools.recover.side_effect = recover
+        for reconstructed in (False, True):
+            with self.subTest(reconstructed=reconstructed):
+                runtime.restore_reconstructed_checkpoint.return_value = reconstructed
+                tools.verify_restored_runtipi_configuration.side_effect = ValueError("original configuration differs")
+                with mock.patch.object(UPDATE.CONTROLLER, "ControllerUpdate", return_value=runtime), \
+                        mock.patch.object(UPDATE, "controller_tools", return_value=(tools, reader)), \
+                        mock.patch.object(UPDATE, "write_journal"):
+                    with self.assertRaisesRegex(ValueError, "original configuration differs"):
+                        UPDATE.rollback(self.root, CURRENT, "test-daemon", snapshot, dict(record))
+                runtime.start_original.assert_not_called()
 
     def test_changed_reviewed_backup_policy_fails_before_journal_or_download(self):
         checkpoint = {'backupPolicy': 'none', 'storage': {'backupScope': UPDATE.CONTROLLER.SCOPE}}

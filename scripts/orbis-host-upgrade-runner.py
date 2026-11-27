@@ -49,6 +49,16 @@ def sha(body):
     return hashlib.sha256(body).hexdigest()
 
 
+def runtipi_binding(plan, job):
+    review = job.get('runtipiReviewSha256')
+    require(plan.get('runtipiReviewSha256') == review)
+    if review is None:
+        return None
+    return {'operationId': job['id'], 'approvedReviewSha256': review,
+            'sourceReceiptSha256': sha(encoded(plan['original'])),
+            'targetReceiptSha256': plan['targetSetSha256']}
+
+
 def seal(info):
     return info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode
 
@@ -686,7 +696,7 @@ def run(launcher, service, job, admission):
                     'sentinel': original_collector}
         planned = update.update_plan(service.root, job['current'], job['target'], service.context, Path(job['snapshot']))
         policy = 'none' if planned.get('checkpoint', {}).get('backupPolicy') == 'none' else 'automatic'
-        require(policy == job['backupPolicy'])
+        require(policy == job['backupPolicy'] and planned.get('runtipiReviewSha256') == job.get('runtipiReviewSha256'))
         if job.get('retainedSource') is not None:
             require(helper.HOST.retained_descriptor(service.root, service.context, job['current']) == job['retainedSource'])
         # Cache all Core image layers before stopping or replacing any actor.
@@ -701,6 +711,8 @@ def run(launcher, service, job, admission):
                 'targetSetSha256': sha(admission.body), 'original': original,
                 'target': target, 'integration': spec, 'backupPolicy': policy,
                 'order': ['sentinel', 'integration', 'host', 'core']}
+        if job.get('runtipiReviewSha256') is not None:
+            plan['runtipiReviewSha256'] = job['runtipiReviewSha256']
         binding = {'operationId': job['id'], 'planSha256': sha(encoded(plan)), 'targetDigest': job['target']['digest']}
         journal.append('staged', plan)
         retained = integration_ticket = host_retained = None
@@ -758,6 +770,8 @@ def run(launcher, service, job, admission):
                        'lock_fds': locks}
             if job.get('retainedSource') is not None:
                 options['expected_source'] = job['retainedSource']
+            if (migration := runtipi_binding(plan, job)) is not None:
+                options['runtipi_binding'] = migration
             with progress.follow_core(update, job):
                 result = update.apply_update(service.root, job['current'], job['target'], service.context,
                                              Path(job['snapshot']), **options)
@@ -822,6 +836,7 @@ def reconcile(launcher, service, job, admission):
             and plan['target'] == target and plan['backupPolicy'] == job['backupPolicy']
             and plan['order'] == ['sentinel', 'integration', 'host', 'core'])
     binding = {'operationId': job['id'], 'planSha256': sha(encoded(plan)), 'targetDigest': job['target']['digest']}
+    migration = runtipi_binding(plan, job)
     original = plan['original']
     original_copy = {'inventory': bootstrap.intake['files'], 'unitSha256': bootstrap.intake['acceptingHostUnitSha256']}
     require(original['host']['inventorySha256'] == sha(encoded(original_copy['inventory']))
@@ -898,6 +913,7 @@ def reconcile(launcher, service, job, admission):
         if path.exists() or path.is_symlink():
             require('core-intent' in facts)
             core_record = update.read_journal(Path(job['snapshot']), service.root, service.context, job['current'], job['target'])
+            require(core_record.get('runtipiBinding') == migration)
             if core_record['stage'] not in ('complete', 'aborted', 'rolled-back'):
                 require(terminal is None and collector is not None)
                 # The protected Core producer owns data recovery. Its no-backup

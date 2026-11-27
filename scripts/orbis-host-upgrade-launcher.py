@@ -173,7 +173,8 @@ def stage_source(boot, plan, supervision, scope, state_directory, operation, req
     manifest_body = fetch(base + boot.MANIFEST, 65536)
     manifest = boot.verify_manifest(manifest_body, identity, required=boot.SOURCE_CUSTODY_REQUIRED)
     core_body = fetch(base + 'release-manifest.json', 16384)
-    require(sha(core_body) == manifest['releaseManifestSha256'] and plan.validate_manifest(decoded(core_body)) == target)
+    require(sha(core_body) == manifest['releaseManifestSha256']
+            and plan.update_identity(decoded(core_body)) == plan.update_identity(target))
     archive = fetch(base + boot.ARCHIVE, manifest['archiveBytes'])
     manifest, files = boot.verify_source_package(manifest_body, identity, archive)
     tree_sha = authenticate_tree(fetch, target['commit'], files)
@@ -820,7 +821,7 @@ def execute_source(staged):
             checked = decoded(lines[-1])
             require(checked == {'schema': PROTOCOL, 'selectionSha256': value['selectionSha256'],
                 'executionSha256': selection['executionSha256'], 'coreSha256': selection['coreSha256'],
-                'core': value['core']})
+                'core': decoded(staged.files['release-manifest.json'])})
         scope.verify_bootstrap()
         receipt = {**value, 'executionSha256': selection['executionSha256']}
         write_exclusive(operation_directory / 'source-checked.json', canonical(receipt))

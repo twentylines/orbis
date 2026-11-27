@@ -103,6 +103,13 @@ def require_installation_protocol(raw: object) -> dict[str, str]:
     return manifest
 
 
+def update_identity(raw: object) -> dict[str, str]:
+    """Project the identity used by protected Host update jobs."""
+    release = validate_manifest(raw)
+    fields = ("schema", "image", "tag", "commit", "digest", "runtipiCompatibility", "installationProtocol")
+    return {name: release[name] for name in fields if name in release}
+
+
 def override_yaml(manifest: dict[str, str]) -> str:
     return (
         "services:\n  runtipi:\n"
@@ -240,11 +247,15 @@ def read_review_file(file: Path) -> bytes:
         return body
 
 
+def is_runtipi_412_upgrade(current: dict, target: dict) -> bool:
+    return (current.get("runtipiCompatibility") in (LEGACY_BASE, "v" + LEGACY_BASE)
+            and target.get("runtipiCompatibility") == RUNTIPI_412_BASE)
+
+
 def configuration_412(current: dict, target: dict, env: bytes, version: bytes) -> tuple[dict, str]:
     """Render the exact forward version files and candidate override without writing them."""
     current, target = validate_manifest(current), require_installation_protocol(target)
-    if (current["runtipiCompatibility"].removeprefix("v") != LEGACY_BASE
-            or target["runtipiCompatibility"] != RUNTIPI_412_BASE
+    if (not is_runtipi_412_upgrade(current, target)
             or POLICY.version_order(current["tag"], target["tag"]) != -1
             or current["digest"] == target["digest"]):
         raise ValueError("Review only a forward Orbis release from Runtipi 4.10.1 to 4.12.0")
@@ -288,6 +299,12 @@ def review_412(root: Path, current: dict, target: dict) -> dict:
             for entry in configuration.get("env_file", [])
         ):
             raise ValueError("Another service uses the root environment file and requires separate review")
+        if service != "runtipi" and any(
+            isinstance(mount, dict) and mount.get("type") == "bind" and isinstance(mount.get("source"), str)
+            and any((root / name).is_relative_to(Path(mount["source"]).resolve()) for name in (*prospective_files, "orbis-compose.yml"))
+            for mount in configuration.get("volumes", [])
+        ):
+            raise ValueError("Another service can read the changing version files and requires separate review")
     previous_core = original["services"]["runtipi"]
     env_mounts = [mount for mount in previous_core.get("volumes", []) if mount.get("target") == "/data/.env"]
     if len(env_mounts) != 1 or env_mounts[0].get("type") != "bind" or env_mounts[0].get("source") != str(root / ".env"):

@@ -11,11 +11,13 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import time
 import uuid
 from pathlib import Path
+from contextlib import contextmanager
 import importlib.util
 
 
@@ -29,7 +31,8 @@ SCHEMA = "orbis.installation-transaction.v1"
 STAGES = {"prepared", "quiescing", "snapshotting", "ready", "recovering", "restoring", "starting", "recovered"}
 NO_BACKUP_SCHEMA = "orbis.controller-update-handoff.v1"
 RUNTIPI_CONFIGURATION_SCHEMA = "orbis.update-runtipi-configuration.v1"
-RUNTIPI_CONFIGURATION_FILES = frozenset({".env", "VERSION", "orbis-compose.yml"})
+RUNTIPI_CONFIGURATION_ORDER = (".env", "VERSION", "orbis-compose.yml")
+RUNTIPI_CONFIGURATION_FILES = frozenset(RUNTIPI_CONFIGURATION_ORDER)
 NO_RESTART = {"Name": "no", "MaximumRetryCount": 0}
 
 
@@ -289,14 +292,24 @@ def _runtipi_configuration_record(root, record, path, current, target, binding, 
         "sourceManifestSha256": APPS.digest(current), "targetManifestSha256": APPS.digest(target),
         "compatibility": compatibility, "stagedFileSha256": {name: sha(body) for name, body in after.items()},
     }
+    states = _runtipi_file_states(root, before, after, copy)
+    return receipt, states, before, after, copy
+
+
+def _runtipi_file_states(root, before, after, backup):
     states = {}
+    allowed = set(APPS.HOST.AUTHORITY.CONFIG_PATHS) | {"VERSION"}
     for name in sorted(allowed):
         file = root / name
         if name not in before:
             if os.path.lexists(file):
                 raise TransactionError("An unreviewed configuration file appeared during the Runtipi change")
             continue
-        actual = plan.read_review_file(file)
+        actual = APPS.HOST.PLAN.read_review_file(file)
+        if name in after:
+            expected_metadata = _configuration_file_metadata(backup / name)
+            if expected_metadata[3] != 1 or _configuration_file_metadata(file) != expected_metadata:
+                raise TransactionError("A Runtipi configuration file has unreviewed permissions or attributes")
         if actual == before[name]:
             if name in after:
                 states[name] = "source"
@@ -304,7 +317,23 @@ def _runtipi_configuration_record(root, record, path, current, target, binding, 
             states[name] = "target"
         else:
             raise TransactionError("A configuration file differs from both approved Runtipi states")
-    return receipt, states
+    return states
+
+
+def _configuration_file_metadata(file):
+    info = file.lstat()
+    attributes = {}
+    if hasattr(os, "listxattr"):
+        attributes = {name: os.getxattr(file, name, follow_symlinks=False)
+                      for name in os.listxattr(file, follow_symlinks=False)}
+    return (info.st_mode, info.st_uid, info.st_gid, info.st_nlink, attributes)
+
+
+def _verify_runtipi_compose(root, expected):
+    plan = APPS.HOST.PLAN
+    observed = plan.compose_config(root, plan.compose_files(root), all_profiles=True)
+    if hashlib.sha256(json.dumps(observed, sort_keys=True).encode()).hexdigest() != expected:
+        raise TransactionError("Resolved Compose does not match the reviewed Runtipi configuration")
 
 
 def prepare_runtipi_configuration(root, reader, path, current, target, binding):
@@ -313,7 +342,7 @@ def prepare_runtipi_configuration(root, reader, path, current, target, binding):
     if record["stage"] != "ready":
         raise TransactionError("Runtipi configuration preparation requires a completed stopped checkpoint")
     compatibility = APPS.HOST.PLAN.review_412(root, current, target)
-    receipt, states = _runtipi_configuration_record(root, record, path, current, target, binding, compatibility)
+    receipt, states, _, _, _ = _runtipi_configuration_record(root, record, path, current, target, binding, compatibility)
     if any(state != "source" for state in states.values()):
         raise TransactionError("Runtipi configuration staging has already started")
     STORAGE.require_quiet_existing(root, reader, record["review"]["storage"])
@@ -328,16 +357,199 @@ def prepare_runtipi_configuration(root, reader, path, current, target, binding):
     return receipt
 
 
+def _read_runtipi_configuration(root, record, path, current, target, binding):
+    saved = record.get("runtipiConfiguration")
+    if record["stage"] not in {"ready", "recovering", "restoring", "starting", "recovered"} or type(saved) is not dict:
+        raise TransactionError("No active Runtipi configuration preparation is available")
+    pair = _runtipi_configuration_record(root, record, path, current, target, binding, saved.get("compatibility"))
+    if saved != pair[0]:
+        raise TransactionError("The saved Runtipi configuration preparation has changed")
+    return pair
+
+
+def _runtipi_staging(record, receipt):
+    staging = record.get("runtipiConfigurationStaging")
+    if staging is None:
+        return None
+    if (type(staging) is not dict or set(staging) != {"receiptSha256", "completed", "phase"}
+            or staging["receiptSha256"] != APPS.digest(receipt)
+            or type(staging["completed"]) is not int or not 0 <= staging["completed"] <= len(RUNTIPI_CONFIGURATION_ORDER)
+            or staging["phase"] not in ("staging", "staged")
+            or (staging["phase"] == "staged" and staging["completed"] != len(RUNTIPI_CONFIGURATION_ORDER))):
+        raise TransactionError("The Runtipi configuration staging journal has changed")
+    return staging
+
+
+def _runtipi_staged_prefix(states, staging):
+    target = [name for name in RUNTIPI_CONFIGURATION_ORDER if states[name] == "target"]
+    observed = len(target)
+    if target != list(RUNTIPI_CONFIGURATION_ORDER[:observed]):
+        raise TransactionError("The staged Runtipi configuration is out of order")
+    if staging is None and observed:
+        raise TransactionError("Runtipi configuration changed before staging was authorized")
+    # One rename can be durable before its completion acknowledgement.
+    if staging is not None and not staging["completed"] <= observed <= staging["completed"] + 1:
+        raise TransactionError("The staged Runtipi configuration conflicts with its journal")
+    return observed
+
+
+def _read_configuration_file(directory, name):
+    fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+    with os.fdopen(fd, "rb") as stream:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or not 0 <= info.st_size <= 1024 * 1024:
+            raise TransactionError("A Runtipi configuration staging file is not regular")
+        body = stream.read(1024 * 1024 + 1)
+        current = os.stat(name, dir_fd=directory, follow_symlinks=False)
+        seal = APPS.HOST.AUTHORITY.seal
+        if len(body) != info.st_size or seal(info) != seal(os.fstat(fd)) or seal(info) != seal(current):
+            raise TransactionError("A Runtipi configuration staging file changed while it was read")
+        return body, info
+
+
+@contextmanager
+def _runtipi_staging_directory(root, operation, after, staging, *, create=False):
+    name = f".orbis-runtipi-412-{operation}"
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    directory = os.open(root, flags)
+    children = None
+    try:
+        info = os.fstat(directory)
+        if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o022:
+            raise TransactionError("The installation root is not protected for Runtipi configuration staging")
+        if create:
+            try:
+                os.mkdir(name, mode=0o700, dir_fd=directory)
+            except FileExistsError:
+                pass
+            os.fsync(directory)
+        try:
+            children = os.open(name, flags, dir_fd=directory)
+        except FileNotFoundError:
+            if create:
+                raise
+        if children is not None:
+            details = os.fstat(children)
+            if (not staging or staging["phase"] != "staging" or details.st_uid != info.st_uid
+                    or details.st_dev != info.st_dev or stat.S_IMODE(details.st_mode) != 0o700):
+                raise TransactionError("An unreviewed Runtipi configuration staging directory exists")
+            names = os.listdir(children)
+            pending = RUNTIPI_CONFIGURATION_ORDER[staging["completed"]:staging["completed"] + 1]
+            if any(file not in pending for file in names):
+                raise TransactionError("An unreviewed file exists in Runtipi configuration staging")
+            for file in names:
+                body, metadata = _read_configuration_file(children, file)
+                if metadata.st_uid != info.st_uid or not after[file].startswith(body):
+                    raise TransactionError("An interrupted Runtipi configuration file has unreviewed bytes")
+        yield directory, name, children
+    finally:
+        if children is not None:
+            os.close(children)
+        os.close(directory)
+
+
+def _replace_runtipi_configuration_file(directory, stage, name, source, target, backup):
+    actual, info = _read_configuration_file(directory, name)
+    original = (backup / name).lstat()
+    if actual != source or (info.st_uid, info.st_gid, info.st_mode) != (original.st_uid, original.st_gid, original.st_mode):
+        raise TransactionError("The original Runtipi configuration changed before staging")
+    try:
+        partial, partial_info = _read_configuration_file(stage, name)
+    except FileNotFoundError:
+        pass
+    else:
+        if partial_info.st_uid != info.st_uid or not target.startswith(partial):
+            raise TransactionError("An interrupted Runtipi configuration file has unreviewed bytes")
+        os.unlink(name, dir_fd=stage)
+    fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=stage)
+    with os.fdopen(fd, "wb") as stream:
+        st = os.fstat(fd)
+        if (st.st_uid, st.st_gid) != (info.st_uid, info.st_gid):
+            os.fchown(fd, info.st_uid, info.st_gid)
+        os.fchmod(fd, stat.S_IMODE(info.st_mode))
+        if hasattr(os, "listxattr"):
+            for attribute in os.listxattr(backup / name, follow_symlinks=False):
+                os.setxattr(fd, attribute, os.getxattr(backup / name, attribute, follow_symlinks=False))
+        stream.write(target)
+        stream.flush()
+        os.fsync(fd)
+    if APPS.HOST.AUTHORITY.seal(info) != APPS.HOST.AUTHORITY.seal(os.stat(name, dir_fd=directory, follow_symlinks=False)):
+        raise TransactionError("The original Runtipi configuration changed during staging")
+    os.replace(name, name, src_dir_fd=stage, dst_dir_fd=directory)
+    os.fsync(directory)
+    os.fsync(stage)
+
+
+def stage_runtipi_configuration(root, reader, path, current, target, binding):
+    """Stage the approved configuration while the enclosing producer holds the installation lock."""
+    record = read_record(path, root, reader)
+    if record["stage"] != "ready":
+        raise TransactionError("Runtipi configuration staging requires a completed stopped checkpoint")
+    receipt, states, before, after, backup = _read_runtipi_configuration(root, record, path, current, target, binding)
+    STORAGE.require_quiet_existing(root, reader, record["review"]["storage"])
+    operation = binding["operationId"]
+    staging = _runtipi_staging(record, receipt)
+    observed = _runtipi_staged_prefix(states, staging)
+    with _runtipi_staging_directory(root, operation, after, staging):
+        pass
+    if staging is None:
+        staging = {"receiptSha256": APPS.digest(receipt), "completed": 0, "phase": "staging"}
+        record["runtipiConfigurationStaging"] = staging
+        save(record)
+    if staging["phase"] == "staged":
+        _verify_runtipi_compose(root, receipt["compatibility"]["prospectiveComposeSha256"])
+        return receipt
+    staging["completed"] = observed
+    save(record)
+    with _runtipi_staging_directory(root, operation, after, staging, create=True) as (directory, folder, stage):
+        for name in RUNTIPI_CONFIGURATION_ORDER[observed:]:
+            _replace_runtipi_configuration_file(directory, stage, name, before[name], after[name], backup)
+            staging["completed"] += 1
+            save(record)
+        os.rmdir(folder, dir_fd=directory)
+        os.fsync(directory)
+    if any(state != "target" for state in _runtipi_file_states(root, before, after, backup).values()):
+        raise TransactionError("The target Runtipi files were not completely staged")
+    _verify_runtipi_compose(root, receipt["compatibility"]["prospectiveComposeSha256"])
+    staging["phase"] = "staged"
+    save(record)
+    return receipt
+
+
+def _runtipi_configuration_recovery(root, record, path, current, target, binding):
+    receipt, states, _, after, _ = _read_runtipi_configuration(root, record, path, current, target, binding)
+    staging = _runtipi_staging(record, receipt)
+    with _runtipi_staging_directory(root, binding["operationId"], after, staging):
+        pass
+    if staging is None and any(state != "source" for state in states.values()):
+        raise TransactionError("Runtipi configuration changed before staging was authorized")
+    return receipt, states
+
+
 def runtipi_configuration_recovery_state(root, reader, path, current, target, binding):
     """Verify exact source/target file bytes before the producer restores its backup."""
     record = read_record(path, root, reader)
-    saved = record.get("runtipiConfiguration")
-    if record["stage"] not in {"ready", "recovering", "restoring", "starting"} or type(saved) is not dict:
+    if record["stage"] == "recovered":
         raise TransactionError("No active Runtipi configuration preparation is available")
-    receipt, states = _runtipi_configuration_record(root, record, path, current, target, binding, saved.get("compatibility"))
-    if saved != receipt:
-        raise TransactionError("The saved Runtipi configuration preparation has changed")
+    receipt, states = _runtipi_configuration_recovery(root, record, path, current, target, binding)
+    if record["stage"] == "ready":
+        _runtipi_staged_prefix(states, _runtipi_staging(record, receipt))
     return states
+
+
+def verify_restored_runtipi_configuration(root, reader, path, current, target, binding, *, reconstructed=False):
+    """Verify all reviewed source files at or after the original startup boundary."""
+    record = read_record(path, root, reader)
+    # The caller has independently verified the completed reconstructed restore.
+    stages = ("ready",) if reconstructed else ("starting", "recovered")
+    if type(reconstructed) is not bool or record["stage"] not in stages:
+        raise TransactionError("Runtipi configuration recovery has not returned to original startup")
+    receipt, states = _runtipi_configuration_recovery(root, record, path, current, target, binding)
+    if any(state != "source" for state in states.values()):
+        raise TransactionError("The original Runtipi configuration has not been completely restored")
+    if os.path.lexists(root / f".orbis-runtipi-412-{binding['operationId']}"):
+        raise TransactionError("Runtipi configuration staging files remain after recovery")
+    _verify_runtipi_compose(root, receipt["compatibility"]["currentComposeSha256"])
 
 
 def recover(root: Path, reader, path: Path, *, host_writers_stopped: bool, before_controller_start=None, before_originals_start=None) -> dict:
@@ -349,6 +561,8 @@ def recover(root: Path, reader, path: Path, *, host_writers_stopped: bool, befor
     record = read_record(path, root, reader)
     if record["stage"] == "recovered":
         raise TransactionError("This installation has already recovered; its journal cannot be replayed")
+    if record.get("runtipiConfiguration") is not None and before_originals_start is None:
+        raise TransactionError("The Runtipi configuration recovery verifier is required")
     value = record["review"]
     origin = record.setdefault("recoveryStartedFrom", record["stage"])
     record["stage"] = "recovering"
@@ -381,12 +595,11 @@ def recover(root: Path, reader, path: Path, *, host_writers_stopped: bool, befor
             RESTORE.restore(root, reader, restore_review, restore_path, host_writers_stopped=True)
     record["stage"] = "starting"
     save(record)
-    if before_originals_start is not None:
-        before_originals_start()
-    return finish_recovery(root, reader, path, before_controller_start=before_controller_start)
+    return finish_recovery(root, reader, path, before_controller_start=before_controller_start,
+                           before_originals_start=before_originals_start)
 
 
-def finish_recovery(root: Path, reader, path: Path, *, before_controller_start=None) -> dict:
+def finish_recovery(root: Path, reader, path: Path, *, before_controller_start=None, before_originals_start=None) -> dict:
     """Finish an already restored transaction without replaying its data copy.
 
     The enclosing Root issuer must independently establish that starting has
@@ -395,6 +608,12 @@ def finish_recovery(root: Path, reader, path: Path, *, before_controller_start=N
     record = read_record(path, root, reader)
     if record['stage'] != 'starting':
         raise TransactionError('Only a restored transaction can finish original startup')
+    if record.get("runtipiConfiguration") is not None and before_originals_start is None:
+        raise TransactionError("The Runtipi configuration recovery verifier is required")
+    if before_originals_start is not None:
+        if not callable(before_originals_start):
+            raise TransactionError('The enclosing Root recovery verifier is invalid')
+        before_originals_start()
     value = record['review']
     for original in ordered(value, starting=True):
         current = identities(root, reader, value)[original["id"]]

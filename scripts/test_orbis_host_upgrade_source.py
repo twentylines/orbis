@@ -59,8 +59,8 @@ class SourceTests(unittest.TestCase):
         path.mkdir(mode=0o700,parents=True,exist_ok=True)
         return path
 
-    def build_inputs(self):
-        self.core_body=json.dumps(self.target).encode()
+    def build_inputs(self, published=None):
+        self.core_body=json.dumps(self.target if published is None else published).encode()
         self.assets=BUILD.build(self.files,self.core_body)
         identity={'tag':self.target['tag'],'commit':self.target['commit'],'manifestSha256':BOOT.sha(self.assets[BOOT.MANIFEST])}
         self.launcher=BOOT._render_installer('release',identity,self.files['scripts/install-orbis.py'])
@@ -214,6 +214,18 @@ class SourceTests(unittest.TestCase):
             self.assertEqual(set(value['sentinel']['toolkit']),{'activate_release.py','stage_release.py','verify_release.py','bootstrap_verifier.py','LICENSE'})
             admission.verify_bootstrap()
         with self.assertRaises(ValueError):admission.verify_bootstrap()
+
+    def test_published_manifest_keeps_full_source_custody_with_a_compact_job_identity(self):
+        self.target={**self.target,'runtipiCompatibility':'4.12.0'}
+        self.scope.target=copy.deepcopy(self.target)
+        self.build_inputs({**self.target,'releaseChannel':'stable','updatePriority':'normal','criticalThrough':None,
+            'criticalFixes':[],'platforms':['linux/amd64','linux/arm64'],'dataCompatibility':'orbis.data.v1',
+            'accountIdentifierCompatibility':'orbis.account-identifier.v1','migrationFingerprint':'sha256:'+'b'*64})
+        staged=self.stage()
+        checked=self.execute(staged)
+        with self.target_hold(staged,checked) as admission:
+            self.assertEqual(admission.target.manifest()['core'],self.target)
+            self.assertEqual((staged.directory/'release-manifest.json').read_bytes(),self.core_body)
 
     def test_target_copy_replacement_revokes_admission_even_with_equal_bytes(self):
         staged=self.stage();checked=self.execute(staged)

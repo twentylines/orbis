@@ -39,6 +39,8 @@ SOURCE_ENABLEMENT = 'orbis.controller-source-bootstrap-enablement.v1'
 PRESERVE_ENV = 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS'
 PROBE_RETIREMENT = 'orbis.controller-probe-retirement.v2'
 TOOLS = load('orbis-install-transaction.py', 'orbis_controller_reconstruction_transaction')
+COMPAT = load('orbis-install-compat.py', 'orbis_controller_migration_compatibility')
+PLAN = TOOLS.APPS.HOST.PLAN
 CAPABILITY = {'schema': 'orbis.controller-overlay-startup.v1', 'version': 1, 'preserveNetworkAccess': True,
               'preserveRunningApps': True, 'environment': 'ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1'}
 NO_BACKUP_CAPABILITY = {**CAPABILITY, 'schema': 'orbis.controller-overlay-startup.v2', 'version': 2,
@@ -1189,6 +1191,21 @@ class ControllerUpdate:
                            'source': {'container': source, 'imageConfiguration': source_image.get('Config') or {}},
                            'target': {'creationReference': target_ref, 'publication': self.target}}
             body = self.runtime.base_body(body_record, 'candidate', target_image.get('Config') or {})
+            if PLAN.is_runtipi_412_upgrade(self.current, self.target):
+                key = 'TIPI_VERSION='
+                versions = [item.removeprefix(key) for item in source['Config'].get('Env', []) if item.startswith(key)]
+                if without_backup or len(versions) != 1 or versions[0].removeprefix('v') != PLAN.LEGACY_BASE:
+                    raise ValueError('The live source Runtipi version differs from its backed upgrade review')
+                body['Env'] = [item for item in body['Env'] if not item.startswith(key)]
+                body['Env'].append(key + PLAN.RUNTIPI_412_BASE)
+                reader = self.runtime.reader
+                image = COMPAT.image_ledger(reader, self.target)
+                database = COMPAT.database(reader, peers['runtipi-db']['Id'])
+                COMPAT.require_compatible(database['ledger'], image['ledger'])
+                COMPAT.idle_app_queue(reader, peers['runtipi-queue']['Id'], stopped_controller=False)
+                if image['imageId'] != target_image['Id']:
+                    raise ValueError('The migration ledger probe does not match the pinned target image')
+                record['migrationCompatibility'] = {'database': database, 'image': image}
             body['Env'] = [item for item in body['Env'] if not item.startswith('ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=')]
             body['Env'].append('ORBIS_CONTROLLER_PRESERVE_NETWORK_ACCESS=1')
             for key in ('io.orbis.restore', 'io.orbis.restore.nonce', 'io.orbis.restore.role'):
@@ -1208,6 +1225,7 @@ class ControllerUpdate:
             self.save(record)
         if unbacked(record) != without_backup or record['checkpoint'] != checkpoint:
             raise ValueError('The protected controller checkpoint changed')
+        self.migration_review(record)
         self.preserved(record)
         if not record.get('probeId'):
             probe_body = {'Image': self.target['image'] + '@' + self.target['digest'],
@@ -1318,6 +1336,29 @@ class ControllerUpdate:
             if not raw['State'].get('Running'):
                 self.runtime.change(['start', raw['Id']])
 
+    def migration_review(self, record):
+        review = record.get('migrationCompatibility')
+        cross_base = PLAN.is_runtipi_412_upgrade(record.get('current', {}), record.get('target', {}))
+        if cross_base != (review is not None):
+            raise ValueError('The protected database migration review is missing or unexpected')
+        return review
+
+    def wait_migration_peers(self, record):
+        reader = self.runtime.reader
+        files = record['peers']
+        checks = (('runtipi-db', ['pg_isready', '-U', 'tipi', '-d', 'tipi']),
+                  ('runtipi-queue', ['rabbitmq-diagnostics', '-q', 'ping']))
+        deadline = time.monotonic() + 90
+        for name, command in checks:
+            while True:
+                try:
+                    reader._read(['exec', files[name]['Id'], *command])
+                    break
+                except TOOLS.APPS.DETECT.InspectionError as error:
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError('The backed database or broker did not become ready for the migration') from error
+                    time.sleep(1)
+
     def check_candidate_networks(self, record, candidate):
         source = record['source']
         if record.get('coreNetwork') is not None:
@@ -1392,6 +1433,14 @@ class ControllerUpdate:
             self.save(record)
         CoreNetwork(self).move(record, 'target')
         self.start_peers(record)
+        if (review := self.migration_review(record)) is not None:
+            self.wait_migration_peers(record)
+            reader = self.runtime.reader
+            database = COMPAT.database(reader, record['peers']['runtipi-db']['Id'])
+            if database != review['database'] or review['image']['imageId'] != record['targetImageId']:
+                raise ValueError('The stopped controller database changed since its migration review')
+            COMPAT.require_compatible(database['ledger'], review['image']['ledger'])
+            COMPAT.idle_app_queue(reader, record['peers']['runtipi-queue']['Id'], stopped_controller=True)
         if progress is not None:
             progress('restarting')
         self.runtime.change(['start', candidate['Id']])
@@ -1419,6 +1468,10 @@ class ControllerUpdate:
             if raw['State'].get('Running') and (raw['State'].get('Health') or {}).get('Status') == 'healthy':
                 if identifier == record.get('candidateId'):
                     self.require_cli_storage(record, candidate=raw, require_key=True)
+                    if (review := self.migration_review(record)) is not None:
+                        database = COMPAT.database(self.runtime.reader, record['peers']['runtipi-db']['Id'], require_idle=False)
+                        if database['ledger'] != review['image']['ledger'] or database['postgresMajor'] != review['database']['postgresMajor']:
+                            raise ValueError('The target controller did not finish its reviewed database migrations')
                 return
             if time.monotonic() >= deadline or raw['State'].get('Status') in {'exited', 'dead'}:
                 raise RuntimeError('The reviewed controller did not become healthy')

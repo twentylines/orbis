@@ -465,6 +465,13 @@ def read_journal(snapshot: Path, root: Path, context: str, current: dict[str, st
     ):
         raise ValueError("update journal does not match this installation and release pair")
     unbacked_job(record)
+    if HOST.PLAN.is_runtipi_412_upgrade(current, target):
+        binding = record.get("runtipiBinding")
+        validate_runtipi_binding(snapshot, target, binding.get("approvedReviewSha256") if isinstance(binding, dict) else None, binding)
+        if record.get("backupScope") != CONTROLLER.SCOPE or unbacked_job(record):
+            raise ValueError("The base upgrade requires its backed controller checkpoint")
+    elif "runtipiBinding" in record:
+        raise ValueError("Unexpected base upgrade authority")
     retained_source(root, context, record, current, target)
     if HOST.retained_state(root) and record.get("retainedSource") is None:
         raise ValueError("retained recovery requires its full protected source identity")
@@ -571,7 +578,9 @@ def restore_core_policies(root: Path, context: str, checkpoint: dict) -> None:
         reader.change(["update", "--restart", flag, identifier])
 
 
-def backup_policy(target: dict[str, str]) -> str:
+def backup_policy(target: dict[str, str], current: dict[str, str] | None = None) -> str:
+    if current is not None and HOST.PLAN.is_runtipi_412_upgrade(current, target):
+        return 'automatic'
     return 'none' if target.get('installationProtocol') == HOST.PLAN.INSTALLATION_PROTOCOL else 'automatic'
 
 
@@ -580,14 +589,17 @@ def update_plan(root: Path, current: dict[str, str], target: dict[str, str], con
         raise ValueError("Docker context name is invalid")
     if current["digest"] == target["digest"]:
         raise ValueError("current and target image digests are identical")
-    scoped = backup_policy(target) == 'none'
-    if not scoped and shutil.which("rsync") is None:
+    cross_base = HOST.PLAN.is_runtipi_412_upgrade(current, target)
+    policy = backup_policy(target, current)
+    scoped = cross_base or policy == 'none'
+    if policy == 'automatic' and shutil.which("rsync") is None:
         raise ValueError("rsync is required to restore a stopped installation snapshot")
     if journal_path(snapshot).exists() or journal_path(snapshot).is_symlink():
         raise ValueError("an update journal already exists for this snapshot destination")
     expected = HOST.installation_fingerprint(root, current, context)
     HOST.require_current_state(root, expected)
-    candidate = HOST.PLAN.plan(root, target)
+    candidate = HOST.PLAN.plan(root, current if cross_base else target)
+    compatibility = HOST.PLAN.review_412(root, current, target) if cross_base else None
     current_image = HOST.controller_reference(root, current, context)
     if HOST.retained_state(root):
         HOST.resolve_current_identity(root, context, current)
@@ -601,7 +613,7 @@ def update_plan(root: Path, current: dict[str, str], target: dict[str, str], con
     verify_release(target)
     if scoped:
         tools, reader = controller_tools(context)
-        checkpoint = tools.review(root, reader, snapshot, checkpoint_path(snapshot), scope=CONTROLLER.SCOPE, backup=False)
+        checkpoint = tools.review(root, reader, snapshot, checkpoint_path(snapshot), scope=CONTROLLER.SCOPE, backup=cross_base)
         snapshot_bytes = checkpoint["storage"]["estimatedBytes"]
     else:
         require_quiet_apps(root, context)
@@ -615,12 +627,26 @@ def update_plan(root: Path, current: dict[str, str], target: dict[str, str], con
         "targetImage": f"{target['image']}@{target['digest']}",
         "snapshot": str(snapshot),
         "snapshotBytes": snapshot_bytes,
-        "backupPolicy": backup_policy(target),
+        "backupPolicy": policy,
         "runningAppsMustBeStopped": not scoped,
     }
     if scoped:
         result["checkpoint"] = checkpoint
+    if compatibility is not None:
+        result["runtipiReviewSha256"] = tools.APPS.digest(compatibility)
     return result
+
+
+def validate_runtipi_binding(snapshot, target, review_sha, binding):
+    if (type(binding) is not dict or set(binding) !=
+            {"operationId", "approvedReviewSha256", "sourceReceiptSha256", "targetReceiptSha256"}
+            or any(not isinstance(value, str) for value in binding.values())
+            or not all(re.fullmatch(r"[0-9a-f]{64}", binding[key]) for key in binding if key != "operationId")
+            or binding["approvedReviewSha256"] != review_sha):
+        raise ValueError("This base upgrade requires its coordinated configuration review")
+    operation = uuid.UUID(binding["operationId"])
+    if operation.version != 4 or str(operation) != binding["operationId"] or snapshot.name != f"orbis-{target['tag']}-{operation}":
+        raise ValueError("The base upgrade review belongs to another operation")
 
 
 def stop_core(root: Path, context: str, allow_absent: bool = False) -> None:
@@ -669,14 +695,33 @@ def rollback(root: Path, current: dict[str, str], context: str, snapshot: Path, 
         tools, reader = controller_tools(context, HOST.LOCK_DESCRIPTOR.get())
         checkpoint = protected['checkpoint']
         checkpoint_journal = checkpoint_path(snapshot)
-        reconstructed = runtime.restore_reconstructed_checkpoint()
-        if not reconstructed and checkpoint_journal.exists():
+        original_verifier = None
+        migration_args = None
+        saved = None
+        if checkpoint_journal.exists() or checkpoint_journal.is_symlink():
             saved = tools.read_record(checkpoint_journal, root, reader)
             if saved['review'] != checkpoint:
                 raise ValueError('Checkpoint recovery differs from protected controller authority')
+            if saved.get('runtipiConfiguration') is not None:
+                migration_args = (root, reader, checkpoint_journal, current, record['targetPublication'], record['runtipiBinding'])
+                if saved['stage'] != 'recovered':
+                    tools.runtipi_configuration_recovery_state(*migration_args)
+                def original_verifier():
+                    tools.verify_restored_runtipi_configuration(*migration_args)
+        if record.get("runtipiBinding") is not None and (
+                origin in {"snapshot-ready", "staged"} and saved is None
+                or origin == "staged" and migration_args is None):
+            raise ValueError("The base upgrade rollback requires its protected configuration checkpoint")
+        reconstructed = runtime.restore_reconstructed_checkpoint()
+        if reconstructed and migration_args is not None:
+            tools.verify_restored_runtipi_configuration(*migration_args, reconstructed=True)
+        elif not reconstructed and saved is not None:
             if saved['stage'] != 'recovered':
+                options = {} if original_verifier is None else {'before_originals_start': original_verifier}
                 tools.recover(root, reader, checkpoint_journal, host_writers_stopped=True,
-                              before_controller_start=runtime.verify_source_bootstrap)
+                              before_controller_start=runtime.verify_source_bootstrap, **options)
+            elif original_verifier is not None:
+                original_verifier()
         runtime.start_original()
         runtime.restore_policies(target=False)
         restore_retained_enrollment(root, current, context, record)
@@ -765,10 +810,15 @@ def rollback(root: Path, current: dict[str, str], context: str, snapshot: Path, 
     write_journal(snapshot, record)
 
 
-def apply_update(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path, *, expected_source=None, expected_backup_policy=None, controller_state_dir=Path("/var/lib/orbis/state"), lock_fds=None) -> dict[str, object]:
+def apply_update(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path, *, expected_source=None, expected_backup_policy=None, runtipi_binding=None, controller_state_dir=Path("/var/lib/orbis/state"), lock_fds=None) -> dict[str, object]:
     lock_options = {} if lock_fds is None else {'inherited': lock_fds}
     with HOST.host_lock(root, **lock_options) as lock_fd:
         planned = update_plan(root, current, target, context, snapshot)
+        review_sha = planned.get("runtipiReviewSha256")
+        if review_sha is not None:
+            validate_runtipi_binding(snapshot, target, review_sha, runtipi_binding)
+        elif runtipi_binding is not None:
+            raise ValueError("Unexpected base upgrade authority")
         policy = 'none' if planned.get('checkpoint', {}).get('backupPolicy') == 'none' else 'automatic'
         if expected_backup_policy is not None and expected_backup_policy != policy:
             raise ValueError('The update backup policy changed; review this update again')
@@ -783,6 +833,8 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
             "targetDigest": target["digest"],
             "stage": "preparing",
         }
+        if runtipi_binding is not None:
+            record["runtipiBinding"] = runtipi_binding
         if HOST.retained_state(root):
             descriptor = HOST.retained_descriptor(root, context, current)
             record["retainedSource"] = {"schema": "orbis.update-retained-source.v1", "descriptor": descriptor,
@@ -833,7 +885,11 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
                 record["stage"] = "snapshot-ready"
                 write_journal(snapshot, record)
             source = retained_source(root, context, record, current, target)
-            if source:
+            if runtipi_binding is not None:
+                args = (root, reader, checkpoint_path(snapshot), current, target, runtipi_binding)
+                tools.prepare_runtipi_configuration(*args)
+                tools.stage_runtipi_configuration(*args)
+            elif source:
                 if (root / "orbis-compose.yml").read_text() != HOST.AUTHORITY.override_content(current, source["creationReference"]):
                     raise ValueError("retained source override changed before update staging")
                 HOST.AUTHORITY.atomic(root / "orbis-compose.yml", HOST.STAGE.staged_content(target).encode())
@@ -925,7 +981,12 @@ def recover(root: Path, current: dict[str, str], target: dict[str, str], context
                 require_local_recovery(snapshot, record)
         if record.get('backupScope') == CONTROLLER.SCOPE and not unbacked_job(record):
             runtime = CONTROLLER.ControllerUpdate(HOST, root, context, snapshot, current, target, controller_state_dir)
-            protected = runtime.read()
+            try:
+                protected = runtime.read()
+            except FileNotFoundError:
+                if record.get('stage') not in {'preparing', 'downloading', 'pulled'}:
+                    raise
+                protected = {}
             if protected.get('phase') == 'committed':
                 record['controllerCleanupRequired'] = runtime.commit()
                 record['stage'] = 'complete'

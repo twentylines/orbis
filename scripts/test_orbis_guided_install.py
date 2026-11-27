@@ -1156,6 +1156,36 @@ class ExplicitChannelTests(GuidedFixture):
                 self.assertEqual(calls, ['/v1/status', '/v1/plan', '/v1/apply', '/v1/status'])
                 self.assertIn('Checking the release and update readiness', steps)
 
+    def test_412_installer_requires_the_coordinating_bridge_and_its_backup_receipt(self):
+        target = {**MANIFEST, "runtipiCompatibility": "4.12.0"}
+        current = {**MANIFEST, "tag": "v1.0.0", "digest": "sha256:" + "d" * 64}
+        channel = {"channel": "stable", "revision": "initial"}
+        upgrade = SimpleNamespace(SERVICE=SimpleNamespace(installed_manifest=lambda *_: current, read_channel=lambda *_: channel),
+            SETUP=SimpleNamespace(SOCKET_FILE=Path("/unused/socket"), installed_credentials_only=lambda *_: False), upgrade=mock.Mock())
+        helper = {"enrolled": True, "currentDigest": current["digest"], "imageMatches": True,
+                  "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1", "runtipi-412-update.v1"]}
+        plan = {"planId": "fixture", "targetTag": target["tag"], "targetDigest": target["digest"], "backupPolicy": "automatic"}
+        complete = {**helper, "currentDigest": target["digest"], "coreHealth": "healthy",
+                    "job": {"id": plan["planId"], "state": "complete"}}
+        display = SimpleNamespace(set_remaining_steps=mock.Mock(), step=lambda *_: contextlib.nullcontext())
+        with mock.patch.object(GUIDE, "load", return_value=upgrade), \
+                mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release"), \
+                mock.patch.object(GUIDE, "prepare_backup_tools") as packages, \
+                mock.patch.object(GUIDE, "prepare_sentinel") as sentinel, \
+                mock.patch.object(GUIDE, "host_request") as request:
+            request.return_value = {**helper, "capabilities": []}
+            with self.assertRaisesRegex(GUIDE.HostServiceCompatibilityError, "same-base"):
+                GUIDE.update_existing(Path("/unused"), SimpleNamespace(context="test"), target, display)
+            packages.assert_not_called()
+            request.side_effect = [helper, helper, {**plan, "backupPolicy": "none"}]
+            with self.assertRaisesRegex(ValueError, "confirm the required"):
+                GUIDE.update_existing(Path("/unused"), SimpleNamespace(context="test"), target, display)
+            request.side_effect = [helper, helper, plan, {"jobId": plan["planId"]}, complete]
+            self.assertEqual(GUIDE.update_existing(Path("/unused"), SimpleNamespace(context="test"), target, display)["result"],
+                             "orbis-updated")
+        upgrade.upgrade.assert_not_called()
+        sentinel.assert_not_called()
+
     def test_nightly_policy_keeps_following_nightly_when_latest_artifact_is_stable(self):
         current = {**MANIFEST, "tag": "v1.0.0", "digest": "sha256:" + "d" * 64}
         channel = {"channel": "nightly", "revision": "initial"}

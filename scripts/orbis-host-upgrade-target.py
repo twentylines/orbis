@@ -112,8 +112,8 @@ def hold_target_set(setup, source, selection_sha256, core):
         with setup.HOST.AUTHORITY.protected_directory(source.parent) as parent:
             with setup.HOST.AUTHORITY.protected_file(parent, 'release-manifest.json', 16384) as body:
                 require(sha(body) == selection['coreSha256'])
-                selected_core = setup.PLAN.validate_manifest(json.loads(body))
-                require(selected_core == core and selection['installer']['tag'] == core['tag']
+                selected_core = setup.PLAN.update_identity(json.loads(body))
+                require(selected_core == setup.PLAN.update_identity(core) and selection['installer']['tag'] == core['tag']
                         and selection['installer']['commit'] == core['commit'])
         # Discover the target list without importing or running target setup.
         with setup.HOST.AUTHORITY.protected_directory(source) as parent:

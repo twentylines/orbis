@@ -29,11 +29,14 @@ GENERATED = re.compile(
     r"      ORBIS_VERSION: v[0-9A-Za-z.-]+\n"
     r"      ORBIS_COMMIT: [0-9a-f]{40}\n"
     r"      ORBIS_IMAGE_DIGEST: sha256:[0-9a-f]{64}\n"
+    r"(?:      TIPI_VERSION: 4\.12\.0\n)?"
 )
 
 
 def staged_content(manifest: dict[str, str]) -> str:
-    return HEADER + PLAN.override_yaml(PLAN.validate_manifest(manifest))
+    release = PLAN.validate_manifest(manifest)
+    override = PLAN.override_412 if release["runtipiCompatibility"] == PLAN.RUNTIPI_412_BASE else PLAN.override_yaml
+    return HEADER + override(release)
 
 
 def stage(root: Path, manifest: dict[str, str]) -> dict[str, object]:

@@ -643,6 +643,25 @@ class ControllerUpdateTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             C.unbacked(self.record)
 
+    def test_412_target_waits_for_peers_and_verifies_database_before_and_after_start(self):
+        installed = {"ledger": [{"createdAt": 1, "hash": "a" * 64}], "pendingApps": 0, "postgresMajor": 15}
+        migrated = {**installed, "ledger": [*installed["ledger"], {"createdAt": 2, "hash": "b" * 64}]}
+        self.record.update(current={"runtipiCompatibility": "4.10.1"}, target={"runtipiCompatibility": "4.12.0"},
+            migrationCompatibility={"database": installed,
+                                    "image": {"imageId": self.record["targetImageId"], "ledger": migrated["ledger"]}})
+        candidate = self.record["candidateId"]
+        def inspect_ledger(_reader, _database, *, require_idle=True):
+            self.assertEqual(["start", candidate] in self.calls, not require_idle)
+            return installed if require_idle else migrated
+        with mock.patch.object(self.updater, 'wait_migration_peers') as ready, \
+                mock.patch.object(C.COMPAT, 'database', side_effect=inspect_ledger) as ledger, \
+                mock.patch.object(C.COMPAT, 'idle_app_queue') as queue:
+            self.updater.start_target()
+        self.assertEqual(ledger.call_count, 2)
+        ready.assert_called_once()
+        queue.assert_called_once_with(self.runtime.reader, self.record['peers']['runtipi-queue']['Id'], stopped_controller=True)
+        self.assertEqual(self.record['phase'], 'active')
+
     def test_target_start_preserves_proxy_and_reuses_database_and_queue_ids(self):
         proxy_before = copy.deepcopy(self.objects['3' * 64])
         progress = []

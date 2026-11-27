@@ -417,7 +417,11 @@ function LocalUpdates() {
         typeof result.hostUpdateSupported !== 'boolean' ||
         (result.warning !== null && typeof result.warning !== 'string') ||
         result.crossesRuntipiBoundary !== (result.currentRuntipiVersion !== result.targetRuntipiVersion) ||
-        (result.hostUpdateSupported && (result.crossesRuntipiBoundary || result.currentRuntipiVersion !== '4.10.1'))
+        (result.hostUpdateSupported &&
+          !(
+            (!result.crossesRuntipiBoundary && ['4.10.1', '4.12.0'].includes(result.currentRuntipiVersion)) ||
+            (result.currentRuntipiVersion === '4.10.1' && result.targetRuntipiVersion === '4.12.0')
+          ))
       )
         throw new Error('The release compatibility check could not be verified. Try again before updating.');
       return result;
@@ -430,11 +434,13 @@ function LocalUpdates() {
   const updateCore = useMutation({
     mutationKey: ['orbis-compatibility', 'update', user.id, build.data?.version ?? '', 'apply'],
     gcTime: compatibilityReviewTime,
-    mutationFn: (tag: string) =>
+    mutationFn: ({ tag, requiresBackup }: { tag: string; requiresBackup: boolean }) =>
       duringCoreUpdateRequest(async () => {
         setCoreRequestStage('checking');
         const [checked] = await Promise.all([hostRequest<HostPlan>('plan', { tag }), prepareDesktopForCoreUpdate()]);
         if (checked.targetTag !== tag) throw new Error('The checked release changed. Refresh before updating.');
+        if (requiresBackup && checked.backupPolicy !== 'automatic')
+          throw new Error('The host did not confirm a recovery backup for this base upgrade.');
         setCoreRequestStage('starting');
         const result = await hostRequest<{ jobId: string; state: string }>('apply', { planId: checked.planId });
         if (!validCoreUpdate(result.jobId, tag)) throw new Error('The host returned an incomplete update response.');
@@ -687,7 +693,7 @@ function LocalUpdates() {
                     <section className="modal-body" tabIndex={0} aria-label="Update details">
                       {coreReview?.warning ? (
                         <div className="desktop-update-risk" role="note">
-                          <strong>{coreReview.crossesRuntipiBoundary ? 'Downgrade boundary' : 'Host updater unavailable'}</strong>
+                          <strong>{coreReview.hostUpdateSupported ? 'Recovery backup' : 'Host updater unavailable'}</strong>
                           <p>{coreReview.warning}</p>
                         </div>
                       ) : null}
@@ -695,15 +701,15 @@ function LocalUpdates() {
                         <ol className="desktop-update-process">
                           <li>
                             <strong>Verify</strong>
-                            <span>Check the published release, image, and available backup storage.</span>
+                            <span>Check the published release and image.</span>
                           </li>
                           <li>
-                            <strong>Back up and install</strong>
-                            <span>Create a verified recovery snapshot, then switch Orbis to {coreReview?.tag}.</span>
+                            <strong>Install</strong>
+                            <span>Switch Orbis to {coreReview.tag}.</span>
                           </li>
                           <li>
                             <strong>Reconnect</strong>
-                            <span>Check server health and reconnect automatically. Restore the previous release if startup fails.</span>
+                            <span>Check server health and reconnect automatically.</span>
                           </li>
                         </ol>
                       ) : null}
@@ -714,20 +720,19 @@ function LocalUpdates() {
                       </button>
                       <button
                         type="button"
-                        disabled={!coreReview?.hostUpdateSupported || coreReview.crossesRuntipiBoundary || !canPlan || coreUpdatePending}
+                        disabled={!coreReview?.hostUpdateSupported || !canPlan || coreUpdatePending}
                         onClick={() => {
                           if (
                             !coreReview?.hostUpdateSupported ||
-                            coreReview.crossesRuntipiBoundary ||
                             coreUpdateRequested.current ||
                             queryClient.isMutating({ mutationKey: coreUpdateKey, exact: true })
                           )
                             return;
                           coreUpdateRequested.current = true;
-                          const tag = coreReview.tag;
+                          const { tag, crossesRuntipiBoundary: requiresBackup } = coreReview;
                           setCoreReview(null);
                           setCoreRequestStage('checking');
-                          updateCore.mutate(tag);
+                          updateCore.mutate({ tag, requiresBackup });
                         }}
                       >
                         {coreUpdatePending ? (coreRequestStage === 'checking' ? 'Checking update…' : 'Starting update…') : 'Update Orbis'}

@@ -488,22 +488,32 @@ def update_existing(root, reader, target, display, *, without_host_service=False
         raise ValueError(f"Installed {UI.display_release(current['tag'])} is newer than this installer. Use the latest installer; no downgrade was made")
     if current["tag"] == target["tag"] and current["digest"] != target["digest"]:
         raise ValueError("The same release tag has a different digest; inspect its published identity before updating")
-    requires_backup_tools = target.get("installationProtocol") != HOST.PLAN.INSTALLATION_PROTOCOL
+    cross_base = HOST.PLAN.is_runtipi_412_upgrade(current, target)
+    socket_path = upgrade.SETUP.SOCKET_FILE
+    if cross_base:
+        if without_host_service:
+            raise ValueError("The compatibility upgrade requires an enrolled coordinating Orbis Host service")
+        status = host_request(socket_path, "/v1/status")
+        if (status.get("enrolled") is not True or status.get("imageMatches") is not True
+                or status.get("currentDigest") != current["digest"]
+                or "runtipi-412-update.v1" not in (status.get("capabilities") or [])):
+            raise HostServiceCompatibilityError("Install and verify the same-base Orbis Host update before changing the compatibility base")
+    requires_backup_tools = cross_base or target.get("installationProtocol") != HOST.PLAN.INSTALLATION_PROTOCOL
     missing_backup_tools = requires_backup_tools and not shutil.which("rsync")
-    display.set_remaining_steps(6 + int(missing_backup_tools))
+    display.set_remaining_steps((3 if cross_base else 6) + int(missing_backup_tools))
     with display.step("Verifying the Orbis release"):
         REPLACE.UPDATE.verify_release(target)
     if requires_backup_tools:
         prepare_backup_tools(display)
-    prepared_sentinel = prepare_sentinel(display, state_dir)
-    activate_sentinel(display, prepared_sentinel)
-    with display.step("Updating account security" if without_host_service else "Updating the host service"):
-        enable = load("orbis-host-service-enable.py", "orbis_guided_update_enable")
-        custody = {"source_custody": source_custody} if source_custody is not None else {}
-        role = {'credentials_only': True} if without_host_service else {}
-        enable.enable(root, reader.context, Path(__file__).parent, **custody, **role)
-        upgrade.upgrade(root, reader.context, Path(__file__).parent, str(root), **custody)
-    socket_path = upgrade.SETUP.SOCKET_FILE
+    if not cross_base:
+        prepared_sentinel = prepare_sentinel(display, state_dir)
+        activate_sentinel(display, prepared_sentinel)
+        with display.step("Updating account security" if without_host_service else "Updating the host service"):
+            enable = load("orbis-host-service-enable.py", "orbis_guided_update_enable")
+            custody = {"source_custody": source_custody} if source_custody is not None else {}
+            role = {'credentials_only': True} if without_host_service else {}
+            enable.enable(root, reader.context, Path(__file__).parent, **custody, **role)
+            upgrade.upgrade(root, reader.context, Path(__file__).parent, str(root), **custody)
     credentials_only = upgrade.SETUP.installed_credentials_only(root, reader.context)
     # A later installer run retains a previously selected narrow role even
     # when the flag is omitted; it must not attempt administrative RPCs.
@@ -538,6 +548,8 @@ def update_existing(root, reader, target, display, *, without_host_service=False
         checked = host_request(socket_path, "/v1/plan", request)
         if checked.get("targetTag") != target["tag"] or checked.get("targetDigest") != target["digest"]:
             raise ValueError("The checked update does not match the verified installer release")
+        if cross_base and checked.get("backupPolicy") != "automatic":
+            raise ValueError("The Host service did not confirm the required compatibility upgrade backup")
     with display.step("Updating Orbis and verifying server health"):
         try:
             accepted = host_request(socket_path, "/v1/apply", {"planId": checked["planId"]})

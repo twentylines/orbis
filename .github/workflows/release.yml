@@ -7,6 +7,10 @@ on:
         description: 'New Nightly tag, for example v0.6.0-beta.1'
         required: true
         type: string
+      runtipi_412:
+        description: 'Build a qualified Nightly release on the Runtipi 4.12 base'
+        type: boolean
+        default: false
   push:
     tags:
       - 'v*'
@@ -37,6 +41,7 @@ jobs:
       DOCKER_BUILD_RECORD_UPLOAD: 'false'
       DOCKER_BUILD_SUMMARY: 'false'
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      RUNTIPI_COMPATIBILITY: ${{ inputs.runtipi_412 && '4.12.0' || '4.10.1' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -88,7 +93,7 @@ jobs:
           outputs: type=oci,dest=${{ env.RELEASE_DIR }}/image.oci.tar,compression=gzip
           tags: ghcr.io/${{ github.repository }}:${{ env.RELEASE_TAG }}
           build-args: |
-            TIPI_VERSION=4.10.1
+            TIPI_VERSION=${{ env.RUNTIPI_COMPATIBILITY }}
             LOCAL=true
             ORBIS_VERSION=${{ env.RELEASE_TAG }}
             ORBIS_COMMIT=${{ github.sha }}
@@ -118,6 +123,7 @@ jobs:
             --arg tag "$RELEASE_TAG" \
             --arg commit "$RELEASE_SHA" \
             --arg digest "$IMAGE_DIGEST" \
+            --arg runtipiCompatibility "$RUNTIPI_COMPATIBILITY" \
             --arg updatePriority "$UPDATE_PRIORITY" \
             --arg criticalThrough "$CRITICAL_THROUGH" \
             --argjson criticalFixes "$CRITICAL_FIXES" \

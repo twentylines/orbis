@@ -72,11 +72,12 @@ def bounded_json(text: str):
         raise CompatibilityError("Installation compatibility data could not be read") from error
 
 
-def database(reader, identifier: str) -> dict:
+def database(reader, identifier: str, *, require_idle: bool = True) -> dict:
     value = bounded_json(reader._read([
         "exec", identifier, "psql", "-X", "-v", "ON_ERROR_STOP=1", "-U", "tipi", "-d", "tipi", "-Atqc", DATABASE_QUERY,
     ]))
-    if not isinstance(value, dict) or type(value.get("pendingApps")) is not int or value["pendingApps"] != 0:
+    if (not isinstance(value, dict) or type(value.get("pendingApps")) is not int
+            or value["pendingApps"] < 0 or require_idle and value["pendingApps"] != 0):
         raise CompatibilityError("Finish pending app operations before replacing the controller")
     if type(value.get("postgresMajor")) is not int or value["postgresMajor"] < 14:
         raise CompatibilityError("The installed database version needs a separate compatibility review")

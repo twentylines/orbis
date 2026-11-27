@@ -118,7 +118,14 @@ export class OrbisDowngradeService {
     const currentRuntipiVersion = runtime.replace(/^v/, '');
     const targetRuntipiVersion = manifest.runtipiCompatibility;
     const crossesRuntipiBoundary = currentRuntipiVersion !== targetRuntipiVersion;
-    const hostUpdateSupported = !crossesRuntipiBoundary && currentRuntipiVersion === '4.10.1';
+    const installed = valid(process.env.ORBIS_VERSION);
+    const to412 =
+      targetRuntipiVersion === '4.12.0' &&
+      (currentRuntipiVersion === '4.12.0' || (currentRuntipiVersion === '4.10.1' && installed !== null && lt(installed, manifest.tag)));
+    const host = to412 ? await this.host.status() : undefined;
+    const hostUpdateSupported =
+      (!crossesRuntipiBoundary && currentRuntipiVersion === '4.10.1') ||
+      Boolean(host?.available && host.enrolled && host.capabilities?.includes('runtipi-412-update.v1'));
     return {
       tag: manifest.tag,
       currentRuntipiVersion,
@@ -126,10 +133,12 @@ export class OrbisDowngradeService {
       crossesRuntipiBoundary,
       hostUpdateSupported,
       warning: crossesRuntipiBoundary
-        ? `This release requires compatibility base ${targetRuntipiVersion}. This server uses ${currentRuntipiVersion}. Changing the base prevents downgrading to releases that require the previous base. The current host updater cannot apply this transition.`
+        ? `This release moves the compatibility base from ${currentRuntipiVersion} to ${targetRuntipiVersion}. Changing the base prevents downgrading to releases that require the previous base. ${
+            hostUpdateSupported ? 'Orbis will verify a recovery backup before installing.' : 'The current host updater cannot apply this transition.'
+          }`
         : hostUpdateSupported
           ? null
-          : 'The current host updater supports compatibility base 4.10.1 only and cannot apply this update.',
+          : 'The current host updater does not support this compatibility base.',
     };
   }
 

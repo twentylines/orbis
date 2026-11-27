@@ -2175,7 +2175,8 @@ class HostService:
     def status(self) -> dict:
         if getattr(self, 'credentials_only', False):
             return self.credential_status()
-        capabilities = ["restart.v1", "packages.refresh.v1", "release-channels.v1", "controller-config.v1", "controller-update-no-backup.v1"]
+        capabilities = ["restart.v1", "packages.refresh.v1", "release-channels.v1", "controller-config.v1",
+                        "controller-update-no-backup.v1", "runtipi-412-update.v1"]
         if PACKAGES.smart_tools_supported():
             capabilities.append("drives.tools-install.v1")
         saved = HOST.saved_state(self.root)
@@ -2311,6 +2312,8 @@ class HostService:
             record["legacyStableReturn"] = True
         if HOST.retained_state(self.root):
             record["retainedSource"] = HOST.retained_descriptor(self.root, self.context, current)
+        if "runtipiReviewSha256" in result:
+            record["runtipiReviewSha256"] = result["runtipiReviewSha256"]
         write_private(self.state_dir / f"plan-{plan_id}.json", record)
         return {
             "planId": plan_id,
@@ -2371,7 +2374,10 @@ class HostService:
                 raise ValueError("update plan has an invalid snapshot destination")
             # Policy follows the reviewed target identity. The worker performs
             # the full Docker/storage revalidation before installation effects.
-            if UPDATE.backup_policy(target) != plan["backupPolicy"]:
+            review_sha = plan.get("runtipiReviewSha256")
+            cross_base = PLAN.is_runtipi_412_upgrade(current, target)
+            if (UPDATE.backup_policy(target, current) != plan["backupPolicy"] or cross_base != (review_sha is not None)
+                    or (cross_base and (not isinstance(review_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", review_sha)))):
                 raise ValueError("update backup policy changed; create a new plan")
             self.core_overlays().reconcile_unaccepted()
             self.require_core_overlay_clear(previous)
@@ -2403,6 +2409,8 @@ class HostService:
                 job["legacyStableReturn"] = True
             if plan.get("retainedSource") is not None:
                 job["retainedSource"] = plan["retainedSource"]
+            if review_sha is not None:
+                job["runtipiReviewSha256"] = review_sha
             try:
                 write_private(self.job_file, job)
             except Exception:

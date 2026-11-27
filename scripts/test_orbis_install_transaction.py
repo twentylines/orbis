@@ -194,11 +194,115 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(self.docker.calls, [])
         with self.assertRaisesRegex(TX.TransactionError, "has changed"):
             TX.runtipi_configuration_recovery_state(*args[:-1], {**binding, "sourceReceiptSha256": "1" * 64})
-        (self.root / ".env").write_bytes(originals[".env"].replace(b"4.10.1", b"4.12.0"))
+        replace = TX._replace_runtipi_configuration_file
+
+        def interrupt_after_rename(*arguments):
+            replace(*arguments)
+            raise Interrupted()
+
+        with mock.patch.object(TX, "_replace_runtipi_configuration_file", side_effect=interrupt_after_rename):
+            with self.assertRaises(Interrupted):
+                TX.stage_runtipi_configuration(*args)
         self.assertEqual(TX.runtipi_configuration_recovery_state(*args),
                          {".env": "target", "VERSION": "source", "orbis-compose.yml": "source"})
         (self.root / "VERSION").write_text("unreviewed\n")
         with self.assertRaisesRegex(TX.TransactionError, "differs from both approved"):
+            TX.runtipi_configuration_recovery_state(*args)
+        with self.assertRaisesRegex(TX.TransactionError, "differs from both approved"):
+            TX.stage_runtipi_configuration(*args)
+        (self.root / "VERSION").write_bytes(originals["VERSION"])
+        (self.root / ".env").write_bytes(originals[".env"])
+        with self.assertRaisesRegex(TX.TransactionError, "recovery verifier is required"):
+            TX.recover(self.root, self.docker, self.journal, host_writers_stopped=True)
+        self.assertEqual(self.docker.calls, [])
+
+    @unittest.skipUnless(shutil.which("docker"), "Docker Compose is unavailable")
+    def test_runtipi_staging_resumes_private_partial_write_and_preserves_configuration_permissions(self):
+        current, target, binding = self.runtipi_configuration_fixture()
+        env = self.root / ".env"
+        env.chmod(0o640)
+        TX.checkpoint(self.root, self.docker, self.review(), host_writers_stopped=True)
+        self.docker.calls.clear()
+        args = (self.root, self.docker, self.journal, current, target, binding)
+        receipt = TX.prepare_runtipi_configuration(*args)
+        folder = self.root / f".orbis-runtipi-412-{binding['operationId']}"
+
+        def interrupt_before_rename(directory, stage, name, source, expected, backup):
+            fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=stage)
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(expected[:6])
+            raise Interrupted()
+
+        with mock.patch.object(TX, "_replace_runtipi_configuration_file", side_effect=interrupt_before_rename):
+            with self.assertRaises(Interrupted):
+                TX.stage_runtipi_configuration(*args)
+        partial = (folder / ".env").read_bytes()
+        self.assertEqual(TX.runtipi_configuration_recovery_state(*args), {name: "source" for name in TX.RUNTIPI_CONFIGURATION_FILES})
+        (folder / ".env").write_bytes(b"foreign content")
+        for call in (TX.stage_runtipi_configuration, TX.runtipi_configuration_recovery_state):
+            with self.assertRaisesRegex(TX.TransactionError, "unreviewed bytes"):
+                call(*args)
+        self.assertEqual((folder / ".env").read_bytes(), b"foreign content")
+        (folder / ".env").write_bytes(partial)
+        self.assertEqual(TX.stage_runtipi_configuration(*args), receipt)
+        self.assertEqual(TX.stage_runtipi_configuration(*args), receipt)
+        self.assertEqual(TX.runtipi_configuration_recovery_state(*args), {name: "target" for name in TX.RUNTIPI_CONFIGURATION_FILES})
+        self.assertFalse(folder.exists())
+        self.assertEqual(env.stat().st_mode & 0o777, 0o640)
+        self.assertEqual(self.docker.calls, [])
+        env.chmod(0o644)
+        with self.assertRaisesRegex(TX.TransactionError, "unreviewed permissions or attributes"):
+            TX.stage_runtipi_configuration(*args)
+        env.chmod(0o640)
+        with mock.patch.object(TX.APPS.HOST.PLAN, "compose_config", return_value={}):
+            with self.assertRaisesRegex(TX.TransactionError, "Resolved Compose"):
+                TX.stage_runtipi_configuration(*args)
+        (self.root / "VERSION").write_text("4.10.1\n")
+        for call in (TX.stage_runtipi_configuration, TX.runtipi_configuration_recovery_state):
+            with self.assertRaisesRegex(TX.TransactionError, "out of order"):
+                call(*args)
+
+    @unittest.skipUnless(shutil.which("docker"), "Docker Compose is unavailable")
+    def test_runtipi_startup_resume_requires_verifier_and_all_restored_files(self):
+        current, target, binding = self.runtipi_configuration_fixture()
+        originals = {name: (self.root / name).read_bytes() for name in TX.RUNTIPI_CONFIGURATION_FILES}
+        TX.checkpoint(self.root, self.docker, self.review(), host_writers_stopped=True)
+        args = (self.root, self.docker, self.journal, current, target, binding)
+        TX.prepare_runtipi_configuration(*args)
+        TX.stage_runtipi_configuration(*args)
+        with self.assertRaisesRegex(TX.TransactionError, "not returned to original startup"):
+            TX.verify_restored_runtipi_configuration(*args)
+        with self.assertRaisesRegex(TX.TransactionError, "not been completely restored"):
+            TX.verify_restored_runtipi_configuration(*args, reconstructed=True)
+        # Model the already-restored journal selection. Actual rsync restore is
+        # covered by the separate Linux test.
+        record = TX.read_record(self.journal, self.root, self.docker)
+        record["stage"] = "starting"
+        TX.save(record)
+        self.docker.calls.clear()
+
+        def verifier():
+            self.assertEqual(self.docker.calls, [])
+            TX.verify_restored_runtipi_configuration(*args)
+
+        with self.assertRaisesRegex(TX.TransactionError, "recovery verifier is required"):
+            TX.finish_recovery(self.root, self.docker, self.journal)
+        with self.assertRaisesRegex(TX.TransactionError, "not been completely restored"):
+            TX.finish_recovery(self.root, self.docker, self.journal, before_originals_start=verifier)
+        self.assertEqual(self.docker.calls, [])
+        for name, content in originals.items():
+            (self.root / name).write_bytes(content)
+        record["stage"] = "ready"
+        TX.save(record)
+        TX.verify_restored_runtipi_configuration(*args, reconstructed=True)
+        record["stage"] = "starting"
+        TX.save(record)
+        TX.finish_recovery(self.root, self.docker, self.journal, before_originals_start=verifier)
+        self.assertEqual(self.states(), self.original)
+        mutations = list(self.docker.calls)
+        TX.verify_restored_runtipi_configuration(*args)
+        self.assertEqual(self.docker.calls, mutations)
+        with self.assertRaisesRegex(TX.TransactionError, "No active"):
             TX.runtipi_configuration_recovery_state(*args)
 
     @unittest.skipUnless(sys.platform == "linux" and shutil.which("docker"), "requires Linux rsync and Docker Compose")
@@ -208,15 +312,12 @@ class TransactionTests(unittest.TestCase):
         TX.checkpoint(self.root, self.docker, self.review(), host_writers_stopped=True)
         args = (self.root, self.docker, self.journal, current, target, binding)
         TX.prepare_runtipi_configuration(*args)
-        for name, body in TX.APPS.HOST.PLAN.configuration_412(current, target, originals[".env"], originals["VERSION"])[0].items():
-            (self.root / name).write_bytes(body)
-        override = TX.APPS.HOST.STAGE.HEADER + TX.APPS.HOST.PLAN.override_412(target)
-        (self.root / "orbis-compose.yml").write_text(override)
+        TX.stage_runtipi_configuration(*args)
         self.assertEqual(TX.runtipi_configuration_recovery_state(*args), {name: "target" for name in originals})
 
         def verify_before_originals_start():
             self.assertEqual(self.docker.controller_state, "exited")
-            self.assertEqual(TX.runtipi_configuration_recovery_state(*args), {name: "source" for name in originals})
+            TX.verify_restored_runtipi_configuration(*args)
         TX.recover(self.root, self.docker, self.journal, host_writers_stopped=True,
                    before_originals_start=verify_before_originals_start)
         with self.assertRaisesRegex(TX.TransactionError, "No active"):

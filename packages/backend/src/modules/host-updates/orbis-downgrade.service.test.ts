@@ -440,6 +440,25 @@ describe('reviewed Orbis downgrades', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it('requires an enrolled coordinating host for a forward 4.12 upgrade', async () => {
+    vi.stubEnv('ORBIS_VERSION', '0.1.0-beta.1');
+    const published = { ...manifest, runtipiCompatibility: '4.12.0' };
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json(published));
+    expect(await service.releaseCompatibility(target)).toMatchObject({
+      crossesRuntipiBoundary: true,
+      hostUpdateSupported: false,
+    });
+    host.status.mockResolvedValue({ ...status, capabilities: ['runtipi-412-update.v1'] });
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json(published));
+    const reviewed = await service.releaseCompatibility(target);
+    expect(reviewed.hostUpdateSupported).toBe(true);
+    expect(reviewed.warning).toContain('verify a recovery backup');
+    vi.stubEnv('TIPI_VERSION', '4.12.0');
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json(published));
+    expect(await service.releaseCompatibility(target)).toMatchObject({ hostUpdateSupported: true, warning: null });
+    expect(host.plan).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid, nightly, unverified, oversize and unavailable compatibility metadata', async () => {
     for (const tag of ['../private', '', null, 'v0.1.0-nightly.20261025000000.aaaaaaaa']) {
       await expect(service.releaseCompatibility(tag)).rejects.toThrow('published');
