@@ -1174,6 +1174,13 @@ class ControllerUpdate:
             # Only protected reviewed reset enrollment can add a dedicated bind.
             proxy = self.runtime.inspect('runtipi-reverse-proxy')
             overlay = self.runtime.overlay_preflight(source, policy='controller-overlay.v1')
+            dashboard_network = overlay['network']
+            source_network_id = source['NetworkSettings']['Networks'][dashboard_network].get('NetworkID')
+            if (overlay['proxyId'] != proxy['Id'] or overlay['proxyDefinition'] != self.runtime.definition(proxy)
+                    or not isinstance(source_network_id, str) or not re.fullmatch(r'[a-f0-9]{64}', source_network_id)
+                    or overlay['proxyNetworks'].get(dashboard_network) != source_network_id
+                    or proxy['NetworkSettings']['Networks'].get(dashboard_network, {}).get('NetworkID') != source_network_id):
+                raise ValueError('The reviewed dashboard network attachment changed')
             peers = {name: self.runtime.inspect(name) for name in ('runtipi-db', 'runtipi-queue')}
             record = {'schema': NO_BACKUP_POLICY if without_backup else POLICY, 'root': str(self.root), 'context': self.context, 'snapshot': str(self.snapshot),
                       'current': self.current, 'target': self.target, 'phase': 'preparing', 'nonce': secrets.token_hex(32),
@@ -1211,6 +1218,8 @@ class ControllerUpdate:
             for key in ('io.orbis.restore', 'io.orbis.restore.nonce', 'io.orbis.restore.role'):
                 body['Labels'].pop(key, None)
             body['Labels']['io.orbis.controller-update'] = self.key
+            # Traefik must reach the controller through the shared dashboard network.
+            body['Labels']['traefik.docker.network'] = dashboard_network
             # Preserve name-based network aliases used by the controller's peers.
             body['NetworkingConfig'] = {'EndpointsConfig': {name: {'Aliases': sorted({alias for alias in (endpoint.get('Aliases') or [])
                 if alias not in {source['Id'], source['Id'][:12]}})} for name, endpoint in source['NetworkSettings']['Networks'].items()}}

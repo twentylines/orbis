@@ -469,6 +469,11 @@ class NewInstallationTests(unittest.TestCase):
         self.assertEqual(socket["source"], "/run/selected-docker.sock")
         self.assertTrue(socket["read_only"])
         self.assertEqual(services["runtipi-reverse-proxy"]["ports"], ["18170:80", "18171:443"])
+        core, proxy = services["runtipi"], services["runtipi-reverse-proxy"]
+        shared, = set(core["networks"]) & set(proxy["networks"])
+        self.assertEqual(core["labels"]["traefik.docker.network"], config["networks"][shared]["name"])
+        self.assertEqual(core["labels"]["traefik.http.middlewares.runtipi.forwardauth.address"],
+                         "http://runtipi:3000/api/auth/traefik")
 
     def test_new_stack_mounts_host_cgroup_read_only_without_creating_it(self):
         with mock.patch.object(NEW.Path, "is_dir", return_value=True):

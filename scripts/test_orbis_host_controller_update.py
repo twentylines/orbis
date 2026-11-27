@@ -439,6 +439,84 @@ class ControllerUpdateTests(unittest.TestCase):
         self.assertEqual(environment['ORBIS_COMMIT'], publication['commit'])
         self.assertEqual(environment['ORBIS_IMAGE_DIGEST'], publication['digest'])
 
+    def test_new_candidate_pins_only_the_reviewed_shared_dashboard_network(self):
+        main = 'runtipi_tipi_main_network'
+        custom = 'operator_dashboard_network'
+        label = 'traefik.docker.network'
+        checkpoint = {'storage': {'backupScope': C.SCOPE}}
+        self.updater.snapshot = self.root / 'snapshot'
+        self.updater.current = {'tag': 'v0.13.0-beta.1'}
+        self.updater.target.update(tag='v0.13.0-beta.2', commit='c' * 40)
+        self.updater.host = SimpleNamespace(controller_reference=lambda *_: 'published-source')
+        self.updater.read = mock.Mock(side_effect=FileNotFoundError)
+        self.updater.save = mock.Mock()
+        self.runtime.engine = mock.Mock()
+        source = self.objects['1' * 64]
+        proxy = self.objects['3' * 64]
+        source['Config']['Image'] = 'published-source'
+        source['State']['Running'] = True
+        source['Mounts'] = [{'Type': 'bind', 'Source': '/run/orbis', 'Destination': '/run/orbis', 'RW': False}]
+        labels = {'com.docker.compose.project.working_dir': str(self.root), 'com.docker.compose.service': 'runtipi',
+                  'traefik.enable': 'true', 'traefik.http.services.dashboard.loadbalancer.server.port': '3000',
+                  'traefik.http.middlewares.runtipi.forwardauth.address': 'http://runtipi:3000/api/auth/traefik'}
+        routers = {}
+        for name, entrypoint in (('dashboard', 'web'), ('dashboard-secure', 'websecure')):
+            rule = 'PathPrefix(`/`)'
+            prefix = 'traefik.http.routers.' + name + '.'
+            labels.update({prefix + 'rule': rule, prefix + 'entrypoints': entrypoint, prefix + 'service': 'dashboard'})
+            routers[name + '@docker'] = {'status': 'enabled', 'rule': rule, 'entryPoints': [entrypoint],
+                                        'service': 'dashboard', 'priority': 15}
+            if entrypoint == 'websecure':
+                labels[prefix + 'tls'] = 'true'
+                routers[name + '@docker']['tls'] = {}
+        proxy['Config']['Labels'] = {'com.docker.compose.project.working_dir': str(self.root),
+                                    'com.docker.compose.service': 'runtipi-reverse-proxy',
+                                    'com.docker.compose.project': 'runtipi'}
+        source_networks = {C.CORE_NETWORK: {'NetworkID': 'd' * 64}, main: {'NetworkID': 'e' * 64}}
+        shared = {main: source_networks[main]}
+        private_route = {main: {'NetworkID': '0' * 64}}
+        alternative = {custom: {'NetworkID': 'f' * 64}}
+        by_name = {'runtipi': source, 'runtipi-reverse-proxy': proxy,
+                   'runtipi-db': self.objects['4' * 64], 'runtipi-queue': self.objects['5' * 64]}
+        self.runtime.inspect = lambda name: copy.deepcopy(by_name[name])
+        self.runtime.proxy_routers = mock.Mock(return_value=routers)
+        cases = [
+            (source_networks, shared, None, main),
+            ({C.CORE_NETWORK: source_networks[C.CORE_NETWORK], **alternative}, alternative, custom, custom),
+            ({**source_networks, **alternative}, {**shared, **alternative}, custom, custom),
+            ({**source_networks, **alternative}, {**shared, **alternative}, None, None),
+            (source_networks, shared, C.CORE_NETWORK, None),
+            (source_networks, private_route, None, None),
+        ]
+        for original, attached, explicit, expected in cases:
+            with self.subTest(explicit=explicit, proxy_networks=list(attached), expected=expected):
+                source['Config']['Labels'] = labels if explicit is None else {**labels, label: explicit}
+                source['NetworkSettings']['Networks'] = original
+                proxy['NetworkSettings']['Networks'] = attached
+                self.runtime.reader._object.side_effect = [{'ID': 'fixture-daemon'}, self.objects['2' * 64]]
+                self.updater.save.reset_mock()
+                with (
+                    mock.patch.object(C.PLAN, 'is_runtipi_412_upgrade', return_value=False),
+                    mock.patch.object(self.updater, 'reset_candidate_body', side_effect=lambda _record, body: body),
+                    mock.patch.object(self.updater, 'proxy_candidate_body', side_effect=lambda body, **_: body),
+                    mock.patch.object(self.updater, 'preserved', side_effect=RuntimeError('fixture stops before probe')),
+                ):
+                    if expected is None:
+                        with self.assertRaises(ValueError):
+                            self.updater.prepare(checkpoint)
+                        self.updater.save.assert_not_called()
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, 'fixture stops before probe'):
+                            self.updater.prepare(checkpoint)
+                        self.updater.save.assert_called_once()
+                        saved = self.updater.save.call_args.args[0]
+                        candidate = saved['body']['Labels']
+                        self.assertEqual(candidate[label], expected)
+                        self.assertEqual({key: candidate[key] for key in labels}, labels)
+                        self.assertEqual(saved['source']['Config']['Labels'].get(label), explicit)
+                        self.assertEqual(self.updater.source_reconstruction_body(saved)['Labels'].get(label), explicit)
+                self.runtime.engine.assert_not_called()
+
     def test_capability_probe_never_starts_or_mounts_any_host_data(self):
         checkpoint = {'storage': {'backupScope': C.SCOPE}}
         self.record['checkpoint'] = checkpoint
