@@ -20,9 +20,11 @@ const publicationSchema = type({
   tag: type('string').narrow(isPublishedOrbisReleaseTag),
   commit: type('string').narrow((value) => /^[a-f0-9]{40}$/.test(value)),
   digest: image,
-  runtipiCompatibility: "'4.10.1'",
+  runtipiCompatibility: "'4.10.1' | '4.12.0'",
   'installationProtocol?': "'orbis.installation-state.v1'",
-}).onUndeclaredKey('reject');
+})
+  .onUndeclaredKey('reject')
+  .narrow((publication) => publication.runtipiCompatibility === '4.10.1' || publication.installationProtocol !== undefined);
 const proofSchema = type({
   schema: "'orbis.controller-publication-proof.v1'",
   publication: publicationSchema,
@@ -290,6 +292,7 @@ function verifyGraph(proof: typeof proofSchema.infer, expected: ControllerPublic
     labels['org.opencontainers.image.source'] !== 'https://github.com/twentylines/orbis' ||
     labels['org.opencontainers.image.version'] !== expected.publication.tag ||
     labels['org.opencontainers.image.revision'] !== expected.publication.commit ||
+    (labels['io.orbis.runtipi-compatibility'] ?? '4.10.1') !== expected.publication.runtipiCompatibility ||
     (expected.publication.installationProtocol !== undefined &&
       labels['io.orbis.installation-protocol'] !== expected.publication.installationProtocol)
   )

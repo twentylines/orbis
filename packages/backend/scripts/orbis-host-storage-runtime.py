@@ -323,6 +323,13 @@ try {
   require(apps.status === 200 && Array.isArray(apps.body?.installed) && apps.body.installed.length === 0);
   completed.push('root-authorized-first-registration');
 
+  if (process.argv.includes('--expect-runtipi-412')) {
+    phase = 'runtipi-412-build';
+    const build = await request('GET', '/api/system/build', { cookie: originalCookie });
+    require(build.status === 200 && build.body?.commit === commit && build.body.runtipiCompatibility === '4.12.0');
+    completed.push('runtipi-412-build-verified');
+  }
+
   phase = 'second-registration-refusal';
   const duplicate = await request('POST', '/api/auth/register', {
     body: { username: `fixture-other-${randomUUID().slice(0, 12)}`, password: randomBytes(32).toString('base64url') },
@@ -737,6 +744,9 @@ class Runtime:
         before = self.inspect(self.core_id())
         require(before['State']['Status'] == 'running' and before['State'].get('Health', {}).get('Status') == 'healthy', 'candidate-health-lost')
         arguments = ['--exercise-main-worker'] if self.main_worker else []
+        candidate_412 = self.manifest.get('runtipiCompatibility') == '4.12.0'
+        if candidate_412:
+            arguments.append('--expect-runtipi-412')
         try:
             result = self.docker('exec', self.core_id(), 'node', '/opt/orbis-test-probe/normal-setup.mjs',
                                  self.manifest['commit'], '--exercise-normal-setup', *arguments,
@@ -747,8 +757,10 @@ class Runtime:
         require(len(result.stdout) <= 16384 and not result.stderr, 'invalid-normal-setup-probe-output')
         record = json.loads(result.stdout)
         require(type(record) is dict and record.get('case') == 'normal-setup-api', 'invalid-normal-setup-probe-output')
-        allowed = ('root-authorized-first-registration', 'second-operator-registration-refused',
-                   'root-authorized-password-change-and-session-retirement')
+        allowed = ('root-authorized-first-registration',)
+        if candidate_412:
+            allowed += ('runtipi-412-build-verified',)
+        allowed += ('second-operator-registration-refused', 'root-authorized-password-change-and-session-retirement')
         if self.main_worker:
             allowed += ('main-worker-custom-app-created', 'main-worker-installed-and-running',
                         'main-worker-backup-retained', 'main-worker-backup-data-restored',
@@ -761,7 +773,7 @@ class Runtime:
         passed = result.returncode == 0 and record.get('passed') is True and completed == list(allowed)
         self.results.append({'case': 'normal-setup-api', 'passed': passed, 'completed': completed,
             'failurePhase': record.get('failurePhase') if record.get('failurePhase') in (
-                'fixture-preconditions', 'actual-first-registration', 'second-registration-refusal',
+                'fixture-preconditions', 'actual-first-registration', 'runtipi-412-build', 'second-registration-refusal',
                 'root-authorized-password-change', 'actual-logout',
                 'main-worker-preconditions', 'main-worker-create', 'main-worker-install',
                 'main-worker-backup', 'main-worker-restore', 'main-worker-restart',

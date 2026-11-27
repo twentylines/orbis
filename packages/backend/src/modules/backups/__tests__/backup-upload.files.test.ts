@@ -29,6 +29,7 @@ describe('Streamed backup uploads with real files and archives', () => {
   let backups: string;
   let incoming: string;
   let logger: LoggerService;
+  let repository: AppsRepository;
   let newManager: () => BackupManager;
   const config = {
     id: 'demo',
@@ -75,7 +76,7 @@ describe('Streamed backup uploads with real files and archives', () => {
       getAppPaths: () => ({ appDataDir, appInstalledDir }),
       getInstalledAppInfo: async () => JSON.parse(await fs.promises.readFile(path.join(appInstalledDir, 'config.json'), 'utf8')),
     } as unknown as AppFilesManager;
-    const repository = {
+    repository = {
       getAppByUrn: vi.fn().mockResolvedValue({ id: 1 }),
       updateAppById: vi.fn(),
       getMigrationLedger: vi.fn().mockResolvedValue({ baselined: false, migrationIds: [] }),
@@ -119,6 +120,61 @@ describe('Streamed backup uploads with real files and archives', () => {
     expect(await fs.promises.readFile(path.join(root, 'app-data/store/demo/binary.bin'))).toEqual(Buffer.from([0, 255, 128, 0]));
     expect(await fs.promises.readFile(path.join(root, 'data/user-config/store/demo/app.env'), 'utf8')).toBe('SETTING=archived\n');
     expect(fs.existsSync(path.join(root, 'app-data/store/demo/newer-data'))).toBe(false);
+  });
+
+  it.each([
+    { initialized: true, migrationIds: ['rename-data-v2', 'repair.index'] },
+    { initialized: true, migrationIds: [] },
+    { initialized: false, migrationIds: [] },
+  ])('restores the exact Runtipi v4.12 migration state with data (%j)', async ({ initialized, migrationIds }) => {
+    const source = path.join(root, 'source');
+    await fs.promises.writeFile(path.join(source, 'runtipi-migrations.json'), JSON.stringify({ version: 1, initialized, migrationIds }));
+    await archive.createTarGz(source, incoming);
+    vi.mocked(repository.getMigrationLedger).mockResolvedValue({ baselined: true, migrationIds: ['newer-ledger'] });
+    await publish(await uploaded());
+    expect(await fs.promises.readFile(path.join(backups, 'legacy.tar.gz'))).toEqual(await fs.promises.readFile(incoming));
+    await manager.restoreApp(appUrn, 'legacy.tar.gz');
+    expect(await fs.promises.readFile(path.join(root, 'app-data/store/demo/binary.bin'))).toEqual(Buffer.from([0, 255, 128, 0]));
+    expect(repository.replaceMigrationLedger).toHaveBeenCalledExactlyOnceWith(
+      1,
+      { baselined: initialized, migrationIds },
+      { status: 'stopped', version: 1 },
+    );
+  });
+
+  it.each([
+    ['uninitialized history', { version: 1, initialized: false, migrationIds: ['rename-data-v2'] }],
+    ['unknown version', { version: 2, initialized: true, migrationIds: [] }],
+    ['duplicate IDs', { version: 1, initialized: true, migrationIds: ['rename-data-v2', 'rename-data-v2'] }],
+    ['oversized manifest', { version: 1, initialized: true, migrationIds: ['x'.repeat(48 * 1024)] }],
+  ])('rejects invalid Runtipi v4.12 metadata (%s) before upload or restore', async (_problem, ledger) => {
+    const source = path.join(root, 'source');
+    await fs.promises.writeFile(path.join(source, 'runtipi-migrations.json'), JSON.stringify(ledger));
+    await archive.createTarGz(source, incoming);
+    await expect(publish(await uploaded())).rejects.toThrow('not a valid backup');
+    expect(await manager.listBackupsByAppId(appUrn)).toEqual([]);
+    await fs.promises.copyFile(incoming, path.join(backups, 'retained.tar.gz'));
+    await expect(manager.restoreApp(appUrn, 'retained.tar.gz')).rejects.toThrow();
+    expect(await fs.promises.readFile(path.join(root, 'app-data/store/demo/newer-data'), 'utf8')).toBe('newer');
+    expect(repository.replaceMigrationLedger).not.toHaveBeenCalled();
+  });
+
+  it('rejects competing ledger formats and prevents applying Runtipi history to a different app', async () => {
+    const source = path.join(root, 'source');
+    const orbis = path.join(source, 'orbis-app-migrations.json');
+    await fs.promises.writeFile(path.join(source, 'runtipi-migrations.json'), '{"version":1,"initialized":true,"migrationIds":["rename-data-v2"]}');
+    await fs.promises.writeFile(orbis, JSON.stringify({ version: 1, appUrn, ledger: { baselined: true, migrationIds: [] } }));
+    await archive.createTarGz(source, incoming);
+    await expect(publish(await uploaded())).rejects.toThrow('not a valid backup');
+    await fs.promises.copyFile(incoming, path.join(backups, 'conflicting.tar.gz'));
+    await expect(manager.restoreApp(appUrn, 'conflicting.tar.gz')).rejects.toThrow('conflicting application migration ledgers');
+    await fs.promises.rm(orbis);
+    await fs.promises.writeFile(path.join(source, 'app/config.json'), JSON.stringify({ ...config, id: 'different-app' }));
+    await archive.createTarGz(source, incoming);
+    await fs.promises.copyFile(incoming, path.join(backups, 'unrelated.tar.gz'));
+    await expect(manager.restoreApp(appUrn, 'unrelated.tar.gz')).rejects.toThrow('Invalid app configuration');
+    expect(await fs.promises.readFile(path.join(root, 'app-data/store/demo/newer-data'), 'utf8')).toBe('newer');
+    expect(repository.replaceMigrationLedger).not.toHaveBeenCalled();
   });
 
   it('validates, publishes and restores inert container links in every archive tree without touching their targets', async () => {

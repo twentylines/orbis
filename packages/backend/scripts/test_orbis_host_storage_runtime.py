@@ -237,6 +237,8 @@ class RuntimeBoundaries(unittest.TestCase):
 
 
 class CandidateBoundaries(unittest.TestCase):
+    source = Path(__file__).resolve().parents[3]
+
     def test_production_changes_cannot_join_an_older_image(self):
         for change in ('M\tscripts/orbis-host-service.py\n', 'D\tpackages/backend/src/app.module.ts\n',
                        'A\tpackages/backend/src/unreviewed.ts\n'):
@@ -254,7 +256,7 @@ class CandidateBoundaries(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'production sources differ'):
                 C.validate_source(Path('/checkout'), 'a' * 40)
 
-    def registry(self, *, missing_arm=False, wrong_commit=False, corrupt_blob=False):
+    def registry(self, *, missing_arm=False, wrong_commit=False, corrupt_blob=False, bases=None):
         tag, commit = 'v0.9.2-rc.3', 'a' * 40
         entries, objects = [], {}
         def blob(value):
@@ -263,11 +265,14 @@ class CandidateBoundaries(unittest.TestCase):
             objects[digest] = body
             return {'digest': digest, 'size': len(body)}
         for arch in (['amd64'] if missing_arm else ['amd64', 'arm64']):
+            labels = {'org.opencontainers.image.source': 'https://github.com/twentylines/orbis',
+                      'org.opencontainers.image.revision': 'b' * 40 if wrong_commit else commit,
+                      'org.opencontainers.image.version': tag,
+                      'io.orbis.installation-protocol': 'orbis.installation-state.v1'}
+            if bases and arch in bases:
+                labels['io.orbis.runtipi-compatibility'] = bases[arch]
             config = blob({'os': 'linux', 'architecture': arch, 'config': {
-                'Labels': {'org.opencontainers.image.source': 'https://github.com/twentylines/orbis',
-                           'org.opencontainers.image.revision': 'b' * 40 if wrong_commit else commit,
-                           'org.opencontainers.image.version': tag,
-                           'io.orbis.installation-protocol': 'orbis.installation-state.v1'},
+                'Labels': labels,
                 'Env': ['ORBIS_VERSION=' + tag, 'ORBIS_COMMIT=' + commit]}})
             if corrupt_blob:
                 objects[config['digest']] = b'{}'
@@ -286,18 +291,27 @@ class CandidateBoundaries(unittest.TestCase):
         tag, commit, digest, reader = self.registry()
         with patch.object(C, 'validate_source'), patch.object(C, 'read', side_effect=reader), \
                 patch.object(C.subprocess, 'check_output', return_value=b'f' * 64 + b'\n'):
-            result = C.verify(Path('/checkout'), tag, commit, digest)
+            result = C.verify(self.source, tag, commit, digest)
             self.assertEqual(result['commit'], commit)
             self.assertEqual(result['digest'], digest)
             self.assertEqual(result['platforms'], ['linux/amd64', 'linux/arm64'])
+            self.assertEqual(result['runtipiCompatibility'], '4.10.1')
+
+    def test_registry_derives_412_manifest_from_matching_platform_labels(self):
+        tag, commit, digest, reader = self.registry(bases={'amd64': '4.12.0', 'arm64': '4.12.0'})
+        with patch.object(C, 'validate_source'), patch.object(C, 'read', side_effect=reader), \
+                patch.object(C.subprocess, 'check_output', return_value=b'f' * 64 + b'\n'):
+            result = C.verify(self.source, tag, commit, digest)
+            self.assertEqual(result['runtipiCompatibility'], '4.12.0')
 
     def test_registry_refuses_missing_platform_wrong_revision_and_corruption(self):
-        for options in ({'missing_arm': True}, {'wrong_commit': True}, {'corrupt_blob': True}):
+        for options in ({'missing_arm': True}, {'wrong_commit': True}, {'corrupt_blob': True},
+                        {'bases': {'amd64': '4.12.0'}}, {'bases': {'arm64': '4.12.1'}}):
             with self.subTest(options=options):
                 tag, commit, digest, reader = self.registry(**options)
                 with patch.object(C, 'validate_source'), patch.object(C, 'read', side_effect=reader):
                     with self.assertRaises(ValueError):
-                        C.verify(Path('/checkout'), tag, commit, digest)
+                        C.verify(self.source, tag, commit, digest)
 
 
 
@@ -435,6 +449,20 @@ class NormalSetupBoundaries(unittest.TestCase):
             with self.assertRaisesRegex(R.Refused, 'normal-setup-api-failed'): runtime.probe_normal_setup()
         self.assertEqual(runtime.results, [{'case': 'normal-setup-api', 'passed': False, 'completed': [],
             'failurePhase': 'actual-first-registration', 'lastStatus': 503}])
+
+    def test_candidate_412_requires_live_core_build_identity(self):
+        runtime = self.runtime()
+        runtime.manifest['runtipiCompatibility'] = '4.12.0'
+        runtime.owned['a' * 64] = ('runtipi', 'sha256:' + 'b' * 64, R.IMAGE + '@sha256:' + 'c' * 64)
+        state = {'State': {'Status': 'running', 'Health': {'Status': 'healthy'}}}
+        child = {'case': 'normal-setup-api', 'passed': True,
+                 'completed': ['root-authorized-first-registration', 'second-operator-registration-refused',
+                               'root-authorized-password-change-and-session-retirement', 'session-logout']}
+        result = subprocess.CompletedProcess([], 0, json.dumps(child).encode(), b'')
+        with patch.object(runtime, 'inspect', return_value=state), patch.object(runtime, 'docker', return_value=result) as docker:
+            with self.assertRaisesRegex(R.Refused, 'invalid-normal-setup-case-sequence'):
+                runtime.probe_normal_setup()
+            self.assertIn('--expect-runtipi-412', docker.call_args.args)
 
     def test_api_selects_only_the_live_host_only_cookie_after_legacy_domain_retirement(self):
         import shutil

@@ -258,6 +258,7 @@ def verify_published_graph(expected_release: dict, *, platform: dict, index_byte
             or labels.get("org.opencontainers.image.source") != SOURCE
             or labels.get("org.opencontainers.image.version") != publication["tag"]
             or labels.get("org.opencontainers.image.revision") != publication["commit"]
+            or labels.get(CHECK.PLAN.RUNTIPI_BASE_LABEL, CHECK.PLAN.LEGACY_BASE) != publication["runtipiCompatibility"].removeprefix("v")
             or ("installationProtocol" in publication
                 and labels.get("io.orbis.installation-protocol") != publication["installationProtocol"])):
         raise fail()

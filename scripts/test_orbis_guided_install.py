@@ -610,6 +610,35 @@ class NewInstallationTests(unittest.TestCase):
         with self.assertRaises(subprocess.TimeoutExpired):
             GUIDE.UI.retry_download(mock.Mock(side_effect=subprocess.TimeoutExpired("docker pull", 900)))
 
+    def test_fresh_install_stages_both_version_files_from_the_same_release(self):
+        for base in ("4.10.1", "4.12.0"):
+            with self.subTest(base=base), tempfile.TemporaryDirectory() as folder, contextlib.ExitStack() as stack:
+                parent = Path(folder)
+                root, state = parent / "server", parent / "private"
+                state.mkdir()
+                manifest = dict(MANIFEST, runtipiCompatibility=base)
+                approved = "a" * 64
+                args = SimpleNamespace(http_port=18080, https_port=18443, server_ip=None, approved_reset_plan_sha256=approved)
+                for target, name, result in [
+                    (NEW, "require_empty", None), (NEW, "server_ip", "192.0.2.1"),
+                    (NEW.REPLACE, "Engine", SimpleNamespace(endpoint="/run/docker.sock")),
+                    (NEW.OWNERSHIP, "installer_storage", {"fixture": True}), (NEW.OWNERSHIP, "verify_installer_storage", None),
+                    (NEW.RESET, "review_external_legacy", {}), (NEW.RESET, "review_plan_sha256", approved),
+                    (NEW.RESET, "prepare_external_reviewed", {}), (NEW.RESET, "external_directory", parent / "unused" / "reset"),
+                    (NEW.OWNERSHIP, "prepare_new", {}), (NEW.APPS, "digest_daemon", "b" * 64),
+                    (NEW.HOST, "host_lock", contextlib.nullcontext()), (NEW.PROXY, "declaration", {"mutableIdentity": {"source": str(parent)}}),
+                    (NEW.subprocess, "run", subprocess.CompletedProcess([], 0)), (NEW, "pointer", None),
+                    (NEW, "finish", {"result": "fixture-prepared"}),
+                ]:
+                    stack.enter_context(mock.patch.object(target, name, return_value=result))
+                stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+                reader = mock.Mock(context="test")
+                self.assertEqual(NEW.install(root, reader, manifest, state, args, mock.Mock())["result"], "fixture-prepared")
+                files = next(state.glob("new-*/files"))
+                self.assertEqual((files / "VERSION").read_text(), base + "\n")
+                self.assertIn(f"TIPI_VERSION='{base}'", (files / ".env").read_text().splitlines())
+                self.assertEqual(json.loads((files.parent / "transaction.json").read_bytes())["manifest"], manifest)
+
     def test_cancel_and_failed_dependency_pulls_leave_the_installation_directory_untouched(self):
         for failure in ("cancel", "pull-error", "pull-timeout"):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as folder:

@@ -6,6 +6,7 @@ only public release metadata is emitted. This cannot publish or change a release
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -57,6 +58,9 @@ def verify(source, tag, commit, digest):
     if not re.fullmatch(r'[a-f0-9]{40}', commit) or not re.fullmatch(r'sha256:[a-f0-9]{64}', digest):
         raise ValueError('Invalid candidate identity')
     validate_source(source, commit)
+    spec = importlib.util.spec_from_file_location('orbis_candidate_plan', source / 'scripts/orbis-release-plan.py')
+    plan = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(plan)
     token = json.loads(read('https://ghcr.io/token?service=ghcr.io&scope=repository:twentylines/orbis:pull')[0])['token']
     headers = {'Authorization': 'Bearer ' + token, 'Accept': TYPES}
 
@@ -74,6 +78,7 @@ def verify(source, tag, commit, digest):
     platforms = [item for item in index['manifests'] if item.get('platform', {}).get('os') == 'linux']
     if sorted(item['platform']['architecture'] for item in platforms) != ['amd64', 'arm64']:
         raise ValueError('Both candidate platforms are required')
+    bases = set()
     for descriptor in platforms:
         image = get('manifests/' + descriptor['digest'], descriptor['digest'])
         config_descriptor = image['config']
@@ -87,11 +92,14 @@ def verify(source, tag, commit, digest):
                 or f'ORBIS_VERSION={tag}' not in config['config']['Env']
                 or f'ORBIS_COMMIT={commit}' not in config['config']['Env']):
             raise ValueError('Candidate configuration differs from its publication')
+        bases.add(plan.image_compatibility(labels))
+    if len(bases) != 1:
+        raise ValueError('Candidate platforms declare different Runtipi compatibility bases')
     fingerprint = subprocess.check_output(['python3', '-B', str(source / 'scripts/orbis-migration-fingerprint.py')], cwd=source).decode().strip()
     return {'schema': 'orbis.release.v1', 'image': 'ghcr.io/twentylines/orbis',
             'tag': tag, 'commit': commit, 'digest': digest, 'releaseChannel': 'nightly',
             'updatePriority': 'normal', 'criticalThrough': None, 'criticalFixes': [],
-            'platforms': ['linux/amd64', 'linux/arm64'], 'runtipiCompatibility': '4.10.1',
+            'platforms': ['linux/amd64', 'linux/arm64'], 'runtipiCompatibility': bases.pop(),
             'installationProtocol': 'orbis.installation-state.v1', 'dataCompatibility': 'orbis.data.v1',
             'accountIdentifierCompatibility': 'orbis.account-identifier.v1', 'migrationFingerprint': fingerprint}
 

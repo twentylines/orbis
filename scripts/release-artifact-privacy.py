@@ -469,6 +469,7 @@ class Image:
         self.used = set()
         self.layers = {}
         self.platforms = set()
+        self.runtipi_bases = set()
 
     def close(self):
         self.archive.close()
@@ -549,6 +550,7 @@ class Image:
                 labels = configuration.get('config', {}).get('Labels', {})
                 if labels.get('org.opencontainers.image.revision') != commit or labels.get('org.opencontainers.image.version') != tag:
                     reject('image-source-identity-mismatch')
+                self.runtipi_bases.add(labels.get('io.orbis.runtipi-compatibility', '4.10.1'))
                 self.platforms.add(label)
             layers = document.get('layers')
             if not isinstance(layers, list) or len(layers) > 256:
@@ -596,13 +598,15 @@ def load(name):
     return module
 
 
-def installer_files(manifest_path, installer, notes, digest, tag, commit, budget, repository=None):
+def installer_files(manifest_path, installer, notes, digest, tag, commit, budget, runtipi_bases, repository=None):
     build = load('orbis-installer-bundle')
     plan = load('orbis-release-plan')
     release_bytes = manifest_path.read_bytes()
     release = plan.validate_manifest(json.loads(release_bytes))
     if release['tag'] != tag or release['commit'] != commit or release['digest'] != digest:
         reject('installer-image-identity-mismatch')
+    if runtipi_bases != {release['runtipiCompatibility'].removeprefix('v')}:
+        reject('image-runtipi-compatibility-mismatch')
     source = build.committed_files(repository or Path(__file__).resolve().parent.parent, commit)
     expected = build.build(source, release_bytes)
     if installer.is_symlink() or {file.name for file in installer.iterdir()} != set(expected):
@@ -762,7 +766,7 @@ def main(argv=None):
                 stage = 'image-content'
                 image.scan(budget)
             stage = 'installer-assets'
-            artifacts = installer_files(args.manifest, args.installer, args.notes, digest, args.tag, args.commit, budget)
+            artifacts = installer_files(args.manifest, args.installer, args.notes, digest, args.tag, args.commit, budget, image.runtipi_bases)
             stage = 'artifact-identity'
             if file_hash(args.oci) != archive_sha:
                 reject('scanned-artifact-changed')

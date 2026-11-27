@@ -7,6 +7,10 @@ on:
         description: 'New immutable candidate tag, for example v0.8.0-rc.1'
         required: true
         type: string
+      runtipi_412:
+        description: 'Build an isolated Runtipi 4.12 compatibility candidate'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -38,6 +42,7 @@ jobs:
       DOCKER_BUILD_RECORD_UPLOAD: 'false'
       DOCKER_BUILD_SUMMARY: 'false'
       RELEASE_TAG: ${{ inputs.tag }}
+      RUNTIPI_COMPATIBILITY: ${{ inputs.runtipi_412 && '4.12.0' || '4.10.1' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -68,7 +73,7 @@ jobs:
           outputs: type=oci,dest=${{ env.RELEASE_DIR }}/image.oci.tar,compression=gzip
           tags: ghcr.io/${{ github.repository }}:${{ env.RELEASE_TAG }}
           build-args: |
-            TIPI_VERSION=4.10.1
+            TIPI_VERSION=${{ env.RUNTIPI_COMPATIBILITY }}
             LOCAL=true
             ORBIS_VERSION=${{ env.RELEASE_TAG }}
             ORBIS_COMMIT=${{ github.sha }}
@@ -98,6 +103,7 @@ jobs:
             --arg updatePriority normal \
             --arg criticalThrough '' \
             --argjson criticalFixes '[]' \
+            --arg runtipiCompatibility "$RUNTIPI_COMPATIBILITY" \
             --arg migrationFingerprint "$(python3 scripts/orbis-migration-fingerprint.py)" \
             -f scripts/release-manifest.jq > release-manifest.json
           printf 'Orbis snapshot preparation and recovery updates.\n\nImage: %s@%s\n' "$IMAGE" "$IMAGE_DIGEST" > release-notes.md
@@ -133,3 +139,6 @@ jobs:
       tag: ${{ inputs.tag }}
       commit: ${{ github.sha }}
       digest: ${{ needs.publish.outputs.image-digest }}
+      normal_setup: ${{ inputs.runtipi_412 }}
+      host_engine: ${{ inputs.runtipi_412 }}
+      main_worker: ${{ inputs.runtipi_412 }}

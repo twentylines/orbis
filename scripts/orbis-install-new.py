@@ -268,6 +268,7 @@ def finish(record, reader, journal):
 
 
 def install(root, reader, manifest, state, args, confirm, display=None, ask=None):
+    base = HOST.PLAN.require_installation_protocol(manifest)["runtipiCompatibility"].removeprefix("v")
     require_empty(root, reader, args.http_port, args.https_port)
     address = server_ip(args.server_ip)
     endpoint = REPLACE.Engine(reader).endpoint
@@ -306,7 +307,7 @@ def install(root, reader, manifest, state, args, confirm, display=None, ask=None
     with HOST.host_lock(root):
         OWNERSHIP.verify_installer_storage(HOST, root, storage, reader.context)
         require_empty(root, reader, args.http_port, args.https_port)
-        values = {"ROOT_FOLDER_HOST": str(root), "INTERNAL_IP": address, "TIPI_VERSION": "4.10.1", "JWT_SECRET": secrets.token_hex(64), "POSTGRES_PASSWORD": secrets.token_hex(32), "RABBITMQ_USERNAME": "tipi", "RABBITMQ_PASSWORD": secrets.token_hex(32), "RABBITMQ_HOST": "runtipi-queue", "NGINX_PORT": str(args.http_port), "NGINX_PORT_SSL": str(args.https_port), "TZ": "UTC", "LOCAL_DOMAIN": "orbis.lan", "DOMAIN": "orbis.invalid"}
+        values = {"ROOT_FOLDER_HOST": str(root), "INTERNAL_IP": address, "TIPI_VERSION": base, "JWT_SECRET": secrets.token_hex(64), "POSTGRES_PASSWORD": secrets.token_hex(32), "RABBITMQ_USERNAME": "tipi", "RABBITMQ_PASSWORD": secrets.token_hex(32), "RABBITMQ_HOST": "runtipi-queue", "NGINX_PORT": str(args.http_port), "NGINX_PORT_SSL": str(args.https_port), "TZ": "UTC", "LOCAL_DOMAIN": "orbis.lan", "DOMAIN": "orbis.invalid"}
         try:
             memory_match = re.search(r"^MemTotal:\s+(\d+)\s+kB$", Path("/proc/meminfo").read_text(), re.MULTILINE)
             memory_total = int(memory_match[1]) * 1024 if memory_match else 0
@@ -315,7 +316,7 @@ def install(root, reader, manifest, state, args, confirm, display=None, ask=None
         except OSError:
             pass
         environment = "".join(f"{key}='{value}'\n" for key, value in values.items())
-        files = {".env": environment.encode(), "VERSION": b"4.10.1\n", "docker-compose.yml": (json.dumps(compose(root, REPLACE.target_image(manifest), endpoint, args.http_port, args.https_port, installer_storage=storage), indent=2) + "\n").encode(), "orbis-compose.yml": HOST.STAGE.staged_content(manifest).encode()}
+        files = {".env": environment.encode(), "VERSION": (base + "\n").encode(), "docker-compose.yml": (json.dumps(compose(root, REPLACE.target_image(manifest), endpoint, args.http_port, args.https_port, installer_storage=storage), indent=2) + "\n").encode(), "orbis-compose.yml": HOST.STAGE.staged_content(manifest).encode()}
         folder = run / "files"; folder.mkdir(mode=0o700)
         for name, data in files.items():
             (folder / name).write_bytes(data); (folder / name).chmod(0o600)

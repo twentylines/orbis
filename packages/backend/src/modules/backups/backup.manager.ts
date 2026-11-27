@@ -13,7 +13,7 @@ import { appInfoSchema } from '@runtipi/common/schemas';
 import type { AppUrn } from '@runtipi/common/types';
 import { type } from 'arktype';
 import { AppFilesManager } from '../apps/app-files-manager';
-import { appMigrationLedgerSchema } from '../apps/app-migration-ledger';
+import { type AppMigrationLedger, appMigrationLedgerSchema } from '../apps/app-migration-ledger';
 import { AppsRepository } from '../apps/apps.repository';
 import { RestoreTransaction } from './restore-transaction';
 import { validateArchiveLinks, validateBackupTree } from './backup-links';
@@ -21,8 +21,10 @@ import { copyStableBackupFile, copyStableBackupTree } from './stable-backup-copy
 import { BackupStagingCleanup } from './backup-staging-cleanup';
 
 const ledgerFile = 'orbis-app-migrations.json';
+const runtipiLedgerFile = 'runtipi-migrations.json';
 const maxLedgerBytes = 48 * 1024;
 const backupLedgerSchema = type({ version: '1', appUrn: 'string', ledger: appMigrationLedgerSchema }).onUndeclaredKey('reject');
+const runtipiLedgerSchema = type({ version: '1', initialized: 'boolean', migrationIds: 'string[]' }).onUndeclaredKey('reject');
 
 @Injectable()
 export class BackupManager implements OnModuleInit {
@@ -212,7 +214,15 @@ export class BackupManager implements OnModuleInit {
       await fs.promises.chmod(archiveDirectory, 0o700);
       const stableArchive = path.join(archiveDirectory, 'backup.tar.gz');
       await copyStableBackupFile(archive, stableArchive);
-      this.validateRestoreArchiveEntries(await this.archiveManager.listTarGz(stableArchive));
+      const entries = await this.archiveManager.listTarGz(stableArchive);
+      this.validateRestoreArchiveEntries(entries);
+      const runtipiEntry = entries.find((entry) => this.normalizeArchiveEntryPath(entry.path) === runtipiLedgerFile);
+      let runtipiLedger: AppMigrationLedger | undefined;
+      if (runtipiEntry) {
+        const config = entries.find((entry) => this.normalizeArchiveEntryPath(entry.path) === 'app/config.json');
+        await this.validateArchivedAppConfig(appUrn, stableArchive, config);
+        runtipiLedger = await this.readRuntipiLedger(stableArchive, runtipiEntry);
+      }
       await this.restoreTransaction.replace(
         appUrn,
         async (restoreDir) => {
@@ -249,7 +259,7 @@ export class BackupManager implements OnModuleInit {
             throw error;
           });
           const app = await this.appsRepository.getAppByUrn(appUrn);
-          let migration: { appId: number; ledger: typeof appMigrationLedgerSchema.infer } | undefined;
+          let migration: { appId: number; ledger: AppMigrationLedger } | undefined;
           if (metadata) {
             if (!metadata.isFile() || metadata.nlink !== 1 || metadata.size > maxLedgerBytes || !app) {
               throw new Error('Invalid application migration ledger in backup');
@@ -257,6 +267,9 @@ export class BackupManager implements OnModuleInit {
             const saved = backupLedgerSchema.assert(JSON.parse(await fs.promises.readFile(ledgerPath, 'utf8')));
             if (saved.appUrn !== appUrn) throw new Error('Application migration ledger belongs to another application');
             migration = { appId: app.id, ledger: saved.ledger };
+          } else if (runtipiLedger) {
+            if (!app) throw new Error('The application must exist to restore its migration history');
+            migration = { appId: app.id, ledger: runtipiLedger };
           } else if (app) {
             const ledger = await this.appsRepository.getMigrationLedger(app.id);
             if (ledger.migrationIds.length) throw new Error('This backup predates the application migration history');
@@ -278,19 +291,29 @@ export class BackupManager implements OnModuleInit {
 
   private validateRestoreArchiveEntries(entries: ArchiveEntry[]) {
     validateArchiveLinks(entries, (entry) => this.normalizeArchiveEntryPath(entry), 'verbatim');
+    let hasLedger = false;
     for (const entry of entries) {
-      const entryPath = this.normalizeArchiveEntryPath(entry.path);
+      const entryPath = this.normalizeArchiveEntryPath(entry.path).replace(/\/$/, '');
 
-      if (entryPath === '.') {
-        continue;
-      }
-
-      const rootName = entryPath.split('/')[0];
-
-      if (!rootName) {
-        throw new Error('Backup contains unsupported file types');
-      }
+      if (entryPath !== ledgerFile && entryPath !== runtipiLedgerFile) continue;
+      if (entry.type !== '-') throw new Error('Invalid application migration ledger in backup');
+      if (hasLedger) throw new Error('Backup contains conflicting application migration ledgers');
+      hasLedger = true;
     }
+  }
+
+  private async validateArchivedAppConfig(appUrn: AppUrn, source: string, entry: ArchiveEntry | undefined, signal?: AbortSignal) {
+    if (!entry || entry.type !== '-') throw new Error('Missing app configuration');
+    const config = JSON.parse(await this.archiveManager.readTarConfig(source, entry.path, signal));
+    const parsed = appInfoSchema({ ...config, urn: appUrn });
+    if (parsed instanceof type.errors || parsed.id !== extractAppUrn(appUrn).appName) throw new Error('Invalid app configuration');
+  }
+
+  private async readRuntipiLedger(source: string, entry: ArchiveEntry, signal?: AbortSignal): Promise<AppMigrationLedger> {
+    const content = await this.archiveManager.readTarConfig(source, entry.path, signal);
+    if (Buffer.byteLength(content) > maxLedgerBytes) throw new Error('Invalid application migration ledger in backup');
+    const { initialized, migrationIds } = runtipiLedgerSchema.assert(JSON.parse(content));
+    return appMigrationLedgerSchema.assert({ baselined: initialized, migrationIds });
   }
 
   private normalizeArchiveEntryPath(entryPath: string) {
@@ -501,13 +524,10 @@ export class BackupManager implements OnModuleInit {
         if (paths.has(root) && paths.get(root)?.type !== 'd') throw new Error('An archive root is not a directory');
       }
       const hasData = [...paths.keys()].some((name) => name === 'app-data' || name.startsWith('app-data/'));
-      const configEntry = paths.get('app/config.json');
-      if (!hasData || !configEntry || configEntry.type !== '-' || paths.get('app-data')?.type === '-') {
-        throw new Error('Missing app data or configuration');
-      }
-      const config = JSON.parse(await this.archiveManager.readTarConfig(source, configEntry.path, signal));
-      const parsed = appInfoSchema({ ...config, urn: appUrn });
-      if (parsed instanceof type.errors || parsed.id !== extractAppUrn(appUrn).appName) throw new Error('Invalid app configuration');
+      if (!hasData || paths.get('app-data')?.type === '-') throw new Error('Missing app data');
+      await this.validateArchivedAppConfig(appUrn, source, paths.get('app/config.json'), signal);
+      const runtipiEntry = paths.get(runtipiLedgerFile);
+      if (runtipiEntry) await this.readRuntipiLedger(source, runtipiEntry, signal);
     } catch (error) {
       signal?.throwIfAborted();
       this.logger.warn('Rejected an invalid uploaded backup', error instanceof Error ? error.name : 'validation error');

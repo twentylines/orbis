@@ -73,8 +73,10 @@ ENV NODE_ENV="production"
 
 ARG ORBIS_VERSION=development
 ARG ORBIS_COMMIT
+ARG TIPI_VERSION=4.10.1
 ENV ORBIS_VERSION=${ORBIS_VERSION}
 ENV ORBIS_COMMIT=${ORBIS_COMMIT}
+LABEL io.orbis.runtipi-compatibility=${TIPI_VERSION}
 LABEL io.orbis.installation-protocol="orbis.installation-state.v1"
 LABEL io.orbis.network-prune-scope="orbis.managed"
 LABEL io.orbis.core-restore-runtime="orbis.core-restore-release.v1"

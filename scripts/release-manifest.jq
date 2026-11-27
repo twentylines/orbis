@@ -9,7 +9,7 @@
   criticalThrough: (if ($ARGS.named.criticalThrough // "") == "" then null else $ARGS.named.criticalThrough end),
   criticalFixes: ($ARGS.named.criticalFixes // []),
   platforms: ["linux/amd64", "linux/arm64"],
-  runtipiCompatibility: "4.10.1",
+  runtipiCompatibility: ($ARGS.named.runtipiCompatibility // "4.10.1"),
   installationProtocol: "orbis.installation-state.v1",
   dataCompatibility: "orbis.data.v1",
   accountIdentifierCompatibility: "orbis.account-identifier.v1",

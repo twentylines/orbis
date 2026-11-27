@@ -24,7 +24,14 @@ const platform = { os: 'linux' as const, architecture: 'arm64' as const };
 const tag = 'v0.5.0-beta.3';
 const commit = 'a'.repeat(40);
 const imageType = 'application/vnd.oci.image.manifest.v1+json';
-function fixture(options: { config?: (value: Record<string, unknown>) => void; index?: (value: Record<string, unknown>) => void } = {}) {
+function fixture(
+  options: {
+    base?: '4.10.1' | '4.12.0';
+    imageBase?: string;
+    config?: (value: Record<string, unknown>) => void;
+    index?: (value: Record<string, unknown>) => void;
+  } = {},
+) {
   const config: Record<string, unknown> = {
     os: 'linux',
     architecture: 'arm64',
@@ -34,6 +41,7 @@ function fixture(options: { config?: (value: Record<string, unknown>) => void; i
         'org.opencontainers.image.version': tag,
         'org.opencontainers.image.revision': commit,
         'io.orbis.installation-protocol': 'orbis.installation-state.v1',
+        ...(options.imageBase ? { 'io.orbis.runtipi-compatibility': options.imageBase } : {}),
       },
     },
     rootfs: { type: 'layers', diff_ids: [`sha256:${'1'.repeat(64)}`] },
@@ -59,7 +67,7 @@ function fixture(options: { config?: (value: Record<string, unknown>) => void; i
     tag,
     commit,
     digest: digest(index),
-    runtipiCompatibility: '4.10.1' as const,
+    runtipiCompatibility: options.base ?? '4.10.1',
     installationProtocol: 'orbis.installation-state.v1' as const,
   };
   const identity = { pointId: '11111111-1111-4111-8111-111111111111', controllerId: 'b'.repeat(64), imageId: digest(configBytes) };
@@ -128,6 +136,14 @@ function seal<T extends object>(value: T) {
   const { preparationSha256: _old, ...body } = value as T & { preparationSha256?: string };
   return { ...body, preparationSha256: sha(`orbis.controller-publication-capture.v1\n${canonical(body)}`) };
 }
+it('requires the verified image to explicitly declare 4.12 compatibility', () => {
+  const exact = fixture({ base: '4.12.0', imageBase: '4.12.0' });
+  expect(decodeControllerPublicationReceipt(exact.packet, exact.expected).metadata.version).toBe(1);
+  for (const imageBase of [undefined, '4.10.1', '4.12.1']) {
+    const different = fixture({ base: '4.12.0', imageBase });
+    expect(() => decodeControllerPublicationReceipt(different.packet, different.expected)).toThrow();
+  }
+});
 it('accepts the protected retained v2 identity and rejects graph or authority drift', () => {
   const original = fixture();
   const proof = original.packet.proof;

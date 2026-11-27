@@ -54,7 +54,7 @@ class ArtifactTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.oci = self.root / 'image.tar'
 
-    def image(self, layers=None, platforms=('amd64', 'arm64'), env=None, attestation=True, extra=None, changed_label=False):
+    def image(self, layers=None, platforms=('amd64', 'arm64'), env=None, attestation=True, extra=None, changed_label=False, bases=None):
         blobs = {}
 
         def blob(data, media):
@@ -68,6 +68,8 @@ class ArtifactTests(unittest.TestCase):
                 'org.opencontainers.image.revision': 'b' * 40 if changed_label else COMMIT,
                 'org.opencontainers.image.version': TAG,
             }}}
+            if bases and arch in bases:
+                config['config']['Labels']['io.orbis.runtipi-compatibility'] = bases[arch]
             manifest = {'schemaVersion': 2, 'mediaType': SCAN.MANIFEST, 'config': blob(encoded(config), SCAN.CONFIG),
                         'layers': [blob(gzip.compress(value, mtime=0), next(key for key, gz in SCAN.LAYERS.items() if gz))
                                    for value in (layers or [layer([('app/main.mjs', b'public runtime')])])]}
@@ -460,10 +462,10 @@ class ArtifactTests(unittest.TestCase):
         with mock.patch.object(SCAN, 'MAX_TOTAL', 10), self.assertRaises(SCAN.Rejected):
             self.scan_image()
 
-    def installer(self, digest):
+    def installer(self, digest, base='4.10.1'):
         build, plan = SCAN.load('orbis-installer-bundle'), SCAN.load('orbis-release-plan')
         release = {'schema': 'orbis.release.v1', 'image': 'ghcr.io/twentylines/orbis', 'tag': TAG, 'commit': COMMIT,
-                   'digest': digest, 'installationProtocol': 'orbis.installation-state.v1', 'runtipiCompatibility': '4.10.1'}
+                   'digest': digest, 'installationProtocol': 'orbis.installation-state.v1', 'runtipiCompatibility': base}
         self.manifest = self.root / 'release-manifest.json'
         self.manifest.write_bytes(encoded(release))
         source = {name: b'# public source fixture\n' for name in build.REQUIRED}
@@ -500,6 +502,21 @@ class ArtifactTests(unittest.TestCase):
         with mock.patch.object(SCAN, 'publish_image') as publish:
             self.assertEqual(self.cli('publish')[0], 1)
             publish.assert_not_called()
+
+    def test_412_manifest_and_every_platform_must_declare_the_same_base(self):
+        selected = {"amd64": "4.12.0", "arm64": "4.12.0"}
+        self.installer(self.image(bases=selected), base='4.12.0')
+        self.assertEqual(self.cli('scan')[0], 0)
+        self.assertEqual(self.cli('verify')[0], 0)
+        for bases in ({}, {"amd64": "4.12.0"}, {**selected, "arm64": "4.12.1"}):
+            self.report.unlink(missing_ok=True)
+            manifest = json.loads(self.manifest.read_bytes())
+            manifest["digest"] = self.image(bases=bases)
+            self.manifest.write_bytes(encoded(manifest))
+            result, message = self.cli('scan')
+            self.assertEqual(result, 1)
+            self.assertIn('image-runtipi-compatibility-mismatch', message['error'])
+            self.assertFalse(self.report.exists())
 
     def test_notes_image_or_receipt_changed_after_scan_cannot_publish(self):
         self.installer(self.image())
