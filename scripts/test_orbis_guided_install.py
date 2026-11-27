@@ -1156,13 +1156,52 @@ class ExplicitChannelTests(GuidedFixture):
                 self.assertEqual(calls, ['/v1/status', '/v1/plan', '/v1/apply', '/v1/status'])
                 self.assertIn('Checking the release and update readiness', steps)
 
+    def test_same_base_bridge_installs_custodied_host_before_dispatch(self):
+        current = {**MANIFEST, "tag": "v0.9.1", "digest": "sha256:" + "d" * 64}
+        channel = {"channel": "stable", "revision": "initial"}
+        root = Path("/unused")
+        source = Path(GUIDE.__file__).parent
+        socket = Path("/unused/socket")
+        custody = "a" * 64
+        operations = mock.Mock()
+        upgrade = SimpleNamespace(SERVICE=SimpleNamespace(installed_manifest=lambda *_: current, read_channel=lambda *_: channel),
+            SETUP=SimpleNamespace(SOCKET_FILE=socket, installed_credentials_only=lambda *_: False), upgrade=operations.upgrade)
+        enable = SimpleNamespace(enable=operations.enable)
+        operations.prepare_sentinel.return_value = mock.sentinel.prepared
+        operations.request.side_effect = [
+            {"capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1", "runtipi-412-update.v1"]},
+            {"planId": "bridge", "targetTag": MANIFEST["tag"], "targetDigest": MANIFEST["digest"]},
+            {"jobId": "bridge"},
+            {"currentDigest": MANIFEST["digest"], "coreHealth": "healthy", "imageMatches": True,
+             "job": {"id": "bridge", "state": "complete"}},
+        ]
+        display = SimpleNamespace(set_remaining_steps=mock.Mock(), step=lambda *_: contextlib.nullcontext())
+        with mock.patch.object(GUIDE, "load", side_effect=lambda name, _: upgrade if name == "orbis-host-service-upgrade.py" else enable), \
+                mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release", operations.verify), \
+                mock.patch.object(GUIDE, "prepare_sentinel", operations.prepare_sentinel), \
+                mock.patch.object(GUIDE, "activate_sentinel", operations.activate), \
+                mock.patch.object(GUIDE, "host_request", operations.request):
+            result = GUIDE.update_existing(root, SimpleNamespace(context="test"), MANIFEST, display, source_custody=custody)
+        self.assertEqual(result, {"result": "orbis-updated", "releaseTag": MANIFEST["tag"], "jobId": "bridge"})
+        self.assertEqual(operations.mock_calls, [
+            mock.call.verify(MANIFEST),
+            mock.call.prepare_sentinel(display, None),
+            mock.call.activate(display, mock.sentinel.prepared),
+            mock.call.enable(root, "test", source, source_custody=custody),
+            mock.call.upgrade(root, "test", source, str(root), source_custody=custody),
+            mock.call.request(socket, "/v1/status"),
+            mock.call.request(socket, "/v1/plan", {"tag": MANIFEST["tag"]}),
+            mock.call.request(socket, "/v1/apply", {"planId": "bridge"}),
+            mock.call.request(socket, "/v1/status"),
+        ])
+
     def test_412_installer_requires_the_coordinating_bridge_and_its_backup_receipt(self):
         target = {**MANIFEST, "runtipiCompatibility": "4.12.0"}
         current = {**MANIFEST, "tag": "v1.0.0", "digest": "sha256:" + "d" * 64}
         channel = {"channel": "stable", "revision": "initial"}
         upgrade = SimpleNamespace(SERVICE=SimpleNamespace(installed_manifest=lambda *_: current, read_channel=lambda *_: channel),
             SETUP=SimpleNamespace(SOCKET_FILE=Path("/unused/socket"), installed_credentials_only=lambda *_: False), upgrade=mock.Mock())
-        helper = {"enrolled": True, "currentDigest": current["digest"], "imageMatches": True,
+        helper = {"enrolled": True, "currentDigest": current["digest"], "imageMatches": True, "coreHealth": "healthy",
                   "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1", "runtipi-412-update.v1"]}
         plan = {"planId": "fixture", "targetTag": target["tag"], "targetDigest": target["digest"], "backupPolicy": "automatic"}
         complete = {**helper, "currentDigest": target["digest"], "coreHealth": "healthy",
@@ -1171,18 +1210,24 @@ class ExplicitChannelTests(GuidedFixture):
         with mock.patch.object(GUIDE, "load", return_value=upgrade), \
                 mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release"), \
                 mock.patch.object(GUIDE, "prepare_backup_tools") as packages, \
-                mock.patch.object(GUIDE, "prepare_sentinel") as sentinel, \
+                mock.patch.object(GUIDE, "prepare_sentinel") as sentinel, mock.patch.object(GUIDE.time, "sleep") as sleep, \
                 mock.patch.object(GUIDE, "host_request") as request:
-            request.return_value = {**helper, "capabilities": []}
-            with self.assertRaisesRegex(GUIDE.HostServiceCompatibilityError, "same-base"):
-                GUIDE.update_existing(Path("/unused"), SimpleNamespace(context="test"), target, display)
+            for failed_status in ({**helper, "capabilities": []}, {**helper, "capabilities": "runtipi-412-update.v1"},
+                                  {**helper, "coreHealth": "starting"}, FileNotFoundError()):
+                with self.subTest(failed_status=failed_status):
+                    request.side_effect = [failed_status]
+                    with self.assertRaisesRegex(GUIDE.HostServiceCompatibilityError, "same-base"):
+                        GUIDE.update_existing(Path("/unused"), SimpleNamespace(context="test"), target, display)
             packages.assert_not_called()
             request.side_effect = [helper, helper, {**plan, "backupPolicy": "none"}]
             with self.assertRaisesRegex(ValueError, "confirm the required"):
                 GUIDE.update_existing(Path("/unused"), SimpleNamespace(context="test"), target, display)
-            request.side_effect = [helper, helper, plan, {"jobId": plan["planId"]}, complete]
+            request.reset_mock()
+            request.side_effect = [helper, helper, plan, {"jobId": plan["planId"]}, FileNotFoundError(), complete]
             self.assertEqual(GUIDE.update_existing(Path("/unused"), SimpleNamespace(context="test"), target, display)["result"],
                              "orbis-updated")
+            sleep.assert_called_once_with(1)
+            self.assertEqual([call.args[1] for call in request.call_args_list].count("/v1/apply"), 1)
         upgrade.upgrade.assert_not_called()
         sentinel.assert_not_called()
 

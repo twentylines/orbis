@@ -738,7 +738,9 @@ def check_source_child(state, operation):
     manifest_body = read_file(selected / boot.MANIFEST, 65536)
     manifest = boot.verify_manifest(manifest_body, record['installer'], required=boot.SOURCE_CUSTODY_REQUIRED)
     core_body = read_file(selected / 'release-manifest.json', 16384)
-    require(sha(core_body) == manifest['releaseManifestSha256'] and decoded(core_body) == bootstrap.target)
+    plan = load_sibling('orbis-release-plan.py', 'orbis_source_child_plan')
+    require(sha(core_body) == manifest['releaseManifestSha256']
+            and plan.update_identity(decoded(core_body)) == plan.update_identity(bootstrap.target))
     archive = read_file(selected / boot.ARCHIVE, 8 * LIMIT)
     manifest, files = boot.verify_source_package(manifest_body, record['installer'], archive)
     require(source_protocol(files['scripts/orbis-install.py'], legacy=True) == value['sourceProtocol'])

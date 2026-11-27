@@ -446,13 +446,18 @@ def installed_manifest(root: Path, context: str) -> dict[str, str]:
         raise ValueError("the installed image identity differs from the enrolled release")
     # Installed releases can outlive their remote assets. New targets still
     # require fresh GitHub/GHCR verification in plan and apply.
+    base = PLAN.read_version(root)
+    if PLAN.image_compatibility(labels) != base:
+        raise ValueError("the installed image compatibility base differs from the installation")
+    protocol_label = "io.orbis.installation-protocol"
     current = PLAN.validate_manifest({
         "schema": "orbis.release.v1",
         "image": PLAN.IMAGE,
         "tag": saved["tag"],
         "commit": labels.get("org.opencontainers.image.revision"),
         "digest": saved["digest"],
-        "runtipiCompatibility": PLAN.read_version(root),
+        "runtipiCompatibility": base,
+        **({"installationProtocol": labels[protocol_label]} if protocol_label in labels else {}),
     })
     HOST.require_current_state(root, HOST.installation_fingerprint(root, current, context))
     return current

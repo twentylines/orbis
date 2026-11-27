@@ -922,6 +922,9 @@ class Runtime:
         result = run([sys.executable, '-B', str(self.source / 'scripts/orbis-host.py'), 'enroll',
             str(self.root), str(self.manifest_path), '--docker-context', 'default', '--confirm-root', str(self.root)], self.source)
         require(json.loads(result.stdout).get('result') == 'enrolled', 'ordinary-enrollment-failed')
+        service = load(self.source / 'scripts/orbis-host-service.py', 'enrolled_release_probe')
+        installed = service.installed_manifest(self.root, 'default')
+        require(installed == service.PLAN.update_identity(self.manifest), 'enrolled-release-identity-mismatch')
 
     def core_id(self):
         identifiers = [identifier for identifier, identity in self.owned.items() if identity[0] == 'runtipi']

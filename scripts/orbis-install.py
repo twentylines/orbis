@@ -493,10 +493,15 @@ def update_existing(root, reader, target, display, *, without_host_service=False
     if cross_base:
         if without_host_service:
             raise ValueError("The compatibility upgrade requires an enrolled coordinating Orbis Host service")
-        status = host_request(socket_path, "/v1/status")
+        try:
+            status = host_request(socket_path, "/v1/status")
+        except OSError as error:
+            raise HostServiceCompatibilityError("Install and verify the same-base Orbis Host update before changing the compatibility base") from error
+        capabilities = status.get("capabilities")
         if (status.get("enrolled") is not True or status.get("imageMatches") is not True
+                or status.get("coreHealth") != "healthy"
                 or status.get("currentDigest") != current["digest"]
-                or "runtipi-412-update.v1" not in (status.get("capabilities") or [])):
+                or not isinstance(capabilities, list) or "runtipi-412-update.v1" not in capabilities):
             raise HostServiceCompatibilityError("Install and verify the same-base Orbis Host update before changing the compatibility base")
     requires_backup_tools = cross_base or target.get("installationProtocol") != HOST.PLAN.INSTALLATION_PROTOCOL
     missing_backup_tools = requires_backup_tools and not shutil.which("rsync")
@@ -564,7 +569,13 @@ def update_existing(root, reader, target, display, *, without_host_service=False
             raise ValueError("Update acknowledgement changed. Check Updates before retrying")
         deadline = time.monotonic() + 1800
         while time.monotonic() < deadline:
-            status = host_request(socket_path, "/v1/status")
+            try:
+                status = host_request(socket_path, "/v1/status")
+            except OSError:
+                # The coordinated update replaces this listener. Keep observing
+                # the accepted job without resubmitting it during that gap.
+                time.sleep(1)
+                continue
             job = status.get("job") or {}
             if job.get("id") != job_id:
                 raise ValueError(f"The update status changed. Inspect job {job_id} before retrying")

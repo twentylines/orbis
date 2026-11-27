@@ -384,6 +384,8 @@ class SourceTests(unittest.TestCase):
         script=directory/'bootstrap/scripts/orbis-host-upgrade-launcher.py'
         script.parent.mkdir(mode=0o700,parents=True)
         script.write_bytes(b'# local lineage fixture\n')
+        for name in ('orbis-release-plan.py', 'orbis-release-policy.py', 'migration-preflight.py'):
+            (script.parent/name).write_bytes(self.files['scripts/'+name])
         job={'id':self.operation,'worker':{'requestSha256':'d'*64}}
         L.write_exclusive(self.state/'job.json',L.canonical(job))
         frame={'pid':5000,'invocationId':'c'*32,'unit':S.unit_name(self.operation)}
@@ -409,6 +411,8 @@ class SourceTests(unittest.TestCase):
         self.assertFalse((staged.directory/BOOT.SOURCE_EXECUTION).exists())
 
     def test_source_child_rechecks_full_selection_and_uses_only_source_check_arguments(self):
+        self.build_inputs({**self.target, 'releaseChannel': 'stable', 'updatePriority': 'normal',
+                           'criticalFixes': [], 'platforms': ['linux/amd64', 'linux/arm64']})
         staged=self.stage()
         script,runtime,scope=self.child_scope(staged)
         class Executed(BaseException):pass

@@ -11,6 +11,10 @@ on:
         description: 'Build an isolated Runtipi 4.12 compatibility candidate'
         type: boolean
         default: false
+      qualify_installed:
+        description: 'Exercise native setup, Host storage and the app worker on the selected base'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -139,6 +143,6 @@ jobs:
       tag: ${{ inputs.tag }}
       commit: ${{ github.sha }}
       digest: ${{ needs.publish.outputs.image-digest }}
-      normal_setup: ${{ inputs.runtipi_412 }}
-      host_engine: ${{ inputs.runtipi_412 }}
-      main_worker: ${{ inputs.runtipi_412 }}
+      normal_setup: ${{ inputs.runtipi_412 || inputs.qualify_installed }}
+      host_engine: ${{ inputs.runtipi_412 || inputs.qualify_installed }}
+      main_worker: ${{ inputs.runtipi_412 || inputs.qualify_installed }}

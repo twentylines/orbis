@@ -210,6 +210,45 @@ class InstalledManifestTests(unittest.TestCase):
         self.assertEqual(docker.call_args.args[1][-1], f"{CURRENT['image']}@{CURRENT['digest']}")
         self.assertEqual(docker.call_args.args[2], self.root)
 
+    def enroll_412(self):
+        current = {**CURRENT, "runtipiCompatibility": "4.12.0",
+                   "installationProtocol": "orbis.installation-state.v1"}
+        self.metadata["labels"].update({
+            "io.orbis.runtipi-compatibility": current["runtipiCompatibility"],
+            "io.orbis.installation-protocol": current["installationProtocol"],
+        })
+        (self.root / "VERSION").write_text("4.12.0\n")
+        (self.root / ".env").write_text("TIPI_VERSION=4.12.0\n")
+        (self.root / "orbis-compose.yml").write_text(SERVICE.HOST.STAGE.staged_content(current))
+        self.saved = SERVICE.HOST.installation_fingerprint(self.root, current, "test-daemon")
+        SERVICE.HOST.write_state(self.root, self.saved)
+        return current
+
+    def test_installed_412_keeps_the_digest_bound_image_protocol_without_remote_assets(self):
+        current = self.enroll_412()
+        with mock.patch.object(SERVICE.HOST, "docker", return_value=self.inspect_result()), mock.patch.object(
+            SERVICE.CHECK, "check", side_effect=AssertionError("installed identity must not require remote assets")
+        ):
+            self.assertEqual(self.service.current_manifest(), current)
+
+    def test_installed_412_rejects_missing_or_mismatched_image_labels(self):
+        label_faults = (
+            ("io.orbis.runtipi-compatibility", None),
+            ("io.orbis.runtipi-compatibility", "4.10.1"),
+            ("io.orbis.installation-protocol", None),
+            ("io.orbis.installation-protocol", "unknown-protocol"),
+        )
+        for label, value in label_faults:
+            with self.subTest(label=label, value=value):
+                self.enroll_412()
+                if value is None:
+                    del self.metadata["labels"][label]
+                else:
+                    self.metadata["labels"][label] = value
+                with mock.patch.object(SERVICE.HOST, "docker", return_value=self.inspect_result()):
+                    with self.assertRaises(ValueError):
+                        self.service.current_manifest()
+
     def test_target_release_still_requires_independent_verification(self):
         with mock.patch.object(SERVICE.HOST, "docker", return_value=self.inspect_result()), mock.patch.object(
             SERVICE, "manifest_for_tag", side_effect=ValueError("target release is not verified")
