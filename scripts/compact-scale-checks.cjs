@@ -211,7 +211,7 @@ async function measure(page, rootSelector) {
             body: box(root.querySelector('.card-body')),
             code: [...root.querySelectorAll('pre')].map((element) => ({
               box: box(element),
-              complete: element.textContent === './runtipi-cli reset-password',
+              complete: element.textContent === 'sudo docker exec -it runtipi orbis-cli reset-password',
             })),
           }
         : null,

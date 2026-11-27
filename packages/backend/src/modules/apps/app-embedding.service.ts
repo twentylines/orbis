@@ -20,6 +20,7 @@ type HeaderObservation = { statusCode: number; policies: string[]; frameOptions:
 const CACHE_MS = 30_000;
 const MAX_CACHE = 128;
 const MAX_PENDING = 4;
+const APP_REDIRECTS = [301, 302, 303, 307, 308];
 
 export function embeddingUrl(value: unknown, originOnly = false): URL | undefined {
   if (typeof value !== 'string' || value.length > 2048 || /\p{Cc}/u.test(value)) return;
@@ -120,36 +121,62 @@ export async function embeddingHeaders(url: URL): Promise<HeaderObservation> {
   if (!addresses.length || addresses.some(({ address }) => !safeEmbeddingAddress(address))) throw new Error('Unsafe address');
   const address = addresses[0];
   if (!address) throw new Error('No address');
-  return new Promise((resolve, reject) => {
-    const request = (url.protocol === 'https:' ? https : http).request(
-      {
-        hostname,
-        port: url.port || (url.protocol === 'https:' ? 443 : 80),
-        path: url.pathname + url.search,
-        method: 'HEAD',
-        family: address.family,
-        lookup: (_hostname, _options, callback) => callback(null, address.address, address.family),
-        agent: false,
-        maxHeaderSize: 16 * 1024,
-        headers: { Accept: 'text/html', 'User-Agent': 'Orbis embedding compatibility', Connection: 'close' },
-      },
-      (response) => {
-        const headers = (name: string) => {
-          const values: string[] = [];
-          for (let index = 0; index < response.rawHeaders.length; index += 2) {
-            if (response.rawHeaders[index]?.toLowerCase() === name) values.push(response.rawHeaders[index + 1] ?? '');
-          }
-          return values;
-        };
-        resolve({ statusCode: response.statusCode ?? 0, policies: headers('content-security-policy'), frameOptions: headers('x-frame-options') });
-        response.destroy();
-      },
-    );
-    const timer = setTimeout(() => request.destroy(new Error('Request timeout')), Math.max(1, deadline - Date.now()));
-    request.on('close', () => clearTimeout(timer));
-    request.on('error', reject);
-    request.end();
-  });
+  const observe = (destination: URL, method: 'HEAD' | 'GET') =>
+    new Promise<{ headers: HeaderObservation; locations: string[] }>((resolve, reject) => {
+      const request = (url.protocol === 'https:' ? https : http).request(
+        {
+          hostname,
+          port: url.port || (url.protocol === 'https:' ? 443 : 80),
+          path: destination.pathname + destination.search,
+          method,
+          family: address.family,
+          lookup: (_hostname, _options, callback) => callback(null, address.address, address.family),
+          agent: false,
+          maxHeaderSize: 16 * 1024,
+          headers: { Accept: 'text/html', 'User-Agent': 'Orbis embedding compatibility', Connection: 'close' },
+        },
+        (response) => {
+          const headers = (name: string) => {
+            const values: string[] = [];
+            for (let index = 0; index < response.rawHeaders.length; index += 2) {
+              if (response.rawHeaders[index]?.toLowerCase() === name) values.push(response.rawHeaders[index + 1] ?? '');
+            }
+            return values;
+          };
+          resolve({
+            headers: { statusCode: response.statusCode ?? 0, policies: headers('content-security-policy'), frameOptions: headers('x-frame-options') },
+            locations: headers('location'),
+          });
+          response.destroy();
+        },
+      );
+      const timer = setTimeout(() => request.destroy(new Error('Request timeout')), Math.max(1, deadline - Date.now()));
+      request.on('close', () => clearTimeout(timer));
+      request.on('error', reject);
+      request.end();
+    });
+  let destination = url;
+  let method: 'HEAD' | 'GET' = 'HEAD';
+  const visited = new Set([url.pathname + url.search]);
+  for (let redirects = 0; ; redirects++) {
+    let response = await observe(destination, method);
+    // App routers may only implement GET. Close the response at its headers.
+    if (method === 'HEAD' && [405, 501].includes(response.headers.statusCode) && Date.now() < deadline) {
+      method = 'GET';
+      response = await observe(destination, method);
+    }
+    const { headers, locations } = response;
+    const location = locations.length === 1 ? locations[0] : undefined;
+    if (!location || !APP_REDIRECTS.includes(headers.statusCode) || redirects === 2 || Date.now() >= deadline) return headers;
+    // Keep every request on the original, registered app origin and pinned IP.
+    const parsed = URL.parse(location, destination);
+    const next = parsed && embeddingUrl(parsed.href);
+    if (!next || next.origin !== url.origin) return headers;
+    const path = next.pathname + next.search;
+    if (visited.has(path)) return headers;
+    visited.add(path);
+    destination = next;
+  }
 }
 
 @Injectable()
@@ -206,7 +233,9 @@ export class AppEmbeddingService {
         const policy = embeddingPolicy(headers, parent, target);
         return result(policy.status, policy.reason);
       })
-      .catch(() => result('unknown', 'unreachable'))
+      .catch((error: unknown) =>
+        result('unknown', error instanceof Error && 'code' in error && error.code === 'ECONNREFUSED' ? 'connection-refused' : 'unreachable'),
+      )
       .then((value) => {
         this.cache.delete(key);
         this.cache.set(key, value);

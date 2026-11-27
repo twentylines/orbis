@@ -26,7 +26,7 @@ test('user can logout', async ({ page, context }) => {
   await expect(page.getByText('Login to your account')).toBeVisible();
 });
 
-test('reset password page identifies the retained CLI as a migration-only option', async ({ page }) => {
+test('reset password page shows the local Orbis CLI command', async ({ page }) => {
   await unsetPasswordChangeRequest();
   await createTestUser();
   await page.goto('/login');
@@ -34,8 +34,8 @@ test('reset password page identifies the retained CLI as a migration-only option
   await expect(page.getByRole('link', { name: 'Forgot password?' })).toBeVisible();
   await page.getByRole('link', { name: 'Forgot password?' }).click();
 
-  await expect(page.getByText('./runtipi-cli reset-password')).toBeVisible();
-  await expect(page.getByText(/migrated from Runtipi and still has its CLI/)).toBeVisible();
+  await expect(page.getByText('sudo docker exec -it runtipi orbis-cli reset-password')).toBeVisible();
+  await expect(page.getByText(/server administrator can run this command on the Docker host/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Reset password' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Cancel password change request' })).toHaveCount(0);
   await expect(page.getByPlaceholder('Your new password', { exact: true })).toHaveCount(0);

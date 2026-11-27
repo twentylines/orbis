@@ -1,6 +1,6 @@
 import type { GetAppDto } from '@/api-client';
 
-type ServerAddresses = { localDomain?: string; sslPort?: number };
+type ServerAddresses = { internalIp?: string; localDomain?: string; sslPort?: number };
 export type AppDestinationData = {
   app?: Pick<NonNullable<GetAppDto['app']>, 'status' | 'openPort' | 'port' | 'exposedLocal' | 'exposed' | 'domain'> | null;
   info: Pick<GetAppDto['info'], 'no_gui' | 'url_suffix' | 'https' | 'dynamic_config' | 'port'>;
@@ -22,8 +22,12 @@ export function appDestinations({ app, info, metadata }: AppDestinationData, set
     }
   };
   if (app.openPort || !info.dynamic_config) {
-    const host = hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname;
-    add('Server address', `${info.https ? 'https' : 'http'}://${host}:${app.port ?? info.port}${suffix}`);
+    const addPort = (label: string, address: string) => {
+      const host = address.includes(':') && !address.startsWith('[') ? `[${address}]` : address;
+      add(label, `${info.https ? 'https' : 'http'}://${host}:${app.port ?? info.port}${suffix}`);
+    };
+    addPort('Server address', hostname);
+    if (settings.internalIp) addPort('LAN address', settings.internalIp);
   }
   if (app.exposedLocal && metadata.localSubdomain && settings.localDomain)
     add('Local domain', `https://${metadata.localSubdomain}.${settings.localDomain}${tlsPort}${suffix}`);

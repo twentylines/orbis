@@ -28,10 +28,17 @@ import type { AppWindow as WindowState } from './app-window-state';
 import type { WindowArea } from './window-geometry';
 import { prefersReducedMotion } from './motion-setting';
 import { dockMotionDuration, sectionMotionTiming } from './section-motion-geometry';
-import { useAppEmbedding } from './app-embedding';
+import { useAppEmbedding, useAppEmbeddingAlternatives } from './app-embedding';
 import { useDesktopPreferences } from './preferences';
 import { appDestinations } from './app-destinations';
-import { appAddress, appEmbeddingBoundary, appEmbeddingWarning, isAppFramePolicyAdvisory, type AppEmbeddingCheck } from './app-opening';
+import {
+  appAddress,
+  appEmbeddingBoundary,
+  appEmbeddingWarning,
+  compatibleAppAlternative,
+  shouldOfferAppWindowRecovery,
+  type AppEmbeddingCheck,
+} from './app-opening';
 import { useWindowVisible } from './window-visibility';
 import { appFlyoutAnchor, placeAppWindowFlyout, type AppFlyoutPoint, type AppFlyoutPosition } from './app-window-flyout';
 import { appMinimizeCrossfade } from './app-window-transition';
@@ -75,6 +82,7 @@ export function AppWindow({
   active,
   desktop,
   serverName,
+  internalIp,
   localDomain,
   sslPort,
   saved,
@@ -100,6 +108,7 @@ export function AppWindow({
   active: boolean;
   desktop: boolean;
   serverName: string;
+  internalIp?: string;
   localDomain?: string;
   sslPort?: number;
   saved?: DesktopWindowBounds;
@@ -589,6 +598,7 @@ export function AppWindow({
             ) : null}
             <AppFrame
               request={request}
+              internalIp={internalIp}
               localDomain={localDomain}
               sslPort={sslPort}
               enabled={desktop && status === 'visible'}
@@ -646,6 +656,7 @@ export function AppWindow({
 
 const AppFrame = memo(function AppFrame({
   request,
+  internalIp,
   localDomain,
   sslPort,
   enabled,
@@ -660,6 +671,7 @@ const AppFrame = memo(function AppFrame({
   onTab,
 }: {
   request: WindowState['request'];
+  internalIp?: string;
   localDomain?: string;
   sslPort?: number;
   enabled: boolean;
@@ -679,14 +691,16 @@ const AppFrame = memo(function AppFrame({
   const [slowLoad, setSlowLoad] = useState<string>();
   const [rememberTab, setRememberTab] = useState(false);
   const [triedAddress, setTriedAddress] = useState<string>();
+  const [checkGraceElapsed, setCheckGraceElapsed] = useState<string>();
+  const [addressWasChanged, setAddressWasChanged] = useState(false);
   const visible = useWindowVisible();
   const noticeHeading = useRef<HTMLHeadingElement>(null);
   // Browser error pages fire load as well. An observed load only clears the waiting indicator.
   const awaitingLoad = observedLoad !== loadKey;
   const check = useAppEmbedding(request, enabled && visible && !boundary);
   const { preferences, update } = useDesktopPreferences();
-  const policyWarning = request.launchUrl !== triedAddress && isAppFramePolicyAdvisory(check.data);
-  const coversFrame = Boolean(boundary || policyWarning);
+  const connectionWarning = request.launchUrl !== triedAddress && shouldOfferAppWindowRecovery(check.data);
+  const coversFrame = Boolean(boundary || connectionWarning);
   const warningMode = coversFrame ? 'page' : help ? 'flyout' : null;
   const installed = useQuery({
     ...getAppOptions({ path: { urn: request.urn } }),
@@ -696,10 +710,25 @@ const AppFrame = memo(function AppFrame({
   });
   const alternatives =
     onAddressChange && warningMode && !request.urn.includes('/') && installed.data?.info.urn === request.urn && !installed.isError
-      ? appDestinations(installed.data, { localDomain, sslPort }, window.location.hostname).filter(
+      ? appDestinations(installed.data, { internalIp, localDomain, sslPort }, window.location.hostname).filter(
           ({ url }) => appAddress(request.launchUrl) !== url && !appEmbeddingBoundary(url, window.location.origin),
         )
       : [];
+  const autoRecover = connectionWarning && enabled && visible && !addressWasChanged;
+  const alternateChecks = useAppEmbeddingAlternatives(request.urn, alternatives, autoRecover);
+  const compatibleAddress = compatibleAppAlternative(alternatives, alternateChecks);
+  const findingAddress = autoRecover && (installed.isFetching || alternateChecks.some(({ isPending }) => isPending));
+  useLayoutEffect(() => {
+    if (!autoRecover || !compatibleAddress || !onAddressChange) return;
+    setAddressWasChanged(true);
+    onAddressChange(compatibleAddress);
+  }, [autoRecover, compatibleAddress, onAddressChange]);
+  const waitingForCheck = !boundary && !connectionWarning && check.isLoading && checkGraceElapsed !== request.launchUrl;
+  useEffect(() => {
+    if (!waitingForCheck) return;
+    const timer = window.setTimeout(() => setCheckGraceElapsed(request.launchUrl), 600);
+    return () => window.clearTimeout(timer);
+  }, [waitingForCheck, request.launchUrl]);
   const helpFlyout = useWindowFlyout(warningMode === 'flyout', flyoutFrame, helpTrigger, helpAnchor);
   const notice = appEmbeddingWarning(boundary ?? check.data) ?? {
     blocked: false,
@@ -710,8 +739,8 @@ const AppFrame = memo(function AppFrame({
         : 'Some apps block embedded windows or need a browser tab for sign-in. Reload the app or open a tab.',
   };
   useLayoutEffect(() => {
-    if (enabled && active && warningMode) noticeHeading.current?.focus({ preventScroll: true });
-  }, [enabled, active, warningMode]);
+    if (enabled && active && warningMode && !compatibleAddress) noticeHeading.current?.focus({ preventScroll: true });
+  }, [enabled, active, warningMode, compatibleAddress]);
   useEffect(() => {
     if (!enabled || !visible || boundary || !awaitingLoad) return;
     const timer = window.setTimeout(() => setSlowLoad(loadKey), 15_000);
@@ -737,7 +766,7 @@ const AppFrame = memo(function AppFrame({
       }
       role={coversFrame ? undefined : 'dialog'}
       aria-label="App window help"
-      aria-busy={check.isFetching}
+      aria-busy={check.isFetching || findingAddress}
     >
       <div className={coversFrame ? 'app-window-compatibility-content' : 'app-window-recovery-content'}>
         {coversFrame ? <IconAlertTriangle size={30} aria-hidden="true" /> : null}
@@ -750,6 +779,7 @@ const AppFrame = memo(function AppFrame({
           </Button>
         )}
         <p>{notice.description}</p>
+        {findingAddress ? <output>Checking other app addresses…</output> : null}
         <label className="app-window-remember-tab">
           <input type="checkbox" checked={rememberTab} onChange={(event) => setRememberTab(event.target.checked)} />
           <span>Always open this app in a new tab</span>
@@ -757,10 +787,12 @@ const AppFrame = memo(function AppFrame({
         <div className="app-window-compatibility-actions">
           {boundary ? null : (
             <>
-              {policyWarning ? (
+              {connectionWarning ? (
                 <Button
                   onClick={() => {
+                    setAddressWasChanged(true);
                     setTriedAddress(request.launchUrl);
+                    reload();
                     if (help) onHelpClose();
                     else helpTrigger?.focus({ preventScroll: true });
                   }}
@@ -775,7 +807,7 @@ const AppFrame = memo(function AppFrame({
                 onClick={async () => {
                   setTriedAddress(undefined);
                   const latest = await check.recheck();
-                  if (policyWarning && latest.data?.status === 'not-blocked-by-headers') reload();
+                  if (connectionWarning && latest.data?.status === 'not-blocked-by-headers') reload();
                 }}
               >
                 Check again
@@ -806,6 +838,7 @@ const AppFrame = memo(function AppFrame({
                 <Button
                   key={url}
                   onClick={() => {
+                    setAddressWasChanged(true);
                     setTriedAddress(undefined);
                     if (help) onHelpClose();
                     else helpTrigger?.focus({ preventScroll: true });
@@ -828,11 +861,15 @@ const AppFrame = memo(function AppFrame({
           Still opening this app…
         </output>
       ) : null}
-      {boundary ? null : (
+      {waitingForCheck ? (
+        <output className="app-window-loading-note" aria-live="polite">
+          Opening app…
+        </output>
+      ) : null}
+      {boundary || waitingForCheck || connectionWarning ? null : (
         <iframe
           key={loadKey}
           className="app-window-frame"
-          hidden={policyWarning}
           title={`${request.name} app`}
           src={request.launchUrl}
           onLoad={() => setObservedLoad(loadKey)}

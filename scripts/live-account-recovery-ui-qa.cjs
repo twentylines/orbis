@@ -570,7 +570,7 @@ async function measureAuth(page) {
       code: [...body.querySelectorAll('pre')].map((element) => ({
         box: box(element),
         color: getComputedStyle(element.querySelector('code')).color,
-        completeCommand: element.textContent === './runtipi-cli reset-password',
+        completeCommand: element.textContent === 'sudo docker exec -it runtipi orbis-cli reset-password',
         scrollWidth: element.scrollWidth,
         clientWidth: element.clientWidth,
         overflowX: getComputedStyle(element).overflowX,
@@ -1089,7 +1089,7 @@ async function main() {
         checkAuth(reset, group.textScale);
         assert.equal(
           await activePage.locator('.desktop-auth pre code').textContent(),
-          './runtipi-cli reset-password',
+          'sudo docker exec -it runtipi orbis-cli reset-password',
           'Forgot password only displays the real local CLI command',
         );
         const command = activePage.locator('.desktop-auth pre');

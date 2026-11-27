@@ -83,6 +83,21 @@ export function isAppFramePolicyAdvisory(check?: AppEmbeddingCheck) {
   return check?.status === 'blocked' && ['x-frame-options-deny', 'x-frame-options-sameorigin', 'csp-frame-ancestors'].includes(check.reason);
 }
 
+export function shouldOfferAppWindowRecovery(check?: AppEmbeddingCheck) {
+  return isAppFramePolicyAdvisory(check) || (check?.status === 'unknown' && check.reason === 'connection-refused');
+}
+
+export function compatibleAppAlternative(
+  alternatives: readonly { url: string }[],
+  checks: readonly { data?: AppEmbeddingCheck; isPending: boolean }[],
+) {
+  for (const [index, alternative] of alternatives.entries()) {
+    const check = checks[index];
+    if (!check || check.isPending) return;
+    if (check.data?.status === 'not-blocked-by-headers') return alternative.url;
+  }
+}
+
 export function appEmbeddingBoundary(url: string | undefined, origin: string): AppEmbeddingCheck | undefined {
   const target = appUrl(url);
   const source = appUrl(origin);
@@ -120,6 +135,12 @@ export function appEmbeddingWarning(check?: AppEmbeddingCheck) {
       };
     }
   }
+  if (check?.status === 'unknown' && check.reason === 'connection-refused')
+    return {
+      blocked: false,
+      title: 'This app address refused the connection',
+      description: 'The Orbis server could not connect to this address. Try another app address or connect directly from your browser.',
+    };
   if (check?.status === 'unknown' && check.reason === 'unreachable')
     return {
       blocked: false,

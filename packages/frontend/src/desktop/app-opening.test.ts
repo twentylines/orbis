@@ -6,10 +6,12 @@ import {
   appEmbeddingWarning,
   appOpeningMode,
   appRestorePlan,
+  compatibleAppAlternative,
   initialAppBounds,
   isAppFramePolicyAdvisory,
   primaryAppAddress,
   restoreAppBounds,
+  shouldOfferAppWindowRecovery,
 } from './app-opening';
 
 describe('actual app opening', () => {
@@ -108,6 +110,17 @@ describe('actual app opening', () => {
 });
 
 describe('general app window compatibility warnings', () => {
+  test('recovers to a confirmed configured address in preference order', () => {
+    const alternatives = [{ url: 'https://lan.local/' }, { url: 'https://app.example.test/' }];
+    const ready = { isPending: false, data: { status: 'not-blocked-by-headers' as const, reason: 'no-blocking-header' } };
+    const denied = { isPending: false, data: { status: 'blocked' as const, reason: 'x-frame-options-deny' } };
+    expect(compatibleAppAlternative(alternatives, [{ isPending: true }, ready])).toBeUndefined();
+    expect(compatibleAppAlternative(alternatives, [denied, ready])).toBe(alternatives[1]?.url);
+    expect(compatibleAppAlternative(alternatives, [ready, ready])).toBe(alternatives[0]?.url);
+    expect(compatibleAppAlternative(alternatives, [denied, denied])).toBeUndefined();
+    expect(shouldOfferAppWindowRecovery({ status: 'unknown', reason: 'connection-refused' })).toBe(true);
+    expect(shouldOfferAppWindowRecovery({ status: 'unknown', reason: 'unreachable' })).toBe(false);
+  });
   test('distinguishes a server probe failure from the browser app connection', () => {
     const warning = appEmbeddingWarning({ status: 'unknown', reason: 'unreachable' });
     expect(warning?.blocked).toBe(false);

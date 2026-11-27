@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { queryOptions, useQueries, useQuery } from '@tanstack/react-query';
 import type { AppLaunchRequest } from './app-window-state';
 import { appEmbeddingBoundary, type AppEmbeddingCheck } from './app-opening';
 
@@ -31,26 +31,21 @@ export function AppEmbeddingProvider({ children }: PropsWithChildren) {
 
 export const useBlockedAppEmbeds = () => useContext(EmbeddingContext).blocked;
 
-export function useAppEmbedding(request: AppLaunchRequest, enabled: boolean) {
-  const { report } = useContext(EmbeddingContext);
-  const url = request.launchUrl ?? '';
-  const refreshNext = useRef(false);
-  const check = useQuery({
-    queryKey: ['app-embedding', request.urn, url, window.location.origin],
+function embeddingOptions(urn: string, url: string, enabled: boolean, refresh?: () => boolean) {
+  const origin = window.location.origin;
+  return queryOptions({
+    queryKey: ['app-embedding', urn, url, origin],
     enabled,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     retry: false,
     refetchOnWindowFocus: false,
     queryFn: async ({ signal }): Promise<AppEmbeddingCheck> => {
-      if (!url || request.urn.includes('/')) return { status: 'unknown', reason: 'unverified-destination' };
-      const params = new URLSearchParams({ destination: url, parentOrigin: window.location.origin });
-      if (refreshNext.current) {
-        params.set('refresh', 'true');
-        refreshNext.current = false;
-      }
+      if (!url || urn.includes('/')) return { status: 'unknown', reason: 'unverified-destination' };
+      const params = new URLSearchParams({ destination: url, parentOrigin: origin });
+      if (refresh?.()) params.set('refresh', 'true');
       try {
-        const response = await fetch(`/api/apps/${encodeURIComponent(request.urn)}/embedding-compatibility?${params}`, {
+        const response = await fetch(`/api/apps/${encodeURIComponent(urn)}/embedding-compatibility?${params}`, {
           signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]),
         });
         if (!response.ok) return { status: 'unknown', reason: 'check-unavailable' };
@@ -70,6 +65,23 @@ export function useAppEmbedding(request: AppLaunchRequest, enabled: boolean) {
       return { status: 'unknown', reason: 'check-unavailable' };
     },
   });
+}
+
+export function useAppEmbeddingAlternatives(urn: string, alternatives: readonly { url: string }[], enabled: boolean) {
+  return useQueries({ queries: enabled ? alternatives.map(({ url }) => embeddingOptions(urn, url, true)) : [] });
+}
+
+export function useAppEmbedding(request: AppLaunchRequest, enabled: boolean) {
+  const { report } = useContext(EmbeddingContext);
+  const url = request.launchUrl ?? '';
+  const refreshNext = useRef(false);
+  const check = useQuery(
+    embeddingOptions(request.urn, url, enabled, () => {
+      const refresh = refreshNext.current;
+      refreshNext.current = false;
+      return refresh;
+    }),
+  );
   useEffect(() => {
     report(request.urn, url);
   }, [request.urn, url, report]);

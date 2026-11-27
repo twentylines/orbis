@@ -60,6 +60,18 @@ const retainedCapability = await Bun.build({
 if (!retainedCapability.success) throw new AggregateError(retainedCapability.logs, 'Retained worker capability build failed');
 await assertNoPrivateBuildPaths(retainedCapability.outputs);
 
+const orbisCli = await Bun.build({
+  entrypoints: ['./src/orbis-cli.ts'],
+  outdir: './dist',
+  naming: { entry: '[name].mjs' },
+  format: 'esm',
+  target: 'node',
+  env: 'disable',
+  banner: '#!/usr/bin/env node',
+});
+if (!orbisCli.success) throw new AggregateError(orbisCli.logs, 'Orbis CLI build failed');
+await assertNoPrivateBuildPaths(orbisCli.outputs);
+
 const captureEntrypoints = [
   './src/core-capture-publication.ts',
   './src/core-capture-seal.ts',

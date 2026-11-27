@@ -9,11 +9,11 @@ export default function ResetPasswordPage() {
       <h2 className="desktop-auth-heading" data-auth-focus="" tabIndex={-1}>
         Reset your password
       </h2>
-      <p className="desktop-auth-help">
-        If your server was migrated from Runtipi and still has its CLI, a server administrator can run this command from the installation folder.
-      </p>
+      <p className="desktop-auth-help">A server administrator can run this command on the Docker host to reset the Orbis operator password.</p>
       <pre className="desktop-auth-recovery-command">
-        <code>./runtipi-cli reset-password</code>
+        <code>
+          sudo docker exec -it runtipi <span className="text-nowrap">orbis-cli</span> <span className="text-nowrap">reset-password</span>
+        </code>
       </pre>
       <AuthBack to={`/login${query ? `?${query}` : ''}`} />
     </div>

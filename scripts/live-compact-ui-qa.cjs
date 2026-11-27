@@ -731,7 +731,7 @@ async function measure(page, rootSelector) {
               inputsEmpty: [...root.querySelectorAll('input')].every((input) => !input.value),
               code: [...root.querySelectorAll('pre')].map((element) => ({
                 ...style(element),
-                complete: element.textContent === './runtipi-cli reset-password',
+                complete: element.textContent === 'sudo docker exec -it runtipi orbis-cli reset-password',
                 scrollWidth: element.scrollWidth,
                 clientWidth: element.clientWidth,
               })),
@@ -1677,7 +1677,7 @@ async function main() {
           if (sample.name === 'reset')
             assert.equal(
               await page.locator('.desktop-auth pre').textContent(),
-              './runtipi-cli reset-password',
+              'sudo docker exec -it runtipi orbis-cli reset-password',
               'Actual reset command must remain complete',
             );
           if (sample.name === 'monitor') await inspectModel(page, sample, group, actualAppearance, shot, save, item);

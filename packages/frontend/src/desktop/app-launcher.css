@@ -204,6 +204,10 @@
   min-height: 100%;
   padding: 28px;
 }
+.app-window-compatibility-content > h3:focus,
+.app-window-recovery-content > h3:focus {
+  outline: none;
+}
 .orbis-app-launcher .app-window-compatibility-content > svg {
   flex: none;
 }

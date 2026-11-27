@@ -188,7 +188,7 @@ describe('embedding transport security', () => {
     expect(network.http).not.toHaveBeenCalled();
   });
 
-  it('does not follow redirects, read a response body or substitute GET for HEAD', async () => {
+  it('does not follow redirects to another origin or read a response body', async () => {
     rawHeaders = [
       'Location',
       'http://169.254.169.254/latest',
@@ -204,9 +204,64 @@ describe('embedding transport security', () => {
     expect(network.http).toHaveBeenCalledOnce();
     expect(destroyed).toHaveBeenCalledOnce();
     expect(network.lookup).not.toHaveBeenCalled();
-    statusCode = 405;
-    expect(embeddingPolicy(await embeddingHeaders(target), parent, target).reason).toBe('head-unsupported');
-    expect(network.http).toHaveBeenCalledTimes(2);
+  });
+
+  it('checks the GET headers when the registered app only implements GET', async () => {
+    const send = network.http.getMockImplementation();
+    if (!send) throw new Error('Missing transport fixture');
+    network.http.mockImplementation((options: RequestOptions, callback: (response: IncomingMessage) => void) => {
+      statusCode = options.method === 'HEAD' ? 405 : 200;
+      rawHeaders = options.method === 'GET' ? ['X-Frame-Options', 'SAMEORIGIN'] : [];
+      return send(options, callback);
+    });
+    const observed = await embeddingHeaders(new URL('http://app.local:8123/'));
+    expect(embeddingPolicy(observed, parent, target).reason).toBe('x-frame-options-sameorigin');
+    expect(network.lookup).toHaveBeenCalledOnce();
+    expect(network.http.mock.calls.map(([options]) => options.method)).toEqual(['HEAD', 'GET']);
+    expect(destroyed).toHaveBeenCalledTimes(2);
+  });
+
+  it('checks the actual landing page of a GET-only app on the same pinned origin', async () => {
+    const send = network.http.getMockImplementation();
+    if (!send) throw new Error('Missing transport fixture');
+    network.http.mockImplementation((options: RequestOptions, callback: (response: IncomingMessage) => void) => {
+      if (options.method === 'HEAD') {
+        statusCode = 405;
+        rawHeaders = [];
+      } else if (options.path === '/') {
+        statusCode = 302;
+        rawHeaders = ['Location', '/onboarding.html'];
+      } else {
+        statusCode = 200;
+        rawHeaders = ['X-Frame-Options', 'SAMEORIGIN'];
+      }
+      return send(options, callback);
+    });
+    const registered = new URL('http://app.local:8123/');
+    expect(embeddingPolicy(await embeddingHeaders(registered), parent, registered).reason).toBe('x-frame-options-sameorigin');
+    expect(network.http.mock.calls.map(([options]) => [options.method, options.path])).toEqual([
+      ['HEAD', '/'],
+      ['GET', '/'],
+      ['GET', '/onboarding.html'],
+    ]);
+    expect(network.lookup).toHaveBeenCalledOnce();
+    expect(destroyed).toHaveBeenCalledTimes(3);
+  });
+
+  it('leaves looping and long redirect chains unverified', async () => {
+    const send = network.http.getMockImplementation();
+    if (!send) throw new Error('Missing transport fixture');
+    network.http.mockImplementation((options: RequestOptions, callback: (response: IncomingMessage) => void) => {
+      statusCode = 302;
+      rawHeaders = ['Location', `/hop-${network.http.mock.calls.length}`];
+      return send(options, callback);
+    });
+    expect(embeddingPolicy(await embeddingHeaders(target), parent, target).reason).toBe('redirect');
+    expect(network.http).toHaveBeenCalledTimes(3);
+    rawHeaders = ['Location', '/'];
+    network.http.mockImplementation(send);
+    expect(embeddingPolicy(await embeddingHeaders(target), parent, target).reason).toBe('redirect');
+    expect(network.http).toHaveBeenCalledTimes(4);
   });
 
   it('bounds DNS and socket time even if neither endpoint replies', async () => {
@@ -337,6 +392,10 @@ describe('installed app authorization and bounded caching', () => {
       throw new Error('private transport details');
     });
     expect(await service.check(urn, target, parent)).toMatchObject({ status: 'unknown', reason: 'unreachable' });
+    network.http.mockImplementation(() => {
+      throw Object.assign(new Error('private transport details'), { code: 'ECONNREFUSED' });
+    });
+    expect(await service.check(urn, target, parent, true)).toMatchObject({ status: 'unknown', reason: 'connection-refused' });
   });
 
   it('rejects malformed URL inputs and never treats credentials as a destination', () => {

@@ -334,6 +334,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                         area={area}
                         ratio={appWindowRatio(state, item)}
                         serverName={preferences.serverName}
+                        internalIp={userSettings.internalIp}
                         localDomain={userSettings.localDomain}
                         sslPort={userSettings.sslPort}
                         saved={preferences.appLaunch.apps[item.request.urn]?.bounds}

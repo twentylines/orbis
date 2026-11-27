@@ -91,6 +91,7 @@ COPY --from=builder_base /deps/docker-binary /usr/local/bin/docker-compose
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/packages/backend/dist ./
 RUN test -s /app/sentinel-recovery-source.mjs && test -s /app/sentinel-recovery-auth.mjs
+RUN test -s /app/orbis-cli.mjs && chmod 0755 /app/orbis-cli.mjs && ln -s /app/orbis-cli.mjs /usr/local/bin/orbis-cli
 COPY --from=builder /app/packages/backend/src/restore-install-hold-capability.json ./restore-install-hold-capability.json
 COPY --from=builder /app/packages/backend/src/retained-terminal-capability.json ./retained-terminal-capability.json
 COPY --from=builder /app/packages/backend/src/retained-app-engine-capability.json ./retained-app-engine-capability.json

@@ -51,3 +51,15 @@ test('deduplicates equivalent local and public addresses', () => {
   data.app.domain = 'photos.home.test';
   expect(appDestinations(data, settings, 'localhost')).toHaveLength(1);
 });
+
+test('offers the configured LAN address only when the host port is available', () => {
+  const data = fixture();
+  const addresses = { ...settings, internalIp: '192.168.1.20' };
+  expect(appDestinations(data, addresses, 'orbis.home.test')[1]).toEqual({
+    label: 'LAN address',
+    url: 'http://192.168.1.20:8081/photos?view=grid',
+  });
+  expect(appDestinations(data, addresses, addresses.internalIp).some(({ label }) => label === 'LAN address')).toBe(false);
+  data.app.openPort = false;
+  expect(appDestinations(data, addresses, 'orbis.home.test').some(({ label }) => label === 'LAN address')).toBe(false);
+});
