@@ -113,7 +113,7 @@ class DockerPrerequisiteTests(unittest.TestCase):
     def test_existing_docker25_api_and_modern_compose_need_no_prerequisite_mutation(self):
         reader = mock.Mock()
         reader.socket.return_value = "/run/docker.sock"
-        for compose in ("v2.35.1", "5.6.1"):
+        for compose in ("v2.35.1", "5.6.1", "2.40.3+ds1-0ubuntu1~24.04.1"):
             reader._read.side_effect = [compose, "1.44"]
             with mock.patch.object(GUIDE.shutil, "which", return_value="/usr/bin/docker"), mock.patch.object(Path, "is_socket", return_value=True), mock.patch.object(GUIDE.subprocess, "run") as execute:
                 GUIDE.require_docker_prerequisites(reader)

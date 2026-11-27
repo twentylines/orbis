@@ -70,8 +70,8 @@ def require_docker_prerequisites(reader, *, state_dir=None, accepted=False, insp
             version = reader._read(["compose", "version", "--short"])
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
             raise ValueError("The Docker Compose plugin could not be used. " + DOCKER_INSTALL_HELP) from error
-        match = re.fullmatch(r"v?(\d+)\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", version) if isinstance(version, str) else None
-        if match is None or int(match[1]) < 2:
+        version_tuple = PREREQUISITES.compose_version(version)
+        if version_tuple is None or version_tuple[0] < 2:
             raise ValueError("A supported Docker Compose plugin was not found. " + DOCKER_INSTALL_HELP)
         if check_engine:
             REPLACE.Engine(reader)

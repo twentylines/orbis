@@ -91,6 +91,13 @@ class PolicyTests(unittest.TestCase):
     def test_missing_docker_is_reported_as_required_setup_without_command(self):
         with mock.patch.object(P,'host'),mock.patch.object(P.shutil,'which',return_value=None),mock.patch.object(P,'run') as run:
             self.assertEqual(P.inspect()['kind'],'install');run.assert_not_called()
+    def test_distribution_compose_suffix_does_not_trigger_package_changes(self):
+        for compose, kind in [('2.40.3+ds1-0ubuntu1~24.04.1','ready'), ('2.19.1+ds1-1','compose'),
+                              ('2.40.3+','compose'), ('2.40.3\nextra','compose')]:
+            with self.subTest(compose=compose), mock.patch.object(P,'host'), \
+                    mock.patch.object(P.shutil,'which',return_value='/usr/bin/docker'), \
+                    mock.patch.object(P,'docker',side_effect=['"unix:///run/docker.sock"', '{"ApiVersion":"1.44"}', compose]):
+                self.assertEqual(P.inspect()['kind'],kind)
     def test_stopped_local_daemon_has_safe_start_path_instead_of_generic_failure(self):
         def execute(args,**_kwargs):
             return 'loaded' if 'show' in args else 'inactive'

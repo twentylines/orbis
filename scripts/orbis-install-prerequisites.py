@@ -43,6 +43,14 @@ class PrerequisiteError(ValueError):
     pass
 
 
+def compose_version(value):
+    if not isinstance(value, str) or len(value) > 180:
+        return None
+    # Distribution packages can include a Debian revision and an Ubuntu suffix.
+    match = re.fullmatch(r'v?([0-9]+)\.([0-9]+)\.([0-9]+)(?:[-+~][0-9A-Za-z][0-9A-Za-z.+~-]*)?', value)
+    return tuple(map(int, match.groups())) if match else None
+
+
 def sha(path):
     result = hashlib.sha256()
     with Path(path).open('rb') as stream:
@@ -218,8 +226,8 @@ def inspect(context='default'):
         raise PrerequisiteError('The selected Docker daemon needs a configuration or permissions repair. Its existing packages, containers and data were preserved.') from error
     try:
         compose=docker(context,['compose','version','--short'])
-        match=re.fullmatch(r'v?(\d+)\.(\d+)\.\d+(?:[-+][0-9A-Za-z.-]+)?',compose)
-        compose_ready=bool(match and (int(match[1]),int(match[2]))>=(2,20))
+        version_tuple=compose_version(compose)
+        compose_ready=bool(version_tuple and version_tuple>=(2,20,0))
     except (PrerequisiteError,OSError,subprocess.SubprocessError):compose=None;compose_ready=False
     return {'kind':'ready' if int(api.split('.')[1])>=44 and compose_ready else 'compose' if int(api.split('.')[1])>=44 else 'upgrade','context':context,'engine':version.get('Version'),'api':api,'compose':compose}
 
