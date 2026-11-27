@@ -47,3 +47,17 @@ test('system alerts remain visible without stopped apps and larger lists retain 
   expect(html).toContain('View all 8 applications');
   expect(html).not.toContain('App 6');
 });
+
+test('operator update actions go directly to the existing review for the affected app', () => {
+  const html = render({
+    canUpdate: true,
+    apps: [
+      { urn: 'stopped:official', id: 'stopped', name: 'Stopped app', stopped: true },
+      { urn: 'ready:official', id: 'ready', name: 'Ready app', stopped: false },
+    ],
+  });
+  expect(html).toContain('href="/apps/official/ready/update"');
+  expect(html).toContain('>Update</span>');
+  expect(html).toContain('href="/apps/official/stopped"');
+  expect(html).not.toContain('/apps/official/stopped/update');
+});

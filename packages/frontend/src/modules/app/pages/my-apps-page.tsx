@@ -199,7 +199,7 @@ function LocalApps() {
                 <StopAllButton availableUpdates={updatesAvailable} />
               </ActionBar.Center>
               <ActionBar.Right>
-                <RestartAllButton availableUpdates={updatesAvailable} />
+                <RestartAllButton />
               </ActionBar.Right>
             </ActionBar>
           </div>

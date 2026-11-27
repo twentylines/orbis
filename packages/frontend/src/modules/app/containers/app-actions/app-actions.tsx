@@ -35,7 +35,6 @@ import { UninstallDialog } from '../../components/dialogs/uninstall-dialog/unins
 import { UpdateSettingsDialog } from '../../components/dialogs/update-settings-dialog/update-settings-dialog';
 import { TemplateSyncDialog } from '../../components/template-sync-dialog/template-sync-dialog';
 import { useAppStatus } from '../../helpers/use-app-status';
-import { Tooltip } from 'react-tooltip';
 import { appDestinations } from '@/desktop/app-destinations';
 import { primaryAppAddress } from '@/desktop/app-opening';
 import { DropdownMenuChevron, DropdownMenuSeparator } from '@/components/ui/DropdownMenu/DropdownMenu';
@@ -161,10 +160,8 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
       {t('APP_ACTION_RESTART')}
       {app?.pendingRestart && (
         <div>
-          <Tooltip className="tooltip" anchorSelect=".configChanged">
-            {t('MY_APPS_PENDING_RESTART')}
-          </Tooltip>
-          <span className="ms-2 badge bg-red" />
+          <span className="ms-2 badge bg-red" aria-hidden="true" />
+          <span className="visually-hidden">{t('MY_APPS_PENDING_RESTART')}</span>
         </div>
       )}
     </DropdownMenuItem>
@@ -181,9 +178,6 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
       className="updateAvailable"
     >
       <IconDownload className="me-2" size={16} />
-      <Tooltip className="tooltip" anchorSelect=".updateAvailable">
-        {t('MY_APPS_UPDATE_AVAILABLE')}
-      </Tooltip>
       <div>
         {t('APP_ACTION_UPDATE')}
         <span className="ms-2 badge bg-red" />
@@ -255,7 +249,7 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
   );
 
   const OpenButton = (
-    <div className="app-launch-actions" key="open">
+    <div className="app-launch-actions" data-split={destinations.length > 1 || undefined} key="open">
       <Button
         className="action-button app-launch-button"
         disabled={!preferredAddress}
@@ -388,7 +382,7 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
         {listItems.length + listItemsAdvanced.length + listItemsDestructive.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button name="more" className="more-button" aria-label="More application actions" title="More application actions">
+              <Button name="more" className="more-button" aria-label="More application actions">
                 <IconDots size={14} />
                 {((updateAvailable && !versionIsIgnored) || app?.pendingRestart) && <span className="app-action-notice" aria-hidden="true" />}
               </Button>

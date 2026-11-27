@@ -183,11 +183,9 @@ export function DriveHealthView() {
                   >
                     <IconDatabase size={24} aria-hidden="true" />
                     <span className="drive-health-device-copy">
-                      <strong title={drive.model}>{drive.model}</strong>
+                      <strong>{drive.model}</strong>
                       <span className="drive-health-device-identity">
-                        <span className="drive-health-device-path" title={drive.device}>
-                          {drive.device}
-                        </span>
+                        <span className="drive-health-device-path">{drive.device}</span>
                         <span>{drive.capacityBytes === null ? 'Capacity unavailable' : resourceBytes(drive.capacityBytes)}</span>
                       </span>
                       <span className="drive-health-device-values">

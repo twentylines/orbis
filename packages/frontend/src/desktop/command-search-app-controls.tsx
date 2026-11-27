@@ -30,7 +30,6 @@ export function SearchAppCommandControls({
             data-app-command={command.action}
             className="desktop-search-result-manage"
             aria-label={`${label} ${command.name}`}
-            title={label}
             onKeyDown={onKeyDown}
             onClick={() => onCommand(command)}
           >

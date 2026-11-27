@@ -710,7 +710,7 @@ export function CommandSearch() {
                                   >
                                     <span className="desktop-search-result-icon">{result.icon}</span>
                                     <span className="desktop-search-result-text">
-                                      <strong title={result.label}>
+                                      <strong>
                                         <WrapWords text={result.label} />
                                       </strong>
                                       {result.detail ? <small>{result.detail}</small> : null}

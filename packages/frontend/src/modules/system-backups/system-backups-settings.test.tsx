@@ -541,7 +541,7 @@ test('backup confirmation preserves the selected archive and nearby error throug
     backupRemovalContents({ kind: 'export', busy: false, disabled: false, error: null, onCancel: () => {}, onRemove: () => {} }),
   );
   const markup = renderToStaticMarkup(<Dialog open>{closed}</Dialog>);
-  expect(markup).toContain('Remove uploaded backup?');
+  expect(markup.replace(/<[^>]+>/g, '')).toContain('Remove uploaded backup?');
   expect(markup).not.toContain('Remove server backup copy?');
   expect(markup).toContain('Files already saved on your device are unaffected.');
   expect(markup).toContain('backup-removal-error');
@@ -559,7 +559,7 @@ test('backup confirmation locks both matching actions while deletion is pending'
   );
   expect(markup.match(/disabled=""/g)).toHaveLength(2);
   expect(markup).toContain('aria-busy="true"');
-  expect(markup).toContain('Remove server backup copy?');
+  expect(markup.replace(/<[^>]+>/g, '')).toContain('Remove server backup copy?');
   const blocked = renderToStaticMarkup(
     <Dialog open>
       {backupRemovalContents({ kind: 'import', busy: false, disabled: true, error: null, onCancel: () => {}, onRemove: () => {} })}

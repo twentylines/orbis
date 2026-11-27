@@ -172,7 +172,7 @@ export const MultiServiceForm = forwardRef<MultiServiceFormHandle, Props>(functi
 
     return (
       <li className="nav-item nav-item-c" key={tabId}>
-        <button type="button" className={tabClass} aria-current={isActive ? 'page' : undefined} onClick={() => setActiveTab(tabId)} title={label}>
+        <button type="button" className={tabClass} aria-current={isActive ? 'page' : undefined} onClick={() => setActiveTab(tabId)}>
           <span className="nav-link-icon nav-link-icon-c">
             <IconComponent size={24} />
           </span>

@@ -125,7 +125,7 @@ export function ClusterInstallDialog({
                   <IconServer size={22} aria-hidden="true" />
                   <span>
                     <small>Install on</small>
-                    <strong title={targetName}>{targetName}</strong>
+                    <strong>{targetName}</strong>
                   </span>
                 </div>
                 {(cluster.data?.servers.length ?? 0) > 1 && cluster.data?.role !== 'member' ? (

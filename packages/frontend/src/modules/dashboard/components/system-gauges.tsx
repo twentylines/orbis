@@ -73,11 +73,10 @@ export function SystemGauges({ cpu, clockGHz, memoryUsed, memoryTotal, memorySco
           ({ id, title, value, icon: Icon, hash, description, simulated, caption }) => (
             <Link
               key={id}
-              title={description}
               to={hash === 'gpu' ? '/monitor?section=performance&metric=gpu' : `/monitor#${hash}`}
               className="system-gauge"
               data-high={highUsage(value)}
-              aria-label={`${title}, ${value === null ? 'unavailable' : `${value.toFixed(1)} percent${highUsage(value) ? ', high' : ''}`}${caption ? `, ${caption}` : ''}${simulated ? ', simulated preview' : ''}`}
+              aria-label={`${title}, ${value === null ? 'unavailable' : `${value.toFixed(1)} percent${highUsage(value) ? ', high' : ''}`}${caption ? `, ${caption}` : ''}${simulated ? ', simulated preview' : ''}${description && description !== title ? `, ${description}` : ''}`}
             >
               <span className="system-dial" style={{ '--dial-progress': `${Math.max(0, Math.min(100, value ?? 0))}%` } as CSSProperties}>
                 <Icon size={16} aria-hidden="true" />
@@ -92,7 +91,7 @@ export function SystemGauges({ cpu, clockGHz, memoryUsed, memoryTotal, memorySco
         )}
       </div>
       <dl className="system-capacities">
-        <div title="Mean CPU clock reported by the host kernel in this sample; frequency varies with workload.">
+        <div>
           <dt>CPU clock</dt>
           <dd>{reportedClock === null ? 'Unavailable' : `${reportedClock.toFixed(2)} GHz`}</dd>
         </div>

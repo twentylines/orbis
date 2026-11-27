@@ -75,7 +75,6 @@ export const EnvironmentConfig = ({ errors, serviceIndex, control, register }: P
                     onFocus={revealTableAction}
                     className="btn-action service-config-remove"
                     aria-label={`${t('APP_ACTION_REMOVE')}: ${t('MULTI_SERVICE_ENVIRONMENT_TITLE')} ${index + 1}`}
-                    title={t('APP_ACTION_REMOVE')}
                   >
                     <IconX size={20} aria-hidden="true" />
                   </Button>

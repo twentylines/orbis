@@ -20,7 +20,6 @@ export const GuestHeader = () => {
           target="_blank"
           rel="noreferrer"
           aria-label={t('GUEST_DASHBOARD_DOWNLOAD_CERTIFICATE_TOOLTIP')}
-          title={t('GUEST_DASHBOARD_DOWNLOAD_CERTIFICATE_TOOLTIP')}
         >
           <IconCertificate size={20} aria-hidden="true" />
         </a>
@@ -32,7 +31,7 @@ export const GuestHeader = () => {
         >
           {resolvedMode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
         </button>
-        <Link to="/login" className="desktop-icon-button" aria-label={t('HEADER_LOGIN')} title={t('HEADER_LOGIN')}>
+        <Link to="/login" className="desktop-icon-button" aria-label={t('HEADER_LOGIN')}>
           <IconLogin size={20} aria-hidden="true" />
         </Link>
       </div>

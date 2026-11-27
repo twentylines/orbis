@@ -7,6 +7,7 @@ import {
   appOpeningMode,
   appRestorePlan,
   initialAppBounds,
+  isAppFramePolicyAdvisory,
   primaryAppAddress,
   restoreAppBounds,
 } from './app-opening';
@@ -62,6 +63,12 @@ describe('actual app opening', () => {
     expect(primaryAppAddress(destinations, 'https://orbis.local')).toBe('https://notes.local/');
     expect(primaryAppAddress(destinations, 'http://server.local')).toBe('http://server.local:8080/');
   });
+  test('chooses a distinct origin for an app when its first address is Orbis itself', () => {
+    const destinations = [{ url: 'http://orbis.local/app' }, { url: 'http://orbis.local:8080/' }];
+    expect(primaryAppAddress(destinations, 'http://orbis.local')).toBe('http://orbis.local:8080/');
+    expect(primaryAppAddress(destinations.slice(0, 1), 'http://orbis.local')).toBe('http://orbis.local/app');
+    expect(primaryAppAddress([{ url: 'javascript:alert(1)' }], 'http://orbis.local')).toBeUndefined();
+  });
   test('keeps initial and restored app bounds inside the usable workspace', () => {
     const area = { x: 24, y: 120, width: 1052, height: 380 };
     const initial = initialAppBounds(area);
@@ -107,23 +114,26 @@ describe('general app window compatibility warnings', () => {
     expect(warning?.title).toBe('Check unavailable');
     expect(warning?.description).toContain('Your browser may still connect');
   });
-  test('allows ordinary redirects, sign-in, unsupported HEAD and failed checks to open normally', () => {
-    for (const reason of [
-      'redirect',
-      'authentication-required',
-      'head-unsupported',
-      'policy-unknown',
-      'unverified-destination',
-      'check-unavailable',
-      'busy',
-    ])
+  test('describes redirects and sign-in while leaving the window available', () => {
+    expect(appEmbeddingWarning({ status: 'unknown', reason: 'redirect' })).toMatchObject({ blocked: false, title: 'The app redirects' });
+    expect(appEmbeddingWarning({ status: 'unknown', reason: 'authentication-required' })).toMatchObject({
+      blocked: false,
+      title: 'The app asks for sign-in',
+    });
+  });
+  test('allows unsupported HEAD and failed checks to open normally', () => {
+    for (const reason of ['head-unsupported', 'policy-unknown', 'unverified-destination', 'check-unavailable', 'busy'])
       expect(appEmbeddingWarning({ status: 'unknown', reason })).toBeUndefined();
     expect(appEmbeddingWarning({ status: 'not-blocked-by-headers', reason: 'no-blocking-header' })).toBeUndefined();
     expect(appEmbeddingWarning()).toBeUndefined();
   });
   test('treats anonymous server header restrictions as advisory for the signed-in browser', () => {
-    for (const reason of ['x-frame-options-deny', 'x-frame-options-sameorigin', 'csp-frame-ancestors'])
-      expect(appEmbeddingWarning({ status: 'blocked', reason })).toMatchObject({ blocked: false, title: 'Server restriction' });
+    for (const reason of ['x-frame-options-deny', 'x-frame-options-sameorigin', 'csp-frame-ancestors']) {
+      expect(isAppFramePolicyAdvisory({ status: 'blocked', reason })).toBe(true);
+      expect(appEmbeddingWarning({ status: 'blocked', reason })).toMatchObject({ blocked: false, title: 'The app may block this window' });
+    }
+    expect(isAppFramePolicyAdvisory({ status: 'blocked', reason: 'future-unknown-policy' })).toBe(false);
+    expect(isAppFramePolicyAdvisory({ status: 'unknown', reason: 'x-frame-options-deny' })).toBe(false);
   });
   test('enforces browser-local safety independently of anonymous or stale probe results', () => {
     expect(appEmbeddingBoundary('http://app.local', 'https://orbis.local')).toEqual({ status: 'blocked', reason: 'mixed-content' });

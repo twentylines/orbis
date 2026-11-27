@@ -101,6 +101,7 @@ function renderLocalUpdates({
   packagesReady = 'available',
   readyCount = 1,
   deferredCount = 0,
+  includeAppUpdate = false,
 }: {
   operator?: boolean;
   legacyHelper?: boolean;
@@ -115,10 +116,13 @@ function renderLocalUpdates({
   packagesReady?: 'available' | 'unavailable' | 'legacy';
   readyCount?: number;
   deferredCount?: number;
+  includeAppUpdate?: boolean;
 } = {}) {
   const client = queryClient ?? new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
   client.setQueryData(appContextQueryKey(), { user: { id: 7, operator }, version: { current: '4.10.1' } });
-  client.setQueryData(getInstalledAppsOptions().queryKey, { installed: [] });
+  client.setQueryData<unknown>(getInstalledAppsOptions().queryKey, {
+    installed: includeAppUpdate ? [{ app: { version: 2 }, info: { urn: 'notes:community', name: 'Notes' }, metadata: { latestVersion: 3 } }] : [],
+  });
   client.setQueryData(installedOrbisBuildOptions().queryKey, {
     version: 'v0.1.0',
     commit: '0123456789ab',
@@ -365,4 +369,12 @@ test('an interrupted no-backup update offers a state check without promising aut
   expect(markup).toContain('>Check update state</button>');
   expect(markup).not.toContain('>Restore previous release</button>');
   expect(markup).toContain('Preserve its state for local recovery review.');
+});
+
+test('each available app update exposes its existing review action to operators', () => {
+  const operator = renderLocalUpdates({ includeAppUpdate: true });
+  expect(operator).toContain('<ul class="desktop-updates-app-list">');
+  expect(operator).toContain('href="/apps/community/notes/update"');
+  expect(operator).toContain('aria-label="Update Notes"');
+  expect(renderLocalUpdates({ includeAppUpdate: true, operator: false })).not.toContain('/apps/community/notes/update');
 });

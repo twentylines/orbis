@@ -13,7 +13,7 @@ export function SecureConnectionIndicator({
 }) {
   if (!hasHttpsConnection(protocol, secureContext)) return null;
   return (
-    <span className="secure-connection-indicator" title="HTTPS connection" role="img" aria-label="HTTPS connection">
+    <span className="secure-connection-indicator" role="img" aria-label="HTTPS connection">
       <IconLock size={16} aria-hidden="true" />
       {compact ? null : <span>HTTPS</span>}
     </span>

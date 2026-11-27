@@ -16,6 +16,8 @@ import {
 } from '@tabler/icons-react';
 import { lazy, memo, Suspense, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useQuery } from '@tanstack/react-query';
+import { getAppOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { Button } from '@/components/ui/Button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
@@ -28,7 +30,8 @@ import { prefersReducedMotion } from './motion-setting';
 import { dockMotionDuration, sectionMotionTiming } from './section-motion-geometry';
 import { useAppEmbedding } from './app-embedding';
 import { useDesktopPreferences } from './preferences';
-import { appEmbeddingBoundary, appEmbeddingWarning, type AppEmbeddingCheck } from './app-opening';
+import { appDestinations } from './app-destinations';
+import { appAddress, appEmbeddingBoundary, appEmbeddingWarning, isAppFramePolicyAdvisory, type AppEmbeddingCheck } from './app-opening';
 import { useWindowVisible } from './window-visibility';
 import { appFlyoutAnchor, placeAppWindowFlyout, type AppFlyoutPoint, type AppFlyoutPosition } from './app-window-flyout';
 import { appMinimizeCrossfade } from './app-window-transition';
@@ -72,6 +75,8 @@ export function AppWindow({
   active,
   desktop,
   serverName,
+  localDomain,
+  sslPort,
   saved,
   origin,
   originOpacity,
@@ -85,6 +90,7 @@ export function AppWindow({
   onMinimized,
   onClose,
   onRemoved,
+  onAddressChange,
   onTab,
   onSave,
 }: {
@@ -94,6 +100,8 @@ export function AppWindow({
   active: boolean;
   desktop: boolean;
   serverName: string;
+  localDomain?: string;
+  sslPort?: number;
   saved?: DesktopWindowBounds;
   origin?: DOMRect;
   originOpacity?: number;
@@ -107,6 +115,7 @@ export function AppWindow({
   onMinimized: () => void;
   onClose: () => void;
   onRemoved: () => void;
+  onAddressChange?: (url: string) => void;
   onTab: () => void;
   onSave: (bounds: DesktopWindowBounds) => void;
 }) {
@@ -405,10 +414,8 @@ export function AppWindow({
           <div className="app-launcher-heading">
             <AppLogo urn={request.urn} url={request.logoUrl} size={28} />
             <div>
-              <h2 id={titleId} title={request.name}>
-                {request.name}
-              </h2>
-              <span title={request.serverName || serverName}>{request.serverName || serverName}</span>
+              <h2 id={titleId}>{request.name}</h2>
+              <span>{request.serverName || serverName}</span>
             </div>
           </div>
           <div className="app-launcher-controls">
@@ -416,7 +423,6 @@ export function AppWindow({
               ref={helpButton}
               className="app-launcher-close app-window-help-button"
               aria-label="Page not working?"
-              title="Page not working?"
               aria-expanded={help}
               onClick={(event) => {
                 if (help) closeHelp();
@@ -441,7 +447,6 @@ export function AppWindow({
               className="app-launcher-close"
               size="icon"
               aria-label="App settings"
-              title="App settings"
               aria-expanded={settings}
               onClick={() => {
                 setHelp(false);
@@ -464,7 +469,6 @@ export function AppWindow({
                   className="app-launcher-close"
                   size="icon"
                   aria-label="Window layout"
-                  title="Window layout"
                   onPointerDownCapture={(event) => {
                     if (event.button === 0 && panel.current)
                       setLayoutAnchor(
@@ -552,13 +556,7 @@ export function AppWindow({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button
-              className="app-launcher-close"
-              size="icon"
-              aria-label="Open app in new tab"
-              title="Open in new tab and close this window"
-              onClick={onTab}
-            >
+            <Button className="app-launcher-close" size="icon" aria-label="Open app in new tab" onClick={onTab}>
               <IconExternalLink size={19} aria-hidden="true" />
             </Button>
             <Button
@@ -591,6 +589,8 @@ export function AppWindow({
             ) : null}
             <AppFrame
               request={request}
+              localDomain={localDomain}
+              sslPort={sslPort}
               enabled={desktop && status === 'visible'}
               active={active}
               boundary={boundary}
@@ -599,6 +599,7 @@ export function AppWindow({
               flyoutFrame={panel.current}
               helpTrigger={helpButton.current}
               onHelpClose={closeHelp}
+              onAddressChange={onAddressChange}
               onTab={onTab}
             />
           </div>
@@ -609,7 +610,7 @@ export function AppWindow({
                   App settings
                 </h3>
                 <div ref={setSettingsSaveTarget} className="app-window-settings-save-target" />
-                <Button ref={settingsClose} size="icon" aria-label="Back to app" title="Back to app" onClick={closeSettings}>
+                <Button ref={settingsClose} size="icon" aria-label="Back to app" onClick={closeSettings}>
                   <IconX size={19} aria-hidden="true" />
                 </Button>
               </header>
@@ -645,6 +646,8 @@ export function AppWindow({
 
 const AppFrame = memo(function AppFrame({
   request,
+  localDomain,
+  sslPort,
   enabled,
   active,
   boundary,
@@ -653,9 +656,12 @@ const AppFrame = memo(function AppFrame({
   flyoutFrame,
   helpTrigger,
   onHelpClose,
+  onAddressChange,
   onTab,
 }: {
   request: WindowState['request'];
+  localDomain?: string;
+  sslPort?: number;
   enabled: boolean;
   active: boolean;
   boundary?: AppEmbeddingCheck;
@@ -664,6 +670,7 @@ const AppFrame = memo(function AppFrame({
   flyoutFrame: HTMLElement | null;
   helpTrigger: HTMLElement | null;
   onHelpClose: () => void;
+  onAddressChange?: (url: string) => void;
   onTab: () => void;
 }) {
   const [attempt, setAttempt] = useState(0);
@@ -671,14 +678,29 @@ const AppFrame = memo(function AppFrame({
   const [observedLoad, setObservedLoad] = useState<string>();
   const [slowLoad, setSlowLoad] = useState<string>();
   const [rememberTab, setRememberTab] = useState(false);
+  const [triedAddress, setTriedAddress] = useState<string>();
   const visible = useWindowVisible();
   const noticeHeading = useRef<HTMLHeadingElement>(null);
-  // Load also fires for browser error pages; it only stops automatic rechecks.
+  // Browser error pages fire load as well. An observed load only clears the waiting indicator.
   const awaitingLoad = observedLoad !== loadKey;
-  const check = useAppEmbedding(request, enabled && visible && !boundary && (awaitingLoad || help));
+  const check = useAppEmbedding(request, enabled && visible && !boundary);
   const { preferences, update } = useDesktopPreferences();
-  const showWarning = Boolean(boundary || help);
-  const helpFlyout = useWindowFlyout(showWarning && !boundary, flyoutFrame, helpTrigger, helpAnchor);
+  const policyWarning = request.launchUrl !== triedAddress && isAppFramePolicyAdvisory(check.data);
+  const coversFrame = Boolean(boundary || policyWarning);
+  const warningMode = coversFrame ? 'page' : help ? 'flyout' : null;
+  const installed = useQuery({
+    ...getAppOptions({ path: { urn: request.urn } }),
+    enabled: Boolean(onAddressChange && warningMode) && enabled && visible && !request.urn.includes('/'),
+    staleTime: 30_000,
+    retry: false,
+  });
+  const alternatives =
+    onAddressChange && warningMode && !request.urn.includes('/') && installed.data?.info.urn === request.urn && !installed.isError
+      ? appDestinations(installed.data, { localDomain, sslPort }, window.location.hostname).filter(
+          ({ url }) => appAddress(request.launchUrl) !== url && !appEmbeddingBoundary(url, window.location.origin),
+        )
+      : [];
+  const helpFlyout = useWindowFlyout(warningMode === 'flyout', flyoutFrame, helpTrigger, helpAnchor);
   const notice = appEmbeddingWarning(boundary ?? check.data) ?? {
     blocked: false,
     title: 'Connection options',
@@ -688,8 +710,8 @@ const AppFrame = memo(function AppFrame({
         : 'Some apps block embedded windows or need a browser tab for sign-in. Reload the app or open a tab.',
   };
   useLayoutEffect(() => {
-    if (enabled && active && showWarning) noticeHeading.current?.focus({ preventScroll: true });
-  }, [enabled, active, showWarning]);
+    if (enabled && active && warningMode) noticeHeading.current?.focus({ preventScroll: true });
+  }, [enabled, active, warningMode]);
   useEffect(() => {
     if (!enabled || !visible || boundary || !awaitingLoad) return;
     const timer = window.setTimeout(() => setSlowLoad(loadKey), 15_000);
@@ -698,12 +720,12 @@ const AppFrame = memo(function AppFrame({
   const reload = () => {
     setAttempt((value) => value + 1);
   };
-  const warning = showWarning ? (
+  const warning = warningMode ? (
     <section
-      ref={boundary ? undefined : helpFlyout.attach}
-      className={boundary ? 'app-window-compatibility' : 'app-window-recovery-panel'}
+      ref={coversFrame ? undefined : helpFlyout.attach}
+      className={coversFrame ? 'app-window-compatibility' : 'app-window-recovery-panel'}
       style={
-        boundary
+        coversFrame
           ? undefined
           : {
               left: helpFlyout.position?.left,
@@ -713,16 +735,16 @@ const AppFrame = memo(function AppFrame({
               visibility: helpFlyout.position ? 'visible' : 'hidden',
             }
       }
-      role={boundary ? undefined : 'dialog'}
+      role={coversFrame ? undefined : 'dialog'}
       aria-label="App window help"
       aria-busy={check.isFetching}
     >
-      <div className={boundary ? 'app-window-compatibility-content' : 'app-window-recovery-content'}>
-        {boundary ? <IconAlertTriangle size={30} aria-hidden="true" /> : null}
+      <div className={coversFrame ? 'app-window-compatibility-content' : 'app-window-recovery-content'}>
+        {coversFrame ? <IconAlertTriangle size={30} aria-hidden="true" /> : null}
         <h3 ref={noticeHeading} tabIndex={-1}>
           {notice.title}
         </h3>
-        {boundary ? null : (
+        {coversFrame ? null : (
           <Button className="app-window-recovery-close" size="icon" aria-label="Close page help" onClick={onHelpClose}>
             <IconX size={18} aria-hidden="true" />
           </Button>
@@ -733,7 +755,33 @@ const AppFrame = memo(function AppFrame({
           <span>Always open this app in a new tab</span>
         </label>
         <div className="app-window-compatibility-actions">
-          {boundary ? null : <Button onClick={reload}>Reload app</Button>}
+          {boundary ? null : (
+            <>
+              {policyWarning ? (
+                <Button
+                  onClick={() => {
+                    setTriedAddress(request.launchUrl);
+                    if (help) onHelpClose();
+                    else helpTrigger?.focus({ preventScroll: true });
+                  }}
+                >
+                  Try in window
+                </Button>
+              ) : (
+                <Button onClick={reload}>Reload app</Button>
+              )}
+              <Button
+                disabled={check.isFetching}
+                onClick={async () => {
+                  setTriedAddress(undefined);
+                  const latest = await check.recheck();
+                  if (policyWarning && latest.data?.status === 'not-blocked-by-headers') reload();
+                }}
+              >
+                Check again
+              </Button>
+            </>
+          )}
           <Button
             intent="primary"
             onClick={() => {
@@ -750,12 +798,32 @@ const AppFrame = memo(function AppFrame({
             Open tab
           </Button>
         </div>
+        {alternatives.length > 0 ? (
+          <div className="app-window-alternatives">
+            <p>Other app addresses</p>
+            <div>
+              {alternatives.map(({ label, url }) => (
+                <Button
+                  key={url}
+                  onClick={() => {
+                    setTriedAddress(undefined);
+                    if (help) onHelpClose();
+                    else helpTrigger?.focus({ preventScroll: true });
+                    onAddressChange?.(url);
+                  }}
+                >
+                  Try {label.toLowerCase()}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     </section>
   ) : null;
   return (
     <>
-      {!showWarning && awaitingLoad && slowLoad === loadKey ? (
+      {!warningMode && awaitingLoad && slowLoad === loadKey ? (
         <output className="app-window-loading-note" aria-live="polite">
           Still opening this app…
         </output>
@@ -764,6 +832,7 @@ const AppFrame = memo(function AppFrame({
         <iframe
           key={loadKey}
           className="app-window-frame"
+          hidden={policyWarning}
           title={`${request.name} app`}
           src={request.launchUrl}
           onLoad={() => setObservedLoad(loadKey)}
@@ -772,7 +841,7 @@ const AppFrame = memo(function AppFrame({
           sandbox="allow-forms allow-scripts allow-same-origin allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals allow-presentation"
         />
       )}
-      {warning && !boundary && flyoutFrame ? createPortal(warning, flyoutFrame) : warning}
+      {warning && !coversFrame && flyoutFrame ? createPortal(warning, flyoutFrame) : warning}
     </>
   );
 });

@@ -127,7 +127,6 @@ export const VolumesConfig = ({ errors, serviceIndex, control, register }: Props
                     onFocus={revealTableAction}
                     className="btn-action service-config-remove"
                     aria-label={`${t('APP_ACTION_REMOVE')}: ${t('MULTI_SERVICE_VOLUMES_TITLE')} ${index + 1}`}
-                    title={t('APP_ACTION_REMOVE')}
                   >
                     <IconX size={20} aria-hidden="true" />
                   </Button>

@@ -35,7 +35,6 @@ export function BatteryGlyph({ battery, variant = 'toolbar' }: { battery: HostBa
       className="desktop-battery"
       role="img"
       aria-label={label}
-      title={label}
       data-state={charging ? 'charging' : percent <= 10 ? 'critical' : percent <= 20 ? 'low' : 'normal'}
       data-variant={variant}
     >
@@ -200,7 +199,6 @@ export function HostBatteryButton({ battery }: { battery: HostBattery }) {
           type="button"
           className="desktop-battery-trigger"
           aria-label={`Host battery ${battery.percent}%, ${batteryStateLabel(battery).toLowerCase()}. Battery details`}
-          title="Battery details"
         >
           <BatteryGlyph battery={battery} />
         </button>

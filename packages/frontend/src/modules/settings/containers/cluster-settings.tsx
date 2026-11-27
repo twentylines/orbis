@@ -746,7 +746,7 @@ export function ClusterSettings() {
                   {server.role === 'admin' ? 'Admin server' : 'Member server'}
                   {server.local ? ' · This server' : ''}
                 </span>
-                <span title={server.url}>{server.url}</span>
+                <span>{server.url}</span>
                 {server.url.toLowerCase().startsWith('http://') ? <span className="cluster-server-http">HTTP · Unencrypted private LAN</span> : null}
                 {typeof server.certificateSha256 === 'string' && /^[a-f0-9]{64}$/.test(server.certificateSha256) ? (
                   <span className="cluster-server-certificate">

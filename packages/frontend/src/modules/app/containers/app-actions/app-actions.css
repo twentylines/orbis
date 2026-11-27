@@ -82,3 +82,23 @@
   background: color-mix(in srgb, var(--desktop-action) 88%, black);
   border-color: var(--desktop-action);
 }
+
+.app-launch-actions[data-split] {
+  gap: 0;
+  align-items: stretch;
+}
+.app-launch-actions[data-split] > .app-launch-button {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+.app-launch-actions[data-split] > .app-address-button {
+  display: grid;
+  place-items: center;
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  border-inline-start-color: transparent;
+}
+
+.app-address-button > .orbis-menu-chevron {
+  margin: 0;
+}

@@ -215,7 +215,10 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
 
   const current = navigation.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
   const pendingPath = routeNavigation.location?.pathname;
-  const pendingSection = pendingPath ? navigation.find((item) => pendingPath === item.path || pendingPath.startsWith(`${item.path}/`)) : undefined;
+  const pendingSection =
+    pendingPath && pendingPath !== location.pathname
+      ? navigation.find((item) => pendingPath === item.path || pendingPath.startsWith(`${item.path}/`))
+      : undefined;
   const dockSection = current;
   const isTool = current && current.path !== '/dashboard';
   const sectionLabel = current?.label ?? 'Application';
@@ -237,6 +240,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
             <header className="desktop-system-bar">
               <Link
                 to="/dashboard"
+                state={{ workspaceEntrance: true }}
                 className="desktop-brand"
                 aria-label="Orbis workspace"
                 onClick={(event) => {
@@ -261,7 +265,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                       className="desktop-mode-toggle"
                       aria-label={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
                       aria-pressed={resolvedMode === 'dark'}
-                      title={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
                       onClick={() => update({ mode: resolvedMode === 'dark' ? 'light' : 'dark' })}
                     >
                       {resolvedMode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
@@ -286,7 +289,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
             <main
               className="desktop-main"
               id="desktop-content"
-              aria-busy={routeNavigation.state !== 'idle'}
+              aria-busy={Boolean(pendingPath && pendingPath !== location.pathname)}
               onFocusCapture={(event) => {
                 if (event.target.matches(':focus-visible')) revealPageFocus(event.target);
               }}
@@ -346,7 +349,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                       aria-label={label}
                       aria-current={current?.path === path ? 'page' : undefined}
                       aria-busy={pendingSection?.path === path || undefined}
-                      title={label}
                     >
                       <span className="desktop-dock-content">
                         <span className="desktop-dock-icon">

@@ -45,7 +45,19 @@ export function appRestorePlan(
 }
 
 export function primaryAppAddress(destinations: { url: string }[], origin: string) {
-  return (new URL(origin).protocol === 'https:' ? destinations.find(({ url }) => url.startsWith('https:')) : undefined)?.url ?? destinations[0]?.url;
+  const addresses = destinations.flatMap(({ url }) => {
+    const address = appAddress(url);
+    return address ? [{ url, address }] : [];
+  });
+  const parent = appUrl(origin);
+  if (!parent) return addresses[0]?.url;
+  // Prefer an address that can be framed safely. Keep the best available
+  // direct address as a tab fallback when none is eligible for a window.
+  return (
+    addresses.find(({ address }) => !appEmbeddingBoundary(address, parent.origin))?.url ??
+    (parent.protocol === 'https:' ? addresses.find(({ address }) => address.startsWith('https:'))?.url : undefined) ??
+    addresses[0]?.url
+  );
 }
 
 export function initialAppBounds(area: WindowArea, saved?: DesktopWindowBounds, categories: string[] = []) {
@@ -66,6 +78,10 @@ export function restoreAppBounds(area: WindowArea, floating: DesktopWindowBounds
 }
 
 export type AppEmbeddingCheck = { status: 'blocked' | 'not-blocked-by-headers' | 'unknown'; reason: string };
+
+export function isAppFramePolicyAdvisory(check?: AppEmbeddingCheck) {
+  return check?.status === 'blocked' && ['x-frame-options-deny', 'x-frame-options-sameorigin', 'csp-frame-ancestors'].includes(check.reason);
+}
 
 export function appEmbeddingBoundary(url: string | undefined, origin: string): AppEmbeddingCheck | undefined {
   const target = appUrl(url);
@@ -95,17 +111,32 @@ export function appEmbeddingWarning(check?: AppEmbeddingCheck) {
         title: 'An app address is needed',
         description: 'Set a complete HTTP or HTTPS app address without embedded credentials before opening its window.',
       };
-    return {
-      blocked: false,
-      title: 'Server restriction',
-      description: 'The server reports an embedding restriction. Your signed-in browser may differ.',
-    };
+    if (isAppFramePolicyAdvisory(check)) {
+      const policy = check.reason === 'csp-frame-ancestors' ? 'Content Security Policy' : 'X-Frame-Options';
+      return {
+        blocked: false,
+        title: 'The app may block this window',
+        description: `The app returned a ${policy} framing restriction to the server check. Open a tab, or try the window with your browser’s sign-in.`,
+      };
+    }
   }
   if (check?.status === 'unknown' && check.reason === 'unreachable')
     return {
       blocked: false,
       title: 'Check unavailable',
       description: 'The server could not verify this app. Your browser may still connect.',
+    };
+  if (check?.status === 'unknown' && check.reason === 'authentication-required')
+    return {
+      blocked: false,
+      title: 'The app asks for sign-in',
+      description: 'The server check had no app credentials. Sign in from a browser tab if sign-in in the window fails.',
+    };
+  if (check?.status === 'unknown' && check.reason === 'redirect')
+    return {
+      blocked: false,
+      title: 'The app redirects',
+      description: 'The server check stops at the redirect. Open a browser tab if the destination or sign-in does not work in a window.',
     };
   return undefined;
 }

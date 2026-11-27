@@ -263,86 +263,6 @@
   pointer-events: none;
   background: transparent;
 }
-.workspace[data-app-view="icons"] .workspace-app-list {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 78px), 1fr));
-  gap: 16px 12px;
-}
-.workspace[data-app-view="icons"] .workspace-app {
-  display: flex;
-  align-items: center;
-  width: min(100%, 78px);
-  height: 78px;
-  margin-inline: auto;
-  flex-direction: column;
-  justify-content: center;
-  gap: 7px;
-  padding: 12px 6px;
-  min-height: 0;
-  border: 0;
-  box-shadow: none;
-  background: transparent;
-}
-.workspace[data-app-view="icons"] .workspace-app-copy {
-  position: absolute;
-  top: calc(100% - 5px);
-  left: 50%;
-  z-index: 10;
-  width: max-content;
-  max-width: min(15rem, 70vw);
-  padding: 6px 10px;
-  border: 1px solid var(--desktop-line);
-  border-radius: 9px;
-  background: var(--desktop-window-surface, var(--desktop-surface));
-  color: var(--desktop-ink);
-  text-align: center;
-  translate: -50% 0;
-  visibility: hidden;
-  opacity: 0;
-  pointer-events: none;
-}
-.workspace[data-app-view="icons"] .workspace-app:is(:hover, :focus-visible) .workspace-app-copy {
-  visibility: visible;
-  opacity: 1;
-}
-.workspace[data-app-view="icons"] .workspace-app-entry:has(.workspace-app:is(:hover, :focus-visible)) {
-  z-index: 12;
-}
-.workspace[data-app-view="icons"] .workspace-app-title {
-  justify-content: center;
-}
-.workspace[data-app-view="icons"] .workspace-app-title strong {
-  overflow: hidden;
-  white-space: normal;
-  overflow-wrap: break-word;
-  font-size: 0.8125rem;
-}
-.workspace[data-app-view="icons"] .workspace-app-copy > :not(.workspace-app-title),
-.workspace[data-app-view="icons"] .workspace-app-manage {
-  display: none;
-}
-.workspace[data-app-view="icons"] .workspace-app:hover,
-.workspace[data-app-view="icons"] .workspace-app:focus-visible {
-  background: color-mix(in srgb, var(--desktop-preset-tint) 12%, var(--desktop-surface));
-}
-
-.workspace[data-editing][data-app-view="icons"] .workspace-app-list {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr));
-}
-.workspace[data-editing][data-app-view="icons"] .workspace-app-copy {
-  position: static;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  translate: none;
-  visibility: visible;
-  opacity: 1;
-}
-.workspace[data-editing][data-app-view="icons"] .workspace-app,
-.workspace[data-editing][data-app-view="icons"] .workspace-app .app-logo {
-  justify-items: center;
-  justify-self: center;
-}
 /* Returning from the editor keeps settled cards still instead of restarting their entrance. */
 .workspace[data-arranged] .workspace-grid .workspace-widget,
 .workspace[data-arranged] .workspace-app-entry > .workspace-app {
@@ -413,12 +333,29 @@ body:has(.orbis-theme) .workspace-edit-controls .workspace-edit-toggle:focus-vis
   transition: none;
 }
 
-.workspace[data-editing][data-app-view="icons"] .workspace-app {
-  width: 100%;
-  height: auto;
-  min-height: 78px;
-}
-
-.workspace[data-app-view="icons"]:not([data-editing]) .workspace-app-copy {
-  display: none;
+@media (max-width: 650px) {
+  .workspace:not([data-editing]) .workspace-app-list {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 60px), 1fr));
+    gap: 10px 8px;
+  }
+  .workspace:not([data-editing]) .workspace-app {
+    --app-logo-size: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    width: min(100%, 68px);
+    min-height: 60px;
+    margin-inline: auto;
+    padding: 5px;
+    border: 0;
+    background: transparent;
+  }
+  .workspace:not([data-editing]) .workspace-app :is(.workspace-app-copy, .workspace-app-launch-indicator),
+  .workspace:not([data-editing]) .workspace-app-manage {
+    display: none;
+  }
+  .workspace:not([data-editing]) .workspace-app:is(:hover, :focus-visible) {
+    background: color-mix(in srgb, var(--desktop-preset-tint) 12%, var(--desktop-surface));
+  }
 }

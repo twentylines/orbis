@@ -1,10 +1,9 @@
 import { useEffect, useRef } from 'react';
-import { IconPin, IconLayoutGrid, IconList } from '@tabler/icons-react';
+import { IconPin } from '@tabler/icons-react';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { Switch } from '@/components/ui/Switch';
 import '@/components/ui/dropdown.css';
 import type { WorkspacePreferences, WidgetId } from '@/desktop/preferences';
-import { defaultWorkspaceLayout, type WorkspaceCapabilities } from '@/desktop/workspace-layout';
 import { maximumHomePins } from '@/desktop/workspace-apps';
 
 const labels: Record<WidgetId, string> = {
@@ -15,7 +14,6 @@ const labels: Record<WidgetId, string> = {
 };
 type EditingProps = {
   workspace: WorkspacePreferences;
-  capabilities?: WorkspaceCapabilities;
   save: (next: WorkspacePreferences) => void;
 };
 
@@ -67,7 +65,6 @@ export function DashboardEditing({ workspace, save, reset }: Pick<EditingProps, 
 
 export function ApplicationEditing({
   workspace,
-  capabilities,
   apps,
   appsReady,
   appsFailed,
@@ -87,7 +84,6 @@ export function ApplicationEditing({
 }) {
   const searchInput = useRef<HTMLInputElement>(null);
   const chooser = useRef<HTMLDetailsElement>(null);
-  const layout = workspace.layout ?? defaultWorkspaceLayout;
   const query = search.trim().toLocaleLowerCase();
   const choices = apps.filter(({ info }) => !workspace.pinnedApps.includes(info.urn) && info.name.toLocaleLowerCase().includes(query));
   const installed = new Set(apps.map(({ info }) => info.urn));
@@ -153,15 +149,6 @@ export function ApplicationEditing({
         </button>
       ) : null}
       <Switch label="Show all apps" checked={workspace.showAllApps} onCheckedChange={(showAllApps) => save({ ...workspace, showAllApps })} />
-      <button
-        type="button"
-        aria-pressed={layout.appView === 'icons'}
-        disabled={!capabilities?.workspaceLayout}
-        title={capabilities?.workspaceLayout ? 'Switch application view' : 'Requires a server with workspace layout support'}
-        onClick={() => save({ ...workspace, layout: { ...layout, appView: layout.appView === 'icons' ? 'cards' : 'icons' } })}
-      >
-        {layout.appView === 'icons' ? <IconList size={18} aria-hidden="true" /> : <IconLayoutGrid size={18} aria-hidden="true" />} Icons only
-      </button>
     </div>
   );
 }

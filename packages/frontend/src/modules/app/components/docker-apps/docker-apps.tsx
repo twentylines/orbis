@@ -110,7 +110,7 @@ export function DockerAppsSection({ filters = { search: '', category: '', sort: 
                       <IconBrandDocker size={28} stroke={1.5} aria-hidden="true" />
                     </span>
                     <div className="docker-app-copy">
-                      <h3 title={app.name}>{app.name}</h3>
+                      <h3>{app.name}</h3>
                       <p>
                         {app.running} running · {app.containers.length} {app.containers.length === 1 ? 'container' : 'containers'}
                       </p>

@@ -240,9 +240,7 @@ const SelectItem = ({ className, children, textValue, ...props }: ItemProps) => 
       textValue={textValue || textOf(children) || props.value}
       {...props}
     >
-      <span className="orbis-select-item-text" title={text}>
-        {text ? <WrapWords text={text} /> : children}
-      </span>
+      <span className="orbis-select-item-text">{text ? <WrapWords text={text} /> : children}</span>
       <span className="orbis-select-item-indicator" aria-hidden="true">
         <Menu.ItemIndicator>
           <IconCheck size={20} />

@@ -31,7 +31,7 @@ export const SecurityContainer = (props: { totpEnabled: boolean; username?: stri
       <section className="settings-group" aria-labelledby="settings-password-heading">
         <div className="settings-security-heading">
           <IconKey aria-hidden="true" />
-          <h2 id="settings-password-heading" title={t('SETTINGS_SECURITY_CHANGE_PASSWORD_TITLE')}>
+          <h2 id="settings-password-heading">
             <WrapWords text={t('SETTINGS_SECURITY_CHANGE_PASSWORD_TITLE')} />
           </h2>
         </div>
@@ -43,7 +43,7 @@ export const SecurityContainer = (props: { totpEnabled: boolean; username?: stri
       <section className="settings-group" aria-labelledby="settings-two-factor-heading">
         <div className="settings-security-heading">
           <IconLock aria-hidden="true" />
-          <h2 id="settings-two-factor-heading" title={t('SETTINGS_SECURITY_2FA_TITLE')}>
+          <h2 id="settings-two-factor-heading">
             <WrapWords text={t('SETTINGS_SECURITY_2FA_TITLE')} />
           </h2>
         </div>

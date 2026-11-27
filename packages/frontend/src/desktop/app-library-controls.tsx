@@ -150,13 +150,7 @@ export function AppLibraryControls({
         </SelectContent>
       </Select>
       {filters.search ? (
-        <button
-          type="button"
-          className="btn app-library-clear"
-          aria-label="Clear search filter"
-          title={filters.search}
-          onClick={() => change('q', '')}
-        >
+        <button type="button" className="btn app-library-clear" aria-label="Clear search filter" onClick={() => change('q', '')}>
           <span>{filters.search}</span>
           <IconX size={16} aria-hidden="true" />
         </button>

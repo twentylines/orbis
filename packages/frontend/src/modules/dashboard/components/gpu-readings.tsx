@@ -54,7 +54,7 @@ export function GpuReadings({
             <article className="monitor-gpu-card" key={gpu.id}>
               <header>
                 <span className="monitor-resource-eyebrow">GPU {index}</span>
-                <h3 title={gpu.label}>{gpu.label}</h3>
+                <h3>{gpu.label}</h3>
                 {compact ? null : <p>{[gpu.vendor, gpu.driver].filter(Boolean).join(' · ') || 'Driver not reported'}</p>}
               </header>
               <dl className="monitor-resource-facts">

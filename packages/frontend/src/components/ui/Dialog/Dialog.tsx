@@ -144,7 +144,7 @@ const DialogContent = ({
   if (!visible) return null;
   return (
     <DialogPortal>
-      <DialogOverlay data-reduced={Boolean(reduced)} className={overlayClassName} />
+      <DialogOverlay data-reduced={Boolean(reduced)} data-presentation={presentation} className={overlayClassName} />
       <DialogPrimitive.Content
         className={clsx('modal-content', 'orbis-dialog-content', 'orbis-modal-frame', className)}
         data-size={size}
@@ -256,7 +256,7 @@ const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
 DialogFooter.displayName = 'DialogFooter';
 
 const DialogTitle = ({ className, children, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) => (
-  <DialogPrimitive.Title className={clsx('modal-title', className)} title={typeof children === 'string' ? children : undefined} {...props}>
+  <DialogPrimitive.Title className={clsx('modal-title', className)} {...props}>
     {typeof children === 'string' ? <WrapWords text={children} /> : children}
   </DialogPrimitive.Title>
 );

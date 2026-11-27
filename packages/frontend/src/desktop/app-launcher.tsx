@@ -55,7 +55,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   const windowsEnabled = desktop && preferences.appLaunch.mode !== 'tab';
   const latestPreferences = useRef(preferences);
   latestPreferences.current = preferences;
-  const { user } = useAppContext();
+  const { user, userSettings } = useAppContext();
   const recentStorageKey = `orbis-opened-apps-v1:${user.id}`;
   const [opened, setOpened] = useState<OpenedApps>(() => {
     try {
@@ -253,7 +253,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   const minimizedApps = useMemo(
     () => (
       <DockCompanion visible={desktop && minimized.length > 0} side="right" retainOnExit expandedWidth="var(--orbis-app-tray-width, max-content)">
-        <fieldset ref={setTray} className="orbis-app-tray" aria-label="Minimized apps" title="Minimized apps — scroll horizontally for more">
+        <fieldset ref={setTray} className="orbis-app-tray" data-compact={minimized.length > 3 || undefined} aria-label="Minimized apps">
           <ul className="app-tray-list">
             {minimized.map((members, index) => {
               const { request, status } = members[0];
@@ -274,7 +274,6 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                     data-minimized-app={request.urn}
                     data-flying={(!grouped && status === 'minimizing') || undefined}
                     aria-label={restoreLabel}
-                    title={restoreLabel}
                     onClick={() => openApp(request)}
                     onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
                   >
@@ -335,6 +334,8 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                         area={area}
                         ratio={appWindowRatio(state, item)}
                         serverName={preferences.serverName}
+                        localDomain={userSettings.localDomain}
+                        sslPort={userSettings.sslPort}
                         saved={preferences.appLaunch.apps[item.request.urn]?.bounds}
                         origin={origins.current.get(item.request.urn)?.bounds}
                         originOpacity={origins.current.get(item.request.urn)?.opacity}
@@ -374,6 +375,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                         }}
                         onClose={() => dispatch({ type: 'close', urn: item.request.urn })}
                         onRemoved={() => remove(item.request.urn, true)}
+                        onAddressChange={(url) => dispatch({ type: 'address', urn: item.request.urn, previous: item.request.launchUrl, url })}
                         onTab={() => {
                           window.open(item.request.launchUrl, '_blank', 'noopener,noreferrer');
                           remove(item.request.urn);

@@ -21,7 +21,7 @@ function ReleaseNote({ release, expanded, children }: { release: OrbisRelease; e
       }}
     >
       <summary>
-        <span title={release.tag}>{formatOrbisVersion(release.tag)}</span>
+        <span>{formatOrbisVersion(release.tag)}</span>
         {release.publishedAt ? <time dateTime={release.publishedAt}>{new Date(release.publishedAt).toLocaleDateString()}</time> : null}
         <DisclosureIndicator />
       </summary>

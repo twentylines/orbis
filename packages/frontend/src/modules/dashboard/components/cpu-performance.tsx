@@ -28,6 +28,8 @@ export function CpuPerformance({
   savingLogicalProcessors?: boolean;
 }) {
   const systemSource = sample.cpu.scope === 'host-proc';
+  const clock = sample.cpu.reportedClockGHz;
+  const reportedClock = typeof clock === 'number' && Number.isFinite(clock) && clock > 0 ? clock : null;
   const logicalAvailable = systemSource && sample.cpu.perCorePercent.length > 0;
   const showLogical = logicalAvailable && logicalProcessors;
   const totalPercent = systemSource ? percentReading(sample.cpu.totalPercent) : null;
@@ -56,6 +58,7 @@ export function CpuPerformance({
       <div className="desktop-telemetry-lead" data-high={highUsage(totalPercent)}>
         <strong>{percent(totalPercent)}</strong>
         <span>Total system CPU utilisation</span>
+        {reportedClock !== null ? <span>{reportedClock.toFixed(2)} GHz · Current clock</span> : null}
         {logicalAvailable ? <span>{sample.cpu.perCorePercent.length} logical processors</span> : null}
       </div>
       {logicalAvailable ? null : (

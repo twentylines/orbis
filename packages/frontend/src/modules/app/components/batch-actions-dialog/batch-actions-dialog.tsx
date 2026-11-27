@@ -1,16 +1,15 @@
-import { restartAllAppsMutation, startAllAppsMutation, stopAllAppsMutation, updateAllAppsMutation } from '@/api-client/@tanstack/react-query.gen';
+import { restartAllAppsMutation, startAllAppsMutation, stopAllAppsMutation } from '@/api-client/@tanstack/react-query.gen';
 import { Button } from '@/components/ui/Button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
 import { useDisclosure } from '@/lib/hooks/use-disclosure';
 import type { TranslatableError } from '@/types/error.types';
-import { IconDots, IconPlayerPause, IconPlayerPlay, IconRefresh, IconRotateClockwise } from '@tabler/icons-react';
+import { IconPlayerPause, IconPlayerPlay, IconRotateClockwise } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
 import React from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 
-type BatchAction = 'start-all' | 'stop-all' | 'restart-all' | 'update-all';
+type BatchAction = 'start-all' | 'stop-all' | 'restart-all';
 
 type Props = {
   availableUpdates: number;
@@ -44,18 +43,13 @@ const BatchActionDialog = ({ isOpen, onClose, onConfirm, action }: BatchActionDi
       subtitle: t('MY_APPS_RESTART_ALL_FORM_SUBTITLE'),
       submit: t('MY_APPS_RESTART_ALL_FORM_SUBMIT'),
     },
-    'update-all': {
-      title: t('MY_APPS_UPDATE_ALL_FORM_TITLE'),
-      subtitle: `${t('MY_APPS_UPDATE_ALL_FORM_SUBTITLE_1')}\n\n${t('MY_APPS_UPDATE_ALL_FORM_SUBTITLE_2')}`,
-      submit: t('MY_APPS_UPDATE_ALL_FORM_SUBMIT'),
-    },
   };
 
   const config = actionConfig[action];
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent size="sm">
+      <DialogContent size="sm" data-action-tint={action === 'start-all' ? 'success' : 'warning'}>
         <DialogHeader>
           <DialogTitle>{config.title}</DialogTitle>
         </DialogHeader>
@@ -162,18 +156,12 @@ export const StopAllButton = (_: Props) => {
   );
 };
 
-export const RestartAllButton = ({ availableUpdates }: Props) => {
+export const RestartAllButton = () => {
   const { t } = useTranslation();
-  const dialogDisclosure = useDisclosure();
-  const dropdownDisclosure = useDisclosure();
-  const [selectedAction, setSelectedAction] = React.useState<BatchAction | null>(null);
-
-  const restartAllMutation = useMutation({
+  const dialog = useDisclosure();
+  const mutation = useMutation({
     ...restartAllAppsMutation(),
-    onMutate: () => {
-      dialogDisclosure.close();
-      dropdownDisclosure.close();
-    },
+    onMutate: dialog.close,
     onSuccess: () => {
       toast.loading(t('MY_APPS_RESTART_ALL_IN_PROGRESS'), { duration: 3000 });
     },
@@ -182,75 +170,13 @@ export const RestartAllButton = ({ availableUpdates }: Props) => {
     },
   });
 
-  const updateAllMutation = useMutation({
-    ...updateAllAppsMutation(),
-    onMutate: () => {
-      dialogDisclosure.close();
-      dropdownDisclosure.close();
-    },
-    onSuccess: () => {
-      toast.loading(t('MY_APPS_UPDATE_ALL_IN_PROGRESS'), { duration: 3000 });
-    },
-    onError: (e: TranslatableError) => {
-      toast.error(t(e.message, e.intlParams));
-    },
-  });
-
-  const handleActionClick = (action: BatchAction) => {
-    setSelectedAction(action);
-    dialogDisclosure.open();
-  };
-
-  const handleConfirm = () => {
-    switch (selectedAction) {
-      case 'restart-all':
-        restartAllMutation.mutate({});
-        break;
-      case 'update-all':
-        updateAllMutation.mutate({});
-        break;
-    }
-  };
-
-  if (availableUpdates < 2) {
-    return (
-      <>
-        <BatchActionDialog isOpen={dialogDisclosure.isOpen} onClose={dialogDisclosure.close} onConfirm={handleConfirm} action={selectedAction} />
-        <Button
-          size="icon"
-          intent="default"
-          onClick={() => handleActionClick('restart-all')}
-          title={t('MY_APPS_RESTART_ALL_FORM_SUBMIT')}
-          className="batch-action-desktop-button gap-2"
-        >
-          <IconRotateClockwise size={18} />
-          {t('MY_APPS_RESTART_ALL_FORM_SUBMIT')}
-        </Button>
-      </>
-    );
-  }
-
   return (
     <>
-      <BatchActionDialog isOpen={dialogDisclosure.isOpen} onClose={dialogDisclosure.close} onConfirm={handleConfirm} action={selectedAction} />
-      <DropdownMenu open={dropdownDisclosure.isOpen} onOpenChange={dropdownDisclosure.toggle}>
-        <DropdownMenuTrigger asChild>
-          <Button size="icon" intent="default" title={t('MY_APPS_BATCH_ACTIONS')} className="batch-action-desktop-button gap-2">
-            <IconDots size={18} />
-            {t('MY_APPS_BATCH_ACTIONS')}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => handleActionClick('restart-all')}>
-            <IconRotateClockwise className="me-2" size={16} />
-            {t('MY_APPS_RESTART_ALL_FORM_SUBMIT')}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => handleActionClick('update-all')}>
-            <IconRefresh className="me-2" size={16} />
-            {t('MY_APPS_UPDATE_ALL_FORM_SUBMIT')}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <BatchActionDialog isOpen={dialog.isOpen} onClose={dialog.close} onConfirm={() => mutation.mutate({})} action="restart-all" />
+      <Button size="icon" intent="default" disabled={mutation.isPending} onClick={dialog.open} className="batch-action-desktop-button gap-2">
+        <IconRotateClockwise size={18} aria-hidden="true" />
+        {t('MY_APPS_RESTART_ALL_FORM_SUBMIT')}
+      </Button>
     </>
   );
 };

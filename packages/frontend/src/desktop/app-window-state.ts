@@ -30,6 +30,7 @@ export type AppWindowState = {
 };
 type Action =
   | { type: 'reset-session' }
+  | { type: 'address'; urn: string; previous: string | undefined; url: string }
   | { type: 'open'; request: AppLaunchRequest; restorePair?: boolean }
   | { type: 'focus' | 'minimize' | 'minimized' | 'close' | 'closed' | 'remove'; urn: string }
   | { type: 'place'; urn: string; mode: AppWindowMode; partner?: string }
@@ -97,6 +98,16 @@ export function appWindowReducer(state: AppWindowState, action: Action): AppWind
   const workspace = appWorkspace(state);
   const updateWorkspace = (next: Workspace) => ({ ...state.workspaces, [section]: next });
   switch (action.type) {
+    case 'address': {
+      const current = state.windows.find(({ request }) => request.urn === action.urn);
+      if (current?.status !== 'visible' || current.request.launchUrl !== action.previous || action.url === action.previous) return state;
+      return {
+        ...state,
+        windows: state.windows.map((item) =>
+          item === current ? { ...item, request: { ...item.request, launchUrl: action.url, preferredUrl: action.url } } : item,
+        ),
+      };
+    }
     case 'reset-session':
       return { windows: [], section: '/dashboard' };
     case 'open': {

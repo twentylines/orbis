@@ -39,7 +39,6 @@ export function WorkspaceResizeHandle({
       className="workspace-resize-handle"
       aria-label={`Resize ${name}, ${size.columns} columns${advanced ? `, ${size.height} pixels high` : ''}`}
       aria-describedby="workspace-resize-help"
-      title={advanced ? 'Drag to resize. Arrow keys adjust width and height.' : 'Drag or use left/right arrows for narrow or wide.'}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         const node = event.currentTarget.closest<HTMLElement>('.workspace-widget');

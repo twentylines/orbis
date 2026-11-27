@@ -32,7 +32,7 @@ export const StopDialog: React.FC<IProps> = ({ info, isOpen, onClose }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent size="sm">
+      <DialogContent size="sm" data-action-tint="warning">
         <DialogHeader>
           <DialogTitle>{t('APP_STOP_FORM_TITLE', { name: info.name })}</DialogTitle>
         </DialogHeader>

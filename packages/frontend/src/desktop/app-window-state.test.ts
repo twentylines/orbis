@@ -29,6 +29,18 @@ test('body activation keeps split geometry, ratio and both existing iframe reque
   expect(activated.windows.map((item) => item.request)).toEqual([first, second]);
 });
 
+test('switching to another managed address changes only the selected window document', () => {
+  const paired = reduce(reduce(open({ windows: [] }), { type: 'place', urn: first.urn, mode: 'left' }), { type: 'pair', request: second });
+  const next = reduce(paired, { type: 'address', urn: first.urn, previous: first.launchUrl, url: 'https://alternate.local/' });
+  expect(appWorkspace(next)).toBe(appWorkspace(paired));
+  expect(next.windows.find(({ request }) => request.urn === first.urn)?.request).toMatchObject({
+    launchUrl: 'https://alternate.local/',
+    preferredUrl: 'https://alternate.local/',
+  });
+  expect(next.windows.find(({ request }) => request.urn === second.urn)).toBe(paired.windows.find(({ request }) => request.urn === second.urn));
+  expect(reduce(next, { type: 'address', urn: first.urn, previous: first.launchUrl, url: 'https://stale.local/' })).toBe(next);
+});
+
 test('snap offers a partner, pairs independent documents, and focusing either pane keeps both visible', () => {
   const snapped = reduce(open({ windows: [] }), { type: 'place', urn: first.urn, mode: 'left' });
   expect(appWorkspace(snapped).split).toEqual({ anchor: first.urn, side: 'left' });

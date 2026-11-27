@@ -208,3 +208,21 @@
 .desktop-page-toolbar:empty {
   display: none;
 }
+
+:root[data-orbis-header-glass="true"] .desktop-route-page .desktop-page-heading {
+  position: relative;
+  isolation: isolate;
+  border-bottom-color: transparent;
+}
+:root[data-orbis-header-glass="true"] .desktop-route-page .desktop-page-heading::before {
+  position: absolute;
+  inset: 0 0 -16px;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--desktop-pane-surface) 82%, var(--desktop-preset-tint)), transparent);
+  backdrop-filter: var(--desktop-pane-filter);
+  -webkit-backdrop-filter: var(--desktop-pane-filter);
+  mask-image: linear-gradient(black 48%, transparent);
+  pointer-events: none;
+  content: "";
+}

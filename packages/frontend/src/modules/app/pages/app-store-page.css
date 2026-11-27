@@ -177,7 +177,7 @@
   translate: 0 -50%;
 }
 .orbis-store-category-value .orbis-store-category-text {
-  translate: 0 -0.0625em;
+  line-height: 1.25;
 }
 .orbis-store-toolbar .refresh-app-stores {
   width: 100%;

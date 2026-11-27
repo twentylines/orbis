@@ -203,7 +203,6 @@ export function DesktopTaskLink() {
           data-attention-state={attentionState}
           aria-busy={attentionState === 'loading' || undefined}
           aria-label={`Open task centre, ${activeTasks} active operation${activeTasks === 1 ? '' : 's'}${pendingRequests ? `, ${pendingRequests} pending restore request${pendingRequests === 1 ? '' : 's'}` : ''}${alerts ? `, ${alerts} new alert${alerts === 1 ? '' : 's'}` : ''}${attentionStatus ? `, ${attentionStatus}` : ''}`}
-          title={attentionStatus ? `Task centre · ${attentionStatus}` : alerts ? 'Task centre · new alerts' : 'Task centre'}
         >
           {saved.isError ? (
             <IconAlertTriangle size={20} style={{ color: 'var(--desktop-warning)' }} aria-hidden="true" />

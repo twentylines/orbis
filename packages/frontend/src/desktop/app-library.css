@@ -67,13 +67,9 @@ body:has(.orbis-theme) .app-library-controls .app-library-select button {
   flex: none;
 }
 body:has(.orbis-theme) .app-library-controls button:focus-visible {
-  outline: none;
-  box-shadow: none;
-  border-color: var(--desktop-line);
-  background: color-mix(in srgb, var(--desktop-ink) 14%, var(--desktop-surface));
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
+  outline: 2px solid var(--desktop-accent);
+  outline-offset: 2px;
+  text-decoration: none;
 }
 .app-library-clear > span {
   max-width: 14em;

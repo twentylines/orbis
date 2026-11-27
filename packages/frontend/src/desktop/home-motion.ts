@@ -6,7 +6,7 @@ const tileSelector = [
   '.workspace-heading',
   '.workspace-widget',
   '.workspace-apps > .workspace-section-heading',
-  '.workspace-app',
+  '.workspace-app-entry',
   '.workspace-apps .workspace-message',
   '.workspace-editor',
   '.workspace-all-hidden',
@@ -14,7 +14,7 @@ const tileSelector = [
 ].join(', ');
 const openingSelector = '.workspace-heading, .workspace-widget, .workspace-all-hidden, .cluster-home > *';
 
-export function useHomeMotion(key: string, active: boolean, direction: number) {
+export function useHomeMotion(key: string, active: boolean, startupStyle: boolean, direction: number) {
   const entrance = useRef({ key, direction });
   if (entrance.current.key !== key) entrance.current = { key, direction };
   const entryDirection = entrance.current.direction;
@@ -24,7 +24,7 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
     if (!root) return;
     const entered = new WeakSet<HTMLElement>();
     const animations = new Set<Animation>();
-    const opening = Boolean(document.querySelector('[data-initial-startup]'));
+    const opening = startupStyle || Boolean(document.querySelector('[data-initial-startup]'));
     let openingStart: number | null = null;
     let frame = 0;
     const animate = () => {
@@ -36,6 +36,11 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
         const parent = tile.parentElement?.closest(openingSelector);
         return !entered.has(tile) && (!parent || !view.contains(parent));
       });
+      if (opening) {
+        for (const entry of view.querySelectorAll<HTMLElement>('.workspace-app-entry')) {
+          if (!entered.has(entry)) tiles.push(entry);
+        }
+      }
       if (!tiles.length) return;
       const distance = opening ? Math.min(72, innerWidth * 0.08) : Math.min(40, innerWidth * 0.055) * entryDirection;
       const now = document.timeline.currentTime;
@@ -44,19 +49,32 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
       const viewBounds = opening ? view.getBoundingClientRect() : null;
       const positions = tiles.map((tile) => {
         const bounds = viewBounds ? tile.getBoundingClientRect() : null;
+        const app = tile.classList.contains('workspace-app-entry');
         return {
           tile,
-          delay: bounds && viewBounds ? Math.min(120, Math.max(0, (bounds.left - viewBounds.left) / Math.max(1, viewBounds.width)) * 120) : 0,
+          app,
+          delay:
+            bounds && viewBounds
+              ? (app ? 95 : 0) +
+                Math.min(
+                  140,
+                  Math.max(0, (bounds.left - viewBounds.left) / Math.max(1, viewBounds.width)) * 105 +
+                    Math.max(0, (bounds.top - viewBounds.top) / Math.max(1, innerHeight)) * 50,
+                )
+              : 0,
         };
       });
-      for (const { tile, delay } of positions) {
+      for (const { tile, app, delay } of positions) {
         entered.add(tile);
         const animation = tile.animate(
           opening
-            ? [{ transform: `translate3d(${distance}px, 0, 0)` }, { transform: 'translate3d(0, 0, 0)' }]
+            ? [
+                { opacity: 0, transform: `translate3d(${app ? 18 : distance}px, 8px, 0) scale(.97)` },
+                { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)' },
+              ]
             : [{ transform: `translateX(${distance}px)` }, { transform: 'none' }],
           {
-            duration: opening ? 760 : dockMotionDuration,
+            duration: opening ? (app ? 580 : 760) : dockMotionDuration,
             delay,
             easing: opening ? 'cubic-bezier(.2, .7, .2, 1)' : sectionMotionEasing,
             fill: 'backwards',
@@ -98,5 +116,5 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
       const view = root.querySelector<HTMLElement>('.desktop-view-home');
       if (view?.dataset.homeEntry === key) delete view.dataset.homeEntry;
     };
-  }, [active, entryDirection, key]);
+  }, [active, entryDirection, key, startupStyle]);
 }

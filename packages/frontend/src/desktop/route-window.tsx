@@ -405,14 +405,14 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
           </span>
           <div className="desktop-window-label">
             <h1 tabIndex={desktop ? undefined : -1}>{label}</h1>
-            {desktop ? <span title={preferences.serverName}>{preferences.serverName}</span> : null}
+            {desktop ? <span>{preferences.serverName}</span> : null}
           </div>
           {desktop ? (
             <div className="desktop-window-controls">
               {desktop ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button type="button" className="desktop-window-control" aria-label="Window layout" title="Window layout">
+                    <button type="button" className="desktop-window-control" aria-label="Window layout">
                       <IconLayout size={18} aria-hidden="true" />
                     </button>
                   </DropdownMenuTrigger>
@@ -455,7 +455,6 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
                 type="button"
                 className="desktop-window-control"
                 aria-label={`Minimize ${label}`}
-                title="Minimize"
                 disabled={hiding}
                 onClick={() => void minimize()}
               >
@@ -466,7 +465,6 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
                   type="button"
                   className="desktop-window-control"
                   aria-label={mode === 'maximized' ? `Restore ${label} size` : `Maximize ${label}`}
-                  title={mode === 'maximized' ? 'Restore size' : 'Maximize'}
                   onClick={maximize}
                 >
                   {mode === 'maximized' ? <IconArrowsMinimize size={18} aria-hidden="true" /> : <IconArrowsMaximize size={18} aria-hidden="true" />}
@@ -476,7 +474,6 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
                 type="button"
                 className="desktop-window-control desktop-window-dismiss"
                 aria-label={`Close ${label}`}
-                title="Close and return to workspace"
                 onClick={() => navigate('/dashboard')}
               >
                 <IconX size={18} aria-hidden="true" />
@@ -497,7 +494,6 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
             type="button"
             className="desktop-window-resize"
             aria-label={`Resize ${label}`}
-            title="Drag to resize, or press Enter for keyboard controls"
             onPointerDown={(event) => beginPointer(event, 'resize')}
             onPointerMove={movePointer}
             onPointerUp={(event) => endPointer(event, true)}

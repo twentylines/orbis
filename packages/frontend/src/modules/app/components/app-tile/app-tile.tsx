@@ -43,13 +43,13 @@ export const AppTile = memo(
           <AppLogo alt={`${info.name} logo`} urn={info.urn} size={60} />
           <div className="d-flex flex-column app-tile-copy">
             <div className="d-flex align-items-center gap-2">
-              <span className="fw-bolder app-tile-name" title={info.name}>
+              <span className="fw-bolder app-tile-name">
                 <WrapWords text={info.name} />
               </span>
               {opensInTab ? <AppTabIndicator /> : null}
             </div>
             {info.short_desc ? (
-              <div className="text-muted app-tile-description" title={info.short_desc}>
+              <div className="text-muted app-tile-description">
                 <WrapWords text={info.short_desc} />
               </div>
             ) : null}

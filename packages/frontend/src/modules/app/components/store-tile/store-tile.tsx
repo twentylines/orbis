@@ -81,13 +81,13 @@ export function StoreTile({
         </div>
         <div className="orbis-store-tile-copy">
           <div className="orbis-store-tile-title">
-            <h3 id={`${id}-name`} title={app.name}>
+            <h3 id={`${id}-name`}>
               <Skeleton loading={isLoading}>
                 <WrapWords text={app.name} />
               </Skeleton>
             </h3>
           </div>
-          <p id={`${id}-description`} className="orbis-store-tile-description" title={app.short_desc}>
+          <p id={`${id}-description`} className="orbis-store-tile-description">
             <Skeleton loading={isLoading}>
               <WrapWords text={app.short_desc} />
             </Skeleton>

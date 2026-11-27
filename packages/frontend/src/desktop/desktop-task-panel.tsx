@@ -100,7 +100,7 @@ function TaskRow({
           <TaskSymbol record={record} />
         </span>
         <span className="task-centre-row-copy">
-          <strong title={record.title}>{record.title}</strong>
+          <strong>{record.title}</strong>
           <span className="task-centre-row-meta">
             <span>
               {record.status}
@@ -123,7 +123,6 @@ function TaskRow({
           type="button"
           className="task-centre-dismiss"
           aria-label={`Dismiss ${record.title} from activity`}
-          title="Hide from activity"
           onClick={(event) => dismiss(record, event.currentTarget)}
         >
           <span className="task-centre-dismiss-icon" aria-hidden="true">
@@ -790,11 +789,6 @@ export function DesktopTaskPanel({
                                 type="button"
                                 onClick={() => clearActivity(bucket)}
                                 aria-label={bucket === 'review' ? 'Clear all dismissible needs-attention activity' : 'Clear all recent activity'}
-                                title={
-                                  bucket === 'review'
-                                    ? 'Hide dismissible alerts; pending reviews remain available'
-                                    : 'Hide recent activity from this feed'
-                                }
                               >
                                 Clear all
                               </button>
@@ -816,12 +810,7 @@ export function DesktopTaskPanel({
                           <span>{filtered.length} records</span>
                         </h3>
                         {view === 'review' && visibility.enabled && attentionClearable ? (
-                          <button
-                            type="button"
-                            onClick={() => clearActivity('review')}
-                            aria-label="Clear all dismissible needs-attention activity"
-                            title="Hide dismissible alerts; pending reviews remain available"
-                          >
+                          <button type="button" onClick={() => clearActivity('review')} aria-label="Clear all dismissible needs-attention activity">
                             Clear all
                           </button>
                         ) : null}

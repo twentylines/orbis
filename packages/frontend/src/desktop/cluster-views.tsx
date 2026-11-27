@@ -119,7 +119,7 @@ export function ClusterOverview() {
     <section className="cluster-overview" aria-label="Cluster status">
       <div className="cluster-overview-hero">
         <div className="cluster-overview-copy">
-          <h2 title={cluster.data?.name || preferences.serverName}>
+          <h2>
             <WrapWords text={cluster.data?.name || preferences.serverName} />
           </h2>
           <p>{pending ? 'Checking server connections…' : `${responding} of ${servers.length} servers responding`}</p>
@@ -153,10 +153,10 @@ export function ClusterOverview() {
               <button type="button" className="cluster-summary-select" onClick={() => cluster.select(server.id)} aria-label={`View ${name} status`}>
                 <IconServer size={23} aria-hidden="true" />
                 <span>
-                  <strong title={name}>
+                  <strong>
                     <WrapWords text={name} />
                   </strong>
-                  <span title={serverAddress(server)}>{serverAddress(server)}</span>
+                  <span>{serverAddress(server)}</span>
                 </span>
               </button>
               <div className="cluster-summary-readings">
@@ -362,7 +362,6 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
                       <Link
                         className="cluster-app-name"
                         to={compact ? manageUrl : infoPath}
-                        title={entry.info.name}
                         target={compact && !server.local ? '_blank' : undefined}
                         rel={compact && !server.local ? 'noopener noreferrer' : undefined}
                         onClick={compact ? (event) => launch(event, server, entry, logoUrl, launchUrl) : undefined}
@@ -384,7 +383,7 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
                   </h3>
                   <span className="cluster-app-server">
                     <IconServer size={14} aria-hidden="true" />
-                    <span title={serverName(server)}>
+                    <span>
                       <WrapWords text={serverName(server)} />
                     </span>
                   </span>
@@ -460,12 +459,12 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
                   <IconBrandDocker size={30} stroke={1.5} aria-hidden="true" />
                 </span>
                 <div>
-                  <h3 title={entry.name}>
+                  <h3>
                     <WrapWords text={entry.name} />
                   </h3>
                   <span className="cluster-app-server">
                     <IconServer size={14} aria-hidden="true" />
-                    <span title={serverName(server)}>
+                    <span>
                       <WrapWords text={serverName(server)} />
                     </span>
                   </span>
@@ -532,12 +531,10 @@ export function ClusterStore() {
                     <IconServer size={27} aria-hidden="true" />
                   </span>
                   <div>
-                    <h3 title={name}>
+                    <h3>
                       <WrapWords text={name} />
                     </h3>
-                    <span className="cluster-store-address" title={serverAddress(server)}>
-                      {serverAddress(server)}
-                    </span>
+                    <span className="cluster-store-address">{serverAddress(server)}</span>
                   </div>
                 </div>
                 <p>{server.role === 'admin' ? 'Admin server' : 'Paired server'}</p>

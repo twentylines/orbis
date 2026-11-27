@@ -157,6 +157,7 @@ describe('saved appearance applied before hydration and to live materials', () =
       orbisTransparency: 'glass',
       orbisEffects: 'full',
       orbisColourCustom: 'false',
+      orbisHeaderGlass: 'true',
       orbisOled: 'false',
     });
   });
@@ -462,6 +463,7 @@ describe('saved appearance applied before hydration and to live materials', () =
     expect(result.dataset.orbisMotion).toBe('reduced');
     expect(result.dataset.orbisTransparency).toBe('solid');
     expect(result.dataset.orbisEffects).toBe('low');
+    expect(result.dataset.orbisHeaderGlass).toBe('false');
     expect(result.properties.get('--orbis-glass-filter')).toBe('none');
     for (const name of ['surface', 'chrome', 'panel-dark']) expect(rgb(result.properties.get(`--orbis-${name}`) ?? '')[3]).toBe(1);
   });
@@ -471,7 +473,9 @@ describe('saved appearance applied before hydration and to live materials', () =
     expect(apply({ motion: 'reduced' }).dataset.orbisMotion).toBe('reduced');
   });
   test('works when browser media preferences are unavailable', () => {
-    expect(apply({ glassBlur: 0 }, { blockedMedia: true }).properties.get('--orbis-glass-filter')).toBe('none');
+    const result = apply({ glassBlur: 0 }, { blockedMedia: true });
+    expect(result.properties.get('--orbis-glass-filter')).toBe('none');
+    expect(result.dataset.orbisHeaderGlass).toBe('false');
   });
 });
 

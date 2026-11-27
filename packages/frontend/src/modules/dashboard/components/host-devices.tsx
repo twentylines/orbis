@@ -89,14 +89,12 @@ function MountPath({ mount }: { mount: string }) {
   if (segments.length > 32) segments.splice(31, segments.length - 31, segments.slice(31).join(''));
   let offset = 0;
   return (
-    <h4 className="host-device-identifier host-device-mount" title={mount}>
+    <h4 className="host-device-identifier host-device-mount">
       {segments.map((segment) => {
         offset += segment.length;
         return (
           <Fragment key={offset}>
-            <span className="host-device-segment" title={segment}>
-              {segment}
-            </span>
+            <span className="host-device-segment">{segment}</span>
             <wbr />
           </Fragment>
         );
@@ -261,9 +259,7 @@ export const HostDevices = memo(function HostDevices({ onHistory }: { onHistory:
                     <article className="host-device" data-kind="network" key={`${item.interface}:${item.historyId ?? ''}`}>
                       <div className="host-device-identity">
                         <div className="host-device-heading">
-                          <h4 className="host-device-identifier" title={item.interface}>
-                            {item.interface}
-                          </h4>
+                          <h4 className="host-device-identifier">{item.interface}</h4>
                           <span className="host-device-link" data-state={item.state}>
                             {item.state === 'up' ? 'Link up' : item.state === 'down' ? 'Link down' : 'Link unknown'}
                           </span>
@@ -287,9 +283,7 @@ export const HostDevices = memo(function HostDevices({ onHistory }: { onHistory:
                   {disks.map((disk) => (
                     <article className="host-device" data-kind="disk" key={disk.device}>
                       <div className="host-device-identity">
-                        <h4 className="host-device-identifier" title={disk.device}>
-                          {disk.device}
-                        </h4>
+                        <h4 className="host-device-identifier">{disk.device}</h4>
                       </div>
                       <Facts
                         values={[

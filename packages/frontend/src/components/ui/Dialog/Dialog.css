@@ -290,3 +290,43 @@ body:has(.orbis-theme) .orbis-dialog-content .btn:not(.btn-primary, .btn-danger)
     animation-duration: 0.01ms;
   }
 }
+
+:root[data-orbis-header-glass="true"] .orbis-dialog-overlay {
+  backdrop-filter: var(--orbis-glass-filter, blur(12px));
+}
+body:has(.orbis-theme) .modal-content.orbis-dialog-content:is([data-action-tint], :has(> .modal-status:not(.d-none))) {
+  --orbis-dialog-action-color: var(--desktop-accent);
+  background: color-mix(in srgb, var(--orbis-dialog-action-color) 12%, var(--desktop-pane-surface));
+}
+body:has(.orbis-theme) .modal-content.orbis-dialog-content:is([data-action-tint="warning"], :has(> .modal-status.bg-warning)) {
+  --orbis-dialog-action-color: var(--desktop-warning, #cc861c);
+}
+body:has(.orbis-theme) .modal-content.orbis-dialog-content:has(> .modal-status.bg-danger) {
+  --orbis-dialog-action-color: var(--desktop-negative, #c94a52);
+}
+body:has(.orbis-theme) .orbis-dialog-content > .modal-status {
+  display: none;
+}
+.orbis-dialog-content[data-presentation="scene"][data-state="closed"] {
+  animation-duration: 90ms;
+}
+.orbis-dialog-overlay[data-presentation="scene"][data-state="closed"] {
+  animation-duration: 90ms;
+}
+
+body:has(.orbis-theme) .modal-content.orbis-dialog-content[data-action-tint="success"] {
+  --orbis-dialog-action-color: var(--desktop-positive, #358753);
+}
+
+body:has(.orbis-theme) .orbis-dialog-content :is(.orbis-dialog-header, .modal-footer) {
+  border-block-color: transparent;
+}
+@media (max-width: 480px) {
+  .modal-content.orbis-dialog-content {
+    --orbis-dialog-gutter: 16px;
+  }
+  body:has(.orbis-theme) .orbis-dialog-content .orbis-dialog-header {
+    padding-inline: var(--orbis-dialog-gutter);
+    gap: 12px;
+  }
+}

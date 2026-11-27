@@ -167,12 +167,9 @@ function ServerMonitor() {
           <header className="monitor-page-heading">
             <div>
               <h2>Overview</h2>
-              <p title={serverName}>{serverName}</p>
+              <p>{serverName}</p>
             </div>
-            <div
-              className="desktop-monitor-live-status"
-              title="CPU and memory update every second. Other hardware readings keep their own sampling rate."
-            >
+            <div className="desktop-monitor-live-status">
               <span className={telemetry.isError ? 'desktop-live-dot desktop-live-dot-stale' : 'desktop-live-dot'} aria-hidden="true" />
               <span>{telemetry.isError ? 'Readings delayed' : telemetry.isPending ? 'Connecting' : 'Every second'}</span>
             </div>
@@ -260,9 +257,7 @@ function ServerMonitor() {
                     <span className="visually-hidden">Upload </span>
                     {rate(network?.txBytesPerSecond)}
                   </dd>
-                  <dd className="monitor-summary-interface" title={network?.interface}>
-                    {network?.interface ?? 'No interface reading'}
-                  </dd>
+                  <dd className="monitor-summary-interface">{network?.interface ?? 'No interface reading'}</dd>
                 </div>
               </dl>
               <dl className="monitor-system-facts">

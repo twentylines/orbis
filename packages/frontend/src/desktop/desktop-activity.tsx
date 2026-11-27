@@ -205,7 +205,6 @@ function ActivityPill({ activity, desktop }: { activity: DesktopActivity; deskto
                 type="button"
                 className="desktop-activity-trigger"
                 aria-label={`${displayed.title}: ${displayed.detail}. Open activity details.`}
-                title={`${displayed.title}: ${displayed.detail}`}
               >
                 <span className="desktop-activity-icon">
                   <ActivityIcon kind={displayed.kind} appUrn={displayed.appUrn} />

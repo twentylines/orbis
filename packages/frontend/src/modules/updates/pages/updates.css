@@ -267,8 +267,7 @@
 }
 .desktop-system-update-details {
   margin-top: 0.75rem;
-  border-top: 1px solid var(--desktop-line);
-  padding-top: 0.15rem;
+  padding-top: 0.45rem;
 }
 .desktop-system-update-details > summary,
 .system-update-progress > details > summary {
@@ -297,7 +296,6 @@
   padding: 0;
   margin-block: 0.75rem 0;
   border: 0;
-  border-top: 1px solid var(--desktop-line);
   border-radius: 0;
   background: transparent;
 }
@@ -506,7 +504,9 @@
 }
 .desktop-updates-app-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0;
+  list-style: none;
   gap: 0.6rem;
   margin-block: 0.75rem;
 }
@@ -821,10 +821,20 @@ p.desktop-host-package-versions {
 .desktop-update-app:hover {
   border-color: var(--desktop-accent);
 }
-.desktop-update-app > img {
+.desktop-update-app-info {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 44px;
+  color: inherit;
+  text-decoration: none;
+}
+.desktop-update-app-info > img {
   flex: none;
 }
-.desktop-update-app span {
+.desktop-update-app-info > span {
   min-width: 0;
   flex: 1;
 }
@@ -859,7 +869,6 @@ p.desktop-host-package-versions {
   display: grid;
   gap: 8px;
   margin-top: 16px;
-  border-top: 1px solid var(--desktop-line);
   padding-top: 14px;
 }
 .desktop-update-build-details h3 {
@@ -1081,7 +1090,6 @@ body:has(.orbis-theme) .desktop-package-review .desktop-host-package-plan textar
 }
 .desktop-downgrade {
   margin-top: 1.25rem;
-  border-top: 1px solid var(--desktop-line);
   padding-top: 1.25rem;
 }
 .desktop-downgrade > h3 {
@@ -1297,4 +1305,11 @@ body:has(.orbis-theme) .desktop-update-review-dialog > .modal-body:focus-visible
 .desktop-critical-update p {
   margin: 4px 0 0;
   line-height: 1.5;
+}
+
+.desktop-update-app > .desktop-update-action {
+  flex: none;
+}
+.desktop-updates-card :is(.desktop-system-update-details, .desktop-updates-release, .desktop-update-build, .desktop-downgrade) {
+  border-block-start: 0;
 }

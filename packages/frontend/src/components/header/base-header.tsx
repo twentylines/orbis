@@ -5,7 +5,6 @@ import clsx from 'clsx';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
-import { Tooltip } from 'react-tooltip';
 
 type BaseHeaderProps = {
   isLoggedIn: boolean;
@@ -87,49 +86,38 @@ export const BaseHeader = (props: BaseHeaderProps) => {
           </div>
           <div style={{ zIndex: 1 }} className="d-flex">
             {showCertificateButton && (
-              <>
-                <Tooltip className="tooltip" anchorSelect=".downloadCert">
-                  {t('GUEST_DASHBOARD_DOWNLOAD_CERTIFICATE_TOOLTIP')}
-                </Tooltip>
-                <button
-                  type="button"
-                  onClick={downloadCertificate}
-                  className="downloadCert nav-link px-0 cursor-pointer"
-                  data-testid="download-certificate-button"
-                >
-                  <IconCertificate size={20} />
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={downloadCertificate}
+                className="downloadCert nav-link px-0 cursor-pointer"
+                aria-label={t('GUEST_DASHBOARD_DOWNLOAD_CERTIFICATE_TOOLTIP')}
+                data-testid="download-certificate-button"
+              >
+                <IconCertificate size={20} />
+              </button>
             )}
-            <Tooltip className="tooltip" anchorSelect=".darkMode">
-              {t('HEADER_DARK_MODE')}
-            </Tooltip>
             <button
               type="button"
               onClick={() => setDarkMode(true)}
               className={clsx('darkMode nav-link px-0 cursor-pointer', {
                 'visually-hidden': theme === 'dark',
               })}
+              aria-label={t('HEADER_DARK_MODE')}
               data-testid="dark-mode-toggle"
             >
               <IconMoon data-testid="icon-moon" size={20} />
             </button>
-            <Tooltip className="tooltip" anchorSelect=".lightMode">
-              {t('HEADER_LIGHT_MODE')}
-            </Tooltip>
             <button
               type="button"
               onClick={() => setDarkMode(false)}
               className={clsx('lightMode nav-link px-0 cursor-pointer ', {
                 'visually-hidden': theme === 'light',
               })}
+              aria-label={t('HEADER_LIGHT_MODE')}
               data-testid="light-mode-toggle"
             >
               <IconSun data-testid="icon-sun" size={20} />
             </button>
-            <Tooltip className="tooltip" anchorSelect=".logOut">
-              {isLoggedIn ? t('HEADER_LOGOUT') : t('HEADER_LOGIN')}
-            </Tooltip>
             <button
               type="button"
               onClick={handleLogoutClick}
@@ -137,6 +125,7 @@ export const BaseHeader = (props: BaseHeaderProps) => {
               aria-disabled={logoutDisabled}
               tabIndex={0}
               className={clsx('logOut nav-link px-0 cursor-pointer', { disabled: logoutDisabled })}
+              aria-label={isLoggedIn ? t('HEADER_LOGOUT') : t('HEADER_LOGIN')}
               data-testid="logout-button"
             >
               {isLoggedIn ? <IconLogout size={20} /> : <IconLogin size={20} />}

@@ -23,13 +23,6 @@ export function OrbisUpdateNotice() {
     <Link
       to="/updates"
       className={`desktop-update-notice${critical ? ' desktop-update-notice-critical' : ''}`}
-      title={
-        busy
-          ? 'Orbis update in progress. Open Updates for details.'
-          : critical
-            ? `Critical security update to Orbis ${formatOrbisVersion(latest?.tag ?? '')}`
-            : label
-      }
       aria-label={label}
       onClick={(event) => {
         if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && cluster.data?.localId) cluster.select(cluster.data.localId);

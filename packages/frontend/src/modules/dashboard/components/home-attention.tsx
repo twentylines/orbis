@@ -1,6 +1,7 @@
 import { IconAlertTriangle, IconCircleCheck, IconPlayerStop, IconRefresh } from '@tabler/icons-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
+import { useAppContext } from '@/context/app-context';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { SystemHealthAttention } from './system-health-attention';
 import { useSystemHealth } from './use-system-health';
@@ -11,9 +12,11 @@ type Props = { apps: AttentionApp[]; unhealthy: number; loading: boolean; unavai
 
 export function HomeAttention(props: Props) {
   const health = useSystemHealth();
+  const { user } = useAppContext();
   return (
     <HomeAttentionContent
       {...props}
+      canUpdate={user.operator === true}
       hasSystemAlert={Object.values(health).some((condition) => condition.active)}
       systemAlerts={<SystemHealthAttention />}
     />
@@ -29,7 +32,8 @@ export function HomeAttentionContent({
   healthPending = false,
   hasSystemAlert,
   systemAlerts,
-}: Props & { hasSystemAlert: boolean; systemAlerts?: ReactNode }) {
+  canUpdate = false,
+}: Props & { hasSystemAlert: boolean; systemAlerts?: ReactNode; canUpdate?: boolean }) {
   const hasAttention = apps.length > 0 || unhealthy > 0 || hasSystemAlert;
   const statusUnknown = loading || unavailable || healthUnavailable || healthPending;
   return (
@@ -73,16 +77,19 @@ export function HomeAttentionContent({
         <ul className="home-attention-list">
           {apps.slice(0, 6).map((app) => (
             <li key={app.urn}>
-              <Link to={`/apps/${encodeURIComponent(app.urn.split(':')[1] ?? '')}/${encodeURIComponent(app.id)}`}>
+              <Link
+                to={`/apps/${encodeURIComponent(app.urn.split(':')[1] ?? '')}/${encodeURIComponent(app.id)}${app.stopped || !canUpdate ? '' : '/update'}`}
+                state={app.stopped || !canUpdate ? undefined : { from: '/dashboard' }}
+              >
                 <AppLogo urn={app.urn} size={34} alt="" loading="lazy" startupOptional />
                 <span className="home-attention-app">
-                  <strong title={app.name}>{app.name}</strong>
+                  <strong>{app.name}</strong>
                   <small>
                     {app.stopped ? <IconPlayerStop size={13} aria-hidden="true" /> : <IconRefresh size={13} aria-hidden="true" />}
                     {app.stopped ? 'Stopped' : 'Update available'}
                   </small>
                 </span>
-                <span className="home-attention-action">{app.stopped ? 'Manage' : 'Review'}</span>
+                <span className="home-attention-action">{app.stopped ? 'Manage' : canUpdate ? 'Update' : 'Review'}</span>
               </Link>
             </li>
           ))}

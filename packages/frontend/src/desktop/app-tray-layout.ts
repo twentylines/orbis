@@ -44,7 +44,7 @@ export function useAppTrayLayout(desktop: boolean, count: number, element: HTMLE
         padding -
         spacing(element, 'margin-left');
       const itemWidth = Number.parseFloat(getComputedStyle(element).getPropertyValue('--app-tray-item-width')) || 118;
-      const slots = Math.max(1, Math.floor((available + gap) / (itemWidth + gap)));
+      const slots = Math.min(5, Math.max(1, Math.floor((available + gap) / (itemWidth + gap))));
       const width = `${Math.min(slots, count) * (itemWidth + gap) - gap + padding}px`;
       if (inner.style.getPropertyValue('--orbis-app-tray-width') !== width) inner.style.setProperty('--orbis-app-tray-width', width);
     };

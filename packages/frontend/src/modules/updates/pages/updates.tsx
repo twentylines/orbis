@@ -209,12 +209,15 @@ export default function Updates() {
 
 function LocalUpdates() {
   const tabsId = useId();
-  const [section, setSection] = useState<'system' | 'apps'>('system');
+  const location = useLocation();
+  const [section, setSection] = useState<'system' | 'apps'>(() =>
+    new URLSearchParams(location.search).get('section') === 'apps' ? 'apps' : 'system',
+  );
   const [coreReview, setCoreReview] = useState<ReleaseCompatibility | null>(null);
   const coreReviewIntent = useRef(0);
   const coreUpdateRequested = useRef(false);
   const coreReviewButton = useRef<HTMLButtonElement>(null);
-  const entry = useLocation().key;
+  const entry = location.key;
   const lastEntry = useRef(entry);
   const visible = useWindowVisible();
   const sentinelProgress = useSentinelUpdateProgress(visible && section === 'system');
@@ -613,23 +616,36 @@ function LocalUpdates() {
           {apps.isPending ? <p>Checking installed applications…</p> : null}
           {apps.isError ? <p role="alert">Application updates could not be checked. Try again from Applications.</p> : null}
           {!apps.isError && apps.data && available.length === 0 ? <p>No application updates found.</p> : null}
-          <div className="desktop-updates-app-list">
+          <ul className="desktop-updates-app-list">
             {!apps.isError &&
               available.map(({ app, info, metadata }) => {
                 const [appId, storeId] = info.urn.split(':');
+                const appPath = `/apps/${encodeURIComponent(storeId ?? '')}/${encodeURIComponent(appId ?? '')}`;
                 return (
-                  <Link className="desktop-update-app" to={`/apps/${storeId}/${appId}`} key={info.urn}>
-                    <AppLogo urn={info.urn} size={42} alt="" />
-                    <span>
-                      <strong title={info.name}>{info.name}</strong>
-                      <small>
-                        Version {app.version} → {metadata.latestVersion}
-                      </small>
-                    </span>
-                  </Link>
+                  <li className="desktop-update-app" key={info.urn}>
+                    <Link className="desktop-update-app-info" to={appPath}>
+                      <AppLogo urn={info.urn} size={42} alt="" />
+                      <span>
+                        <strong>{info.name}</strong>
+                        <small>
+                          Version {app.version} → {metadata.latestVersion}
+                        </small>
+                      </span>
+                    </Link>
+                    {user.operator ? (
+                      <Link
+                        className="desktop-update-action"
+                        to={`${appPath}/update`}
+                        state={{ from: '/updates?section=apps' }}
+                        aria-label={`Update ${info.name}`}
+                      >
+                        Update
+                      </Link>
+                    ) : null}
+                  </li>
                 );
               })}
-          </div>
+          </ul>
           <Link className="desktop-update-action secondary desktop-updates-app-link" to="/apps">
             Manage applications
           </Link>
@@ -654,7 +670,12 @@ function LocalUpdates() {
                     if (!open && !coreUpdatePending) setCoreReview(null);
                   }}
                 >
-                  <DialogContent className="desktop-update-review-dialog" closeDisabled={coreUpdatePending} restoreFocusTo={coreReviewButton}>
+                  <DialogContent
+                    className="desktop-update-review-dialog"
+                    data-action-tint="warning"
+                    closeDisabled={coreUpdatePending}
+                    restoreFocusTo={coreReviewButton}
+                  >
                     <DialogHeader>
                       <DialogTitle>{coreReview?.crossesRuntipiBoundary ? 'Runtipi version changes' : 'Update Orbis?'}</DialogTitle>
                       <DialogDescription>
@@ -907,7 +928,7 @@ function LocalUpdates() {
                       {build.data.imageDigest ? (
                         <div className="desktop-update-image">
                           <span>Image</span>
-                          <code title={build.data.imageDigest}>{build.data.imageDigest}</code>
+                          <code>{build.data.imageDigest}</code>
                         </div>
                       ) : (
                         <span>Image digest unavailable.</span>
@@ -1089,7 +1110,7 @@ function LocalUpdates() {
                 if (!open && !applyRestart.isPending) closeRestartReview();
               }}
             >
-              <DialogContent closeDisabled={applyRestart.isPending} restoreFocusTo={restartReviewButton}>
+              <DialogContent data-action-tint="warning" closeDisabled={applyRestart.isPending} restoreFocusTo={restartReviewButton}>
                 <DialogHeader>
                   <DialogTitle>Restart this server?</DialogTitle>
                   <DialogDescription>
@@ -1158,20 +1179,12 @@ function LocalUpdates() {
               </output>
             ) : null}
             {latestPackageJob ? <SystemUpdateProgress job={latestPackageJob} /> : null}
-            {user.operator && systemPackages.data?.available ? (
+            {user.operator && systemPackages.data?.available && (systemPackages.data.packageCount ?? 0) > 0 ? (
               <details className="desktop-system-update-details">
                 <summary>
                   <DisclosureIndicator size={17} />
-                  {(systemPackages.data?.packageCount ?? 0) > 0 ? 'Package details and exclusions' : 'Package details'}
+                  Package details and exclusions
                 </summary>
-                {systemPackages.data?.available ? (
-                  <p className="desktop-host-package-times">
-                    {systemPackages.data.indexesUpdatedAt
-                      ? `Package lists last changed ${new Date(systemPackages.data.indexesUpdatedAt).toLocaleString()}.`
-                      : 'Package list age unavailable.'}
-                    {systemPackages.data.rebootRequired ? ' A reboot request is recorded on this host.' : ''}
-                  </p>
-                ) : null}
                 {systemPackages.data?.truncated ? <output>Showing the first 1,000 packages. Check the host for the complete list.</output> : null}
                 {!!systemPackages.data?.packageCount && systemPackages.data.available ? (
                   <>
@@ -1246,7 +1259,7 @@ function LocalUpdates() {
                                 );
                               }}
                             />
-                            <strong title={item.name}>
+                            <strong>
                               {[...item.name.matchAll(/[^:-]*[:-]|[^:-]+$/g)].map((part) => (
                                 <Fragment key={part.index}>
                                   <WrapWords text={part[0]} />
@@ -1258,9 +1271,9 @@ function LocalUpdates() {
                             {readinessKnown && !item.ready ? <span>Deferred</span> : null}
                           </label>
                           <p className="desktop-host-package-versions">
-                            <code title={item.installedVersion}>{item.installedVersion}</code>
+                            <code>{item.installedVersion}</code>
                             <span aria-hidden="true">→</span>
-                            <code title={item.candidateVersion}>{item.candidateVersion}</code>
+                            <code>{item.candidateVersion}</code>
                           </p>
                           <small>{packageSources(item.sources)}</small>
                           <div className="desktop-host-package-foot">

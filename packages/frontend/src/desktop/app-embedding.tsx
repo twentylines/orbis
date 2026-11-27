@@ -55,9 +55,13 @@ export function useAppEmbedding(request: AppLaunchRequest, enabled: boolean) {
         });
         if (!response.ok) return { status: 'unknown', reason: 'check-unavailable' };
         const value: unknown = await response.json();
-        if (value && typeof value === 'object' && 'status' in value && 'reason' in value) {
-          const { status, reason } = value;
-          if (['blocked', 'not-blocked-by-headers', 'unknown'].includes(String(status)) && typeof reason === 'string')
+        if (value && typeof value === 'object' && 'status' in value && 'reason' in value && 'targetUrl' in value) {
+          const { status, reason, targetUrl } = value;
+          if (
+            targetUrl === new URL(url).href &&
+            ['blocked', 'not-blocked-by-headers', 'unknown'].includes(String(status)) &&
+            typeof reason === 'string'
+          )
             return { status: status as AppEmbeddingCheck['status'], reason };
         }
       } catch {

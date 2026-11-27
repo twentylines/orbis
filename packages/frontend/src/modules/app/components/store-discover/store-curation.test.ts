@@ -118,7 +118,7 @@ describe('catalogue-first Store presentation', () => {
     ]);
     expect(html).toContain('Unavailable');
     expect(html).toContain('Preview');
-    expect(html).toContain('A personal media server.');
+    expect(html.replace(/<[^>]+>/g, '')).toContain('A personal media server.');
     expect(html).toContain('aria-describedby=');
     expect(html).not.toContain('<button');
   });

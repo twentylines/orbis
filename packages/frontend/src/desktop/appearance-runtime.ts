@@ -263,6 +263,7 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
     set('panel-dark', css([...mix(panel, preset, tint).slice(0, 3), panel[3]] as Rgba));
   }
   if (materialChanged || darkChrome || chromeAdjusted || defaultChromeChanged || chromeTint > 0) set('chrome', css(tintedChrome));
+  root.dataset.orbisHeaderGlass = String(!solid && blur !== 0);
   if (solid || blur === 0) set('glass-filter', 'none');
   else if (blur !== null) set('glass-filter', `blur(${blur}px) saturate(1.2)`);
   const chromeBlur = customMaterial ? numeric('chromeBlur', 0, 64) : null;

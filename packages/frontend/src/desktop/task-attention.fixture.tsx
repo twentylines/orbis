@@ -225,7 +225,8 @@ try {
     expect(latest()).toMatchObject({ count: 3, alert: false, state: 'unavailable' });
     expect(latest().label).toContain('saved task alerts unavailable');
     expect(latest().label).toContain('1 active operation, 2 pending restore requests');
-    expect(latest().title).toContain('retry');
+    expect(latest().label).toContain('open Tasks to retry');
+    expect(latest().title).toBeUndefined();
     expect(gets).toBe(1);
     await act(async () => {
       link.onClick();

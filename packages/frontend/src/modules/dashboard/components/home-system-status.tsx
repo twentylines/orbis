@@ -33,7 +33,7 @@ export function NetworkSummary({ network, visible }: { network: ReturnType<typeo
         <IconArrowsDownUp size={17} aria-hidden="true" /> {network?.label ?? 'Network'}
       </span>
       {network ? (
-        <strong className="workspace-network-interface" title={network.interface}>
+        <strong className="workspace-network-interface">
           {network.interface}
           {network.speedMbps !== null ? (
             <small>{network.speedMbps >= 1000 ? `${(network.speedMbps / 1000).toFixed(1)} Gbps` : `${network.speedMbps} Mbps`} link</small>

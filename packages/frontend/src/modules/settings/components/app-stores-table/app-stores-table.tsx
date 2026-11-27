@@ -32,10 +32,10 @@ export const AppStoresTable = ({ appStores }: Props) => {
         {appStores.map((appStore) => (
           <li className="app-store-card" key={appStore.slug}>
             <div className="app-store-identity">
-              <h3 className="app-store-name" title={appStore.name}>
+              <h3 className="app-store-name">
                 <WrapWords text={appStore.name} />
               </h3>
-              <a className="app-store-url" title={appStore.url} href={appStore.url} target="_blank" rel="noreferrer noopener nofollow">
+              <a className="app-store-url" href={appStore.url} target="_blank" rel="noreferrer noopener nofollow">
                 {appStore.url}
               </a>
             </div>

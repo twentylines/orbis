@@ -158,7 +158,7 @@ export const HostProcessesView = memo(function HostProcessesView({ limit }: { li
             {visibleRows.map((row) => (
               <li key={row.pid} data-process-pid={row.pid}>
                 <div className="host-process-identity">
-                  <strong title={row.name}>
+                  <strong>
                     <bdi>{row.name}</bdi>
                   </strong>
                   <span>PID {row.pid}</span>

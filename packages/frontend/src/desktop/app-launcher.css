@@ -224,6 +224,21 @@
   min-height: 44px;
   white-space: normal;
 }
+.app-window-alternatives,
+.app-window-alternatives > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.app-window-compatibility .app-window-alternatives {
+  justify-content: center;
+}
+.app-window-alternatives .btn {
+  min-height: 44px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .orbis-app-launcher[hidden],
 .app-window-frame[hidden] {
   display: none;
@@ -237,12 +252,17 @@
   box-shadow: none;
 }
 .orbis-app-tray {
+  box-sizing: border-box;
   align-self: end;
   display: flex;
   align-items: center;
   min-width: 0;
   --app-tray-inset: 7px;
   --app-tray-item-width: 118px;
+  --app-tray-restore-width: 52px;
+  --app-tray-close-width: 52px;
+  --app-tray-item-gap: 4px;
+  --app-tray-item-inset: 5px;
   flex: none;
   width: var(--orbis-dock-side-width, var(--orbis-app-tray-width, max-content));
   height: var(--orbis-dock-side-height, 100%);
@@ -258,6 +278,13 @@
 }
 .orbis-app-tray[hidden] {
   display: none;
+}
+.orbis-app-tray[data-compact] {
+  --app-tray-item-width: 76px;
+  --app-tray-restore-width: 44px;
+  --app-tray-close-width: 26px;
+  --app-tray-item-gap: 2px;
+  --app-tray-item-inset: 2px;
 }
 .app-tray-list {
   display: flex;
@@ -279,9 +306,9 @@
 .app-tray-item {
   display: flex;
   align-items: center;
-  gap: calc(4px * (1 - var(--orbis-dock-fold, 0)));
+  gap: calc(var(--app-tray-item-gap) * (1 - var(--orbis-dock-fold, 0)));
   flex: none;
-  padding: calc(5px - 3px * var(--orbis-dock-fold, 0));
+  padding: calc(var(--app-tray-item-inset) + (2px - var(--app-tray-item-inset)) * var(--orbis-dock-fold, 0));
   border-radius: var(--orbis-dock-item-radius, 14px);
   background: color-mix(in srgb, var(--desktop-chrome-ink) 9%, transparent);
   scroll-snap-align: start;
@@ -302,7 +329,7 @@
   align-items: center;
   gap: 0;
   justify-content: center;
-  width: calc(52px - var(--orbis-dock-fold, 0) * 8px);
+  width: calc(var(--app-tray-restore-width) + (44px - var(--app-tray-restore-width)) * var(--orbis-dock-fold, 0));
   min-width: 44px;
   height: calc(52px - var(--orbis-dock-fold, 0) * 8px);
   flex: none;
@@ -311,7 +338,7 @@
 .orbis-app-tray .app-tray-close {
   display: grid;
   place-items: center;
-  width: calc(52px * (1 - var(--orbis-dock-fold, 0)));
+  width: calc(var(--app-tray-close-width) * (1 - var(--orbis-dock-fold, 0)));
   min-width: 0;
   height: calc(52px - var(--orbis-dock-fold, 0) * 8px);
   padding: 0;

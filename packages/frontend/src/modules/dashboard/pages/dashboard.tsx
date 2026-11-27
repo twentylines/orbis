@@ -127,7 +127,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   const [appChooserOpen, setAppChooserOpen] = useState(false);
   const roomy = useDesktopWindows();
   const [saveRequested, setSaveRequested] = useState(false);
-  const { preferences, update, syncState, workspaceCapabilities } = useDesktopPreferences();
+  const { preferences, update, syncState } = useDesktopPreferences();
   const { workspace } = preferences;
   const apps = useQuery({ ...getInstalledAppsOptions(), staleTime: 15000, refetchInterval: 15000 });
   const containers = useContainerTelemetry();
@@ -255,7 +255,6 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
             {hasEdited.current ? (
               <ApplicationEditing
                 workspace={workspace}
-                capabilities={workspaceCapabilities}
                 apps={installed}
                 appsReady={apps.isSuccess}
                 appsFailed={apps.isError}
@@ -372,7 +371,6 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
                       target={launchUrl ? '_blank' : undefined}
                       rel={launchUrl ? 'noopener noreferrer' : undefined}
                       className="workspace-app"
-                      title={info.name}
                       onClick={(event) => {
                         if (editing) {
                           event.preventDefault();
@@ -393,7 +391,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
                       <AppLogo urn={info.urn} size={54} alt="" />
                       <span className="workspace-app-copy">
                         <span className="workspace-app-title">
-                          <strong title={info.name}>{info.name}</strong>
+                          <strong>{info.name}</strong>
                           {tabOnly ? <AppTabIndicator /> : null}
                         </span>
                         {appUpdate ? <small>Update available</small> : null}
@@ -401,12 +399,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
                       </span>
                     </Link>
                     {editing ? null : (
-                      <Link
-                        className="workspace-app-manage"
-                        to={`/apps/${storeId}/${appId}`}
-                        aria-label={`Manage ${info.name}`}
-                        title={`Manage ${info.name}`}
-                      >
+                      <Link className="workspace-app-manage" to={`/apps/${storeId}/${appId}`} aria-label={`Manage ${info.name}`}>
                         <IconSettings size={17} aria-hidden="true" />
                       </Link>
                     )}
@@ -440,7 +433,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
               const time = new Date(task.updatedAt).toLocaleTimeString();
               return (
                 <li key={task.id}>
-                  <Link to="/tasks" aria-label={`${title}, ${taskStates[task.status]}, ${time}`} title={title}>
+                  <Link to="/tasks" aria-label={`${title}, ${taskStates[task.status]}, ${time}`}>
                     <span>
                       <strong>
                         {taskLabels[task.action]} <span className="workspace-recent-app-name">{name}</span>
@@ -519,7 +512,6 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
       data-startup-ready={!apps.isPending}
       data-editing={editing || undefined}
       data-arranged={hasEdited.current || undefined}
-      data-app-view={layout.appView}
     >
       <div className="workspace-heading">
         <HomeGreeting headingRef={heading} focusable={focusOnMount} />
@@ -529,7 +521,6 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
             <button
               type="button"
               className="workspace-edit-toggle"
-              title={editing ? (saveRequested ? 'Saving workspace' : 'Save workspace') : 'Edit workspace'}
               aria-label={editing ? (saveRequested ? 'Saving workspace' : 'Save workspace') : 'Edit workspace'}
               aria-pressed={editing}
               ref={editToggle}

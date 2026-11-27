@@ -173,7 +173,6 @@ export function ClusterConnection() {
               ? `Connected to ${remote?.name ?? 'admin server'} at ${address}`
               : label
       }
-      title={restartingServer ? restart?.job?.message : updating ? watch?.message : label}
     >
       <span className={`desktop-connection-dot is-${connectionState}`} aria-hidden="true">
         {connectionState === 'connected' ? <span className="desktop-connection-pulse" /> : null}
@@ -191,7 +190,7 @@ export function ClusterServerLabel() {
     : cluster.selectedServer && !cluster.selectedServer.local
       ? cluster.selectedServer.name
       : preferences.serverName;
-  return <span title={name}>{name}</span>;
+  return <span>{name}</span>;
 }
 
 export function useCluster() {
@@ -348,7 +347,6 @@ export function ClusterSwitcher() {
         className="desktop-icon-button cluster-switcher"
         ref={opener}
         aria-label={`Switch server in ${cluster.data?.name}`}
-        title="Switch server"
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen(true)}

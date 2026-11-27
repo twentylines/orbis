@@ -17,6 +17,7 @@ export function useSectionMotion(ready = true) {
   useHomeMotion(
     location.key,
     ready && location.pathname === '/dashboard',
+    location.state?.workspaceEntrance === true,
     sectionDirection(sectionIndex(previous.current.path), sectionIndex(location.pathname), action, previous.current.index, historyIndex()),
   );
 

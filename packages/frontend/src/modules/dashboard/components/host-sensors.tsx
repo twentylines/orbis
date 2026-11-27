@@ -116,10 +116,8 @@ export const HostSensorsView = memo(function HostSensorsView() {
                     const limit = temperatureLimit(sensor);
                     return (
                       <article className="host-sensor-card" key={sensor.id} data-sensor-id={sensor.id}>
-                        <h4 title={sensor.label}>{sensor.label}</h4>
-                        <p className="host-sensor-chip" title={sensor.chip}>
-                          {sensor.chip}
-                        </p>
+                        <h4>{sensor.label}</h4>
+                        <p className="host-sensor-chip">{sensor.chip}</p>
                         <strong className="host-sensor-reading" data-status={sensor.status} data-warning={critical || sensor.status === 'fault'}>
                           {sensor.celsius === null ? sensorState[sensor.status] || 'Unavailable' : temperature(sensor.celsius)}
                         </strong>
@@ -141,10 +139,8 @@ export const HostSensorsView = memo(function HostSensorsView() {
                 <div className="host-sensor-list">
                   {ready.fans.map((sensor) => (
                     <article className="host-sensor-card" key={sensor.id} data-sensor-id={sensor.id}>
-                      <h4 title={sensor.label}>{sensor.label}</h4>
-                      <p className="host-sensor-chip" title={sensor.chip}>
-                        {sensor.chip}
-                      </p>
+                      <h4>{sensor.label}</h4>
+                      <p className="host-sensor-chip">{sensor.chip}</p>
                       <strong className="host-sensor-reading" data-status={sensor.status} data-warning={sensor.status === 'fault'}>
                         {sensor.rpm === null ? sensorState[sensor.status] || 'Unavailable' : `${sensor.rpm.toLocaleString()} RPM`}
                       </strong>
@@ -159,12 +155,8 @@ export const HostSensorsView = memo(function HostSensorsView() {
                 <div className="host-sensor-list">
                   {ready.gpus.map((gpu) => (
                     <article className="host-sensor-card" key={gpu.id} data-sensor-id={gpu.id}>
-                      <h4 title={gpu.label}>{gpu.label}</h4>
-                      <p
-                        className="host-sensor-chip"
-                        data-fallback={!gpu.vendor && !gpu.driver}
-                        title={[gpu.vendor, gpu.driver].filter(Boolean).join(' · ') || 'Driver not reported'}
-                      >
+                      <h4>{gpu.label}</h4>
+                      <p className="host-sensor-chip" data-fallback={!gpu.vendor && !gpu.driver}>
                         {[gpu.vendor, gpu.driver].filter(Boolean).join(' · ') || 'Driver not reported'}
                       </p>
                       <dl className="host-gpu-facts">

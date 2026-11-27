@@ -248,12 +248,10 @@ export function RackDeck({
                   <Machine>
                     <span className="cluster-module-heading">
                       {item.server ? <IconServer size={20} aria-hidden="true" /> : <IconLayersLinked size={20} aria-hidden="true" />}
-                      <span title={item.name}>{item.name}</span>
+                      <span>{item.name}</span>
                       {selected ? <IconCheck size={17} aria-hidden="true" /> : null}
                     </span>
-                    <span className="cluster-module-address" title={address}>
-                      {item.server ? address : `${servers.length} paired servers`}
-                    </span>
+                    <span className="cluster-module-address">{item.server ? address : `${servers.length} paired servers`}</span>
                     <span className="cluster-module-meters">
                       {item.server ? (
                         <>

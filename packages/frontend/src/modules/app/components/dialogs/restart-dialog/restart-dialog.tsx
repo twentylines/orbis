@@ -34,6 +34,7 @@ export const RestartDialog: React.FC<IProps> = ({ info, isOpen, onClose }) => {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
+        data-action-tint="warning"
         size="sm"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
