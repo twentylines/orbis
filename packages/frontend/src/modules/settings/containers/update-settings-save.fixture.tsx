@@ -299,9 +299,18 @@ try {
         core = { ...core, revision: 2, settings: { ...core.settings, apps: { enabled: true } } };
         intercept = undefined;
         await flush(() => release(Response.json(core)));
+        // A recorded PUT does not mean the mutation has acknowledged it or React has rendered the result.
+        const settleBy = performance.now() + 2000;
+        while (performance.now() < settleBy && (puts().length < 2 || ![...switches.values()].every((control) => control.saved && !control.pending))) {
+          await flush(() => undefined);
+        }
         expect(puts()).toHaveLength(2);
         expect(required(puts()[1]).body).toMatchObject({ apps: { enabled: false }, expectedRevision: 2 });
-        expect(required(switches.get('settings')).pending).toBe(false);
+        expect([...switches.values()].map(({ checked, pending, saved }) => ({ checked, pending, saved }))).toEqual([
+          { checked: false, pending: false, saved: true },
+          { checked: false, pending: false, saved: true },
+        ]);
+        expect(client.getQueryData<AutomaticUpdateStatus>(coreKey)?.revision).toBe(3);
         expect(core.settings.apps?.enabled).toBe(false);
       } else {
         await switchSession();
