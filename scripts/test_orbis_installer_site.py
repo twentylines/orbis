@@ -1,12 +1,13 @@
 import copy
-import fnmatch
 from contextlib import redirect_stdout
 import importlib.util
 import io
 import json
+import os
 import subprocess
 from pathlib import Path
 import tempfile
+import textwrap
 import unittest
 from urllib.error import HTTPError
 from unittest import mock
@@ -24,22 +25,62 @@ class InstallerEndpointTests(unittest.TestCase):
         for body in [b"REQUIRED = {'one'}\nREQUIRED |= callback()", b"REQUIRED = {'one'}\nREQUIRED += {'two'}"]:
             with self.assertRaises(ValueError): SITE.required_sources({'scripts/orbis-installer-bundle.py': body})
 
-    def test_packaged_helper_changes_trigger_independent_installer_publication(self):
-        repository = Path(__file__).resolve().parent.parent
-        workflow = (repository / '.github/workflows/installer-site.yml').read_text()
-        paths = [line.strip()[3:-1] for line in workflow.splitlines() if line.startswith("      - '")]
-        commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repository).decode().strip()
-        files = SITE.BUILD.committed_files(repository, commit)
-        self.assertTrue(files)
-        for name in files:
-            with self.subTest(source=name):
-                self.assertTrue(any(fnmatch.fnmatchcase(name, pattern) for pattern in paths), name)
+    def test_installer_publication_requires_a_public_release_receipt(self):
+        workflow = (Path(__file__).resolve().parent.parent / '.github/workflows/installer-site.yml').read_text()
+        triggers = workflow.split('\npermissions:', 1)[0]
+        self.assertNotIn('  push:', triggers)
+        self.assertIn("workflows: ['Orbis release']", triggers)
+        self.assertIn('public_release_run:', triggers)
+        start = workflow.index('          [[ "$UPSTREAM_RUN"')
+        end = workflow.index('\n  verify:', start)
+        admission = textwrap.dedent(workflow[start:end])
+        # Run the production filter against synthetic API responses. This
+        # invokes jq with the workflow's actual expressions and never calls GitHub.
+        gh = '''
+gh() {
+  [[ "$#" == 4 && "$1" == api && "$3" == --jq ]]
+  case "$2" in
+    "repos/$GITHUB_REPOSITORY/actions/runs/123") jq -r "$4" <<< "$FIXTURE_RUN" ;;
+    "repos/$GITHUB_REPOSITORY/actions/runs/123/jobs") jq -r "$4" <<< "$FIXTURE_JOBS" ;;
+    *) return 2 ;;
+  esac
+}
+'''
+        repo = 'twentylines/orbis'
+        public = {'path': '.github/workflows/release.yml', 'conclusion': 'success', 'head_repository': {'full_name': repo}}
+        step = {'name': 'Verify the GitHub release is public', 'conclusion': 'success'}
+        publish = {'name': 'publish', 'conclusion': 'success', 'steps': [step]}
+        cases = [
+            ('published', '123', public, [publish], 'true'),
+            ('draft', '123', public, [{**publish, 'steps': [{**step, 'conclusion': 'skipped'}]}], 'false'),
+            ('missing-public-check', '123', public, [{**publish, 'steps': []}], 'false'),
+            ('duplicate-publish', '123', public, [publish, publish], 'false'),
+            ('failed-publish', '123', public, [{**publish, 'conclusion': 'failure'}], 'false'),
+            ('failed-release', '123', {**public, 'conclusion': 'failure'}, [publish], None),
+            ('wrong-workflow', '123', {**public, 'path': '.github/workflows/ci.yml'}, [publish], None),
+            ('wrong-repository', '123', {**public, 'head_repository': {'full_name': 'example/orbis'}}, [publish], None),
+            ('invalid-run', 'other', public, [publish], None),
+        ]
+        for name, run_id, run, jobs, expected in cases:
+            with self.subTest(name=name):
+                output = Path(self.temp.name) / name
+                result = subprocess.run(['/bin/bash', '--noprofile', '--norc', '-euo', 'pipefail', '-c', gh + admission],
+                    env={**os.environ, 'GITHUB_OUTPUT': str(output), 'GITHUB_REPOSITORY': repo, 'UPSTREAM_RUN': run_id,
+                         'FIXTURE_RUN': json.dumps(run), 'FIXTURE_JOBS': json.dumps({'jobs': jobs})},
+                    capture_output=True, check=False, text=True)
+                if expected is None:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertFalse(output.exists())
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(output.read_text(), f'publish={expected}\n')
 
     def test_installer_publication_waits_for_full_checks_of_the_same_source(self):
         workflow = (Path(__file__).resolve().parent.parent / '.github/workflows/installer-site.yml').read_text()
         self.assertIn('uses: ./.github/workflows/ci.yml', workflow)
         self.assertIn('uses: ./.github/workflows/integration-tests.yml', workflow)
-        self.assertIn('needs: [verify, integration]', workflow)
+        self.assertIn('needs: [release-admission, verify, integration]', workflow)
+        self.assertEqual(workflow.count("if: needs.release-admission.outputs.publish == 'true'"), 3)
         self.assertIn('ref: ${{ github.sha }}', workflow)
         self.assertNotIn('ref: main', workflow)
         self.assertLess(workflow.index('git/ref/heads/main'), workflow.index('scripts/publish-installer-site.py "$INSTALLER_WORK/'))

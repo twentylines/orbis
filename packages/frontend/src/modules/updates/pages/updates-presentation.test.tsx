@@ -11,7 +11,8 @@ import { installedOrbisBuildOptions, orbisPublishedReleasesOptions, orbisRelease
 import { orbisReleaseChannelsOptions } from '@/desktop/release-channels';
 import { sentinelStatusOptions } from '../sentinel-status';
 import { OrbisDowngrade } from './orbis-downgrade';
-import Updates, { checkUpdateSources, orbisUpdateEligibilityOptions } from './updates';
+import { orbisUpdateEligibilityOptions } from '@/desktop/core-update-api';
+import Updates, { checkUpdateSources } from './updates';
 
 function renderDowngrade({ enabled = true, failed = false, active = true } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, staleTime: Number.POSITIVE_INFINITY } } });

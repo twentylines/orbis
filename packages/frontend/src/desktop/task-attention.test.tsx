@@ -8,6 +8,8 @@ import { AppContextProvider } from '@/context/app-context';
 import { UserContextProvider } from '@/context/user-context';
 import { appContextQueryKey, userContextQueryKey } from '@/api-client/@tanstack/react-query.gen';
 import { DesktopTaskLink } from './desktop-task-link';
+import { orbisUpdateEligibilityOptions } from './core-update-api';
+import { HostUpdateProvider } from './host-update-watch';
 import {
   clearRecoveredHistoryAcknowledgement,
   criticalUpdateAttentionKey,
@@ -139,12 +141,29 @@ test('only marks an available newer critical release, including inherited critic
   expect(criticalUpdateAttentionKey({ ...release, imageManifestUrl: null }, 'v1.1.0')).toBeNull();
 });
 
-test('shows a red number for a critical update even when no app operation is running', () => {
+test.each([undefined, false, true])('shows the critical update badge only when compatible (%s)', (compatible) => {
   const client = createAppQueryClient();
   client.setQueryData(appContextQueryKey(), { user: { id: 7, operator: true } });
   client.setQueryData(userContextQueryKey(), { isLoggedIn: true });
   client.setQueryData(['orbis-release-channels'], { current: 'stable' });
-  client.setQueryData(['orbis-installed-build'], { version: 'v1.1.0' });
+  client.setQueryData(['orbis-installed-build'], { version: 'v1.1.0', runtipiCompatibility: '4.10.1' });
+  client.setQueryData(['orbis-host-update-status'], {
+    available: true,
+    enrolled: true,
+    currentTag: 'v1.1.0',
+    coreState: 'running',
+    coreHealth: 'healthy',
+    imageMatches: true,
+  });
+  if (compatible !== undefined)
+    client.setQueryData(orbisUpdateEligibilityOptions('v1.1.3', 7, 'v1.1.0', '4.10.1', false).queryKey, {
+      tag: 'v1.1.3',
+      currentRuntipiVersion: '4.10.1',
+      targetRuntipiVersion: compatible ? '4.10.1' : '4.12.0',
+      crossesRuntipiBoundary: !compatible,
+      hostUpdateSupported: compatible,
+      warning: null,
+    });
   client.setQueryData(
     ['orbis-github-releases', 'stable'],
     [{ tag: 'v1.1.3', priority: 'critical', imageManifestUrl: 'https://example.test/release.json' }],
@@ -154,15 +173,17 @@ test('shows a red number for a critical update even when no app operation is run
       <MemoryRouter>
         <UserContextProvider>
           <AppContextProvider>
-            <DesktopTaskLink />
+            <HostUpdateProvider>
+              <DesktopTaskLink />
+            </HostUpdateProvider>
           </AppContextProvider>
         </UserContextProvider>
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  expect(markup.match(/desktop-task-badge/g)?.length).toBe(1);
-  expect(markup).toContain('data-alert="true"');
-  expect(markup).toContain('0 active operations, 1 new alert');
+  expect(markup.match(/desktop-task-badge/g)?.length ?? 0).toBe(compatible ? 1 : 0);
+  expect(markup.includes('data-alert="true"')).toBe(compatible === true);
+  expect(markup.includes('0 active operations, 1 new alert')).toBe(compatible === true);
   expect(markup).not.toContain('desktop-task-alert');
   client.clear();
 });

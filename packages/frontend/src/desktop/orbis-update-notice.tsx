@@ -1,24 +1,16 @@
-import { useQuery } from '@tanstack/react-query';
 import { IconAlertTriangle, IconDownload, IconRefresh } from '@tabler/icons-react';
 import { Link } from 'react-router';
-import { installedOrbisBuildOptions, newerOrbisRelease, orbisUpdateNoticeOptions } from './orbis-release';
-import { useCoreUpdateBusy } from './host-update-watch';
-import { useWindowVisible } from './window-visibility';
 import { useCluster } from './cluster';
-import { orbisReleaseChannelsOptions } from './release-channels';
 import { formatOrbisVersion } from './orbis-version';
+import { useCoreUpdateBusy } from './host-update-watch';
+import { useOrbisUpdateOffer } from './use-orbis-update-offer';
 
 export function OrbisUpdateNotice() {
-  const visible = useWindowVisible();
-  const busy = useCoreUpdateBusy();
+  const { busy, release } = useOrbisUpdateOffer();
   const cluster = useCluster();
-  const build = useQuery({ ...installedOrbisBuildOptions(), enabled: visible });
-  const channels = useQuery({ ...orbisReleaseChannelsOptions(), enabled: visible });
-  const releases = useQuery(orbisUpdateNoticeOptions(visible && Boolean(channels.data) && !channels.isError, channels.data?.current));
-  const latest = channels.isError || releases.isError ? undefined : releases.data?.[0];
-  if (!busy && (!latest || !newerOrbisRelease(latest, build.data?.version))) return null;
-  const critical = latest?.priority === 'critical';
-  const label = busy ? 'Updating Orbis' : critical ? 'Critical update' : `Update to Orbis ${formatOrbisVersion(latest?.tag ?? '')}`;
+  if (!busy && !release) return null;
+  const critical = release?.priority === 'critical';
+  const label = busy ? 'Updating Orbis' : critical ? 'Critical update' : `Update to Orbis ${formatOrbisVersion(release?.tag ?? '')}`;
   return (
     <Link
       to="/updates"

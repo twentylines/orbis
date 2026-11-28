@@ -15,6 +15,7 @@ export type CoreUpdateJob = {
 };
 export type CoreUpdateStatus = {
   available: boolean;
+  capabilities?: string[];
   enrolled?: boolean;
   currentTag?: string | null;
   coreState?: string;
@@ -42,6 +43,18 @@ export type CoreUpdateEvent =
 const jobId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const releaseTag = /^v\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?$/;
 export const coreJobIsActive = (job?: CoreUpdateJob | null) => ['queued', 'running', 'recovering'].includes(job?.state ?? '');
+export const coreHostCanPlan = (host: CoreUpdateStatus | undefined, installed: string | undefined) =>
+  Boolean(
+    installed &&
+      host?.available &&
+      host.enrolled &&
+      host.imageMatches &&
+      host.coreState === 'running' &&
+      host.coreHealth === 'healthy' &&
+      host.currentTag === installed &&
+      !coreJobIsActive(host.job) &&
+      host.job?.state !== 'interrupted',
+  );
 export const coreWatchIsActive = (watch: CoreUpdateWatch | null) => Boolean(watch && !watch.refreshIssued && watch.phase !== 'failed');
 export const validCoreUpdate = (id: string, targetTag: string) => jobId.test(id) && releaseTag.test(targetTag);
 export const coreUpdateTitle = (phase: CoreUpdateWatch['phase'], operation: CoreUpdateOperation = 'update') =>

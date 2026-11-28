@@ -17,11 +17,10 @@ import {
   taskAttentionSession,
   taskAttentionKey,
 } from './task-attention';
-import { installedOrbisBuildOptions, orbisReleasesOptions } from './orbis-release';
+import { useOrbisUpdateOffer } from './use-orbis-update-offer';
 import { useAppContext } from '@/context/app-context';
 import { useUserContext } from '@/context/user-context';
 import toast from 'react-hot-toast';
-import { orbisReleaseChannelsOptions } from './release-channels';
 import { useTimeMachineActivity } from '@/modules/time-machine/use-time-machine-activity';
 import { DesktopTaskPanel, taskPanelPosition } from './desktop-task-panel';
 import { useTaskCentreRecords } from './task-centre-records';
@@ -101,13 +100,8 @@ export function DesktopTaskLink() {
   const location = useLocation();
   const reducedMotion = Boolean(useReducedMotion());
   // Observe the header's existing update queries without starting another request or polling loop.
-  const channels = useQuery({ ...orbisReleaseChannelsOptions(), enabled: false });
-  const build = useQuery({ ...installedOrbisBuildOptions(), enabled: false });
-  const releases = useQuery({ ...orbisReleasesOptions(channels.data?.current), enabled: false });
-  const criticalKey = criticalUpdateAttentionKey(
-    channels.data && !channels.isError && !releases.isError ? releases.data?.[0] : undefined,
-    build.data?.version,
-  );
+  const { release, installed } = useOrbisUpdateOffer(true);
+  const criticalKey = criticalUpdateAttentionKey(release, installed);
   const keys = useMemo(
     () => [
       ...(tasks.data?.tasks.flatMap((task) => {

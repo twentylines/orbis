@@ -1,7 +1,7 @@
+import { hostRequest, orbisUpdateEligibilityOptions, type ReleaseCompatibility } from '@/desktop/core-update-api';
 import { duringCoreUpdateRequest } from '@/desktop/core-update-request';
 import { packageRestartRequired, packageUpdateLimit, selectedPackageNames, startPackageUpdate } from '../package-updates';
 import { UpdateDownloadProgress } from '@/components/recovery-progress/update-download-progress';
-import type { DownloadProgress } from '@/desktop/download-progress';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
@@ -22,7 +22,7 @@ import {
   IconServerCog,
   IconSettings,
 } from '@tabler/icons-react';
-import { queryOptions, useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
@@ -39,7 +39,14 @@ import {
   serverRestartQueryKey,
   type ServerRestartStatus,
 } from '@/desktop/host-update-watch';
-import { coreUpdatePhaseMessage, coreUpdateTitle, coreWatchIsActive, validCoreUpdate } from '@/desktop/core-update-state';
+import {
+  coreHostCanPlan,
+  type CoreUpdateStatus,
+  coreUpdatePhaseMessage,
+  coreUpdateTitle,
+  coreWatchIsActive,
+  validCoreUpdate,
+} from '@/desktop/core-update-state';
 import { installedOrbisBuildOptions, orbisReleaseErrorMessage, orbisReleasesOptions, newerOrbisRelease } from '@/desktop/orbis-release';
 import { useReviewExpired } from '@/desktop/use-review-expired';
 import { orbisReleaseChannelsOptions, releaseChannelErrorMessage } from '@/desktop/release-channels';
@@ -49,29 +56,6 @@ import { useSentinelUpdateProgress } from '../sentinel-update-progress';
 import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
 import debianLogo from './debian-open-use.svg';
 
-type HostJob = {
-  id: string;
-  state: string;
-  targetTag: string;
-  startedAt: number;
-  finishedAt?: number;
-  message?: string;
-  phase?: string | null;
-  download?: DownloadProgress;
-  backupPolicy?: 'none' | 'automatic';
-};
-type HostStatus = {
-  available: boolean;
-  capabilities?: string[];
-  enrolled?: boolean;
-  currentTag?: string | null;
-  currentDigest?: string | null;
-  coreState?: string;
-  coreHealth?: string;
-  imageMatches?: boolean;
-  reason?: string;
-  job?: HostJob | null;
-};
 type HostPlan = {
   planId: string;
   currentTag: string;
@@ -80,14 +64,6 @@ type HostPlan = {
   snapshotBytes: number;
   appsMustBeStopped: boolean;
   backupPolicy?: 'none' | 'automatic';
-};
-type ReleaseCompatibility = {
-  tag: string;
-  currentRuntipiVersion: string;
-  targetRuntipiVersion: string;
-  crossesRuntipiBoundary: boolean;
-  hostUpdateSupported: boolean;
-  warning: string | null;
 };
 type HostPackage = {
   name: string;
@@ -166,67 +142,6 @@ function packageSize(bytes: number | null): string {
 function packageSources(sources: HostPackage['sources']): string {
   const labels = sources.map((source) => [source.origin, source.archive].filter(Boolean).join(' · ')).filter(Boolean);
   return [...new Set(labels)].join(', ') || 'Repository unavailable';
-}
-
-async function hostRequest<T>(path: string, body?: object, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(`/api/host-updates/${path}`, {
-    method: body ? 'POST' : 'GET',
-    credentials: 'same-origin',
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.any([
-      ...(signal ? [signal] : []),
-      AbortSignal.timeout(
-        path === 'plan' || path.startsWith('downgrade/')
-          ? 110_000
-          : path === 'packages/plan' || path === 'packages/apply' || path === 'packages/refresh'
-            ? 70_000
-            : path === 'packages'
-              ? 40_000
-              : 20_000,
-      ),
-    ]),
-  });
-  const result: unknown = await response.json().catch(() => null);
-  if (response.ok && (!result || typeof result !== 'object'))
-    throw new Error('The host returned an incomplete response. Check its status before retrying.');
-  if (!response.ok) {
-    const message =
-      typeof result === 'object' && result !== null && 'message' in result && typeof result.message === 'string' ? result.message : null;
-    const error = new Error(message || `Host update request failed (${response.status})`);
-    throw Object.assign(error, {
-      canForce: response.status === 400 && typeof result === 'object' && result !== null && 'canForce' in result && result.canForce === true,
-    });
-  }
-  return result as T;
-}
-
-export function orbisUpdateEligibilityOptions(tag: string, userId: number, installed: string, base: string, hostCanChangeBase: boolean) {
-  return queryOptions({
-    queryKey: ['orbis-update-eligibility', userId, installed, base, hostCanChangeBase, tag],
-    queryFn: async ({ signal }) => {
-      const result = await hostRequest<ReleaseCompatibility>(`release-compatibility?tag=${encodeURIComponent(tag)}`, undefined, signal);
-      if (
-        result.tag !== tag ||
-        result.currentRuntipiVersion !== base ||
-        typeof result.targetRuntipiVersion !== 'string' ||
-        typeof result.crossesRuntipiBoundary !== 'boolean' ||
-        typeof result.hostUpdateSupported !== 'boolean' ||
-        (result.warning !== null && typeof result.warning !== 'string') ||
-        result.crossesRuntipiBoundary !== (base !== result.targetRuntipiVersion) ||
-        (result.hostUpdateSupported &&
-          !(
-            (!result.crossesRuntipiBoundary && ['4.10.1', '4.12.0'].includes(base)) ||
-            (base === '4.10.1' && result.targetRuntipiVersion === '4.12.0')
-          ))
-      )
-        throw new Error('The release compatibility check could not be verified. Try again before updating.');
-      return result;
-    },
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-    retry: false,
-  });
 }
 
 export default function Updates() {
@@ -390,7 +305,7 @@ function LocalUpdates() {
   const orbisUpdateAvailable = !build.isError && newerOrbisRelease(latest, build.data?.version);
   const host = useQuery({
     queryKey: ['orbis-host-update-status'],
-    queryFn: ({ signal }) => hostRequest<HostStatus>('status', undefined, signal),
+    queryFn: ({ signal }) => hostRequest<CoreUpdateStatus>('status', undefined, signal),
     enabled: visible && user?.operator === true,
     refetchInterval: (query) => (['running', 'recovering'].includes(query.state.data?.job?.state ?? '') ? 4000 : 30_000),
     retry: 1,
@@ -403,6 +318,7 @@ function LocalUpdates() {
     enabled: visible && user.operator && orbisUpdateAvailable && Boolean(installedBase && host.data?.available),
   });
   const hostUpdateBlocked = eligibility.data?.hostUpdateSupported === false;
+  const releaseEligible = eligibility.data?.hostUpdateSupported === true && !eligibility.isError;
   const packageChangelog = useQuery({
     queryKey: ['orbis-host-package-changelog', selectedPackage],
     queryFn: ({ signal }) =>
@@ -523,19 +439,11 @@ function LocalUpdates() {
   const canPlan = Boolean(
     build.data &&
       orbisUpdateAvailable &&
-      eligibility.data?.hostUpdateSupported === true &&
-      !eligibility.isError &&
+      releaseEligible &&
       user?.operator === true &&
       !host.isError &&
-      host.data?.available &&
-      host.data.enrolled &&
-      host.data.imageMatches &&
-      host.data.coreState === 'running' &&
-      host.data.coreHealth === 'healthy' &&
-      host.data.currentTag === build.data.version &&
-      !jobBusy &&
-      !activeWatch &&
-      job?.state !== 'interrupted',
+      coreHostCanPlan(host.data, build.data.version) &&
+      !activeWatch,
   );
   const matchingPackages = (systemPackages.data?.packages ?? []).filter((item) =>
     `${item.name} ${packageSources(item.sources)}`.toLocaleLowerCase().includes(packageSearch.trim().toLocaleLowerCase()),
@@ -849,7 +757,7 @@ function LocalUpdates() {
                     {build.isError ? <p role="alert">The installed version could not be loaded.</p> : null}
                     {latest ? (
                       <p>
-                        {orbisUpdateAvailable && !hostUpdateBlocked && !eligibility.isError && !eligibility.isLoading ? (
+                        {canPlan ? (
                           <>
                             Update available <strong>{formatOrbisVersion(latest.tag)}</strong>
                           </>
@@ -870,7 +778,7 @@ function LocalUpdates() {
                       <p role="alert">Could not verify update compatibility. Check for updates again.</p>
                     ) : null}
                   </div>
-                  {latest && orbisUpdateAvailable && !hostUpdateBlocked && !eligibility.isError ? (
+                  {latest && orbisUpdateAvailable && releaseEligible ? (
                     <button
                       className="desktop-update-action desktop-system-update-primary"
                       type="button"
@@ -909,7 +817,7 @@ function LocalUpdates() {
                 <OrbisLogo size={176} plain />
               </div>
             </div>
-            {latest?.priority === 'critical' && orbisUpdateAvailable ? (
+            {latest?.priority === 'critical' && canPlan ? (
               <div className="desktop-critical-update" role="note" aria-label="Critical update">
                 <IconAlertTriangle size={22} aria-hidden="true" />
                 <div>
