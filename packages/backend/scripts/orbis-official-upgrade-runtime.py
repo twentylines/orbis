@@ -740,7 +740,7 @@ def build(cookie, pin):
             == (tag, commit, digest, base), 'loopback-build-mismatch')
 
 
-def fixture_app_failure(status):
+def fixture_app_failure(status, *, started_at=None):
     evidence = {}
     if status in ('failed', 'interrupted', 'unconfirmed', 'cancelled'):
         evidence['fixtureAppTaskStatus'] = status
@@ -752,9 +752,14 @@ def fixture_app_failure(status):
             'image': ('manifest unknown', 'pull access denied', 'no such image', 'failed to resolve reference'),
             'compose': ('compose json validation errors', 'invalid compose project', 'services.web'),
             'storage': ('no space left on device', 'read-only file system'),
+            'fresh-install-custody': ('fresh install baseline', 'fresh app storage', 'fresh app installation',
+                                      'fresh storage', 'fresh install request', 'fresh storage boundary'),
+            'app-update-custody': ('app update transaction', 'staged app update', 'app update storage'),
         }
         try:
-            logs = subprocess.run(DOCKER + ['logs', '--tail', '220', 'runtipi'], env=ENV,
+            selection = ['--since', started_at] if isinstance(started_at, str) and re.fullmatch(
+                r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z', started_at) else []
+            logs = subprocess.run(DOCKER + ['logs', '--tail', '220', *selection, 'runtipi'], env=ENV,
                                   stdin=subprocess.DEVNULL, capture_output=True, timeout=10)
             if logs.returncode == 0:
                 body = (logs.stdout + logs.stderr).decode(errors='replace').lower()

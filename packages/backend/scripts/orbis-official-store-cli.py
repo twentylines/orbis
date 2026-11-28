@@ -16,6 +16,9 @@ GIT_SERVER = 'orbis-qa-git'
 STORE_URL = f'http://{GIT_SERVER}:9418/{STORE}.git'
 APP_ROUTE = '/api/apps/' + quote(URN, safe='')
 BACKUPS_ROUTE = '/api/backups/' + quote(URN, safe='')
+TASK_PHASES = {'preparing', 'pulling_images', 'stopping', 'backing_up', 'copying', 'archiving', 'saving',
+               'migrating', 'publishing', 'starting', 'verifying', 'committing', 'recovering'}
+TASK_STATUSES = {'queued', 'running', 'cancelling', 'cancelled', 'succeeded', 'failed', 'interrupted', 'unconfirmed'}
 
 
 def write_package(worktree, version, image, token):
@@ -67,6 +70,14 @@ def publish_revision(run, worktree, bare, revision):
     run(['/usr/bin/git', '-C', str(worktree), '-c', 'core.hooksPath=/dev/null', 'push', str(bare), f'{revision}:refs/heads/main'])
 
 
+def task_evidence(runtime, row, action):
+    status, phase = row.get('status'), row.get('phase')
+    details = runtime.fixture_app_failure(status, started_at=row.get('startedAt') or row.get('createdAt')).evidence
+    return {'cliAppAction': action,
+            'cliAppTaskStatus': status if isinstance(status, str) and status in TASK_STATUSES else 'unrecognized',
+            'cliAppTaskPhase': phase if isinstance(phase, str) and phase in TASK_PHASES else None, **details}
+
+
 def one_task(runtime, cookie, request, action):
     runtime.require(type(request) is str and re.fullmatch(r'[0-9a-f-]{36}', request)
                     and str(uuid.UUID(request, version=4)) == request, 'cli-update-task-identity-refused')
@@ -79,9 +90,10 @@ def one_task(runtime, cookie, request, action):
                             'cli-update-task-binding-refused')
             if rows[0]['status'] == 'succeeded':
                 return
-            runtime.require(rows[0]['status'] in ('queued', 'running'), 'cli-update-task-did-not-succeed')
+            if rows[0]['status'] not in ('queued', 'running', 'unconfirmed'):
+                raise runtime.Refused('cli-update-task-did-not-succeed', **task_evidence(runtime, rows[0], action))
         time.sleep(0.5)
-    raise runtime.Refused('cli-update-task-not-observed')
+    raise runtime.Refused('cli-update-task-not-observed', cliAppAction=action)
 
 
 def deployment(runtime, cookie, version, latest, image, token):
@@ -102,8 +114,20 @@ def deployment(runtime, cookie, version, latest, image, token):
 def cli_update_job(runtime, cookie):
     before, _ = runtime.http('GET', '/api/tasks', cookie=cookie)
     old_ids = {item['id'] for item in before['tasks']}
-    output = runtime.run(runtime.DOCKER + ['exec', 'runtipi', 'orbis-cli', 'app', 'update', URN],
-                         timeout=240, code='installed-cli-app-update-refused')
+    try:
+        output = runtime.run(runtime.DOCKER + ['exec', 'runtipi', 'orbis-cli', 'app', 'update', URN],
+                             timeout=240, code='installed-cli-app-update-refused')
+    except runtime.Refused as error:
+        details = {'cliAppAction': 'update'}
+        try:
+            tasks, _ = runtime.http('GET', '/api/tasks', cookie=cookie)
+            rows = [item for item in tasks['tasks'] if item['id'] not in old_ids
+                    and item['appUrn'] == URN and item['action'] == 'update']
+            if len(rows) == 1:
+                details = task_evidence(runtime, rows[0], 'update')
+        except (runtime.Refused, KeyError, TypeError):
+            pass
+        raise runtime.Refused(str(error), **details) from None
     jobs = re.findall(r'^App update accepted for ' + re.escape(URN) + r' \(([a-f0-9-]{36})\)\.$', output, re.M)
     runtime.require(len(jobs) == 1 and jobs[0] not in old_ids
                     and output.splitlines()[-1] == f'App update completed for {URN}.', 'cli-update-terminal-output-refused')

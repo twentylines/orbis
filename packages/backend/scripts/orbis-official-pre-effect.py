@@ -12,6 +12,7 @@ import uuid
 
 PREPARATION = 'source-preparation.json'
 SELECTION = 'selection/installer-source-selection.json'
+LAUNCHER = 'installer-source-launcher.py'
 EXECUTION = 'selection/installer-source-execution.json'
 CHECKED = 'source-checked.json'
 TARGET = 'target-set.json'
@@ -88,7 +89,7 @@ def read_witness(runtime, launcher, service, source, target, case, *, stopped=Fa
         runtime.require(
             execution['schema'] == 'orbis.installer-source-execution.v1'
             and execution['selectionSha256'] == preparation['selectionSha256']
-            and execution['launcherSha256'] == selection['proofs']['install-orbis.py']['sha256']
+            and execution['launcherSha256'] == selection['proofs'][LAUNCHER]['sha256']
             and execution['channel'] == bootstrap.channel
             and launcher.decoded(data[CHECKED]) == {**preparation, 'executionSha256': execution_sha}
             and target_set['schema'] == 'orbis.component-upgrade-target.v1'
@@ -136,8 +137,9 @@ def interrupt(runtime, source, target, case, result):
                         os.close(pid)
                 except missed:
                     continue
-        except (OSError, ValueError, KeyError, TypeError, RuntimeError):
+        except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
             result['preEffectObserverRefused'] = True
+            result['preEffectObserverRefusalKind'] = type(error).__name__
 
     observer = Thread(target=observe, name=f'disposable-{case}-interruption')
     observer.start()
