@@ -90,13 +90,14 @@ try {
   if (hash(body) !== guard.journalSha256 || !bytes.equals(readPrivate(guardFile, 64 * 1024)) ||
       !['version', 'id', 'appUrn', 'requestId', 'phase', 'revision'].every(key => guard[key] === journal[key])) throw new Error();
   const fresh = journal.freshInstall;
-  if (!fresh || !freshPhases.has(fresh.phase) || typeof fresh.createAttempted !== 'boolean' ||
-      !Array.isArray(fresh.containers) || fresh.containers.length > 256) throw new Error();
+  if (fresh && (!freshPhases.has(fresh.phase) || typeof fresh.createAttempted !== 'boolean' ||
+      !Array.isArray(fresh.containers) || fresh.containers.length > 256)) throw new Error();
   const imageId = journal.pulledImages?.imageIds?.web;
   const binding = /^sha256:[a-f0-9]{64}$/.test(imageId) ? {stageId: guard.id, imageId} : null;
-  process.stdout.write(JSON.stringify({readback: 'bound', stage: guard.phase, freshPhase: fresh.phase,
-    createAttempted: fresh.createAttempted, recordedContainers: fresh.containers.length,
-    pinnedImages: Boolean(fresh.imagePinsSha256), binding, ...publicationReadback(journal, staging)}));
+  const freshDetails = fresh ? {freshPhase: fresh.phase, createAttempted: fresh.createAttempted,
+    recordedContainers: fresh.containers.length, pinnedImages: Boolean(fresh.imagePinsSha256)} : {};
+  process.stdout.write(JSON.stringify({readback: 'bound', stage: guard.phase,
+    ...freshDetails, binding, ...publicationReadback(journal, staging)}));
 } catch (error) {
   process.stdout.write(JSON.stringify({readback: error.code === 'ENOENT' ? 'absent' : 'unverified'}));
 }
@@ -160,7 +161,7 @@ def task_evidence(runtime, row, action):
             'cliAppTaskPhase': phase if isinstance(phase, str) and phase in TASK_PHASES else None, **details}
 
 
-def install_readback(runtime, request):
+def app_stage_readback(runtime, request):
     try:
         output = runtime.run(runtime.DOCKER + ['exec', 'runtipi', 'node', '-e', STAGE_READBACK, request,
             '/data/state/time-machine/image-pins', URN], timeout=10)
@@ -173,7 +174,24 @@ def install_readback(runtime, request):
                              '--format', '{{.State}}'], timeout=10).splitlines()
         if len(states) <= 256 and all(row in ('created', 'running', 'exited', 'dead', 'paused', 'restarting', 'removing') for row in states):
             evidence['observedContainerStates'] = {state: states.count(state) for state in sorted(set(states))}
-        if binding is not None and states == ['created']:
+        if binding is not None and 0 < len(states) <= 8 and 'freshPhase' not in evidence:
+            ids = runtime.run(runtime.DOCKER + ['ps', '-aq', '--no-trunc',
+                '--filter', f'label=runtipi.appurn={URN}'], timeout=10).splitlines()
+            if len(ids) == len(states) and all(re.fullmatch(r'[a-f0-9]{64}', item) for item in ids):
+                fields = ('{"image":{{json .Image}},"state":{{json .State.Status}},'
+                          '"exit":{{json .State.ExitCode}},'
+                          '"stage":{{json (index .Config.Labels "io.orbis.app-update.stage")}},'
+                          '"engineError":{{if .State.Error}}true{{else}}false{{end}}}')
+                observed = runtime.run(runtime.DOCKER + ['inspect', '--format', fields, *ids], timeout=10)
+                containers = [json.loads(line) for line in observed.splitlines()]
+                evidence['updateContainerChecks'] = [{
+                    'targetImage': item['image'] == binding['imageId'],
+                    'targetStage': item['stage'] == binding['stageId'],
+                    'state': item['state'] if item['state'] in states else 'unverified',
+                    'exitCode': item['exit'] if type(item['exit']) is int and 0 <= item['exit'] <= 255 else None,
+                    'engineError': item['engineError'] is True,
+                } for item in containers]
+        if binding is not None and 'freshPhase' in evidence and states == ['created']:
             containers = runtime.run(runtime.DOCKER + ['ps', '-aq', '--no-trunc',
                 '--filter', f'label=runtipi.appurn={URN}'], timeout=10)
             if re.fullmatch(r'[a-f0-9]{64}', containers):
@@ -255,6 +273,9 @@ def cli_update_job(runtime, cookie):
                     and item['appUrn'] == URN and item['action'] == 'update']
             if len(rows) == 1:
                 details = task_evidence(runtime, rows[0], 'update')
+                request = rows[0].get('id')
+                if isinstance(request, str) and re.fullmatch(r'[a-f0-9-]{36}', request):
+                    details['cliUpdateStage'] = app_stage_readback(runtime, request)
         except (runtime.Refused, KeyError, TypeError):
             pass
         raise runtime.Refused(str(error), **details) from None
@@ -276,7 +297,7 @@ def seed_and_update(runtime, cookie, worktree, bare, revisions, source_image, ta
         one_task(runtime, cookie, installed['requestId'], 'install')
     except runtime.Refused as error:
         if error.evidence.get('cliAppAction') == 'install':
-            error.evidence['cliInstallStage'] = install_readback(runtime, installed['requestId'])
+            error.evidence['cliInstallStage'] = app_stage_readback(runtime, installed['requestId'])
         raise
     original = deployment(runtime, cookie, 1, 1, source_image, token)
     publish_revision(runtime.run, worktree, bare, revisions[1])

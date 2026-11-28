@@ -736,14 +736,40 @@ def sample_progress(target):
         return None, None, 'unverified-progress-response'
 
 
+def progress_route_readback(operation):
+    reader = load('orbis-host-service')
+    try:
+        job = reader.read_private(STATE / 'job.json')
+        state = job.get('state') if isinstance(job, dict) and job.get('id') == operation else None
+    except (OSError, ValueError, TypeError):
+        state = None
+    result = {'acceptedJobState': state if state in (
+        'queued', 'running', 'interrupted', 'recovering', 'complete', 'failed', 'rolled-back') else 'unverified'}
+    names = {'core': 'runtipi', 'proxy': 'runtipi-reverse-proxy',
+             'responder': 'orbis-retained-' + operation + '-responder'}
+    for kind, name in names.items():
+        try:
+            observed = run(DOCKER + ['inspect', '--format', '{{.State.Status}}', name], timeout=2)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            observed = None
+        result[kind] = observed if observed in ('created', 'running', 'restarting', 'exited', 'dead', 'paused') else 'unverified'
+    return result
+
+
 @contextmanager
 def observe_progress(target, result):
     stop = Event()
     samples = []
+    route_gap = []
     def collect():
+        last_operation = None
         while not stop.is_set() and len(samples) < 6000:
             host_pid, work, missing_reason = sample_progress(target)
             samples.append((time.monotonic(), host_pid, work, missing_reason))
+            if work is not None:
+                last_operation = work[0]
+            elif missing_reason == 'http-502' and last_operation and not route_gap:
+                route_gap.append(progress_route_readback(last_operation))
             stop.wait(0.25)
     observer = Thread(target=collect, name='native-progress-readback')
     observer.start()
@@ -770,6 +796,8 @@ def observe_progress(target, result):
             'missingSampleReasonsBetweenBoundReads': missing,
             'longestBetweenBoundReadsMs': round(1000 * max(gaps)) if gaps else None,
         }
+        if route_gap:
+            result['targetProgress']['firstBadGatewayReadback'] = route_gap[0]
 
 
 def session(operation, credential):
@@ -796,7 +824,7 @@ def fixture_app_failure(status, *, started_at=None):
     evidence = {}
     if status in ('failed', 'interrupted', 'unconfirmed', 'cancelled'):
         evidence['fixtureAppTaskStatus'] = status
-    if status == 'failed':
+    if status in ('failed', 'interrupted'):
         signals = {
             'permission': ('permission denied', 'operation not permitted', 'eacces'),
             'mount': ('mount source path', 'invalid mount config', 'mounts denied'),
@@ -807,6 +835,7 @@ def fixture_app_failure(status, *, started_at=None):
             'fresh-install-custody': ('fresh install baseline', 'fresh app storage', 'fresh app installation',
                                       'fresh storage', 'fresh install request', 'fresh storage boundary'),
             'app-update-custody': ('app update transaction', 'staged app update', 'app update storage'),
+            'runtime-activation': ('could not activate the staged app', 'running frozen app update activate'),
         }
         try:
             selection = ['--since', started_at] if isinstance(started_at, str) and re.fullmatch(
