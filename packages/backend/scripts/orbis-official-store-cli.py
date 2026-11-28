@@ -19,6 +19,55 @@ BACKUPS_ROUTE = '/api/backups/' + quote(URN, safe='')
 TASK_PHASES = {'preparing', 'pulling_images', 'stopping', 'backing_up', 'copying', 'archiving', 'saving',
                'migrating', 'publishing', 'starting', 'verifying', 'committing', 'recovering'}
 TASK_STATUSES = {'queued', 'running', 'cancelling', 'cancelled', 'succeeded', 'failed', 'interrupted', 'unconfirmed'}
+STAGE_READBACK = r"""
+const fs = require('node:fs');
+const { createHash } = require('node:crypto');
+const path = require('node:path');
+const [request, directory, appUrn] = process.argv.slice(1);
+const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const phases = new Set(['staged', 'target-ready', 'switching', 'prepared', 'activation-attempted',
+                        'committing', 'rolling-back', 'rolled-back', 'commit-verified']);
+const freshPhases = new Set(['allocating', 'prepared', 'baseline-intent', 'baselined']);
+
+function readPrivate(location, limit) {
+  if (fs.realpathSync(location) !== location) throw new Error();
+  const fd = fs.openSync(location, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+  try {
+    const before = fs.fstatSync(fd, {bigint: true});
+    if (!before.isFile() || before.uid !== BigInt(process.getuid()) || (before.mode & 0o077n) ||
+        before.nlink !== 1n || before.size <= 0n || before.size > BigInt(limit)) throw new Error();
+    const bytes = fs.readFileSync(fd);
+    const after = fs.fstatSync(fd, {bigint: true});
+    const named = fs.lstatSync(location, {bigint: true});
+    const equal = (a, b) => ['dev', 'ino', 'mode', 'uid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'].every(key => a[key] === b[key]);
+    if (BigInt(bytes.length) !== before.size || !equal(before, after) || !equal(before, named)) throw new Error();
+    return bytes;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+try {
+  if (!uuid.test(request) || !path.isAbsolute(directory) || path.normalize(directory) !== directory) throw new Error();
+  const guardFile = path.join(directory, hash(appUrn) + '.update.json');
+  const bytes = readPrivate(guardFile, 64 * 1024);
+  const guard = JSON.parse(bytes);
+  if (guard.version !== 2 || guard.appUrn !== appUrn || guard.requestId !== request ||
+      !uuid.test(guard.id) || !phases.has(guard.phase)) throw new Error();
+  const body = readPrivate(path.join(directory, 'update-' + guard.id, 'journal.json'), 4 * 1024 * 1024);
+  const journal = JSON.parse(body);
+  if (hash(body) !== guard.journalSha256 || !bytes.equals(readPrivate(guardFile, 64 * 1024)) ||
+      !['version', 'id', 'appUrn', 'requestId', 'phase', 'revision'].every(key => guard[key] === journal[key])) throw new Error();
+  const fresh = journal.freshInstall;
+  if (!fresh || !freshPhases.has(fresh.phase) || typeof fresh.createAttempted !== 'boolean' ||
+      !Array.isArray(fresh.containers) || fresh.containers.length > 256) throw new Error();
+  process.stdout.write(JSON.stringify({readback: 'bound', stage: guard.phase, freshPhase: fresh.phase,
+    createAttempted: fresh.createAttempted, recordedContainers: fresh.containers.length,
+    pinnedImages: Boolean(fresh.imagePinsSha256)}));
+} catch (error) {
+  process.stdout.write(JSON.stringify({readback: error.code === 'ENOENT' ? 'absent' : 'unverified'}));
+}
+"""
 
 
 def write_package(worktree, version, image, token):
@@ -76,6 +125,23 @@ def task_evidence(runtime, row, action):
     return {'cliAppAction': action,
             'cliAppTaskStatus': status if isinstance(status, str) and status in TASK_STATUSES else 'unrecognized',
             'cliAppTaskPhase': phase if isinstance(phase, str) and phase in TASK_PHASES else None, **details}
+
+
+def install_readback(runtime, request):
+    try:
+        output = runtime.run(runtime.DOCKER + ['exec', 'runtipi', 'node', '-e', STAGE_READBACK, request,
+            '/data/state/time-machine/image-pins', URN], timeout=10)
+        evidence = json.loads(output)
+    except (OSError, ValueError):
+        evidence = {'readback': 'unavailable'}
+    try:
+        states = runtime.run(runtime.DOCKER + ['ps', '-a', '--filter', f'label=runtipi.appurn={URN}',
+                             '--format', '{{.State}}'], timeout=10).splitlines()
+        if len(states) <= 256 and all(row in ('created', 'running', 'exited', 'dead', 'paused', 'restarting', 'removing') for row in states):
+            evidence['observedContainerStates'] = {state: states.count(state) for state in sorted(set(states))}
+    except (OSError, ValueError):
+        pass
+    return evidence
 
 
 def one_task(runtime, cookie, request, action):
@@ -142,7 +208,12 @@ def seed_and_update(runtime, cookie, worktree, bare, revisions, source_image, ta
     installed, _ = runtime.http('POST', '/api/app-lifecycle/' + quote(URN, safe='') + '/install',
                                 body={'skipPull': True, 'openPort': False, 'exposed': False, 'exposedLocal': False, 'maxBackups': 2},
                                 cookie=cookie, expect=(200, 201, 202))
-    one_task(runtime, cookie, installed['requestId'], 'install')
+    try:
+        one_task(runtime, cookie, installed['requestId'], 'install')
+    except runtime.Refused as error:
+        if error.evidence.get('cliAppAction') == 'install':
+            error.evidence['cliInstallStage'] = install_readback(runtime, installed['requestId'])
+        raise
     original = deployment(runtime, cookie, 1, 1, source_image, token)
     publish_revision(runtime.run, worktree, bare, revisions[1])
     updated, _ = runtime.http('POST', '/api/marketplace/pull', cookie=cookie, expect=(200, 201), timeout=90)
