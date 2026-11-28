@@ -648,7 +648,10 @@ def observe_progress(target, result):
 
 
 def session(operation, credential):
-    body, cookies = http('POST', '/api/auth/' + operation, body=credential, expect=(200, 201))
+    # First registration can wait for a protected Host ownership request.
+    # Allow that request to settle without sending registration a second time.
+    timeout = 195 if operation == 'register' else 8
+    body, cookies = http('POST', '/api/auth/' + operation, body=credential, expect=(200, 201), timeout=timeout)
     selected = [cookie.split(';', 1)[0] for cookie in cookies if re.match(r'^runtipi-sid=[^;\r\n]+;', cookie)
                 and not re.search(r'(?:^|;)\s*Domain=', cookie, re.I)]
     require(body.get('success') is True and len(selected) == 1, 'fixture-authentication-refused')
@@ -913,7 +916,19 @@ def fixture(environment, result):
     require(isinstance(context, dict) and context.get('isConfigured') is False, 'fresh-fixture-account-refused')
     result['phase'] = 'fixture-registration'
     credential = {'username': 'ota-fixture-' + secrets.token_hex(5), 'password': secrets.token_urlsafe(32)}
-    cookie = session('register', credential)
+    started = time.monotonic()
+    try:
+        cookie = session('register', credential)
+    except Refused:
+        try:
+            context, _ = http('GET', '/api/user-context', timeout=5)
+            if type(context) is dict and type(context.get('isConfigured')) is bool:
+                result['registrationObservedAccount'] = context['isConfigured']
+        except (OSError, ValueError, HTTPException):
+            pass
+        raise
+    finally:
+        result['registrationElapsedMs'] = round(1000 * (time.monotonic() - started))
     build(cookie, initial)
     result['phase'] = 'fixture-markers'
     identity = seed(cookie, initial)
@@ -962,6 +977,31 @@ def fixture(environment, result):
                   componentTerminalVerified=True, automaticBackupVerified=True, loopbackVerified=True, passed=True)
 
 
+def timezone_permission_evidence(source):
+    # Report fixed mount and ancestor categories only. Do not expose host paths.
+    roles = {Path('/'): 'root', Path('/etc'): 'etc', Path('/usr'): 'usr',
+             Path('/usr/share'): 'share', Path('/usr/share/zoneinfo'): 'zoneinfo'}
+    failures = []
+    for mount in source['Mounts']:
+        target = mount.get('Destination')
+        if target not in ('/etc/localtime', '/etc/timezone'):
+            continue
+        location = mount.get('Source')
+        if not isinstance(location, str):
+            continue
+        try:
+            resolved = Path(location).resolve(strict=True)
+            for path in (*reversed(resolved.parents), resolved):
+                meta = path.stat()
+                if meta.st_uid != 0 or meta.st_mode & 0o022:
+                    failures.append({'mount': target.rsplit('/', 1)[1],
+                                     'role': roles.get(path, 'file' if path == resolved else 'ancestor'),
+                                     'rootOwner': meta.st_uid == 0, 'mode': stat.S_IMODE(meta.st_mode)})
+        except OSError:
+            continue
+    return failures
+
+
 def bootstrap_refusal_evidence(update, job, snapshot):
     # The exact protected operation is settled before this diagnostic is used.
     # Observe the failed proof from the existing read-only Engine interface.
@@ -996,6 +1036,7 @@ def bootstrap_refusal_evidence(update, job, snapshot):
             result['bootstrapStartupSites'] = [frame.lineno for frame in traceback.extract_tb(error.__traceback__)
                                                 if Path(frame.filename) == origin][-4:]
             result['bootstrapStartupChecked'] = False
+            result['bootstrapTimezonePermissions'] = timezone_permission_evidence(source)
         else:
             result['bootstrapStartupChecked'] = True
     identifier = entry.get('id')
