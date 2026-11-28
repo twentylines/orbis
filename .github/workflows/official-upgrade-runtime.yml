@@ -31,6 +31,15 @@ on:
         default: false
         type: boolean
 
+      ota_delivery:
+        description: Exercise the installed Updates path or reproduce legacy discovery
+        default: installer
+        type: choice
+        options:
+          - installer
+          - in-app
+          - legacy-discovery
+
       pre_effect_recovery:
         description: Deliberate interruption before any installed component changes
         type: choice
@@ -56,6 +65,7 @@ jobs:
       CHECKPOINT_RECOVERY: ${{ inputs.checkpoint_recovery }}
       CORE_COMMIT_RECOVERY: ${{ inputs.core_commit_recovery }}
       INSTALLED_CLI_UPDATE: ${{ inputs.installed_cli_update }}
+      OTA_DELIVERY: ${{ inputs.ota_delivery }}
       PRE_EFFECT_RECOVERY: ${{ inputs.pre_effect_recovery }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -66,5 +76,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          sudo --non-interactive --preserve-env=CI,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_TOKEN,RUNNER_ENVIRONMENT,STABLE_BRIDGE,CHECKPOINT_RECOVERY,CORE_COMMIT_RECOVERY,INSTALLED_CLI_UPDATE,PRE_EFFECT_RECOVERY,TARGET_COMMIT,TARGET_DIGEST \
+          sudo --non-interactive --preserve-env=CI,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_TOKEN,RUNNER_ENVIRONMENT,STABLE_BRIDGE,CHECKPOINT_RECOVERY,CORE_COMMIT_RECOVERY,INSTALLED_CLI_UPDATE,OTA_DELIVERY,PRE_EFFECT_RECOVERY,TARGET_COMMIT,TARGET_DIGEST \
             /usr/bin/python3 -I -B packages/backend/scripts/orbis-official-upgrade-runtime.py

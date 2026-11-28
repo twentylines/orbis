@@ -1253,16 +1253,22 @@ def fixture(environment, result):
                 not bridge and fault == 'false' and not committed_fault and installed_cli == 'false'
                 and (predecessor[0], target[0]) == ('v0.9.2-beta.10', 'v0.9.2-beta.11')
             )), 'pre-effect-test-mode-refused')
-    initial = STABLE if bridge else predecessor
+    ota = environment.get('OTA_DELIVERY', 'installer')
+    require(ota in ('installer', 'in-app', 'legacy-discovery') and (ota == 'installer' or (
+        not bridge and fault == 'false' and not committed_fault and installed_cli == 'false' and pre_effect == 'none'
+        and (predecessor[0], target[0]) == ('v0.9.2-beta.10', 'v0.9.2-beta.11')
+    )), 'ota-delivery-mode-refused')
+    legacy_discovery = ota == 'legacy-discovery'
+    initial = STABLE if bridge or legacy_discovery else predecessor
     result['fixtureDefaultAclRemoved'], result['fixtureTimezoneProtected'] = preflight(environment)
     result['phase'] = 'publisher'
     modules = [load(name) for name in ('orbis-release-check', 'install-orbis', 'orbis-host-upgrade-launcher')]
     source, candidate = [publisher(pin, *modules, environment.get('GITHUB_TOKEN')) for pin in (predecessor, target)]
-    bootstrap = publisher(STABLE, *modules, environment.get('GITHUB_TOKEN')) if bridge else source
+    bootstrap = publisher(STABLE, *modules, environment.get('GITHUB_TOKEN')) if initial == STABLE else source
     result['phase'] = 'loopback-isolation'
     isolate_dashboard()
     result['phase'] = 'guided-source'
-    if bridge:
+    if initial == STABLE:
         fence('stable-install-intent', STABLE)
         launch(bootstrap, 'source', 600, channel='stable')
         result['phase'] = 'stable-install-readback'
@@ -1300,6 +1306,19 @@ def fixture(environment, result):
     finally:
         result['registrationElapsedMs'] = round(1000 * (time.monotonic() - started))
     build(cookie, initial)
+    if legacy_discovery:
+        result['phase'] = 'legacy-ota-discovery'
+        helper = load('orbis-official-in-app-ota', Path(__file__).parent)
+        runtime = sys.modules[__name__]
+        helper.select_nightly(runtime, cookie)
+        helper.review(runtime, cookie, initial, target, supported=False)
+        host = check_host(initial)
+        require(host.get('job') is None and 'runtipi-412-update.v1' not in host['capabilities'],
+                'legacy-updater-capability-not-reproduced')
+        http('POST', '/api/auth/logout', cookie=cookie, expect=(204,))
+        result.update(passed=True, legacyOtaBlocked=True, source=initial[0], target=target[0],
+                      targetCommit=target[1], targetDigest=target[2], updateSubmitted=False)
+        return
     result['phase'] = 'fixture-markers'
     identity = seed(cookie, initial)
     original = app_data(identity)
@@ -1363,6 +1382,7 @@ def fixture(environment, result):
         result['targetProgress']['boundToTerminalOperation'] = (
             result['targetProgress']['operations'] == [result['checkpointInterruption']['operation']])
         return
+    ota_operation = None
     with observe_progress(target[0], result):
         if committed_fault:
             try:
@@ -1375,6 +1395,16 @@ def fixture(environment, result):
                 verify_committed_return(predecessor, target, result)
             else:
                 raise Refused('commit-interruption-expected-target-refusal-not-observed')
+        elif ota == 'in-app':
+            result['phase'] = 'in-app-update-discovery'
+            helper = load('orbis-official-in-app-ota', Path(__file__).parent)
+            runtime = sys.modules[__name__]
+            cookie = session('login', credential)
+            helper.select_nightly(runtime, cookie)
+            helper.review(runtime, cookie, predecessor, target)
+            result['phase'] = 'in-app-update-apply'
+            ota_operation = helper.accept(runtime, cookie, predecessor, target)
+            helper.terminal(runtime, ota_operation, predecessor, target)
         else:
             launch(candidate, 'target', 1500)
     result['phase'] = 'terminal-readback'
@@ -1385,6 +1415,12 @@ def fixture(environment, result):
     if committed_fault:
         require(target_host['job']['id'] == result['coreCommitInterruption']['operation'], 'commit-operation-changed')
     result['targetProgress']['boundToTerminalOperation'] = result['targetProgress']['operations'] == [target_host['job']['id']]
+    if ota_operation is not None:
+        progress = result['targetProgress']
+        require(target_host['job']['id'] == ota_operation and progress['boundToTerminalOperation']
+                and progress['boundSamples'] > 0 and progress['missingSamplesBetweenBoundReads'] == 0,
+                'in-app-update-progress-not-verified')
+        result['updatesApiVerified'] = True
     if committed_fault:
         require(result['targetProgress']['boundToTerminalOperation'], 'commit-progress-operation-refused')
     cookie = session('login', credential)
