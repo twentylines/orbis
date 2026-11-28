@@ -80,16 +80,22 @@ def preflight(environment):
             and environment.get('GITHUB_ACTIONS') == 'true' and environment.get('RUNNER_ENVIRONMENT') == 'github-hosted'
             and environment.get('GITHUB_REPOSITORY') == REPO and environment.get('GITHUB_REF') == 'refs/heads/main'
             and Path('/run/systemd/system').is_dir(), 'hosted-root-scope-required')
+    os_release = platform.freedesktop_os_release()
+    require((os_release.get('ID'), os_release.get('VERSION_ID'), os_release.get('VERSION_CODENAME'))
+            == ('ubuntu', '24.04', 'noble'), 'hosted-ubuntu-24-04-required')
     require(all(not os.path.lexists(path) for path in (WORK, HOST, Path('/var/lib/orbis'), Path('/opt/orbis-sentinel'),
                 Path('/var/lib/orbis-sentinel'), Path('/run/orbis'), Path('/etc/systemd/system/orbis-host.service'))),
             'existing-installation-refused')
-    require(shutil.which('rsync', path=ENV['PATH']) is not None, 'rsync-required')
-    endpoint = run(DOCKER + ['context', 'inspect', 'default', '--format', '{{.Endpoints.docker.Host}}'])
-    require(endpoint in ('unix:///var/run/docker.sock', 'unix:///run/docker.sock'), 'local-docker-required')
-    version = run(DOCKER + ['version', '--format', '{{.Server.APIVersion}}'])
-    require(re.fullmatch(r'1\.\d{2,3}', version) and int(version.split('.')[1]) >= 44, 'docker-api-required')
-    version = load('orbis-install-prerequisites').compose_version(run(DOCKER + ['compose', 'version', '--short']))
-    require(version is not None and version >= (2, 20, 0), 'compose-version-required')
+    require(all(path.resolve(strict=True) == path and path.stat().st_uid == 0 and not path.stat().st_mode & 0o022
+                for path in WORK.parents), 'installer-parent-refused')
+    prerequisites = load('orbis-install-prerequisites')
+    try:
+        ready = prerequisites.inspect('default')['kind'] == 'ready'
+        missing = prerequisites.required_tools()
+    except prerequisites.PrerequisiteError:
+        raise Refused('docker-prerequisite-check-refused') from None
+    require(ready, 'docker-prerequisites-not-ready')
+    require(not missing, 'backup-prerequisites-not-ready')
     require(not run(DOCKER + ['ps', '-aq', '--filter', 'label=com.docker.compose.project=runtipi']),
             'runtipi-containers-exist')
     require(not run(DOCKER + ['network', 'ls', '-q', '--filter', 'label=com.docker.compose.project=runtipi']),
@@ -159,17 +165,42 @@ def publisher(pin, reader, boot, launcher, token):
     return path
 
 
+def installer_failure(path):
+    """Classify bounded launcher evidence. Raw logs stay on the runner."""
+    with path.open('rb') as log:
+        log.seek(max(0, path.stat().st_size - 128 * 1024))
+        tail = log.read(128 * 1024).splitlines()
+    known = {
+        b'Automatic Docker setup supports ': 'guided-docker-platform-refused',
+        b'Automatic Docker setup requires ': 'guided-docker-endpoint-refused',
+        b'Installer working directory ': 'guided-installer-storage-refused',
+        b'The installation parent must be root-owned ': 'guided-installation-parent-refused',
+        b'HTTP Error ': 'guided-publisher-request-refused',
+        b'Host administration requires ': 'guided-systemd-prerequisite-refused',
+        b'The supported local package boundary ': 'guided-docker-platform-refused',
+    }
+    for line in reversed(tail):
+        for prefix in (b'Orbis installer could not start: ', b'Orbis installation stopped: '):
+            if line.startswith(prefix):
+                message = line[len(prefix):]
+                return next((code for signal, code in known.items() if message.startswith(signal)),
+                            'guided-launcher-refused' if prefix.startswith(b'Orbis installer ') else 'guided-installer-refused')
+    return 'guided-installer-refused'
+
+
 def launch(path, operation, timeout):
     workdir = WORK / operation
     workdir.mkdir(mode=0o700)
-    with (workdir / 'installer.log').open('xb') as log:
+    log_path = workdir / 'installer.log'
+    with log_path.open('xb') as log:
         result = subprocess.run([sys.executable, '-I', '-B', str(path), '--work-dir', str(workdir / 'custody'),
                                  '--root', str(ROOT), '--docker-context', 'default', '--channel', 'nightly',
                                  '--accept-nightly', '--yes', '--no-animation', '--no-color',
                                  '--http-port', str(PORT), '--https-port', str(TLS_PORT)],
                                 env=ENV, cwd=WORK, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                                 check=False, timeout=timeout)
-    require(result.returncode == 0, 'guided-installer-refused')
+    if result.returncode:
+        raise Refused(installer_failure(log_path))
 
 
 def http(method, path, *, body=None, cookie=None, expect=(200,)):

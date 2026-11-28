@@ -19,7 +19,7 @@ permissions:
 jobs:
   official-upgrade:
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
       TARGET_COMMIT: ${{ inputs.target_commit }}
