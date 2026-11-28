@@ -1110,7 +1110,7 @@ def interrupt_at_checkpoint(source, target, result, committed=False):
         result.update(failure)
 
 
-def reconcile_interruption(source, target, fault, expected_state):
+def reconcile_interruption(source, target, fault, expected_state, *, before_dispatch=None):
     operation = fault['operation']
     launcher = load('orbis-host-upgrade-launcher')
     service = load('orbis-host-service')
@@ -1128,6 +1128,8 @@ def reconcile_interruption(source, target, fault, expected_state):
         except witness.supervision.UpgradeSupervisionError:
             require(time.monotonic() < deadline, 'interruption-original-unit-not-quiescent')
             time.sleep(0.25)
+    if before_dispatch is not None:
+        before_dispatch(job)
     if expected_state == 'complete':
         require(committed_boundary(job, Path(job['snapshot']), service.UPDATE, target)
                 == fault['coreReadyReceiptSha256'], 'commit-window-closed-before-interruption')
@@ -1232,6 +1234,12 @@ def fixture(environment, result):
             'installed-cli-test-mode-refused')
     require(not committed_fault or predecessor[1] == target[1] and predecessor[2] != target[2],
             'commit-interruption-release-pair-refused')
+    pre_effect = environment.get('PRE_EFFECT_RECOVERY', 'none')
+    require(pre_effect in ('none', 'source-selection', 'target-custody')
+            and (pre_effect == 'none' or (
+                not bridge and fault == 'false' and not committed_fault and installed_cli == 'false'
+                and (predecessor[0], target[0]) == ('v0.9.2-beta.10', 'v0.9.2-beta.11')
+            )), 'pre-effect-test-mode-refused')
     initial = STABLE if bridge else predecessor
     result['fixtureDefaultAclRemoved'], result['fixtureTimezoneProtected'] = preflight(environment)
     result['phase'] = 'publisher'
@@ -1305,6 +1313,28 @@ def fixture(environment, result):
     result['snapshotEstimateBytes'] = checkpoint_limit()
     result['phase'] = 'guided-target'
     fence('apply-intent', target)
+    if pre_effect != 'none':
+        rehearsal = load('orbis-official-pre-effect', Path(__file__).parent)
+        runtime = sys.modules[__name__]
+        generation = rehearsal.installed_generation(runtime, predecessor)
+        with observe_progress(target[0], result):
+            try:
+                with rehearsal.interrupt(runtime, predecessor, target, pre_effect, result):
+                    launch(candidate, 'target', 1500)
+            except Refused as error:
+                if not result.get('preEffectInterruption', {}).get('sent'):
+                    raise Refused('pre-effect-interruption-not-observed', originalInstallerFailure=str(error),
+                                  **error.evidence) from None
+            else:
+                raise Refused('pre-effect-expected-target-refusal-not-observed')
+            rehearsal.verify(runtime, predecessor, target, result, credential, identity, original, proxy, generation)
+        progress = result['targetProgress']
+        operation = result['preEffectInterruption']['operation']
+        require(progress['boundSamples'] > 0 and progress['operations'] == [operation],
+                'pre-effect-progress-operation-refused')
+        progress['boundToTerminalOperation'] = True
+        result.update(source=predecessor[0], target=target[0], targetCommit=target[1], targetDigest=target[2], passed=True)
+        return
     if fault == 'true':
         with observe_progress(target[0], result):
             try:
