@@ -4,7 +4,7 @@
 import ast
 import errno
 import hashlib
-from http.client import HTTPConnection
+from http.client import HTTPConnection, HTTPException
 import importlib.util
 import json
 import os
@@ -556,7 +556,12 @@ def http(method, path, *, body=None, cookie=None, expect=(200,)):
         connection.request(method, path, body, headers)
         response = connection.getresponse()
         data = response.read(2 * 1024 * 1024 + 1)
-        require(response.status in expect and len(data) <= 2 * 1024 * 1024, 'loopback-api-refused')
+        if response.status not in expect or len(data) > 2 * 1024 * 1024:
+            routes = {'/api/health': 'health', '/api/user-context': 'setup-context', '/api/auth/register': 'register',
+                      '/api/auth/login': 'login', '/api/auth/logout': 'logout', '/api/system/build': 'build',
+                      '/login': 'login-page', '/api/links': 'links', '/api/custom-apps': 'custom-app', '/api/tasks': 'tasks'}
+            kind = routes.get(path, 'app-install' if path.startswith('/api/app-lifecycle/') else 'other')
+            raise Refused('loopback-api-refused', loopbackRoute=kind, loopbackStatus=response.status)
         mime = (response.getheader('Content-Type') or '').split(';')[0]
         return (json.loads(data) if data and mime == 'application/json' else None,
                 [value for name, value in response.getheaders() if name.lower() == 'set-cookie'])
@@ -565,7 +570,7 @@ def http(method, path, *, body=None, cookie=None, expect=(200,)):
 
 
 def session(operation, credential):
-    body, cookies = http('POST', '/api/auth/' + operation, body=credential, expect=(201,))
+    body, cookies = http('POST', '/api/auth/' + operation, body=credential, expect=(200, 201))
     selected = [cookie.split(';', 1)[0] for cookie in cookies if re.match(r'^runtipi-sid=[^;\r\n]+;', cookie)
                 and not re.search(r'(?:^|;)\s*Domain=', cookie, re.I)]
     require(body.get('success') is True and len(selected) == 1, 'fixture-authentication-refused')
@@ -785,10 +790,23 @@ def fixture(environment, result):
     result['phase'] = 'source-host-readback'
     baseline = check_host(initial)
     require(baseline.get('job') is None, 'fresh-source-job-refused')
-    result['phase'] = 'fixture-markers'
+    result['phase'] = 'source-ingress-readback'
+    until = time.monotonic() + 20
+    while True:
+        try:
+            http('GET', '/api/health')
+            break
+        except (OSError, HTTPException, Refused):
+            if time.monotonic() >= until:
+                raise
+            time.sleep(0.5)
+    context, _ = http('GET', '/api/user-context')
+    require(isinstance(context, dict) and context.get('isConfigured') is False, 'fresh-fixture-account-refused')
+    result['phase'] = 'fixture-registration'
     credential = {'username': 'ota-fixture-' + secrets.token_hex(5), 'password': secrets.token_urlsafe(32)}
     cookie = session('register', credential)
     build(cookie, initial)
+    result['phase'] = 'fixture-markers'
     identity = seed(cookie, initial)
     original = app_data(identity)
     http('POST', '/api/auth/logout', cookie=cookie, expect=(204,))
