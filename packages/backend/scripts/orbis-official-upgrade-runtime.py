@@ -2,6 +2,7 @@
 """Qualify one official coordinated release update on a new hosted Linux runner."""
 
 import ast
+import errno
 import hashlib
 import http.client
 import importlib.util
@@ -158,12 +159,19 @@ def installer_signals(files):
         if not re.fullmatch(r'scripts/(?:install-orbis|orbis-[a-z0-9-]+)\.py', name):
             continue
         for node in ast.walk(ast.parse(body)):
-            if not isinstance(node, ast.Raise) or not isinstance(node.exc, ast.Call) or not node.exc.args:
+            if isinstance(node, ast.Raise):
+                error = node.exc
+            elif (isinstance(node, ast.Return) and isinstance(node.value, ast.Call)
+                  and isinstance(node.value.func, ast.Name) and node.value.func.id.endswith('Error')):
+                error = node.value
+            else:
                 continue
-            text = node.exc.args[0]
+            if not isinstance(error, ast.Call) or not error.args:
+                continue
+            text = error.args[0]
             while isinstance(text, ast.BinOp) and isinstance(text.op, ast.Add):
                 text = text.left
-            exact = text is node.exc.args[0] and isinstance(text, ast.Constant)
+            exact = text is error.args[0] and isinstance(text, ast.Constant)
             if isinstance(text, ast.JoinedStr) and text.values:
                 text = text.values[0]
             if isinstance(text, ast.Constant) and isinstance(text.value, str) and 16 <= len(text.value) <= 4096:
@@ -258,6 +266,11 @@ def installer_failure(path, signals=()):
         for prefix in (b'Orbis installer could not start: ', b'Orbis installation stopped: '):
             if line.startswith(prefix):
                 message = line[len(prefix):]
+                number = re.match(rb'\[Errno ([0-9]{1,3})\] ', message)
+                if number:
+                    category = errno.errorcode.get(int(number[1]))
+                    if category in ('EACCES', 'EPERM', 'ENOENT', 'EIO', 'ENOSPC', 'EROFS', 'ELOOP', 'EBUSY'):
+                        evidence['installerErrno'] = category
                 matches = [(exact, len(text), site) for text, exact, site in signals
                            if (message == text if exact else message.startswith(text))]
                 if matches:
@@ -267,6 +280,83 @@ def installer_failure(path, signals=()):
                 fallback = 'guided-launcher-refused' if prefix.startswith(b'Orbis installer ') else 'guided-installer-refused'
                 return next((code for signal, code in known.items() if message.startswith(signal)), fallback), evidence
     return 'guided-installer-refused', evidence
+
+
+def fresh_journal_phase():
+    launcher = load('orbis-host-upgrade-launcher')
+    pointer = launcher.decoded(launcher.read_file(ROOT / '.orbis-installation.json', 16384))
+    if (pointer.get('schema'), pointer.get('kind'), pointer.get('root'), pointer.get('dockerContext')) != (
+            'orbis.installer-pointer.v1', 'new', str(ROOT), 'default'):
+        return None
+    path = Path(pointer['journal'])
+    parts = path.relative_to(WORK / 'source' / 'custody').parts
+    if (len(parts) != 4 or not re.fullmatch(re.escape(SOURCE[0]) + r'-[a-z0-9_]{8}', parts[0])
+            or parts[1] != 'transactions'
+            or not re.fullmatch(r'new-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}', parts[2])
+            or parts[3] != 'transaction.json'):
+        return None
+    journal = launcher.decoded(launcher.read_file(path, 64 * 1024))
+    if ((journal.get('schema'), journal.get('root'), journal.get('dockerContext'))
+            != ('orbis.new-installation.v2', str(ROOT), 'default')
+            or journal.get('manifest', {}).get('digest') != SOURCE[2]):
+        return None
+    phase = journal.get('stage')
+    return phase if phase in ('prepared', 'starting', 'enrolled', 'complete') else None
+
+
+def fresh_startup_evidence():
+    evidence = {}
+    try:
+        phase = fresh_journal_phase()
+        if phase:
+            evidence['freshJournalPhase'] = phase
+        if phase in ('starting', 'enrolled', 'complete'):
+            host = load('orbis-host')
+            probe = subprocess.run(DOCKER + host.compose_args(ROOT) + ['config', '--quiet'], env=ENV, cwd=ROOT,
+                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                   check=False, timeout=8)
+            evidence['composeConfigValid'] = probe.returncode == 0
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError):
+        pass
+
+    names = ('runtipi', 'runtipi-db', 'runtipi-queue', 'runtipi-reverse-proxy')
+    try:
+        inventory = run(DOCKER + ['container', 'ls', '--all', '--no-trunc',
+                        '--filter', 'label=com.docker.compose.project=runtipi',
+                        '--filter', 'label=com.docker.compose.project.working_dir=' + str(ROOT),
+                        '--format', '{{.ID}} {{.Names}}'], timeout=8)
+        owned = {name: identifier for line in inventory.splitlines() if ' ' in line
+                 for identifier, name in [line.split(' ', 1)]
+                 if name in names and re.fullmatch(r'[a-f0-9]{64}', identifier)}
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return evidence
+    template = ('{"service":{{json (index .Config.Labels "com.docker.compose.service")}},'
+                '"project":{{json (index .Config.Labels "com.docker.compose.project")}},'
+                '"root":{{json (index .Config.Labels "com.docker.compose.project.working_dir")}},'
+                '"status":{{json .State.Status}},"exitCode":{{json .State.ExitCode}},'
+                '"oom":{{json .State.OOMKilled}},"hasEngineError":{{if .State.Error}}true{{else}}false{{end}},'
+                '"health":{{if .State.Health}}{{json .State.Health.Status}}{{else}}"none"{{end}}}')
+    rows = {}
+    for name in names:
+        identifier = owned.get(name)
+        rows[name] = {'status': 'not-observed' if not identifier else 'unavailable'}
+        if not identifier:
+            continue
+        try:
+            state = json.loads(run(DOCKER + ['container', 'inspect', '--format', template, identifier], timeout=8))
+            if (state['service'], state['project'], state['root']) != (name, 'runtipi', str(ROOT)):
+                continue
+            rows[name] = {
+                'status': state['status'] if state['status'] in ('created', 'running', 'paused', 'restarting', 'exited', 'dead') else 'unknown',
+                'health': state['health'] if state['health'] in ('starting', 'healthy', 'unhealthy') else 'none',
+                'exitCode': state['exitCode'] if type(state['exitCode']) is int and 0 <= state['exitCode'] <= 255 else None,
+                'oom': state['oom'] is True,
+                'hasEngineError': state['hasEngineError'] is True,
+            }
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+            pass
+    evidence['startupServices'] = rows
+    return evidence
 
 
 def launch(release, operation, timeout):
@@ -283,6 +373,8 @@ def launch(release, operation, timeout):
                                 check=False, timeout=timeout)
     if result.returncode:
         code, evidence = installer_failure(log_path, signals)
+        if operation == 'source' and evidence.get('installerStep') == 'start-core':
+            evidence.update(fresh_startup_evidence())
         raise Refused(code, installerExitCode=result.returncode, **evidence)
 
 
