@@ -1255,7 +1255,7 @@ def fixture(environment, result):
             )), 'pre-effect-test-mode-refused')
     ota = environment.get('OTA_DELIVERY', 'installer')
     require(ota in ('installer', 'in-app', 'legacy-discovery') and (ota == 'installer' or (
-        not bridge and fault == 'false' and not committed_fault and installed_cli == 'false' and pre_effect == 'none'
+        (ota == 'in-app' or not bridge) and fault == 'false' and not committed_fault and installed_cli == 'false' and pre_effect == 'none'
         and (predecessor[0], target[0]) == ('v0.9.2-beta.10', 'v0.9.2-beta.11')
     )), 'ota-delivery-mode-refused')
     legacy_discovery = ota == 'legacy-discovery'
@@ -1408,7 +1408,7 @@ def fixture(environment, result):
         else:
             launch(candidate, 'target', 1500)
     result['phase'] = 'terminal-readback'
-    if bridge:
+    if bridge and ota_operation is None:
         require(executed_launcher(candidate, 'target', target) != bridge_receipt, 'launcher-receipt-replayed')
     target_host = check_host(target)
     completed(target_host, predecessor, target, prior_operations, interrupted=committed_fault)

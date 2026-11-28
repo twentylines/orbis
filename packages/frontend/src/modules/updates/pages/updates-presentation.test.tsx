@@ -11,7 +11,7 @@ import { installedOrbisBuildOptions, orbisPublishedReleasesOptions, orbisRelease
 import { orbisReleaseChannelsOptions } from '@/desktop/release-channels';
 import { sentinelStatusOptions } from '../sentinel-status';
 import { OrbisDowngrade } from './orbis-downgrade';
-import Updates, { checkUpdateSources } from './updates';
+import Updates, { checkUpdateSources, orbisUpdateEligibilityOptions } from './updates';
 
 function renderDowngrade({ enabled = true, failed = false, active = true } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, staleTime: Number.POSITIVE_INFINITY } } });
@@ -103,6 +103,7 @@ function renderLocalUpdates({
   readyCount = 1,
   deferredCount = 0,
   includeAppUpdate = false,
+  releaseEligible = true,
 }: {
   operator?: boolean;
   legacyHelper?: boolean;
@@ -119,6 +120,7 @@ function renderLocalUpdates({
   readyCount?: number;
   deferredCount?: number;
   includeAppUpdate?: boolean;
+  releaseEligible?: boolean;
 } = {}) {
   const client = queryClient ?? new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
   client.setQueryData(appContextQueryKey(), { user: { id: 7, operator }, version: { current: '4.10.1' } });
@@ -141,6 +143,14 @@ function renderLocalUpdates({
       url: 'https://example.test/release',
     },
   ]);
+  client.setQueryData(orbisUpdateEligibilityOptions('v0.2.0', 7, 'v0.1.0', '4.10.1', false).queryKey, {
+    tag: 'v0.2.0',
+    currentRuntipiVersion: '4.10.1',
+    targetRuntipiVersion: releaseEligible ? '4.10.1' : '4.12.0',
+    crossesRuntipiBoundary: !releaseEligible,
+    hostUpdateSupported: releaseEligible,
+    warning: null,
+  });
   client.setQueryData(['orbis-host-update-status'], {
     available: true,
     enrolled: true,
@@ -260,6 +270,14 @@ test('default System view brings the Orbis, OS and service statuses together whi
 test('the Orbis action follows the release status without labelling the release by the selected channel', () => {
   const markup = renderLocalUpdates({ releaseChannel: 'nightly' });
   expect(markup).toMatch(/Update available <strong>0\.2\.0<\/strong><\/p><\/div><button[^>]*desktop-system-update-primary[^>]*>Update Orbis/);
+});
+
+test('an unsupported Nightly is listed without an install action or availability claim', () => {
+  const markup = renderLocalUpdates({ releaseChannel: 'nightly', releaseEligible: false });
+  expect(markup).toContain('Latest release <strong>0.2.0</strong>');
+  expect(markup).toContain('This release requires a supported Orbis Host updater.');
+  expect(markup).not.toContain('>Update Orbis</button>');
+  expect(markup).not.toContain('Update available <strong>0.2.0</strong>');
 });
 
 test('legacy helper capabilities and operator permissions still control system actions and inventory details', () => {

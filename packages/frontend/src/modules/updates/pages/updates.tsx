@@ -22,7 +22,7 @@ import {
   IconServerCog,
   IconSettings,
 } from '@tabler/icons-react';
-import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
@@ -201,6 +201,34 @@ async function hostRequest<T>(path: string, body?: object, signal?: AbortSignal)
   return result as T;
 }
 
+export function orbisUpdateEligibilityOptions(tag: string, userId: number, installed: string, base: string, hostCanChangeBase: boolean) {
+  return queryOptions({
+    queryKey: ['orbis-update-eligibility', userId, installed, base, hostCanChangeBase, tag],
+    queryFn: async ({ signal }) => {
+      const result = await hostRequest<ReleaseCompatibility>(`release-compatibility?tag=${encodeURIComponent(tag)}`, undefined, signal);
+      if (
+        result.tag !== tag ||
+        result.currentRuntipiVersion !== base ||
+        typeof result.targetRuntipiVersion !== 'string' ||
+        typeof result.crossesRuntipiBoundary !== 'boolean' ||
+        typeof result.hostUpdateSupported !== 'boolean' ||
+        (result.warning !== null && typeof result.warning !== 'string') ||
+        result.crossesRuntipiBoundary !== (base !== result.targetRuntipiVersion) ||
+        (result.hostUpdateSupported &&
+          !(
+            (!result.crossesRuntipiBoundary && ['4.10.1', '4.12.0'].includes(base)) ||
+            (base === '4.10.1' && result.targetRuntipiVersion === '4.12.0')
+          ))
+      )
+        throw new Error('The release compatibility check could not be verified. Try again before updating.');
+      return result;
+    },
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+}
+
 export default function Updates() {
   const cluster = useCluster();
   if (cluster.merged || (cluster.selectedServer && !cluster.selectedServer.local)) return <ClusterUpdates />;
@@ -367,6 +395,14 @@ function LocalUpdates() {
     refetchInterval: (query) => (['running', 'recovering'].includes(query.state.data?.job?.state ?? '') ? 4000 : 30_000),
     retry: 1,
   });
+  const installedBase = build.data?.runtipiCompatibility?.replace(/^v/, '') ?? '';
+  const hostCanChangeBase = host.data?.capabilities?.includes('runtipi-412-update.v1') === true;
+  const eligibilityOptions = orbisUpdateEligibilityOptions(latest?.tag ?? '', user.id, build.data?.version ?? '', installedBase, hostCanChangeBase);
+  const eligibility = useQuery({
+    ...eligibilityOptions,
+    enabled: visible && user.operator && orbisUpdateAvailable && Boolean(installedBase && host.data?.available),
+  });
+  const hostUpdateBlocked = eligibility.data?.hostUpdateSupported === false;
   const packageChangelog = useQuery({
     queryKey: ['orbis-host-package-changelog', selectedPackage],
     queryFn: ({ signal }) =>
@@ -432,24 +468,9 @@ function LocalUpdates() {
     mutationKey: ['orbis-compatibility', 'update', user.id, build.data?.version ?? ''],
     gcTime: compatibilityReviewTime,
     onMutate: () => ({ intent: ++coreReviewIntent.current }),
-    mutationFn: async (tag: string) => {
-      const result = await hostRequest<ReleaseCompatibility>(`release-compatibility?tag=${encodeURIComponent(tag)}`);
-      if (
-        result.tag !== tag ||
-        typeof result.currentRuntipiVersion !== 'string' ||
-        typeof result.targetRuntipiVersion !== 'string' ||
-        typeof result.crossesRuntipiBoundary !== 'boolean' ||
-        typeof result.hostUpdateSupported !== 'boolean' ||
-        (result.warning !== null && typeof result.warning !== 'string') ||
-        result.crossesRuntipiBoundary !== (result.currentRuntipiVersion !== result.targetRuntipiVersion) ||
-        (result.hostUpdateSupported &&
-          !(
-            (!result.crossesRuntipiBoundary && ['4.10.1', '4.12.0'].includes(result.currentRuntipiVersion)) ||
-            (result.currentRuntipiVersion === '4.10.1' && result.targetRuntipiVersion === '4.12.0')
-          ))
-      )
-        throw new Error('The release compatibility check could not be verified. Try again before updating.');
-      return result;
+    mutationFn: (tag: string) => {
+      if (tag !== latest?.tag) throw new Error('The selected release changed. Check for updates again.');
+      return queryClient.fetchQuery(eligibilityOptions);
     },
     onSuccess: (result, _variables, context) => {
       if (context?.intent === coreReviewIntent.current) setCoreReview(result);
@@ -502,6 +523,8 @@ function LocalUpdates() {
   const canPlan = Boolean(
     build.data &&
       orbisUpdateAvailable &&
+      eligibility.data?.hostUpdateSupported === true &&
+      !eligibility.isError &&
       user?.operator === true &&
       !host.isError &&
       host.data?.available &&
@@ -555,6 +578,7 @@ function LocalUpdates() {
     const checkRelease = async () => {
       const channel = await channels.refetch({ cancelRefetch: false, throwOnError: true });
       if (channel.data) await queryClient.fetchQuery({ ...orbisReleasesOptions(channel.data.current), staleTime: 0 });
+      await queryClient.invalidateQueries({ queryKey: ['orbis-update-eligibility', user.id] });
     };
     const checkSystem = canRefreshPackages
       ? () => refreshPackages.mutateAsync()
@@ -825,7 +849,7 @@ function LocalUpdates() {
                     {build.isError ? <p role="alert">The installed version could not be loaded.</p> : null}
                     {latest ? (
                       <p>
-                        {orbisUpdateAvailable ? (
+                        {orbisUpdateAvailable && !hostUpdateBlocked && !eligibility.isError && !eligibility.isLoading ? (
                           <>
                             Update available <strong>{formatOrbisVersion(latest.tag)}</strong>
                           </>
@@ -838,8 +862,15 @@ function LocalUpdates() {
                         )}
                       </p>
                     ) : null}
+                    {orbisUpdateAvailable && eligibility.isLoading ? <output>Checking release compatibility…</output> : null}
+                    {orbisUpdateAvailable && hostUpdateBlocked && !eligibility.isError ? (
+                      <p>This release requires a supported Orbis Host updater.</p>
+                    ) : null}
+                    {orbisUpdateAvailable && eligibility.isError ? (
+                      <p role="alert">Could not verify update compatibility. Check for updates again.</p>
+                    ) : null}
                   </div>
-                  {latest && orbisUpdateAvailable ? (
+                  {latest && orbisUpdateAvailable && !hostUpdateBlocked && !eligibility.isError ? (
                     <button
                       className="desktop-update-action desktop-system-update-primary"
                       type="button"
