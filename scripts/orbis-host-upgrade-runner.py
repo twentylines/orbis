@@ -365,7 +365,10 @@ class Progress:
         require(self.sentinel is None and self.value is not None)
         if self.browser is None:
             self.start_browser(resources)
-        self.sentinel = resources.enter_context(ProgressEndpoint(self.observer, self.value))
+        recovering = isinstance(self.bootstrap, self.launcher.ReconciliationBootstrap)
+        if recovering:
+            self.bootstrap.verify_bootstrap()
+        self.sentinel = resources.enter_context(ProgressEndpoint(self.observer, self.value, allow_stale=recovering))
 
     @contextmanager
     def follow_core(self, update, job):

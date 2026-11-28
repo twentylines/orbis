@@ -3,7 +3,7 @@
 These cases do not qualify Linux Root admission or installed replacement. The
 separate source/worker suites exercise genuine bundle/execution custody.
 """
-from contextlib import contextmanager, nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
 import copy
 import hashlib
 import importlib.util
@@ -136,7 +136,7 @@ class RunnerTests(unittest.TestCase):
         class Endpoint:
             def __init__(self, observer, initial, **options):
                 owner.assertEqual(initial['job']['id'], owner.operation)
-                self.browser = bool(options)
+                self.browser = 'directory' in options
                 if self.browser:
                     binding = '\n'.join((owner.operation, owner.current['digest'], owner.target['digest'])).encode('ascii')
                     owner.assertEqual(options['directory'], R.BROWSER_DIRECTORY)
@@ -389,6 +389,22 @@ class RunnerTests(unittest.TestCase):
         self.service.component_recovery_live.side_effect = FileNotFoundError
         self.assertEqual(R.read_progress(self.service, self.job)['job']['state'], 'interrupted')
         self.assertEqual(self.read(self.job_file), self.job)
+
+    def test_only_reconciliation_can_reclaim_both_progress_endpoints(self):
+        for recovering in (False, True):
+            with self.subTest(recovering=recovering):
+                if recovering:
+                    self.interrupt()
+                progress = R.Progress(self.launcher, self.service, self.boot, OBSERVER)
+                progress.publish('recovering' if recovering else 'installing',
+                                 state='recovering' if recovering else 'running')
+                with mock.patch.object(R, 'ProgressEndpoint') as endpoint, ExitStack() as resources:
+                    progress.start(resources)
+                browser, sentinel = endpoint.call_args_list
+                self.assertEqual(browser.kwargs['directory'], R.BROWSER_DIRECTORY)
+                self.assertEqual(browser.kwargs['allow_stale'], recovering)
+                self.assertNotIn('directory', sentinel.kwargs)
+                self.assertEqual(sentinel.kwargs.get('allow_stale', False), recovering)
 
     def test_reconcile_observes_terminal_receipt_after_new_host_generation_without_replay(self):
         self.run_upgrade()
