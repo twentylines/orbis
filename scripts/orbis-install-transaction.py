@@ -14,6 +14,7 @@ import re
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -233,6 +234,70 @@ def read_record(path: Path, root: Path, reader) -> dict:
     if value["root"] != str(root) or value["dockerContext"] != reader.context or private_paths(root, value["storage"], path) != Path(value["journal"]):
         raise TransactionError("The installation journal belongs to another root or Docker context")
     return record
+
+
+def retain_incomplete_checkpoint(root: Path, storage: dict) -> None:
+    approved = Path(storage["bundle"])
+    bundle = APPS.journal_path(approved, root)
+    if bundle != approved:
+        raise TransactionError("The interrupted storage destination changed")
+    info = bundle.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077:
+        raise TransactionError("The interrupted storage destination is not a private directory")
+    manifest = bundle / "storage.json"
+    if os.path.lexists(manifest):
+        saved = RESTORE.private_json(manifest)
+        if saved.get("schema") != STORAGE.SCHEMA or saved.get("plan") != storage or saved.get("stage") not in {"copying", "verifying"}:
+            raise TransactionError("The interrupted storage manifest does not belong to this checkpoint")
+    else:
+        # The directory and the temporary manifest can survive a stop before
+        # the first atomic manifest publication. No resource copy starts then.
+        for entry in bundle.iterdir():
+            details = entry.lstat()
+            if (not entry.name.startswith(".storage.json-") or not stat.S_ISREG(details.st_mode)
+                    or details.st_uid != os.geteuid() or stat.S_IMODE(details.st_mode) & 0o077):
+                raise TransactionError("An unbound interrupted storage directory contains unexpected files")
+    # Keep the failed copy under the private parent. Never overwrite a sealed
+    # backup or use bytes from an unfinished copy to restore the installation.
+    retained = Path(tempfile.mkdtemp(prefix=f".{bundle.name}.interrupted-", dir=bundle.parent))
+    os.rename(bundle, retained / "snapshot")
+    for path in (retained, bundle.parent):
+        descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+
+def complete_rollback_checkpoint(root: Path, reader, path: Path, expected: dict) -> None:
+    """Seal the accepted source checkpoint before any controller retirement."""
+    record = read_record(path, root, reader)
+    if (record.get("review") != expected or record["stage"] not in {"prepared", "quiescing", "snapshotting"}
+            or expected.get("backupPolicy") == "none" or "backupFingerprint" in record
+            or "runtipiConfiguration" in record or "recoveryStartedFrom" in record):
+        raise TransactionError("The checkpoint is not an unfinished copy of the accepted source")
+    RESTORE.runtime()
+    if record["stage"] != "snapshotting":
+        record["stage"] = "quiescing"
+        save(record)
+        quiesce(root, reader, record)
+        record["stage"] = "snapshotting"
+        save(record)
+    storage = expected["storage"]
+    bundle = Path(storage["bundle"])
+    if os.path.lexists(bundle):
+        STORAGE.require_quiet_existing(root, reader, storage)
+        target = bundle / "storage.json"
+        saved = RESTORE.private_json(target) if os.path.lexists(target) else None
+        if saved is None or saved.get("stage") != "complete":
+            retain_incomplete_checkpoint(root, storage)
+    if not os.path.lexists(bundle):
+        STORAGE.capture(root, reader, storage, host_writers_stopped=True)
+    manifest = STORAGE.verified_manifest(bundle)
+    if manifest.get("plan") != storage:
+        raise TransactionError("The completed storage backup does not match the accepted source checkpoint")
+    record.update(stage="ready", backupFingerprint=APPS.digest(manifest))
+    save(record)
 
 
 def _runtipi_configuration_record(root, record, path, current, target, binding, compatibility):

@@ -691,10 +691,28 @@ def rollback(root: Path, current: dict[str, str], context: str, snapshot: Path, 
             record['stage'] = 'aborted'
             write_journal(snapshot, record)
             return
-        runtime.stop_for_rollback()
         tools, reader = controller_tools(context, HOST.LOCK_DESCRIPTOR.get())
         checkpoint = protected['checkpoint']
         checkpoint_journal = checkpoint_path(snapshot)
+        if protected.get('sourceBootstrapEnablement') is not None and origin in {'stopping', 'stopped', 'snapshotting', 'snapshot-ready'}:
+            if not os.path.lexists(checkpoint_journal):
+                if origin != 'stopping':
+                    raise ValueError('Source enablement requires its protected checkpoint journal')
+                raw = runtime.verify_source(protected)
+                if not raw['State'].get('Running') or (raw['State'].get('Health') or {}).get('Status') != 'healthy':
+                    raise ValueError('The original controller is not healthy before checkpoint preparation')
+                record['stage'] = 'aborted'
+                write_journal(snapshot, record)
+                return
+            pending = tools.read_record(checkpoint_journal, root, reader)
+            if pending['review'] != checkpoint:
+                raise ValueError('Checkpoint recovery differs from protected controller authority')
+            if pending['stage'] in {'prepared', 'quiescing', 'snapshotting'}:
+                if runtime.validate_retirement(protected)['phase'] != 'held' or protected.get('candidateId'):
+                    raise ValueError('Only the original stopped controller can complete an interrupted checkpoint')
+                runtime.verify_source(protected)
+                tools.complete_rollback_checkpoint(root, reader, checkpoint_journal, checkpoint)
+        runtime.stop_for_rollback()
         original_verifier = None
         migration_args = None
         saved = None

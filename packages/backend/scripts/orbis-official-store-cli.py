@@ -47,6 +47,36 @@ function readPrivate(location, limit) {
     fs.closeSync(fd);
   }
 }
+function directoryMount(location, expected) {
+  if (fs.realpathSync(location) !== location) return null;
+  const fd = fs.openSync(location, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
+  try {
+    const observed = fs.fstatSync(fd);
+    if (observed.dev !== expected?.dev || observed.ino !== expected?.ino) return null;
+    return fs.readFileSync('/proc/self/fdinfo/' + fd, 'utf8').match(/^mnt_id:\s+(\d+)$/m)?.[1] ?? null;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+function publicationReadback(journal, staging) {
+  if (journal.phase !== 'switching' || !['move-original', 'move-target', 'replace-env'].includes(journal.intent)) return {};
+  const result = {publishIntent: journal.intent};
+  try {
+    const metadataParent = '/data/apps/' + journal.appUrn.split(':')[1];
+    if (journal.metadata !== path.join(metadataParent, journal.appUrn.split(':')[0])) return result;
+    const source = directoryMount(metadataParent, journal.metadataParent);
+    const destination = directoryMount(staging, journal.stagingIdentity);
+    if (source && destination) result.metadataRenameCrossesMount = source !== destination;
+    const matches = (location, expected) => {
+      const stat = fs.lstatSync(location, {throwIfNoEntry: false});
+      return Boolean(stat?.isDirectory() && stat.dev === expected?.dev && stat.ino === expected?.ino);
+    };
+    result.originalMetadataLive = matches(journal.metadata, journal.originalIdentity);
+    result.targetMetadataLive = matches(journal.metadata, journal.targetIdentity);
+    result.originalMetadataRetained = matches(path.join(staging, 'previous-live'), journal.originalIdentity);
+  } catch {}
+  return result;
+}
 try {
   if (!uuid.test(request) || !path.isAbsolute(directory) || path.normalize(directory) !== directory) throw new Error();
   const guardFile = path.join(directory, hash(appUrn) + '.update.json');
@@ -54,7 +84,8 @@ try {
   const guard = JSON.parse(bytes);
   if (guard.version !== 2 || guard.appUrn !== appUrn || guard.requestId !== request ||
       !uuid.test(guard.id) || !phases.has(guard.phase)) throw new Error();
-  const body = readPrivate(path.join(directory, 'update-' + guard.id, 'journal.json'), 4 * 1024 * 1024);
+  const staging = path.join(directory, 'update-' + guard.id);
+  const body = readPrivate(path.join(staging, 'journal.json'), 4 * 1024 * 1024);
   const journal = JSON.parse(body);
   if (hash(body) !== guard.journalSha256 || !bytes.equals(readPrivate(guardFile, 64 * 1024)) ||
       !['version', 'id', 'appUrn', 'requestId', 'phase', 'revision'].every(key => guard[key] === journal[key])) throw new Error();
@@ -63,7 +94,7 @@ try {
       !Array.isArray(fresh.containers) || fresh.containers.length > 256) throw new Error();
   process.stdout.write(JSON.stringify({readback: 'bound', stage: guard.phase, freshPhase: fresh.phase,
     createAttempted: fresh.createAttempted, recordedContainers: fresh.containers.length,
-    pinnedImages: Boolean(fresh.imagePinsSha256)}));
+    pinnedImages: Boolean(fresh.imagePinsSha256), ...publicationReadback(journal, staging)}));
 } catch (error) {
   process.stdout.write(JSON.stringify({readback: error.code === 'ENOENT' ? 'absent' : 'unverified'}));
 }

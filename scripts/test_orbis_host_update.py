@@ -285,6 +285,66 @@ class OrbisHostUpdateTests(unittest.TestCase):
                         UPDATE.rollback(self.root, CURRENT, "test-daemon", snapshot, dict(record))
                 runtime.start_original.assert_not_called()
 
+    def test_recovery_seals_an_interrupted_backup_before_attempting_source_retirement(self):
+        path = UPDATE.checkpoint_path(self.snapshot)
+        path.touch()
+        checkpoint = {"storage": {"backupScope": UPDATE.CONTROLLER.SCOPE}}
+        tools, reader, runtime = mock.Mock(), mock.Mock(), mock.Mock()
+        protected = {"checkpoint": checkpoint, "sourceBootstrapEnablement": {"reviewed": True}}
+        runtime.read.return_value = protected
+        runtime.validate_retirement.return_value = {"phase": "held"}
+        runtime.restore_reconstructed_checkpoint.return_value = True
+        tools.read_record.side_effect = [{"review": checkpoint, "stage": "snapshotting"}, {"review": checkpoint, "stage": "ready"}]
+        effects = mock.Mock()
+        effects.attach_mock(tools.complete_rollback_checkpoint, "seal")
+        effects.attach_mock(runtime.stop_for_rollback, "stop")
+        effects.attach_mock(runtime.start_original, "start")
+        record = {"backupScope": UPDATE.CONTROLLER.SCOPE, "targetPublication": TARGET_412, "stage": "snapshotting"}
+        with (
+            mock.patch.object(UPDATE.CONTROLLER, "ControllerUpdate", return_value=runtime),
+            mock.patch.object(UPDATE, "controller_tools", return_value=(tools, reader)),
+            mock.patch.object(UPDATE.HOST, "docker", side_effect=FakeDocker(self.root)),
+        ):
+            UPDATE.rollback(self.root, CURRENT, "test-daemon", self.snapshot, record)
+        self.assertEqual(effects.mock_calls, [mock.call.seal(self.root, reader, path, checkpoint), mock.call.stop(), mock.call.start()])
+        self.assertEqual(record["stage"], "rolled-back")
+        tools.recover.assert_not_called()
+
+    def test_recovery_does_not_retire_the_source_when_checkpoint_completion_fails(self):
+        UPDATE.checkpoint_path(self.snapshot).touch()
+        checkpoint = {"storage": {"backupScope": UPDATE.CONTROLLER.SCOPE}}
+        tools, runtime = mock.Mock(), mock.Mock()
+        runtime.read.return_value = {"checkpoint": checkpoint, "sourceBootstrapEnablement": {"reviewed": True}}
+        runtime.validate_retirement.return_value = {"phase": "held"}
+        tools.read_record.return_value = {"review": checkpoint, "stage": "snapshotting"}
+        tools.complete_rollback_checkpoint.side_effect = ValueError("copy remains incomplete")
+        record = {"backupScope": UPDATE.CONTROLLER.SCOPE, "targetPublication": TARGET_412, "stage": "snapshotting"}
+        with (
+            mock.patch.object(UPDATE.CONTROLLER, "ControllerUpdate", return_value=runtime),
+            mock.patch.object(UPDATE, "controller_tools", return_value=(tools, mock.Mock())),
+            self.assertRaisesRegex(ValueError, "copy remains incomplete"),
+        ):
+            UPDATE.rollback(self.root, CURRENT, "test-daemon", self.snapshot, record)
+        runtime.stop_for_rollback.assert_not_called()
+        runtime.start_original.assert_not_called()
+
+    def test_recovery_before_checkpoint_journal_keeps_the_healthy_source_running(self):
+        runtime = mock.Mock()
+        runtime.read.return_value = {"checkpoint": {}, "sourceBootstrapEnablement": {"reviewed": True}}
+        runtime.verify_source.return_value = {"State": {"Running": True, "Health": {"Status": "healthy"}}}
+        record = {"backupScope": UPDATE.CONTROLLER.SCOPE, "targetPublication": TARGET_412, "stage": "stopping"}
+        tools = mock.Mock()
+        with (
+            mock.patch.object(UPDATE.CONTROLLER, "ControllerUpdate", return_value=runtime),
+            mock.patch.object(UPDATE, "controller_tools", return_value=(tools, mock.Mock())),
+        ):
+            UPDATE.rollback(self.root, CURRENT, "test-daemon", self.snapshot, record)
+        self.assertEqual(record["stage"], "aborted")
+        self.assertEqual(json.loads(UPDATE.journal_path(self.snapshot).read_bytes())["stage"], "aborted")
+        runtime.stop_for_rollback.assert_not_called()
+        runtime.start_original.assert_not_called()
+        tools.complete_rollback_checkpoint.assert_not_called()
+
     def test_changed_reviewed_backup_policy_fails_before_journal_or_download(self):
         checkpoint = {'backupPolicy': 'none', 'storage': {'backupScope': UPDATE.CONTROLLER.SCOPE}}
         with mock.patch.object(UPDATE, 'update_plan', return_value={'checkpoint': checkpoint}), \

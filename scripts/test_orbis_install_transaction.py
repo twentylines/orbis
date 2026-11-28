@@ -116,6 +116,84 @@ class TransactionTests(unittest.TestCase):
     def recover(self):
         return TX.recover(self.root, self.docker, self.journal, host_writers_stopped=True)
 
+    def interrupt_before_storage(self, *, scope="full"):
+        if scope == TX.STORAGE.LIVE_PROXY_SCOPE:
+            config = self.root / "traefik"
+            config.mkdir()
+            proxy = self.docker.services[identifier("runtipi-reverse-proxy")]
+            proxy["mounts"] = [{"Type": "bind", "Source": str(config), "Destination": "/etc/traefik", "RW": True}]
+        value = TX.review(self.root, self.docker, self.bundle, self.journal, scope=scope)
+        def interrupt(phase):
+            if phase == "snapshotting":
+                raise Interrupted()
+        with self.assertRaises(Interrupted):
+            TX.checkpoint(self.root, self.docker, value, host_writers_stopped=True, progress=interrupt)
+        return value
+
+    def test_enablement_rollback_completes_a_checkpoint_with_no_first_manifest(self):
+        value = self.interrupt_before_storage()
+        self.bundle.mkdir(mode=0o700)
+        pending = self.bundle / ".storage.json-interrupted"
+        pending.write_bytes(b"partial manifest")
+        pending.chmod(0o600)
+        original_apps = copy.deepcopy(self.docker.apps)
+        TX.complete_rollback_checkpoint(self.root, self.docker, self.journal, value)
+        completed = TX.read_record(self.journal, self.root, self.docker)
+        self.assertEqual(completed["stage"], "ready")
+        manifest = TX.STORAGE.verified_manifest(self.bundle)
+        self.assertEqual(manifest["plan"], value["storage"])
+        self.assertEqual(completed["backupFingerprint"], TX.APPS.digest(manifest))
+        retained = list(self.private.glob(".backup.interrupted-*/snapshot/.storage.json-interrupted"))
+        self.assertEqual([item.read_bytes() for item in retained], [b"partial manifest"])
+        self.assertEqual(self.docker.controller_state, "exited")
+        self.assertEqual(self.docker.apps, original_apps)
+        self.assertFalse(any(action[0] == "start" for action, _ in self.docker.calls))
+
+    @unittest.skipUnless(sys.platform == "linux" and shutil.which("rsync"), "requires Linux rsync for filtered capture")
+    def test_enablement_rollback_keeps_the_proxy_and_apps_running_while_finishing_capture(self):
+        value = self.interrupt_before_storage(scope=TX.STORAGE.LIVE_PROXY_SCOPE)
+        original_apps = copy.deepcopy(self.docker.apps)
+        TX.complete_rollback_checkpoint(self.root, self.docker, self.journal, value)
+        self.assertEqual(TX.read_record(self.journal, self.root, self.docker)["stage"], "ready")
+        self.assertEqual(self.docker.services[identifier("runtipi-reverse-proxy")]["state"], "running")
+        self.assertEqual(self.docker.apps, original_apps)
+        self.assertFalse(any(action[0] == "start" for action, _ in self.docker.calls))
+
+    def test_enablement_rollback_preserves_a_partial_copy_before_recapture(self):
+        value = self.interrupt_before_storage()
+        self.bundle.mkdir(mode=0o700)
+        partial = {"schema": TX.STORAGE.SCHEMA, "plan": value["storage"], "stage": "copying", "copies": []}
+        TX.APPS.write_journal(self.bundle / "storage.json", partial)
+        (self.bundle / "resource-0000").write_bytes(b"unfinished")
+        TX.complete_rollback_checkpoint(self.root, self.docker, self.journal, value)
+        retained = list(self.private.glob(".backup.interrupted-*/snapshot"))
+        self.assertEqual(len(retained), 1)
+        self.assertEqual(json.loads((retained[0] / "storage.json").read_bytes()), partial)
+        self.assertEqual((retained[0] / "resource-0000").read_bytes(), b"unfinished")
+        self.assertEqual(TX.STORAGE.verified_manifest(self.bundle)["stage"], "complete")
+
+    def test_enablement_rollback_adopts_the_completed_copy_after_a_lost_acknowledgement(self):
+        value = self.interrupt_before_storage()
+        TX.STORAGE.capture(self.root, self.docker, value["storage"], host_writers_stopped=True)
+        manifest = (self.bundle / "storage.json").read_bytes()
+        with mock.patch.object(TX.STORAGE, "capture", side_effect=AssertionError("Do not repeat a complete backup")):
+            TX.complete_rollback_checkpoint(self.root, self.docker, self.journal, value)
+        self.assertEqual((self.bundle / "storage.json").read_bytes(), manifest)
+        self.assertEqual(TX.read_record(self.journal, self.root, self.docker)["stage"], "ready")
+        self.assertEqual(list(self.private.glob(".backup.interrupted-*")), [])
+
+    def test_enablement_rollback_cannot_move_an_unbound_partial_copy(self):
+        value = self.interrupt_before_storage()
+        self.bundle.mkdir(mode=0o700)
+        manifest_path = self.bundle / "storage.json"
+        TX.APPS.write_journal(manifest_path, {"schema": TX.STORAGE.SCHEMA, "plan": {}, "stage": "copying", "copies": []})
+        before = manifest_path.read_bytes()
+        with self.assertRaisesRegex(TX.TransactionError, "does not belong to this checkpoint"):
+            TX.complete_rollback_checkpoint(self.root, self.docker, self.journal, value)
+        self.assertEqual(manifest_path.read_bytes(), before)
+        self.assertEqual(list(self.private.glob(".backup.interrupted-*")), [])
+        self.assertEqual(TX.read_record(self.journal, self.root, self.docker)["stage"], "snapshotting")
+
     def no_backup_review(self):
         config = self.root / "traefik"
         config.mkdir(exist_ok=True)
