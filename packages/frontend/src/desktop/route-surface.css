@@ -209,6 +209,10 @@
   display: none;
 }
 
+:root[data-orbis-header-glass="true"] .desktop-route-page {
+  --desktop-route-header-gap: 0.875rem;
+  --desktop-route-header-space: calc(var(--desktop-route-header-height, 0px) + var(--desktop-route-header-gap));
+}
 :root[data-orbis-header-glass="true"] .desktop-route-page .desktop-page-heading {
   position: relative;
   z-index: 2;
@@ -217,7 +221,7 @@
   border-radius: inherit;
 }
 :root[data-orbis-header-glass="true"] .desktop-route-page .desktop-page-heading + .desktop-window-content {
-  padding-block-start: 0.875rem;
+  padding-block-start: var(--desktop-route-header-gap);
 }
 :root[data-orbis-header-glass="true"] .desktop-route-page .desktop-page-heading > .desktop-window-icon {
   width: 1.5rem;
@@ -225,7 +229,7 @@
   background: transparent;
   border-color: transparent;
 }
-/* The mask fades the tint and backdrop together across the full page width. */
+/* Fade the sampled backdrop across the full width of the heading. */
 :root[data-orbis-header-glass="true"] .desktop-route-page .desktop-page-heading::before {
   content: "";
   position: absolute;
@@ -233,14 +237,62 @@
   z-index: -1;
   pointer-events: none;
   border-radius: inherit;
-  background: color-mix(in srgb, var(--desktop-surface) 82%, transparent);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
-  mask-image: linear-gradient(to bottom, black, rgb(0 0 0 / 78%) 35%, rgb(0 0 0 / 24%) 76%, transparent);
+  mask-image: linear-gradient(to bottom, black 16%, rgb(0 0 0 / 94%) 43%, rgb(0 0 0 / 52%) 75%, transparent);
 }
-@media (max-width: 760px) {
+@media (max-width: 1099px), (max-height: 639px) {
   :root[data-orbis-header-glass="true"] .desktop-route-page .desktop-page-heading {
     position: sticky;
     top: var(--orbis-bar-bottom, 76px);
+  }
+}
+
+@media (min-width: 1100px) and (min-height: 640px) {
+  /* Scrolling panes start behind the heading. Their content starts below it. */
+  :root[data-orbis-header-glass="true"] .desktop-route-page[data-header-internal-scroll] .desktop-page-heading + .desktop-window-content {
+    position: relative;
+    z-index: 0;
+    margin-block-start: calc(-1 * var(--desktop-route-header-height, 0px));
+    padding-block-start: var(--desktop-route-content-start, 0px);
+  }
+  :root[data-orbis-header-glass="true"] .desktop-route-page[data-route-section="updates"] .desktop-window-content,
+  :root[data-orbis-header-glass="true"] .desktop-route-page[data-route-section="apps"]:not(:has(.store-split-desktop)) .desktop-window-content,
+  :root[data-orbis-header-glass="true"] .desktop-route-page:has(.desktop-route-placeholder) .desktop-window-content {
+    --desktop-route-content-start: var(--desktop-route-header-space);
+    scroll-padding-block-start: calc(var(--desktop-route-header-space) + 8px);
+  }
+  :root[data-orbis-header-glass="true"] .desktop-route-page .store-split-desktop .store-catalogue-pane {
+    margin-block-start: 0;
+    padding-block-start: var(--desktop-route-header-space);
+    scroll-padding-block-start: calc(var(--desktop-route-header-space) + 6px);
+  }
+  :root[data-orbis-header-glass="true"] .desktop-route-page .store-split-desktop .store-preview-content {
+    padding-block-start: calc(var(--desktop-route-header-space) + 20px);
+    scroll-padding-block-start: calc(var(--desktop-route-header-space) + 20px);
+  }
+  :root[data-orbis-header-glass="true"] .desktop-route-page .store-split-desktop .store-preview-close {
+    top: var(--desktop-route-header-space);
+  }
+  :root[data-orbis-header-glass="true"] .desktop-route-page :is(.monitor-section-navigation, .monitor-section-panels) {
+    margin-block-start: 0;
+    padding-block-start: var(--desktop-route-header-space);
+    scroll-padding-block-start: calc(var(--desktop-route-header-space) + 4px);
+  }
+  @container monitor (max-width: 52rem) {
+    :root[data-orbis-header-glass="true"] .desktop-route-page .monitor-sections {
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-block: var(--desktop-route-header-space) calc(var(--orbis-dock-height, 78px) + 32px);
+      scroll-padding-block: var(--desktop-route-header-space) calc(var(--orbis-dock-height, 78px) + 32px);
+    }
+    :root[data-orbis-header-glass="true"] .desktop-route-page :is(.monitor-section-navigation, .monitor-section-panels) {
+      flex: none;
+      max-height: none;
+      overflow: visible;
+      padding-block: 0 4px;
+    }
   }
 }

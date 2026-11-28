@@ -36,4 +36,35 @@
   .desktop .desktop-route-page[data-route-section="tasks"] .task-centre-scroll {
     overflow-y: auto;
   }
+  :root[data-orbis-header-glass="true"] .desktop-route-page[data-route-section="tasks"] .task-centre-page {
+    --task-centre-page-top: calc(var(--desktop-route-header-space, 0px) + var(--task-centre-page-heading-space, 0px));
+    padding-block-start: var(--desktop-route-header-space, 0px);
+  }
+  :root[data-orbis-header-glass="true"]
+    .desktop-route-page[data-route-section="tasks"]
+    .task-centre-page
+    :is(.task-scope, [data-surface="page"] .task-centre-heading) {
+    position: relative;
+    z-index: 1;
+  }
+  :root[data-orbis-header-glass="true"]
+    .desktop-route-page[data-route-section="tasks"]
+    .task-centre-page
+    :is(.task-scope, [data-surface="page"] .task-centre-heading)::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: -0.75rem 0;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--desktop-surface) 35%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    mask-image: linear-gradient(to bottom, transparent, black 22% 78%, transparent);
+  }
+  :root[data-orbis-header-glass="true"] .desktop-route-page[data-route-section="tasks"] .task-centre-page [data-surface="page"] .task-centre-scroll {
+    --task-centre-scroll-top: calc(var(--task-centre-page-top) + 12px);
+    margin-block-start: calc(-1 * var(--task-centre-page-top));
+    padding-block-start: var(--task-centre-scroll-top);
+    scroll-padding-block-start: calc(var(--task-centre-page-top) + 8px);
+  }
 }

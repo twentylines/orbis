@@ -461,6 +461,38 @@
     scrollbar-gutter: stable;
     scroll-padding-block: 24px;
   }
+  :root[data-orbis-header-glass="true"] .desktop-route-page[data-route-section="settings"] .settings-sidebar {
+    box-sizing: border-box;
+    padding-block-start: var(--desktop-route-header-space, 0px);
+    scroll-padding-block-start: calc(var(--desktop-route-header-space, 0px) + 8px);
+  }
+  :root[data-orbis-header-glass="true"] .desktop-route-page[data-route-section="settings"] .settings-content {
+    --settings-panel-top: calc(var(--desktop-route-header-space, 0px) + var(--settings-section-heading-space, 0px));
+    padding-block-start: var(--desktop-route-header-space, 0px);
+  }
+  :root[data-orbis-header-glass="true"] .desktop-route-page[data-route-section="settings"] .settings-heading-container {
+    position: relative;
+    z-index: 1;
+    pointer-events: none;
+  }
+  :root[data-orbis-header-glass="true"] .desktop-route-page[data-route-section="settings"] .settings-heading-container::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: -0.75rem 0;
+    background: color-mix(in srgb, var(--desktop-surface) 35%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    mask-image: linear-gradient(to bottom, transparent, black 22% 78%, transparent);
+  }
+  :root[data-orbis-header-glass="true"] .desktop-route-page[data-route-section="settings"] .settings-save-secondary-actions {
+    pointer-events: auto;
+  }
+  :root[data-orbis-header-glass="true"] .desktop-route-page[data-route-section="settings"] .settings-category-panel {
+    margin-block-start: calc(-1 * var(--settings-panel-top));
+    padding-block-start: var(--settings-panel-top);
+    scroll-padding-block-start: calc(var(--settings-panel-top) + 24px);
+  }
 }
 
 .settings-heading-container {

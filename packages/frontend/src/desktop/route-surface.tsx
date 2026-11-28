@@ -12,6 +12,7 @@ const sizes = new Map<string, number>();
 
 export function RouteSurface({ label, icon, section, children }: PropsWithChildren<{ label: string; icon: ReactNode; section: string }>) {
   const surface = useRef<HTMLElement>(null);
+  const heading = useRef<HTMLElement>(null);
   const [toolbar, setToolbar] = useState<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<HTMLDivElement | null>(null);
   const focusFrame = useRef<number | null>(null);
@@ -24,6 +25,19 @@ export function RouteSurface({ label, icon, section, children }: PropsWithChildr
   const fixedViewport = desktop && /^\/(?:apps|app-store|settings|tasks|monitor|updates)(?:\/|$)/.test(section);
   const sizeKey = `${section}:${window.innerWidth}:${preferences.appearance.textScale}`;
   const reserve = useMemo(() => sizes.get(sizeKey) ?? Math.max(280, window.innerHeight - 210), [sizeKey]);
+  useLayoutEffect(() => {
+    const view = surface.current;
+    const title = heading.current;
+    if (!fixedViewport || !view || !title) return;
+    const measure = (height = title.offsetHeight) => view.style.setProperty('--desktop-route-header-height', `${height}px`);
+    measure();
+    const observer = new ResizeObserver(([entry]) => measure(entry?.borderBoxSize?.[0]?.blockSize));
+    observer.observe(title, { box: 'border-box' });
+    return () => {
+      observer.disconnect();
+      view.style.removeProperty('--desktop-route-header-height');
+    };
+  }, [fixedViewport]);
   useLayoutEffect(() => {
     const view = surface.current;
     // These pages size their scrolling panes from the viewport, not their contents.
@@ -54,9 +68,9 @@ export function RouteSurface({ label, icon, section, children }: PropsWithChildr
         return;
       }
       const content = view.querySelector<HTMLElement>('.desktop-window-content');
-      const heading = view.querySelector<HTMLElement>('.desktop-page-heading');
-      if (!content || !heading) return;
-      const height = Math.ceil(content.offsetHeight + heading.offsetHeight + 2);
+      const title = heading.current;
+      if (!content || !title) return;
+      const height = Math.ceil(content.offsetHeight + title.offsetHeight + 2);
       sizes.set(sizeKey, height);
       if (sizes.size > 64) sizes.delete(sizes.keys().next().value as string);
       const previous = measured.current;
@@ -128,11 +142,12 @@ export function RouteSurface({ label, icon, section, children }: PropsWithChildr
           className="desktop-view desktop-view-app desktop-route-window desktop-route-page"
           data-window-navigation="page"
           data-route-section={routeSection}
+          data-header-internal-scroll={fixedViewport || undefined}
           style={{ '--orbis-route-reserve': `${reserve}px` } as CSSProperties}
           aria-label={label}
         >
           <div className="desktop-route-surface" aria-hidden="true" />
-          <header className="desktop-page-heading">
+          <header ref={heading} className="desktop-page-heading">
             <span className="desktop-window-icon" aria-hidden="true">
               {icon}
             </span>

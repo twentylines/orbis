@@ -1,4 +1,4 @@
-import { useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   IconArchive,
@@ -206,6 +206,17 @@ export function SettingsWorkspace({
 }) {
   const active = current;
   const [visited, setVisited] = useState<ReadonlySet<SettingsSection>>(() => new Set([active]));
+  const heading = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = heading.current;
+    const content = element?.parentElement;
+    if (!element || !content) return;
+    const measure = () => content.style.setProperty('--settings-section-heading-space', `${element.getBoundingClientRect().height}px`);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     setVisited((previous) => retainSettingsSections(previous, active));
   }, [active]);
@@ -261,7 +272,7 @@ export function SettingsWorkspace({
           </Select>
         </div>
         <div className="settings-content">
-          <div className="settings-heading-container">
+          <div ref={heading} className="settings-heading-container">
             <header className="settings-content-heading">
               <h2>{pending && active === 'updates' ? <output>Loading Updates…</output> : section.label}</h2>
               <SettingsSaveActions />
