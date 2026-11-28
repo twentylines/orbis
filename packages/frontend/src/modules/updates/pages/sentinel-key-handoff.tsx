@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
+import { Button } from '@/components/ui/Button';
 
 const fields = ['operationId', 'reviewSha256', 'planSha256', 'keyRevision', 'deliveryEpoch', 'handoff'] as const;
 type Handoff = Record<(typeof fields)[number], string>;
@@ -42,15 +43,7 @@ function saveFile(key: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function SentinelKeyHandoff({
-  active = true,
-  acknowledged,
-  onConfirmed,
-}: {
-  active?: boolean;
-  acknowledged: boolean;
-  onConfirmed: () => void;
-}) {
+export function SentinelKeyHandoff({ active, onConfirmed }: { active: boolean; onConfirmed: () => void }) {
   const [working, setWorking] = useState(false);
   const [https, setHttps] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -63,7 +56,7 @@ export function SentinelKeyHandoff({
   const fileId = useId();
   useEffect(() => setHttps(window.location.protocol === 'https:'), []);
   useEffect(() => {
-    if (!active || acknowledged) {
+    if (!active) {
       operation.current?.abort();
       operation.current = null;
       handoff.current = null;
@@ -73,7 +66,7 @@ export function SentinelKeyHandoff({
       setSaved(false);
       setMessage('');
     }
-  }, [active, acknowledged]);
+  }, [active]);
   useEffect(() => {
     const clear = () => {
       operation.current?.abort();
@@ -95,7 +88,7 @@ export function SentinelKeyHandoff({
     };
   }, []);
 
-  if (!active || !https || acknowledged) return null;
+  if (!active || !https) return null;
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -165,14 +158,14 @@ export function SentinelKeyHandoff({
   };
 
   return (
-    <div className="desktop-sentinel-key-handoff">
+    <div className="settings-recovery-key-handoff">
       {saved ? (
         <form onSubmit={(event) => void confirm(event)}>
           <label htmlFor={fileId}>Choose the saved emergency key</label>
           <input id={fileId} ref={file} type="file" accept=".txt,text/plain" required disabled={working} />
-          <button type="submit" className="desktop-update-action secondary" disabled={working}>
+          <Button type="submit" variant="outline" disabled={working}>
             Confirm saved key
-          </button>
+          </Button>
         </form>
       ) : (
         <form onSubmit={(event) => void save(event)}>
@@ -181,9 +174,9 @@ export function SentinelKeyHandoff({
           </p>
           <label htmlFor={inputId}>Handoff from the host</label>
           <textarea id={inputId} ref={input} autoComplete="off" spellCheck={false} required maxLength={1024} disabled={working} />
-          <button type="submit" className="desktop-update-action secondary" disabled={working}>
+          <Button type="submit" variant="outline" disabled={working}>
             Save emergency key
-          </button>
+          </Button>
         </form>
       )}
       <output aria-live="polite">{message}</output>

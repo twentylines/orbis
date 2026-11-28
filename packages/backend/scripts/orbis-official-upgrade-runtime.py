@@ -588,7 +588,7 @@ def build(cookie, pin):
 
 def seed(cookie, pin=SOURCE):
     marker = secrets.token_hex(12)
-    title, name = 'Official update fixture', 'orbis-ota-fixture-' + marker[:8]
+    title, name = 'OTA DB ' + marker[:8], 'orbis-ota-fixture-' + marker[:8]
     url = 'https://ota-fixture.invalid/' + marker
     http('POST', '/api/links', body={'title': title, 'url': url, 'description': title,
                                     'isVisibleOnGuestDashboard': False}, cookie=cookie, expect=(200, 201))

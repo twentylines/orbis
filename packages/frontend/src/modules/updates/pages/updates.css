@@ -210,43 +210,6 @@
   color: var(--desktop-ink);
   font-weight: 600;
 }
-.desktop-sentinel-key-handoff {
-  min-width: 0;
-  margin-block: 0.65rem;
-}
-.desktop-sentinel-key-handoff form {
-  display: grid;
-  align-items: start;
-  gap: 0.5rem;
-  margin-block-end: 0.4rem;
-}
-.desktop-sentinel-key-handoff :is(textarea, input) {
-  width: 100%;
-  min-width: 0;
-}
-.desktop-sentinel-key-handoff textarea {
-  min-height: 3rem;
-  padding: 0.4rem 0.5rem;
-  border: 1px solid var(--desktop-line);
-  border-radius: 0.35rem;
-  background: var(--desktop-content-fill);
-  color: var(--desktop-ink);
-  resize: vertical;
-}
-.desktop-sentinel-key-handoff input::file-selector-button {
-  min-height: 44px;
-  padding-inline: 0.5rem;
-  color: var(--desktop-ink);
-  background: var(--desktop-content-fill);
-  border: 1px solid var(--desktop-line);
-  border-radius: 0.35rem;
-}
-.desktop-sentinel-key-handoff button {
-  justify-self: start;
-}
-.desktop-sentinel-key-handoff code {
-  overflow-wrap: anywhere;
-}
 .desktop-updates-sentinel > [role="alert"] {
   margin-top: 0.45rem;
   font-size: 0.875rem;

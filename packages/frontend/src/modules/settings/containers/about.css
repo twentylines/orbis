@@ -22,6 +22,85 @@
   font-weight: 650;
   line-height: 1.5;
 }
+.settings-recovery-access {
+  --orbis-control-height: 44px;
+  display: grid;
+  gap: 12px;
+}
+.settings-recovery-summary,
+.settings-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  min-width: 0;
+}
+.settings-recovery-summary {
+  justify-content: space-between;
+}
+.settings-recovery-summary h3 {
+  margin-bottom: 4px;
+}
+.settings-recovery-summary > div {
+  min-width: 0;
+}
+.settings-recovery-actions > .btn,
+.settings-recovery-key-handoff .btn {
+  min-height: 44px;
+  max-width: 100%;
+  line-height: 1.4;
+  text-align: center;
+  white-space: normal;
+}
+.settings-recovery-actions > [role="alert"] {
+  flex-basis: 100%;
+  margin: 0;
+}
+.settings-recovery-guidance,
+.settings-recovery-guidance p,
+.settings-recovery-key-handoff p {
+  margin: 0;
+  color: var(--desktop-muted);
+}
+.settings-recovery-guidance > output {
+  color: var(--desktop-ink);
+}
+.settings-recovery-key-handoff {
+  min-width: 0;
+}
+.settings-recovery-key-handoff form {
+  display: grid;
+  align-items: start;
+  gap: 0.5rem;
+  margin-block-end: 0.4rem;
+}
+.settings-recovery-key-handoff :is(textarea, input) {
+  width: 100%;
+  min-width: 0;
+}
+.settings-recovery-key-handoff textarea {
+  min-height: 3rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--desktop-line);
+  border-radius: 0.35rem;
+  background: var(--desktop-content-fill);
+  color: var(--desktop-ink);
+  resize: vertical;
+}
+.settings-recovery-key-handoff input::file-selector-button {
+  min-height: 44px;
+  padding-inline: 0.5rem;
+  color: var(--desktop-ink);
+  background: var(--desktop-content-fill);
+  border: 1px solid var(--desktop-line);
+  border-radius: 0.35rem;
+}
+.settings-recovery-key-handoff button {
+  justify-self: start;
+}
+.settings-recovery-key-handoff code {
+  overflow-wrap: anywhere;
+}
 .settings-about-facts {
   display: grid;
   gap: 12px;

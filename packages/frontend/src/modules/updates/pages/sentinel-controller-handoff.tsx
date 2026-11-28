@@ -1,6 +1,7 @@
 import { IconShield } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
+import { Button } from '@/components/ui/Button';
 import { applyControllerHandoff, ControllerHandoffError, type ControllerHandoff, reviewControllerHandoff } from '../controller-handoff';
 
 export function SentinelControllerHandoff({ active, portalUrl }: { active: boolean; portalUrl: string }) {
@@ -77,10 +78,17 @@ export function SentinelControllerHandoff({ active, portalUrl }: { active: boole
 
   return (
     <>
-      <button ref={trigger} type="button" className="desktop-update-action secondary" disabled={!active || pending} onClick={() => void review()}>
-        {stage === 'reviewing' ? <span className="desktop-activity-loading" aria-hidden="true" /> : <IconShield size={18} aria-hidden="true" />}
+      <Button
+        ref={trigger}
+        type="button"
+        variant="outline"
+        disabled={!active || pending}
+        loading={stage === 'reviewing'}
+        onClick={() => void review()}
+      >
+        {stage === 'reviewing' ? null : <IconShield size={18} aria-hidden="true" />}
         {stage === 'reviewing' ? 'Reviewing recovery…' : 'Enter recovery'}
-      </button>
+      </Button>
       {message ? <p role="alert">{message}</p> : null}
       <Dialog
         open={stage === 'review' || stage === 'entering' || stage === 'uncertain'}
@@ -100,16 +108,16 @@ export function SentinelControllerHandoff({ active, portalUrl }: { active: boole
                 : 'Orbis will pause while Sentinel keeps recovery available. Your apps and the server will stay running.'}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="desktop-update-plan-actions">
+          <DialogFooter>
             {stage === 'uncertain' ? (
-              <a className="desktop-update-action" href={portalUrl}>
-                Open Sentinel
-              </a>
+              <Button asChild intent="primary">
+                <a href={portalUrl}>Open Sentinel</a>
+              </Button>
             ) : (
               <>
-                <button
+                <Button
                   type="button"
-                  className="desktop-update-action secondary"
+                  variant="outline"
                   disabled={pending}
                   onClick={() => {
                     setStage('idle');
@@ -117,10 +125,10 @@ export function SentinelControllerHandoff({ active, portalUrl }: { active: boole
                   }}
                 >
                   Cancel
-                </button>
-                <button type="button" className="desktop-update-action" disabled={pending} onClick={() => void enter()}>
+                </Button>
+                <Button type="button" intent="primary" disabled={pending} onClick={() => void enter()}>
                   {stage === 'entering' ? 'Opening recovery…' : 'Continue to Sentinel'}
-                </button>
+                </Button>
               </>
             )}
           </DialogFooter>

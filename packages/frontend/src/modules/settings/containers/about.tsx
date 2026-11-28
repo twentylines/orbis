@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { HostSensors, HostTelemetry } from '@runtipi/common/schemas';
 import { IconBrandGithub } from '@tabler/icons-react';
+import { useId } from 'react';
 import { Button } from '@/components/ui/Button';
 import { InstalledVersions } from '@/components/installed-versions/installed-versions';
 import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
@@ -9,11 +10,85 @@ import { installedOrbisBuildOptions } from '@/desktop/orbis-release';
 import { loadTelemetry, telemetryQueryKey } from '@/desktop/telemetry';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { SystemResetPanel } from '@/modules/system-reset/system-reset';
-import { sentinelStatusOptions } from '@/modules/updates/sentinel-status';
+import { SentinelControllerHandoff } from '@/modules/updates/pages/sentinel-controller-handoff';
+import { SentinelKeyHandoff } from '@/modules/updates/pages/sentinel-key-handoff';
+import {
+  recoveryAccessNeedsSignIn,
+  type SentinelEnrollmentStage,
+  sentinelRecoveryAccessOptions,
+  sentinelStatusOptions,
+} from '@/modules/updates/sentinel-status';
 import './about.css';
 
 const entryOptions = { staleTime: 5 * 60_000, refetchOnWindowFocus: false, retry: false } as const;
 type HostSoftware = { osName: string | null; osVersion: string | null; dockerVersion: string | null };
+
+const enrollmentGuidance: Record<Exclude<SentinelEnrollmentStage, 'activated'>, [status: string, next: string]> = {
+  'not-started': ['Enrollment has not started.', 'On the Orbis host, stage the operator account using the protected Sentinel bootstrap.'],
+  staging: ['Operator setup is in progress.', 'Complete the staged setup on the Orbis host before preparing the emergency key.'],
+  'operator-staged': ['Operator account staged.', 'Prepare and save the emergency key through the protected host setup.'],
+  'key-prepared': ['Emergency key prepared.', 'Save the key somewhere you can reach while Orbis is offline, then confirm the saved file.'],
+  'key-expired': ['The emergency key confirmation expired.', 'Review the existing host setup before continuing.'],
+  'key-acknowledged': ['Host recorded a key acknowledgment.', 'Complete the reviewed activation on the Orbis host.'],
+  'activation-pending': ['Activation is in progress.', 'Follow the host setup result before testing recovery sign-in.'],
+};
+
+function RecoveryAccess({ active, operator }: { active: boolean; operator: boolean }) {
+  const heading = useId();
+  const recovery = useQuery(sentinelRecoveryAccessOptions(active));
+  const access = recovery.isError ? undefined : recovery.data;
+  const configured = access?.state === 'configured' ? access : undefined;
+  const stage = operator ? configured?.enrollment : undefined;
+  const enrollment = stage && stage !== 'activated' ? enrollmentGuidance[stage] : undefined;
+  const recoveryLabel = recoveryAccessNeedsSignIn(recovery.error)
+    ? 'Sign in again to check recovery access.'
+    : recovery.isPending
+      ? 'Checking recovery access…'
+      : configured
+        ? {
+            active: 'Portal configured. Recovery service active.',
+            inactive: 'Portal configured. Recovery service inactive.',
+            unknown: 'Portal configured. Recovery service status unknown.',
+          }[configured.unitState]
+        : access?.state === 'missing'
+          ? 'Recovery portal setup required.'
+          : 'Recovery access could not be verified.';
+
+  return (
+    <section className="settings-group settings-recovery-access" aria-labelledby={heading}>
+      <div className="settings-recovery-summary">
+        <div>
+          <h3 id={heading}>Recovery</h3>
+          <output>{recoveryLabel}</output>
+        </div>
+        {configured ? (
+          <div className="settings-recovery-actions">
+            <Button asChild variant="outline">
+              <a href={configured.portalUrl} target="_blank" rel="noopener noreferrer">
+                Open recovery
+              </a>
+            </Button>
+            {stage === 'activated' && configured.unitState === 'active' ? (
+              <SentinelControllerHandoff key={configured.portalUrl} active={active} portalUrl={configured.portalUrl} />
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      {enrollment ? (
+        <div className="settings-recovery-guidance">
+          <output>{enrollment[0]}</output>
+          <p>{enrollment[1]}</p>
+        </div>
+      ) : configured && stage !== 'activated' ? (
+        <p className="settings-recovery-guidance">
+          {operator && configured.unitState === 'active' ? 'Enrollment progress could not be verified. ' : null}
+          Open the portal to check sign-in availability.
+        </p>
+      ) : null}
+      {stage === 'key-prepared' ? <SentinelKeyHandoff active={active} onConfirmed={() => void recovery.refetch()} /> : null}
+    </section>
+  );
+}
 
 function operatingSystemLabel(software?: HostSoftware) {
   const { osName, osVersion } = software ?? {};
@@ -93,6 +168,7 @@ export function About() {
 
   return (
     <div className="settings-about">
+      <RecoveryAccess active={visible} operator={user?.operator === true} />
       <div className="settings-about-sections">
         <section className="settings-group" aria-labelledby="about-software-title">
           <h3 id="about-software-title">Installed software</h3>
