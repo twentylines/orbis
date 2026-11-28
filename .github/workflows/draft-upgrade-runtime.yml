@@ -1,0 +1,43 @@
+name: Draft upgrade runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      rehearsal:
+        description: Qualification of the verified Orbis draft pair
+        required: true
+        type: choice
+        options:
+          - checkpoint-recovery
+          - installed-cli-update
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  qualify:
+    if: github.repository == 'twentylines/orbis' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      # GitHub restricts draft visibility to credentials with push access.
+      # Only this acquisition step receives that token. The installed product
+      # receives only the exact verified bytes on the disposable runner.
+      - name: Acquire the exact unpublished installer assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo --non-interactive --preserve-env=GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GH_TOKEN,RUNNER_ENVIRONMENT \
+            /usr/bin/python3 -I -B packages/backend/scripts/orbis-official-upgrade-runtime.py --acquire-drafts
+
+      - name: Rehearse the signed draft pair without release discovery
+        env:
+          DRAFT_UPGRADE_CASE: ${{ inputs.rehearsal }}
+        run: |
+          sudo --non-interactive --preserve-env=CI,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,RUNNER_ENVIRONMENT,DRAFT_UPGRADE_CASE \
+            /usr/bin/python3 -I -B packages/backend/scripts/orbis-official-upgrade-runtime.py

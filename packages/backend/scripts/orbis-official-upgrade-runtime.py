@@ -2,7 +2,7 @@
 """Qualify one official coordinated release update on a new hosted Linux runner."""
 
 import ast
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 import errno
 import hashlib
 from http.client import HTTPConnection, HTTPException
@@ -92,10 +92,21 @@ def sha(body):
 
 
 def target_pin(environment):
+    if environment.get('DRAFT_UPGRADE_CASE'):
+        return draft_pins()[1]
     commit, digest = environment.get('TARGET_COMMIT'), environment.get('TARGET_DIGEST', '')
     require(commit in TARGET_RELEASES and DIGEST.fullmatch(digest), 'target-pin-required')
     tag, workflow_run = TARGET_RELEASES[commit]
     return (tag, commit, digest, '4.12.0', workflow_run)
+
+
+def draft_pins():
+    directory = Path(__file__).parent
+    transport = load('orbis-official-draft-transport', directory)
+    draft = load('orbis-official-draft-pair', directory)
+    source, target = draft.pins(transport)
+    BRIDGES[source[1]] = source
+    return source, target
 
 
 def source_pin(target):
@@ -286,7 +297,7 @@ def installer_signals(files):
     return signals
 
 
-def publisher(pin, reader, boot, launcher, token):
+def publisher(pin, reader, boot, launcher, token, *, staged_draft=False):
     tag, commit, digest, base, run_id = pin
     api = reader.GITHUB_API
     headers = {'Accept': 'application/vnd.github+json'}
@@ -296,9 +307,10 @@ def publisher(pin, reader, boot, launcher, token):
     def fetch(url, limit):
         return reader.read_url(url, limit, headers if url.startswith(api + '/') else None)[0]
 
-    publication = json.loads(fetch(f'{api}/actions/runs/{run_id}', 512 * 1024))
-    require((publication.get('conclusion'), publication.get('head_sha'), publication.get('path', '').partition('@')[0])
-            == ('success', commit, '.github/workflows/release.yml'), 'official-publisher-mismatch')
+    if not staged_draft:
+        publication = json.loads(fetch(f'{api}/actions/runs/{run_id}', 512 * 1024))
+        require((publication.get('conclusion'), publication.get('head_sha'), publication.get('path', '').partition('@')[0])
+                == ('success', commit, '.github/workflows/release.yml'), 'official-publisher-mismatch')
     checked = reader.check(tag)
     require((checked['tag'], checked['commit'], checked['image'], checked['runtipiCompatibility'],
              checked['installationProtocol']) == (tag, commit, f'{IMAGE}@{digest}', base, 'orbis.installation-state.v1')
@@ -327,7 +339,10 @@ def publisher(pin, reader, boot, launcher, token):
                  core['installationProtocol']) == (tag, commit, IMAGE, digest, base, 'orbis.installation-state.v1')
             and boot._render_installer('release', identity, template) == files['install-orbis.py'],
             'official-source-closure-mismatch')
-    launcher.authenticate_tree(fetch, commit, closure)
+    if staged_draft:
+        launcher.authenticate_embedded_tree(manifest[launcher.GIT_PROOF_FIELD], commit, closure)
+    else:
+        launcher.authenticate_tree(fetch, commit, closure)
     path = WORK / (tag + '.py')
     with path.open('xb') as output:
         output.write(files['install-orbis.py'])
@@ -1228,20 +1243,22 @@ def verify_committed_return(source, target, result):
     result['committedReconciliationVerified'] = True
 
 
-def fixture(environment, result):
+def fixture(environment, result, resources):
     result['phase'] = 'scope'
+    draft_case = environment.get('DRAFT_UPGRADE_CASE', '')
+    require(draft_case in ('', 'checkpoint-recovery', 'installed-cli-update'), 'draft-upgrade-case-refused')
     target = target_pin(environment)
     predecessor = source_pin(target)
     mode = environment.get('STABLE_BRIDGE', 'false')
     require(mode in ('true', 'false'), 'stable-bridge-mode-refused')
     bridge = mode == 'true'
-    fault = environment.get('CHECKPOINT_RECOVERY', 'false')
+    fault = 'true' if draft_case == 'checkpoint-recovery' else environment.get('CHECKPOINT_RECOVERY', 'false')
     require(fault in ('true', 'false') and not (bridge and fault == 'true'), 'checkpoint-recovery-mode-refused')
     committed_input = environment.get('CORE_COMMIT_RECOVERY', 'false')
     require(committed_input in ('true', 'false') and not (committed_input == 'true' and (bridge or fault == 'true')),
             'commit-recovery-mode-refused')
     committed_fault = committed_input == 'true'
-    installed_cli = environment.get('INSTALLED_CLI_UPDATE', 'false')
+    installed_cli = 'true' if draft_case == 'installed-cli-update' else environment.get('INSTALLED_CLI_UPDATE', 'false')
     require(installed_cli in ('true', 'false')
             and not (installed_cli == 'true' and (bridge or fault == 'true' or committed_fault)),
             'installed-cli-test-mode-refused')
@@ -1261,9 +1278,21 @@ def fixture(environment, result):
     legacy_discovery = ota == 'legacy-discovery'
     initial = STABLE if bridge or legacy_discovery else predecessor
     result['fixtureDefaultAclRemoved'], result['fixtureTimezoneProtected'] = preflight(environment)
+    if draft_case:
+        directory = Path(__file__).parent
+        transport = load('orbis-official-draft-transport', directory)
+        draft = load('orbis-official-draft-pair', directory)
+        result['phase'] = 'draft-fixture-transport'
+        private_input = transport.private_directory(draft.INPUT)
+        shutil.copytree(private_input, WORK / 'draft-release-responses')
+        resources.enter_context(transport.activate())
+        result['draftTransport'] = True
+        result['draftPublisherRuns'] = [predecessor[4], target[4]]
+        result['draftTargetDigest'] = target[2]
     result['phase'] = 'publisher'
     modules = [load(name) for name in ('orbis-release-check', 'install-orbis', 'orbis-host-upgrade-launcher')]
-    source, candidate = [publisher(pin, *modules, environment.get('GITHUB_TOKEN')) for pin in (predecessor, target)]
+    source, candidate = [publisher(pin, *modules, environment.get('GITHUB_TOKEN'), staged_draft=bool(draft_case))
+                         for pin in (predecessor, target)]
     bootstrap = publisher(STABLE, *modules, environment.get('GITHUB_TOKEN')) if initial == STABLE else source
     result['phase'] = 'loopback-isolation'
     isolate_dashboard()
@@ -1676,9 +1705,21 @@ def failure_readback(environment, result):
 
 
 def main():
+    if sys.argv[1:] == ['--acquire-drafts']:
+        try:
+            load('orbis-official-draft-pair', Path(__file__).parent).acquire(sys.modules[__name__], os.environ)
+        except Refused as error:
+            print(json.dumps({'phase': 'draft-acquisition', 'passed': False, 'error': str(error)}))
+            return 1
+        except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError):
+            print(json.dumps({'phase': 'draft-acquisition', 'passed': False, 'error': 'draft-acquisition-refused'}))
+            return 1
+        print(json.dumps({'phase': 'draft-acquisition', 'passed': True}))
+        return 0
     result = {'schema': 'orbis.official-upgrade-runtime.v1', 'passed': False}
     try:
-        fixture(os.environ, result)
+        with ExitStack() as resources:
+            fixture(os.environ, result, resources)
     except Refused as error:
         result['error'] = str(error)
         result.update(error.evidence)
