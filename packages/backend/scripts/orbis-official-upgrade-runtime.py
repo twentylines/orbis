@@ -586,6 +586,32 @@ def build(cookie, pin):
             == (tag, commit, digest, base), 'loopback-build-mismatch')
 
 
+def fixture_app_failure(status):
+    evidence = {}
+    if status in ('failed', 'interrupted', 'unconfirmed', 'cancelled'):
+        evidence['fixtureAppTaskStatus'] = status
+    if status == 'failed':
+        signals = {
+            'permission': ('permission denied', 'operation not permitted', 'eacces'),
+            'mount': ('mount source path', 'invalid mount config', 'mounts denied'),
+            'network': ('network_mode', 'failed to create network', 'failed to program'),
+            'image': ('manifest unknown', 'pull access denied', 'no such image', 'failed to resolve reference'),
+            'compose': ('compose json validation errors', 'invalid compose project', 'services.web'),
+            'storage': ('no space left on device', 'read-only file system'),
+        }
+        try:
+            logs = subprocess.run(DOCKER + ['logs', '--tail', '220', 'runtipi'], env=ENV,
+                                  stdin=subprocess.DEVNULL, capture_output=True, timeout=10)
+            if logs.returncode == 0:
+                body = (logs.stdout + logs.stderr).decode(errors='replace').lower()
+                evidence['fixtureAppFailureClasses'] = [
+                    kind for kind, phrases in signals.items() if any(phrase in body for phrase in phrases)
+                ]
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return Refused('fixture-app-task-refused', **evidence)
+
+
 def seed(cookie, pin=SOURCE):
     marker = secrets.token_hex(12)
     title, name = 'OTA DB ' + marker[:8], 'orbis-ota-fixture-' + marker[:8]
@@ -616,10 +642,13 @@ def seed(cookie, pin=SOURCE):
         tasks, _ = http('GET', '/api/tasks', cookie=cookie)
         selected = [task for task in tasks['tasks'] if task['id'] == request_id]
         if selected:
-            require(len(selected) == 1 and selected[0]['appUrn'] == urn and selected[0]['action'] == 'install'
-                    and selected[0]['status'] in ('queued', 'running', 'succeeded'), 'fixture-app-task-refused')
-            if selected[0]['status'] == 'succeeded':
+            require(len(selected) == 1 and selected[0]['appUrn'] == urn and selected[0]['action'] == 'install',
+                    'fixture-app-task-identity-refused')
+            status = selected[0]['status']
+            if status == 'succeeded':
                 return marker, name, links[0]['id']
+            if status not in ('queued', 'running'):
+                raise fixture_app_failure(status)
         time.sleep(0.5)
     raise Refused('fixture-app-task-timeout')
 
