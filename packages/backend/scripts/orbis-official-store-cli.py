@@ -134,6 +134,18 @@ def seed_and_update(runtime, cookie, worktree, bare, revisions, source_image, ta
                     'cli-update-default-backup-refused')
 
 
+def git_server_image(runtime, target_image):
+    # The Alpine product image only needs Git as a client. Put git-http-backend
+    # in a disposable fixture image with an otherwise empty build context.
+    context = runtime.WORK / 'catalogue-server-image'
+    context.mkdir(mode=0o700)
+    (context / 'Dockerfile').write_text(f'FROM {target_image}\nRUN apk add --no-cache git-daemon\n', encoding='ascii')
+    image = runtime.run(runtime.DOCKER + ['build', '--quiet', '--pull=false', str(context)], timeout=120,
+                        code='cli-update-catalogue-image-refused')
+    runtime.require(re.fullmatch(r'sha256:[a-f0-9]{64}', image), 'cli-update-catalogue-image-identity-refused')
+    return image
+
+
 def installed_cli_update(runtime, cookie, source, target):
     runtime.require((source[0], target[0]) == ('v0.9.2-beta.8', 'v0.9.2-beta.9') and source[2] != target[2],
                     'cli-update-release-pair-refused')
@@ -146,23 +158,32 @@ def installed_cli_update(runtime, cookie, source, target):
     runtime.require(network in attached, 'cli-update-catalogue-network-refused')
     server = Path(__file__).resolve().parents[3] / 'scripts/store-fixture-server.cjs'
     runtime.require(server.is_file() and not server.is_symlink(), 'cli-update-catalogue-server-refused')
-    identifier = runtime.run(runtime.DOCKER + ['run', '-d', '--pull=never', '--name', GIT_SERVER, '--network', network,
-        '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--user=0:0', '--entrypoint=node',
-        '-e', 'ORBIS_ALLOW_STORE_FIXTURE=1', '--mount', f'type=bind,src={bare.parent},dst=/fixtures/repos,readonly',
-        '--mount', f'type=bind,src={server},dst=/fixture-server.cjs,readonly', target_image, '/fixture-server.cjs'])
-    runtime.require(re.fullmatch(r'[a-f0-9]{64}', identifier), 'cli-update-catalogue-container-refused')
+    image = git_server_image(runtime, target_image)
     try:
-        probe = f"fetch('{STORE_URL}/info/refs?service=git-upload-pack',{{signal:AbortSignal.timeout(3000)}})"
-        probe += ".then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
-        deadline = time.monotonic() + 30
-        while time.monotonic() < deadline:
-            try:
-                runtime.run(runtime.DOCKER + ['exec', 'runtipi', 'node', '-e', probe], timeout=5)
-                break
-            except runtime.Refused:
-                time.sleep(0.5)
-        else:
-            raise runtime.Refused('cli-update-catalogue-not-ready')
-        seed_and_update(runtime, cookie, worktree, bare, revisions, source_image, target_image, token)
+        identifier = runtime.run(runtime.DOCKER + ['run', '-d', '--pull=never', '--name', GIT_SERVER, '--network', network,
+            '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--user=0:0', '--entrypoint=node',
+            '-e', 'ORBIS_ALLOW_STORE_FIXTURE=1', '--mount', f'type=bind,src={bare.parent},dst=/fixtures/repos,readonly',
+            '--mount', f'type=bind,src={server},dst=/fixture-server.cjs,readonly', image, '/fixture-server.cjs'])
+        runtime.require(re.fullmatch(r'[a-f0-9]{64}', identifier), 'cli-update-catalogue-container-refused')
+        try:
+            runtime.run(runtime.DOCKER + ['exec', identifier, 'test', '-x', '/usr/libexec/git-core/git-http-backend'],
+                        code='cli-update-catalogue-backend-missing')
+            wait_for_catalogue(runtime)
+            seed_and_update(runtime, cookie, worktree, bare, revisions, source_image, target_image, token)
+        finally:
+            runtime.run(runtime.DOCKER + ['rm', '-f', identifier], timeout=20, code='cli-update-catalogue-cleanup-refused')
     finally:
-        runtime.run(runtime.DOCKER + ['rm', '-f', identifier], timeout=20, code='cli-update-catalogue-cleanup-refused')
+        runtime.run(runtime.DOCKER + ['image', 'rm', image], timeout=20, code='cli-update-catalogue-image-cleanup-refused')
+
+
+def wait_for_catalogue(runtime):
+    probe = f"fetch('{STORE_URL}/info/refs?service=git-upload-pack',{{signal:AbortSignal.timeout(3000)}})"
+    probe += ".then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        try:
+            runtime.run(runtime.DOCKER + ['exec', 'runtipi', 'node', '-e', probe], timeout=5)
+            return
+        except runtime.Refused:
+            time.sleep(0.5)
+    raise runtime.Refused('cli-update-catalogue-not-ready')

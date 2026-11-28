@@ -24,6 +24,7 @@ import sys
 from threading import Event, Thread
 import time
 import traceback
+from urllib.error import HTTPError
 from urllib.parse import quote
 import uuid
 from zoneinfo import ZoneInfo
@@ -930,19 +931,22 @@ def verified_operation(status, source, target, policy, prior_operations):
     return operation, update, snapshot
 
 
-def quiescent(operation):
+def quiescent(operation, *, interrupted=False):
     observation = load('orbis-host-upgrade-supervision', HOST)
-    units = [observation.unit_name(operation), observation.reconciliation_unit_name(operation)]
+    runtime = observation.Runtime()
+    scopes = [(observation.unit_name(operation), {'inactive', 'failed'} if interrupted else {'inactive'}),
+              (observation.reconciliation_unit_name(operation), {'inactive'})]
     until = time.monotonic() + 20
     while time.monotonic() < until:
-        states = run(['/usr/bin/systemctl', 'show', '--property=ActiveState', '--value', *units]).split()
-        if states == ['inactive', 'inactive']:
+        observed = [(runtime.unit(unit), unit, allowed) for unit, allowed in scopes]
+        if all(state['ActiveState'] in allowed and state['MainPID'] == state['ControlPID'] == '0'
+               and not state['Job'] and runtime.cgroup_empty(unit) for state, unit, allowed in observed):
             return
         time.sleep(0.25)
     raise Refused('worker-quiescence-refused')
 
 
-def completed(status, source, target, prior_operations=()):
+def completed(status, source, target, prior_operations=(), *, interrupted=False):
     operation, update, snapshot = verified_operation(status, source, target, 'automatic', prior_operations)
     tools, reader = update.controller_tools('default')
     record = tools.read_record(update.checkpoint_path(snapshot), ROOT, reader)
@@ -957,7 +961,7 @@ def completed(status, source, target, prior_operations=()):
     require(run(DOCKER + ['inspect', '--format', '{{.State.Health.Status}}', 'runtipi-db']) == 'healthy',
             'installed-postgres-refused')
     run(DOCKER + ['exec', 'runtipi-queue', 'rabbitmq-diagnostics', '-q', 'check_running'], code='installed-queue-refused')
-    quiescent(operation)
+    quiescent(operation, interrupted=interrupted)
 
 
 def verify_internal_network():
@@ -1303,8 +1307,9 @@ def fixture(environment, result):
             try:
                 with interrupt_at_checkpoint(predecessor, target, result):
                     launch(candidate, 'target', 1500)
-            except Refused:
-                require(result.get('checkpointInterruption', {}).get('sent') is True, 'checkpoint-interruption-not-observed')
+            except Refused as error:
+                if result.get('checkpointInterruption', {}).get('sent') is not True:
+                    raise Refused('checkpoint-interruption-not-observed', originalInstallerFailure=str(error), **error.evidence) from None
             else:
                 raise Refused('interruption-expected-target-refusal-not-observed')
             result['phase'] = 'checkpoint-recovery'
@@ -1317,8 +1322,9 @@ def fixture(environment, result):
             try:
                 with interrupt_at_checkpoint(predecessor, target, result, committed=True):
                     launch(candidate, 'target', 1500)
-            except Refused:
-                require(result.get('coreCommitInterruption', {}).get('sent') is True, 'commit-interruption-not-observed')
+            except Refused as error:
+                if result.get('coreCommitInterruption', {}).get('sent') is not True:
+                    raise Refused('commit-interruption-not-observed', originalInstallerFailure=str(error), **error.evidence) from None
                 result['phase'] = 'committed-recovery'
                 verify_committed_return(predecessor, target, result)
             else:
@@ -1329,7 +1335,7 @@ def fixture(environment, result):
     if bridge:
         require(executed_launcher(candidate, 'target', target) != bridge_receipt, 'launcher-receipt-replayed')
     target_host = check_host(target)
-    completed(target_host, predecessor, target, prior_operations)
+    completed(target_host, predecessor, target, prior_operations, interrupted=committed_fault)
     if committed_fault:
         require(target_host['job']['id'] == result['coreCommitInterruption']['operation'], 'commit-operation-changed')
     result['targetProgress']['boundToTerminalOperation'] = result['targetProgress']['operations'] == [target_host['job']['id']]
@@ -1436,6 +1442,44 @@ def bootstrap_refusal_evidence(update, job, snapshot):
     return result
 
 
+def public_source_readback(target):
+    """Recheck the fixed read-only inputs without replaying worker admission."""
+    stage = 'load-source-verifier'
+    try:
+        boot = load('install-orbis', HOST)
+        launcher = load('orbis-host-upgrade-launcher', HOST)
+        prefix = launcher.RELEASES + target[0] + '/'
+        stage = 'launcher'
+        wrapper = boot.fetch(prefix + 'install-orbis.py', 1024 * 1024)
+        identity = launcher.literal(wrapper, 'EXPECTED_RELEASE')
+        require((identity['tag'], identity['commit']) == target[:2], 'readback-launcher-identity-refused')
+        stage = 'installer-manifest'
+        body = boot.fetch(prefix + boot.MANIFEST, 65536)
+        manifest = boot.verify_manifest(body, identity, required=boot.SOURCE_CUSTODY_REQUIRED)
+        stage = 'release-manifest'
+        core_body = boot.fetch(prefix + 'release-manifest.json', 16384)
+        core = json.loads(core_body)
+        require(sha(core_body) == manifest['releaseManifestSha256']
+                and (core['tag'], core['commit'], core['digest'], core['runtipiCompatibility']) == target[:4],
+                'readback-core-identity-refused')
+        stage = 'installer-archive'
+        archive = boot.fetch(prefix + boot.ARCHIVE, manifest['archiveBytes'])
+        _, files = boot.verify_source_package(body, identity, archive)
+        stage = 'git-tree'
+        launcher.authenticate_tree(boot.fetch, target[1], files)
+        stage = 'source-protocol'
+        require(launcher.source_protocol(files['scripts/orbis-install.py'], legacy=True) == launcher.PROTOCOL
+                and boot._render_installer('release', identity, files['scripts/install-orbis.py']) == wrapper,
+                'readback-source-protocol-refused')
+    except HTTPError as error:
+        return {'stage': stage, 'outcome': 'http-refused', 'status': error.code}
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError) as error:
+        categories = (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError)
+        kind = next(category.__name__ for category in categories if isinstance(error, category))
+        return {'stage': stage, 'outcome': 'verification-refused', 'kind': kind}
+    return {'stage': 'complete', 'outcome': 'verified', 'members': len(files)}
+
+
 def failure_readback(environment, result):
     phase = result.get('phase')
     if phase not in ('guided-bridge', 'bridge-readback', 'guided-target', 'terminal-readback',
@@ -1477,10 +1521,12 @@ def failure_readback(environment, result):
         directory = STATE / 'component-upgrades' / operation
         with launcher.directory(directory) as descriptor:
             names = set(os.listdir(descriptor))
-        known = {'intake.json': 'intake', 'claim.json': 'claimed', 'source-preparation.json': 'source-prepared',
+        known = {'intake.json': 'intake', 'claim.json': 'claimed', 'selection': 'source-selection-present', 'source-preparation.json': 'source-prepared',
                  'source-checked.json': 'source-authenticated', 'target-set.json': 'target-bound',
                  'execution-intent.json': 'execution-intent', 'component-journal': 'component-journal'}
         result['acceptedCustody'] = [label for name, label in known.items() if name in names]
+        if 'claim.json' in names and 'source-preparation.json' not in names:
+            result['publicSourceReadback'] = public_source_readback(target)
         if 'target-set.json' in names and 'component-journal' in names:
             target_body = launcher.read_file(directory / 'target-set.json')
             selected = json.loads(target_body)
