@@ -1572,8 +1572,12 @@ def fixture(environment, result, resources):
         if installed_cli == 'true':
             result['phase'] = 'installed-store-cli-update'
             module = load('orbis-official-store-cli', Path(__file__).parent)
+            # The preceding backup may restart the original app. The distinct
+            # store update must preserve its post-backup runtime and OTA data.
+            before_store_update = app_data(identity)
+            require(before_store_update[:2] == original[:2], 'installed-cli-post-backup-markers-changed')
             module.installed_cli_update(sys.modules[__name__], cookie, predecessor, target)
-            require(app_data(identity) == original, 'installed-cli-update-changed-ota-markers')
+            require(app_data(identity) == before_store_update, 'installed-cli-update-changed-ota-markers')
             result['installedAppUpdateVerified'] = True
     finally:
         http('POST', '/api/auth/logout', cookie=cookie, expect=(204,))
