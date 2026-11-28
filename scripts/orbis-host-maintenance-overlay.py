@@ -382,7 +382,8 @@ class CoreOverlay:
                 raw = self.runtime.inspect(record['responderId'])
                 if not self.terminal_responder_matches(raw, record):
                     raise ValueError('The maintenance responder changed')
-                health = record['intents']['responder']['body'].get('Healthcheck', {})
+                responder_intent = record.get('intents', {}).get('responder', {})
+                health = responder_intent.get('body', {}).get('Healthcheck', {})
                 if raw['State'].get('Running') and health.get('Test', ['NONE']) != ['NONE']:
                     self.runtime.drain_core_overlay(record, raw)
                 self.runtime.change(['update', '--restart', 'no', raw['Id']])
