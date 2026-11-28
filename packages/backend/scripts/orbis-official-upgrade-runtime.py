@@ -849,6 +849,28 @@ def checkpoint_limit():
     return estimate
 
 
+def component_journal(operation_dir, operation, target_body):
+    launcher = load('orbis-host-upgrade-launcher')
+    runner = load('orbis-host-upgrade-runner')
+    directory = operation_dir / 'component-journal'
+    with launcher.directory(directory) as descriptor:
+        names = sorted(os.listdir(descriptor))
+    require(1 <= len(names) <= 64, 'component-journal-inventory-refused')
+    previous = None
+    journal = {}
+    for index, name in enumerate(names):
+        require(bool(re.fullmatch(r'[0-9]{2}-[a-z-]+\.json', name)), 'component-journal-name-refused')
+        body = launcher.read_file(directory / name)
+        record = json.loads(body)
+        phase = record['phase']
+        require(phase in runner.PHASES and phase not in journal and name == f'{index:02d}-{phase}.json'
+                and record['operationId'] == operation and record['targetSetSha256'] == sha(target_body)
+                and record['previousSha256'] == previous, 'component-journal-binding-refused')
+        journal[phase] = record['value']
+        previous = sha(body)
+    return journal, previous
+
+
 def verified_operation(status, source, target, policy, prior_operations):
     operation = status['job']['id']
     require(str(uuid.UUID(operation)) == operation and status['job']['state'] == 'complete'
@@ -864,17 +886,7 @@ def verified_operation(status, source, target, policy, prior_operations):
             and job['current']['digest'] == source[2] and job['target']['digest'] == target[2]
             and target_set['core']['digest'] == target[2] and target_set['sentinel']['release'] == SENTINEL,
             'authoritative-job-refused')
-    previous = None
-    journal = {}
-    for index, path in enumerate(sorted((operation_dir / 'component-journal').iterdir())):
-        body = path.read_bytes()
-        record = json.loads(body)
-        phase = record['phase']
-        require(index < 64 and phase not in journal and path.name == f'{index:02d}-{phase}.json'
-                and record['operationId'] == operation and record['targetSetSha256'] == sha(target_body)
-                and record['previousSha256'] == previous, 'component-journal-binding-refused')
-        journal[phase] = record['value']
-        previous = sha(body)
+    journal, previous = component_journal(operation_dir, operation, target_body)
     phases = list(journal)
     expected = ['integration-ready', 'host-ready', 'core-ready', 'complete']
     require(phases[-1:] == ['complete'] and all(phase in journal for phase in expected)
@@ -1131,6 +1143,25 @@ def failure_readback(environment, result):
                 result.update(bootstrap_refusal_evidence(update, job, snapshot))
     except Exception:
         # Secondary readback never changes an outcome or reveals raw state.
+        return
+    try:
+        launcher = load('orbis-host-upgrade-launcher')
+        directory = STATE / 'component-upgrades' / operation
+        with launcher.directory(directory) as descriptor:
+            names = set(os.listdir(descriptor))
+        known = {'intake.json': 'intake', 'claim.json': 'claimed', 'source-preparation.json': 'source-prepared',
+                 'source-checked.json': 'source-authenticated', 'target-set.json': 'target-bound',
+                 'execution-intent.json': 'execution-intent', 'component-journal': 'component-journal'}
+        result['acceptedCustody'] = [label for name, label in known.items() if name in names]
+        if 'target-set.json' in names and 'component-journal' in names:
+            target_body = launcher.read_file(directory / 'target-set.json')
+            selected = json.loads(target_body)
+            require(selected['core']['commit'] == target[1] and selected['core']['digest'] == target[2],
+                    'diagnostic-target-mismatch')
+            phases, _ = component_journal(directory, operation, target_body)
+            result['componentJournalPhases'] = list(phases)
+    except Exception:
+        # An incomplete stage or absent custody supplies no authority.
         return
 
 
