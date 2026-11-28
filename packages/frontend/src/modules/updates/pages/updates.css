@@ -10,6 +10,13 @@
   gap: 0.875rem 1rem;
   margin-bottom: 1.125rem;
 }
+.desktop-updates-toolbar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  min-width: 0;
+}
 .desktop-updates-tabs {
   display: inline-grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -252,14 +259,12 @@
 .desktop .desktop-updates .desktop-system-update-primary:hover:not(:disabled) {
   background: color-mix(in srgb, var(--desktop-action-ink) 12%, var(--desktop-action));
 }
-.desktop .desktop-updates .desktop-update-action.secondary,
-.desktop .desktop-updates .desktop-update-check {
+.desktop .desktop-updates .desktop-update-action.secondary {
   background: color-mix(in srgb, var(--desktop-preset-tint) 7%, transparent);
   border-color: var(--desktop-line);
   color: var(--desktop-ink);
 }
-.desktop .desktop-updates .desktop-update-action.secondary:hover,
-.desktop .desktop-updates .desktop-update-check:hover:not(:disabled) {
+.desktop .desktop-updates .desktop-update-action.secondary:hover:not([aria-disabled="true"]) {
   background: color-mix(in srgb, var(--desktop-preset-tint) 14%, transparent);
 }
 .desktop-system-update-details {
@@ -289,16 +294,23 @@
   border-radius: 14px;
   background: color-mix(in srgb, var(--desktop-preset-tint) 7%, transparent);
 }
-.system-update-progress[data-state="complete"] {
+.system-update-progress[data-state="complete"],
+.desktop-os-operation[data-refreshing="true"] > .system-update-progress {
   padding: 0;
   margin-block: 0.75rem 0;
   border: 0;
   border-radius: 0;
   background: transparent;
 }
+.desktop-os-operation[data-refreshing="true"] > .system-update-progress > :is(header, progress) {
+  display: none;
+}
 .system-update-progress > progress + details,
 .system-update-progress > p {
   margin-top: 0.65rem;
+}
+.desktop-os-operation[data-refreshing="true"] > .system-update-progress > details {
+  margin-top: 0;
 }
 .system-update-progress > header {
   display: flex;
@@ -479,9 +491,6 @@
   line-height: 1.55;
   overflow-wrap: break-word;
 }
-.desktop-update-summary .desktop-host-package-times {
-  margin-top: 0.3rem;
-}
 .desktop-update-summary strong {
   color: var(--desktop-ink);
   font-variant-numeric: tabular-nums;
@@ -503,6 +512,63 @@
 }
 .desktop-update-check-reserve {
   visibility: hidden;
+}
+.desktop-update-check[aria-disabled="true"] {
+  cursor: wait;
+}
+.desktop-os-check-status {
+  display: grid;
+  margin-top: 0.3rem;
+  color: var(--desktop-muted);
+  line-height: 1.5;
+}
+.desktop-os-check-status > span {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+.desktop-os-check-status > [aria-hidden="true"] {
+  visibility: hidden;
+}
+.desktop-os-check-active {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+.desktop-os-check-indicator {
+  flex: none;
+  overflow: hidden;
+  inline-size: 2rem;
+  block-size: 0.25rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--desktop-accent) 20%, var(--desktop-content-fill));
+}
+.desktop-os-check-indicator::before {
+  content: "";
+  display: block;
+  inline-size: 50%;
+  block-size: 100%;
+  border-radius: inherit;
+  background: var(--desktop-accent);
+}
+.desktop-os-check-status[data-checking="true"] .desktop-os-check-indicator::before {
+  animation: orbis-os-update-check 1.25s ease-in-out infinite alternate;
+}
+@keyframes orbis-os-update-check {
+  to {
+    transform: translateX(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-os-check-status[data-checking="true"] .desktop-os-check-indicator::before {
+    animation: none;
+    transform: translateX(50%);
+  }
+}
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"])
+  .desktop-os-check-status[data-checking="true"]
+  .desktop-os-check-indicator::before {
+  animation: none;
+  transform: translateX(50%);
 }
 .desktop-updates-app-list {
   display: grid;
@@ -1274,9 +1340,6 @@ body:has(.orbis-theme) .desktop-update-review-dialog > .modal-body:focus-visible
   margin: 0;
   line-height: 1.5;
   overflow-wrap: break-word;
-}
-.desktop-orbis-release-retry {
-  justify-self: start;
 }
 .desktop-orbis-update-details > .desktop-update-build {
   margin-top: 1rem;

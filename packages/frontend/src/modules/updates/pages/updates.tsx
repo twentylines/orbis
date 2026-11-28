@@ -207,6 +207,32 @@ export default function Updates() {
   return <LocalUpdates />;
 }
 
+export async function checkUpdateSources(
+  pending: { current: boolean },
+  {
+    blocked,
+    onChecking,
+    checkOrbis,
+    checkSystem,
+  }: {
+    blocked: boolean;
+    onChecking: (value: boolean) => void;
+    checkOrbis: () => Promise<unknown>;
+    checkSystem?: () => Promise<unknown>;
+  },
+) {
+  if (blocked || pending.current) return;
+  pending.current = true;
+  onChecking(true);
+  try {
+    const orbis = Promise.resolve().then(checkOrbis);
+    return await Promise.allSettled(checkSystem ? [orbis, Promise.resolve().then(checkSystem)] : [orbis]);
+  } finally {
+    pending.current = false;
+    onChecking(false);
+  }
+}
+
 function LocalUpdates() {
   const tabsId = useId();
   const location = useLocation();
@@ -234,7 +260,9 @@ function LocalUpdates() {
     restartReviewIntent.current += 1;
     setRestartPlan(null);
   };
-  const systemActionFocus = useRef<{ control: HTMLButtonElement; kind: 'refresh' | 'restart' } | null>(null);
+  const systemActionFocus = useRef<HTMLButtonElement | null>(null);
+  const checkingUpdates = useRef(false);
+  const [checking, setChecking] = useState(false);
   const reviewRestart = useMutation({
     meta: { invalidates: false },
     mutationFn: () => hostRequest<NonNullable<typeof restartPlan>>('restart/plan', {}),
@@ -372,16 +400,13 @@ function LocalUpdates() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['orbis-host-package-job'] }),
   });
   useEffect(() => {
-    const previous = systemActionFocus.current;
-    if (!previous) return;
-    const pending = previous.kind === 'refresh' ? refreshPackages.isPending : reviewRestart.isPending;
-    if (pending) return;
-    const failed = previous.kind === 'refresh' ? refreshPackages.isError : reviewRestart.isError;
+    const control = systemActionFocus.current;
+    if (!control || reviewRestart.isPending) return;
     systemActionFocus.current = null;
-    if (failed && section === 'system' && document.activeElement === document.body && previous.control.isConnected && !previous.control.disabled) {
-      previous.control.focus();
+    if (reviewRestart.isError && section === 'system' && document.activeElement === document.body && control.isConnected && !control.disabled) {
+      control.focus();
     }
-  }, [section, refreshPackages.isPending, refreshPackages.isError, reviewRestart.isPending, reviewRestart.isError]);
+  }, [section, reviewRestart.isPending, reviewRestart.isError]);
   const installPackages = useMutation({
     meta: { invalidates: false },
     mutationFn: (names: string[]) => {
@@ -512,6 +537,37 @@ function LocalUpdates() {
   const packageInventory = user.operator && !systemPackages.isError && systemPackages.data?.available ? systemPackages.data : undefined;
   const osName = packageInventory?.operatingSystem?.trim() ?? '';
   const refreshSupported = host.data?.capabilities?.includes('packages.refresh.v1') === true;
+  const osChecking = refreshPackages.isPending || (packageJobBusy && latestPackageJob?.kind === 'refresh');
+  const canRefreshPackages =
+    user.operator === true &&
+    refreshSupported &&
+    !host.isError &&
+    host.data?.available &&
+    host.data?.enrolled &&
+    host.data.imageMatches &&
+    host.data.coreHealth === 'healthy' &&
+    host.data.coreState === 'running' &&
+    !packageControlsBlocked &&
+    !reviewRestart.isPending &&
+    !applyRestart.isPending &&
+    !coreWatchIsActive(watch);
+  const checkUpdates = () => {
+    const checkRelease = async () => {
+      const channel = await channels.refetch({ cancelRefetch: false, throwOnError: true });
+      if (channel.data) await queryClient.fetchQuery({ ...orbisReleasesOptions(channel.data.current), staleTime: 0 });
+    };
+    const checkSystem = canRefreshPackages
+      ? () => refreshPackages.mutateAsync()
+      : user.operator && packageStatusUnavailable
+        ? () => Promise.allSettled([systemPackages.refetch(), packageJob.refetch(), host.refetch()])
+        : undefined;
+    return checkUpdateSources(checkingUpdates, {
+      blocked: !visible || osChecking,
+      onChecking: setChecking,
+      checkOrbis: () => Promise.allSettled([checkRelease(), build.refetch()]),
+      checkSystem,
+    });
+  };
   const packageUpdateBlocked =
     packageControlsBlocked ||
     host.isError ||
@@ -596,9 +652,26 @@ function LocalUpdates() {
             </button>
           ))}
         </SelectionGroup>
-        <Link className="desktop-update-action secondary desktop-updates-settings" to="/settings?tab=updates">
-          <IconSettings size={18} aria-hidden="true" /> Update settings
-        </Link>
+        <div className="desktop-updates-toolbar-actions">
+          <button
+            type="button"
+            className="desktop-update-action secondary desktop-update-check"
+            aria-disabled={!visible || checking || osChecking}
+            aria-busy={checking || osChecking}
+            onClick={() => void checkUpdates()}
+          >
+            <IconRefresh size={18} aria-hidden="true" />
+            <span className="desktop-update-check-label">
+              <span className="desktop-update-check-reserve" aria-hidden="true">
+                Check for updates
+              </span>
+              <span>{checking || osChecking ? 'Checking…' : 'Check for updates'}</span>
+            </span>
+          </button>
+          <Link className="desktop-update-action secondary desktop-updates-settings" to="/settings?tab=updates">
+            <IconSettings size={18} aria-hidden="true" /> Update settings
+          </Link>
+        </div>
       </div>
       <div className="desktop-update-views">
         <section
@@ -780,54 +853,23 @@ function LocalUpdates() {
                       Update Orbis
                     </button>
                   ) : null}
-                  {build.isError ? (
-                    <button
-                      type="button"
-                      className="desktop-update-action secondary"
-                      disabled={build.isFetching}
-                      onClick={() => void build.refetch()}
-                    >
-                      <IconRefresh size={17} aria-hidden="true" />
-                      {build.isFetching ? 'Loading version…' : 'Retry version check'}
-                    </button>
-                  ) : null}
                 </div>
                 <div className="desktop-orbis-release-state" aria-live="polite" aria-busy={channels.isFetching || releases.isFetching}>
                   {channels.isPending ? <output>Checking the selected release channel…</output> : null}
                   {channels.isError ? (
-                    <>
-                      <p role="alert">
-                        {releaseChannelErrorMessage(channels.error, 'The selected release channel could not be checked.')} Latest release information
-                        is hidden until status recovers.
-                      </p>
-                      <button
-                        className="desktop-update-action secondary desktop-orbis-release-retry"
-                        type="button"
-                        onClick={() => void channels.refetch()}
-                        disabled={channels.isFetching}
-                      >
-                        {channels.isFetching ? 'Checking channel…' : 'Retry'}
-                      </button>
-                    </>
+                    <p role="alert">
+                      {releaseChannelErrorMessage(channels.error, 'The selected release channel could not be checked.')} Latest release information is
+                      hidden until status recovers.
+                    </p>
                   ) : null}
                   {channels.data && !channels.isError && releases.isPending ? <output>Checking published Orbis releases…</output> : null}
                   {channels.data && !channels.isError && releases.isError ? (
-                    <>
-                      <p role="alert">
-                        {orbisReleaseErrorMessage(
-                          releases.error,
-                          'Published Orbis releases could not be checked. No current or latest release is shown.',
-                        )}
-                      </p>
-                      <button
-                        className="desktop-update-action secondary desktop-orbis-release-retry"
-                        type="button"
-                        onClick={() => void releases.refetch()}
-                        disabled={releases.isFetching}
-                      >
-                        {releases.isFetching ? 'Checking releases…' : 'Retry'}
-                      </button>
-                    </>
+                    <p role="alert">
+                      {orbisReleaseErrorMessage(
+                        releases.error,
+                        'Published Orbis releases could not be checked. No current or latest release is shown.',
+                      )}
+                    </p>
                   ) : null}
                   {channels.data && !channels.isError && releases.data?.length === 0 ? <p>No published Orbis releases.</p> : null}
                 </div>
@@ -992,14 +1034,24 @@ function LocalUpdates() {
                         </p>
                       )}
                       {osName ? <p>{osName}</p> : null}
-                      {packageInventory?.checkedAt ? (
-                        <p className="desktop-host-package-times">
-                          Last checked <time dateTime={packageInventory.checkedAt}>{new Date(packageInventory.checkedAt).toLocaleString()}</time>
-                        </p>
-                      ) : null}
                       {packageRestartRequired(systemPackages.data, restart) ? <p>Restart required</p> : null}
                     </div>
                   </div>
+                ) : null}
+                {user.operator ? (
+                  <output className="desktop-os-check-status" data-checking={osChecking} aria-live="polite" aria-atomic="true">
+                    <span className="desktop-os-check-idle" aria-hidden={osChecking}>
+                      {packageInventory?.checkedAt ? (
+                        <>
+                          Last checked <time dateTime={packageInventory.checkedAt}>{new Date(packageInventory.checkedAt).toLocaleString()}</time>
+                        </>
+                      ) : null}
+                    </span>
+                    <span className="desktop-os-check-active" aria-hidden={!osChecking}>
+                      <span className="desktop-os-check-indicator" aria-hidden="true" />
+                      Checking operating system updates…
+                    </span>
+                  </output>
                 ) : null}
                 {user.operator ? (
                   <div className="desktop-update-actions desktop-host-update-actions">
@@ -1027,41 +1079,6 @@ function LocalUpdates() {
                       </button>
                     ) : null}
 
-                    <button
-                      type="button"
-                      className="desktop-update-action desktop-update-check"
-                      aria-describedby={missingHostFeatures.length ? `${tabsId}-host-help` : undefined}
-                      disabled={
-                        !refreshSupported ||
-                        host.isError ||
-                        !host.data?.enrolled ||
-                        !host.data.imageMatches ||
-                        host.data.coreHealth !== 'healthy' ||
-                        host.data.coreState !== 'running' ||
-                        packageControlsBlocked ||
-                        installPackages.isPending ||
-                        reviewRestart.isPending ||
-                        applyRestart.isPending ||
-                        coreWatchIsActive(watch)
-                      }
-                      onClick={(event) => {
-                        systemActionFocus.current =
-                          document.activeElement === event.currentTarget ? { control: event.currentTarget, kind: 'refresh' } : null;
-                        refreshPackages.mutate();
-                      }}
-                    >
-                      <IconRefresh size={17} aria-hidden="true" />
-                      <span className="desktop-update-check-label">
-                        <span className="desktop-update-check-reserve" aria-hidden="true">
-                          Check for updates
-                        </span>
-                        <span>
-                          {refreshPackages.isPending || (packageJobBusy && packageJob.data?.job?.kind === 'refresh')
-                            ? 'Checking…'
-                            : 'Check for updates'}
-                        </span>
-                      </span>
-                    </button>
                     {packageRestartRequired(systemPackages.data, restart) ? (
                       <button
                         type="button"
@@ -1077,8 +1094,7 @@ function LocalUpdates() {
                           coreWatchIsActive(watch)
                         }
                         onClick={(event) => {
-                          systemActionFocus.current =
-                            document.activeElement === event.currentTarget ? { control: event.currentTarget, kind: 'restart' } : null;
+                          systemActionFocus.current = document.activeElement === event.currentTarget ? event.currentTarget : null;
                           restartReviewButton.current = event.currentTarget;
                           reviewRestart.mutate();
                         }}
@@ -1159,17 +1175,6 @@ function LocalUpdates() {
                     ? systemPackages.data.reason || 'This host does not have a supported package manager.'
                     : 'System updates are unavailable. Check the server connection and try again.'}
                 </p>
-                <button
-                  type="button"
-                  className="desktop-update-action"
-                  disabled={systemPackages.isFetching || packageJob.isFetching || host.isFetching}
-                  onClick={() => {
-                    void Promise.all([systemPackages.refetch(), packageJob.refetch(), host.refetch()]);
-                  }}
-                >
-                  <IconRefresh size={17} aria-hidden="true" />
-                  {systemPackages.isFetching || packageJob.isFetching || host.isFetching ? 'Reconnecting…' : 'Retry system updates'}
-                </button>
               </div>
             ) : null}
             {packageJobNeedsInspection ? (
@@ -1183,7 +1188,11 @@ function LocalUpdates() {
                 this check.
               </output>
             ) : null}
-            {latestPackageJob ? <SystemUpdateProgress job={latestPackageJob} /> : null}
+            {latestPackageJob ? (
+              <div className="desktop-os-operation" data-refreshing={packageJobBusy && latestPackageJob.kind === 'refresh'}>
+                <SystemUpdateProgress job={latestPackageJob} />
+              </div>
+            ) : null}
             {user.operator && systemPackages.data?.available && (systemPackages.data.packageCount ?? 0) > 0 ? (
               <details className="desktop-system-update-details">
                 <summary>

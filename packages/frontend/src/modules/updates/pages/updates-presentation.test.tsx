@@ -11,7 +11,7 @@ import { installedOrbisBuildOptions, orbisPublishedReleasesOptions, orbisRelease
 import { orbisReleaseChannelsOptions } from '@/desktop/release-channels';
 import { sentinelStatusOptions } from '../sentinel-status';
 import { OrbisDowngrade } from './orbis-downgrade';
-import Updates from './updates';
+import Updates, { checkUpdateSources } from './updates';
 
 function renderDowngrade({ enabled = true, failed = false, active = true } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, staleTime: Number.POSITIVE_INFINITY } } });
@@ -91,6 +91,7 @@ function renderLocalUpdates({
   operator = true,
   legacyHelper = false,
   jobState,
+  packageRefresh = false,
   operatingSystem = 'Ubuntu 24.04 LTS',
   releaseBody = 'Release notes',
   releaseChannel = 'stable',
@@ -106,6 +107,7 @@ function renderLocalUpdates({
   operator?: boolean;
   legacyHelper?: boolean;
   jobState?: 'running' | 'complete';
+  packageRefresh?: boolean;
   operatingSystem?: string;
   releaseBody?: string;
   releaseChannel?: 'stable' | 'nightly';
@@ -179,7 +181,7 @@ function renderLocalUpdates({
   });
   client.setQueryData(['orbis-host-package-job'], {
     available: true,
-    job: jobState ? { id: 'job', state: jobState, message: 'Recorded package operation' } : null,
+    job: jobState ? { id: 'job', state: jobState, kind: packageRefresh ? 'refresh' : undefined, message: 'Recorded package operation' } : null,
   });
   client.setQueryData(userContextQueryKey(), { isLoggedIn: true });
   client.setQueryData(sentinelStatusOptions(true).queryKey, {
@@ -251,6 +253,8 @@ test('default System view brings the Orbis, OS and service statuses together whi
   expect(markup).toContain('Last checked <time dateTime="2026-11-19T05:00:00Z">');
   expect(markup).toContain('>Release notes</p>');
   expect(markup).toContain('/settings?tab=updates');
+  expect(markup.match(/<button[^>]*desktop-update-check[^>]*>/g)).toHaveLength(1);
+  expect(markup.indexOf('desktop-update-check')).toBeLessThan(markup.indexOf('desktop-updates-card-orbis'));
 });
 
 test('the Orbis action follows the release status without labelling the release by the selected channel', () => {
@@ -262,13 +266,60 @@ test('legacy helper capabilities and operator permissions still control system a
   const legacy = renderLocalUpdates({ legacyHelper: true });
   expect(legacy).toContain('System service update needed');
   expect(legacy).toContain('View setup guide');
-  expect(legacy).toMatch(/<button[^>]*desktop-update-check[^>]*disabled=""[^>]*>/);
+  expect(legacy).toMatch(/<button[^>]*desktop-update-check[^>]*aria-disabled="false"[^>]*>/);
   const member = renderLocalUpdates({ operator: false });
   expect(member).toContain('Host package details require an operator account.');
   expect(member).not.toContain('Filter package details');
-  expect(member).not.toContain('Check for updates');
+  expect(member).toMatch(/<button[^>]*desktop-update-check[^>]*aria-disabled="false"[^>]*>/);
   expect(member).not.toContain('Update system');
   expect(member).toMatch(/<button[^>]*desktop-system-update-primary[^>]*disabled=""[^>]*>/);
+});
+
+test('the global check runs both admitted sources independently even if one fails', async () => {
+  const started: string[] = [];
+  const activity: boolean[] = [];
+  const pending = { current: false };
+  let finishPackages!: (value: string) => void;
+  const packages = new Promise<string>((resolve) => {
+    finishPackages = resolve;
+  });
+  const request = {
+    blocked: false,
+    onChecking: (value: boolean) => activity.push(value),
+    checkOrbis: () => {
+      started.push('orbis');
+      throw new Error('release unavailable');
+    },
+    checkSystem: () => {
+      started.push('os');
+      return packages;
+    },
+  };
+  const result = checkUpdateSources(pending, request);
+  await Promise.resolve();
+  expect(started).toEqual(['orbis', 'os']);
+  expect(await checkUpdateSources(pending, request)).toBeUndefined();
+  expect(started).toEqual(['orbis', 'os']);
+  expect(activity).toEqual([true]);
+  finishPackages('checked');
+  expect(await result).toMatchObject([{ status: 'rejected' }, { status: 'fulfilled', value: 'checked' }]);
+  expect(activity).toEqual([true, false]);
+  expect(await checkUpdateSources(pending, { ...request, blocked: true })).toBeUndefined();
+  expect(started).toEqual(['orbis', 'os']);
+  expect(await checkUpdateSources(pending, { ...request, checkOrbis: async () => 'checked', checkSystem: undefined })).toEqual([
+    { status: 'fulfilled', value: 'checked' },
+  ]);
+});
+
+test('an active OS check updates the status line without removing the inventory or its guarded actions', () => {
+  const markup = renderLocalUpdates({ jobState: 'running', packageRefresh: true });
+  expect(markup).toMatch(/desktop-update-check[^>]*aria-disabled="true"[^>]*aria-busy="true"/);
+  expect(markup).toMatch(/desktop-os-check-status[^>]*data-checking="true"/);
+  expect(markup).toMatch(/desktop-os-check-active[^>]*aria-hidden="false"[^>]*>.*Checking operating system updates…/);
+  expect(markup).toMatch(/desktop-os-check-idle[^>]*aria-hidden="true"[^>]*>Last checked/);
+  expect(markup).toContain('1 update ready');
+  expect(markup).toContain('Filter package details');
+  expect(markup).toMatch(/<button[^>]*desktop-system-update-primary[^>]*disabled=""[^>]*>Update system<\/button>/);
 });
 
 test('active package progress stays in the System view and completed output remains available through its disclosure', () => {

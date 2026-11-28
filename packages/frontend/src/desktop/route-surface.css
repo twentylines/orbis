@@ -210,8 +210,11 @@
 }
 
 :root[data-orbis-header-glass="true"] .desktop-route-page .desktop-page-heading {
+  position: relative;
+  z-index: 2;
   padding-block-end: 0.625rem;
   border-block-end: 0;
+  border-radius: inherit;
 }
 :root[data-orbis-header-glass="true"] .desktop-route-page .desktop-page-heading + .desktop-window-content {
   padding-block-start: 0.875rem;
@@ -222,7 +225,22 @@
   background: transparent;
   border-color: transparent;
 }
-:root[data-orbis-header-glass="true"] .desktop-route-page > .desktop-route-surface {
-  background:
-    radial-gradient(ellipse at top left, color-mix(in srgb, var(--desktop-preset-tint) 9%, transparent), transparent 65%), var(--desktop-pane-surface);
+/* The mask fades the tint and backdrop together across the full page width. */
+:root[data-orbis-header-glass="true"] .desktop-route-page .desktop-page-heading::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 -1.25rem;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--desktop-surface) 82%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  mask-image: linear-gradient(to bottom, black, rgb(0 0 0 / 78%) 35%, rgb(0 0 0 / 24%) 76%, transparent);
+}
+@media (max-width: 760px) {
+  :root[data-orbis-header-glass="true"] .desktop-route-page .desktop-page-heading {
+    position: sticky;
+    top: var(--orbis-bar-bottom, 76px);
+  }
 }

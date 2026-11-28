@@ -1172,6 +1172,10 @@ html[data-orbis-startup-landing="true"] .workspace-widget-attention {
   }
 }
 @media (max-width: 760px) {
+  .desktop-system-actions:not([data-toolbar-editing]) .desktop-connection[data-connection-kind="address"],
+  .desktop-system-actions[data-toolbar-editing] .desktop-connection[data-connection-kind="address"] .desktop-connection-label {
+    display: none;
+  }
   .desktop {
     --desktop-inset: 24px;
     --desktop-bar-inset: 7px;
@@ -1358,9 +1362,10 @@ html[data-orbis-startup-landing="true"] .workspace-widget-attention {
     justify-content: center;
     padding-inline: 6px;
   }
-  .desktop-system-actions .desktop-toolbar-action[data-action="connection"] {
+  .desktop-system-actions .desktop-toolbar-action[data-action="connection"]:has(.desktop-connection[data-connection-kind="status"]) {
     display: flex;
     align-items: center;
+    gap: 8px;
     grid-column: span 3;
     min-width: 0;
   }
@@ -1390,9 +1395,6 @@ html[data-orbis-startup-landing="true"] .workspace-widget-attention {
 @media (max-width: 360px) {
   .desktop-system-bar:has(.desktop-update-notice) {
     justify-content: center;
-  }
-  .desktop-system-bar:has(.desktop-update-notice) .desktop-connection[data-connection-kind="address"] {
-    flex-basis: calc(100% - 40px);
   }
 }
 @media (max-width: 380px) {

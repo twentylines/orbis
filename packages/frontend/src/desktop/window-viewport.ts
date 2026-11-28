@@ -19,7 +19,11 @@ export function revealPageFocus(element: HTMLElement) {
     return;
   }
   element.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
-  const top = (document.querySelector('.desktop-system-bar')?.getBoundingClientRect().bottom ?? 0) + 8;
+  const systemBarBottom = document.querySelector('.desktop-system-bar')?.getBoundingClientRect().bottom ?? 0;
+  const heading = element.closest('.desktop-route-page')?.querySelector<HTMLElement>('.desktop-page-heading');
+  const headingBottom =
+    heading && !heading.contains(element) && getComputedStyle(heading).position === 'sticky' ? heading.getBoundingClientRect().bottom : 0;
+  const top = Math.max(systemBarBottom, headingBottom) + 8;
   const bottom = (document.querySelector('.desktop-dock')?.getBoundingClientRect().top ?? window.innerHeight) - 8;
   const bounds = element.getBoundingClientRect();
   // Nearest scrolling can leave a tall control behind sticky chrome on short screens.
