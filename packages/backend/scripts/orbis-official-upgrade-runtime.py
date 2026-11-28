@@ -4,7 +4,7 @@
 import ast
 import errno
 import hashlib
-import http.client
+from http.client import HTTPConnection
 import importlib.util
 import json
 import os
@@ -545,7 +545,7 @@ def fence(name, pin):
 
 
 def http(method, path, *, body=None, cookie=None, expect=(200,)):
-    connection = http.client.HTTPConnection('127.0.0.1', PORT, timeout=8)
+    connection = HTTPConnection('127.0.0.1', PORT, timeout=8)
     headers = {'Accept': 'application/json', 'Origin': f'http://127.0.0.1:{PORT}'}
     if cookie:
         headers['Cookie'] = cookie
