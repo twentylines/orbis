@@ -7,6 +7,7 @@ import errno
 import hashlib
 from http.client import HTTPConnection, HTTPException
 import importlib.util
+from io import BytesIO
 import json
 import os
 from pathlib import Path
@@ -24,6 +25,7 @@ import time
 import traceback
 from urllib.parse import quote
 import uuid
+from zoneinfo import ZoneInfo
 
 
 WORK = Path('/opt/orbis-official-upgrade-fixture')
@@ -145,6 +147,53 @@ def prepare_fixture_workspace():
     return inherited
 
 
+def protect_fixture_timezone():
+    # Hosted Ubuntu can expose zoneinfo through a world-writable /usr/share.
+    # Keep the same timezone bytes in a protected regular /etc/localtime file
+    # so the real Orbis bootstrap proof can verify its ordinary bind mount.
+    directory = os.open('/etc', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    temporary = '.orbis-runtime-localtime'
+    staged = False
+    try:
+        root, etc = Path('/').stat(), os.fstat(directory)
+        require(all(info.st_uid == 0 and not info.st_mode & 0o022 for info in (root, etc)),
+                'fixture-timezone-parent-refused')
+        info = os.stat('localtime', dir_fd=directory, follow_symlinks=False)
+        require(info.st_uid == 0, 'fixture-timezone-owner-refused')
+        if not stat.S_ISLNK(info.st_mode):
+            require(stat.S_ISREG(info.st_mode) and not info.st_mode & 0o022,
+                    'fixture-timezone-file-refused')
+            return False
+        pointer = os.readlink('localtime', dir_fd=directory)
+        resolved = Path('/etc/localtime').resolve(strict=True)
+        require(resolved.is_relative_to('/usr/share/zoneinfo'), 'fixture-timezone-location-refused')
+        with os.fdopen(os.open(resolved, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), 'rb') as source:
+            observed = os.fstat(source.fileno())
+            require(observed.st_uid == 0 and stat.S_ISREG(observed.st_mode) and 0 < observed.st_size <= 1024 * 1024,
+                    'fixture-zoneinfo-source-refused')
+            data = source.read(observed.st_size + 1)
+            require(len(data) == observed.st_size, 'fixture-zoneinfo-size-changed')
+        ZoneInfo.from_file(BytesIO(data))
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=directory)
+        staged = True
+        with os.fdopen(descriptor, 'wb') as output:
+            os.fchmod(output.fileno(), 0o644)
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        current = os.stat('localtime', dir_fd=directory, follow_symlinks=False)
+        require((current.st_dev, current.st_ino, current.st_mode) == (info.st_dev, info.st_ino, info.st_mode)
+                and os.readlink('localtime', dir_fd=directory) == pointer, 'fixture-timezone-link-changed')
+        os.replace(temporary, 'localtime', src_dir_fd=directory, dst_dir_fd=directory)
+        staged = False
+        os.fsync(directory)
+        return True
+    finally:
+        if staged:
+            os.unlink(temporary, dir_fd=directory)
+        os.close(directory)
+
+
 def preflight(environment):
     require(os.getuid() == os.geteuid() == 0 and sys.platform == 'linux' and platform.machine() == 'x86_64'
             and environment.get('GITHUB_ACTIONS') == 'true' and environment.get('RUNNER_ENVIRONMENT') == 'github-hosted'
@@ -172,7 +221,8 @@ def preflight(environment):
     require(docker_root.is_absolute() and all(shutil.disk_usage(path).free >= 4 * 1024**3
             for path in (WORK.parent, docker_root, Path('/var/lib'))), 'disposable-space-required')
     protect_installer_parent(environment)
-    return prepare_fixture_workspace()
+    default_acl_removed = prepare_fixture_workspace()
+    return default_acl_removed, protect_fixture_timezone()
 
 
 def isolate_dashboard():
@@ -884,7 +934,7 @@ def fixture(environment, result):
     require(mode in ('true', 'false'), 'stable-bridge-mode-refused')
     bridge = mode == 'true'
     initial = STABLE if bridge else SOURCE
-    result['fixtureDefaultAclRemoved'] = preflight(environment)
+    result['fixtureDefaultAclRemoved'], result['fixtureTimezoneProtected'] = preflight(environment)
     result['phase'] = 'publisher'
     modules = [load(name) for name in ('orbis-release-check', 'install-orbis', 'orbis-host-upgrade-launcher')]
     source, candidate = [publisher(pin, *modules, environment.get('GITHUB_TOKEN')) for pin in (SOURCE, target)]
