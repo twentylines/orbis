@@ -17,6 +17,7 @@ import pwd
 import re
 import secrets
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -817,6 +818,7 @@ def check_host(pin):
     require(re.fullmatch(r'[1-9][0-9]{0,9}', pid), 'installed-host-listener-refused')
     status = load('orbis-host-service-setup').read_socket_status(expected_pid=int(pid))
     stable = pin == STABLE
+    expected_sentinel = STABLE_SENTINEL if stable else SENTINEL
     require(status['currentTag'] == pin[0] and status['currentDigest'] == pin[2] and status['imageMatches'] is True
             and status['enrolled'] is True and status['coreHealth'] == 'healthy'
             and ('release-channels.v1' in status['capabilities'] if stable else
@@ -827,11 +829,11 @@ def check_host(pin):
         sentinel = load('orbis-sentinel-install', HOST)
         sentinel._installed_payload(sentinel.INSTALLED_STATE, sentinel.INSTALLED_ROOT)
         installed = json.loads((sentinel.INSTALLED_STATE / 'installed.json').read_bytes())
-        require({key: installed[key] for key in SENTINEL} == SENTINEL, 'installed-sentinel-release-refused')
+        require({key: installed[key] for key in expected_sentinel} == expected_sentinel, 'installed-sentinel-release-refused')
     status_sentinel = load('orbis-host-service', HOST).sentinel_component_status()
     require(status_sentinel['available'] is True, 'installed-sentinel-refused')
     component = status_sentinel['status']['components']['sentinel']
-    require(component['installedVersion'] == (STABLE_SENTINEL if stable else SENTINEL)['version']
+    require(component['installedVersion'] == expected_sentinel['version']
             and component['state'] == 'healthy',
             'installed-sentinel-refused')
     return status
@@ -939,12 +941,203 @@ def completed(status, target, prior_operations=()):
     quiescent(operation)
 
 
+def verify_internal_network():
+    # Inspect the actual target, including service isolation. The configuration
+    # and the protected checkpoint alone cannot prove this runtime topology.
+    network = load('orbis-host-controller-update', HOST).CORE_NETWORK
+    fields = '{{json .Name}} {{json .Driver}} {{json .Scope}} {{json .Internal}}'
+    selected = run(DOCKER + ['network', 'inspect', '--format', fields, network])
+    require(selected == f'"{network}" "bridge" "local" true', 'installed-private-network-refused')
+    for container in ('runtipi-db', 'runtipi-queue', 'runtipi', 'runtipi-reverse-proxy'):
+        template = '{{json .NetworkSettings.Networks}}'
+        connected = json.loads(run(DOCKER + ['container', 'inspect', '--format', template, container]))
+        require(type(connected) is dict and connected, 'installed-service-network-refused')
+        if container in ('runtipi-db', 'runtipi-queue'):
+            require(set(connected) == {network}, 'installed-service-isolation-refused')
+        elif container == 'runtipi':
+            require(network in connected and len(connected) > 1, 'installed-controller-network-refused')
+        else:
+            require(network not in connected, 'installed-proxy-isolation-refused')
+
+
+def verify_installed_app_backup(cookie, identity, original):
+    app = identity[1] + ':_user'
+    route = '/api/backups/' + quote(app, safe='')
+    before, _ = http('GET', route, cookie=cookie)
+    # This runs only after the OTA itself has preserved the original app
+    # instance. Backups can pause that instance to acquire a safe archive.
+    body = run(DOCKER + ['exec', 'runtipi', 'orbis-cli', 'app', 'backup', app],
+               timeout=180, code='installed-cli-app-backup-refused')
+    jobs = re.findall(r'^App backup accepted for ' + re.escape(app) + r' \(([a-f0-9-]{36})\)\.$', body, re.M)
+    require(len(jobs) == 1 and str(uuid.UUID(jobs[0])) == jobs[0]
+            and body.splitlines()[-1] == f'App backup completed for {app}.', 'installed-cli-app-backup-output-refused')
+    tasks, _ = http('GET', '/api/tasks', cookie=cookie)
+    selected = [task for task in tasks['tasks'] if task['id'] == jobs[0]]
+    require(len(selected) == 1 and selected[0]['appUrn'] == app and selected[0]['action'] == 'backup'
+            and selected[0]['status'] == 'succeeded', 'installed-cli-app-backup-job-refused')
+    after, _ = http('GET', route, cookie=cookie)
+    before_names = {item['id'] for item in before['data']}
+    added = [item for item in after['data'] if item['id'] not in before_names]
+    require(after['total'] == before['total'] + 1 and len(added) == 1 and added[0]['size'] > 0
+            and app_data(identity)[:2] == original[:2], 'installed-cli-app-backup-archive-refused')
+
+
+def reviewed_checkpoint(target):
+    launcher = load('orbis-host-upgrade-launcher')
+    service = load('orbis-host-service')
+    job = service.read_private(STATE / 'job.json')
+    if not job or job.get('state') != 'running' or job.get('backupPolicy') != 'automatic':
+        return None
+    require(tuple(job['current'][field] for field in ('tag', 'commit', 'digest')) == SOURCE[:3]
+            and tuple(job['target'][field] for field in ('tag', 'commit', 'digest')) == target[:3],
+            'interruption-job-release-refused')
+    operation = job['id']
+    require(str(uuid.UUID(operation)) == operation, 'interruption-job-refused')
+    snapshot = Path('/var/lib/orbis/snapshots') / f'orbis-{target[0]}-{operation}'
+    require(str(snapshot) == job['snapshot'], 'interruption-checkpoint-path-refused')
+    update = service.UPDATE
+    observation = service.read_private(update.journal_path(snapshot))
+    if not observation or observation['stage'] not in ('stopped', 'snapshotting', 'snapshot-ready'):
+        return None
+    producer = update.read_journal(snapshot, ROOT, 'default', job['current'], job['target'])
+    if producer['stage'] != observation['stage'] or producer['backupScope'] != update.CONTROLLER.SCOPE:
+        return None
+    witness = launcher.Bootstrap(STATE, operation, job['worker'])
+    frame = witness.verify_bootstrap(current=False)
+    claim = launcher.decoded(launcher.read_file(witness.directory / 'claim.json', 16384))
+    require(claim == {'schema': 'orbis.host-upgrade-claim.v1',
+                      'requestSha256': witness.reference['requestSha256'], **frame},
+            'interruption-generation-refused')
+    return job, producer['stage'], frame
+
+
+@contextmanager
+def interrupt_at_checkpoint(target, result):
+    stop = Event()
+    failure = {}
+    def act():
+        try:
+            while not stop.wait(0.15):
+                try:
+                    reviewed = reviewed_checkpoint(target)
+                except (Refused, FileNotFoundError, ProcessLookupError):
+                    continue
+                if not reviewed:
+                    continue
+                job, stage, frame = reviewed
+                try:
+                    pid = os.pidfd_open(frame['pid'])
+                except ProcessLookupError:
+                    continue
+                try:
+                    exact = reviewed_checkpoint(target)
+                    if exact != reviewed or stop.is_set():
+                        continue
+                    # Only the pinned process descriptor can receive this one
+                    # deliberate test fault. The product checks quiescence.
+                    fence('checkpoint-interruption-intent', target)
+                    result['checkpointInterruption'] = {'operation': job['id'], 'stage': stage, 'sent': False}
+                    signal.pidfd_send_signal(pid, signal.SIGKILL)
+                    result['checkpointInterruption']['sent'] = True
+                    return
+                finally:
+                    os.close(pid)
+        except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError):
+            failure['checkpointObservationRefused'] = True
+    observer = Thread(target=act, name='disposable-checkpoint-interruption')
+    observer.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        observer.join()
+        result.update(failure)
+
+
+def verify_checkpoint_return(credential, identity, original, proxy, source, target, result):
+    operation = result['checkpointInterruption']['operation']
+    launcher = load('orbis-host-upgrade-launcher')
+    service = load('orbis-host-service')
+    job = service.read_private(STATE / 'job.json')
+    require(job['id'] == operation and job['state'] in ('running', 'interrupted')
+            and job['current']['digest'] == source[2] and job['target']['digest'] == target[2],
+            'interruption-accepted-job-changed')
+    witness = launcher.ReconciliationBootstrap(STATE, operation, job['worker'])
+    witness.verify_original_claim()
+    deadline = time.monotonic() + 15
+    while True:
+        try:
+            witness.supervision.observe_quiescence(launcher.Files(), STATE, operation, witness.original_frame)
+            break
+        except witness.supervision.UpgradeSupervisionError:
+            require(time.monotonic() < deadline, 'interruption-original-unit-not-quiescent')
+            time.sleep(0.25)
+    # This fixed entry point rechecks the installed bootstrap and is the only
+    # dispatcher used here. It does not replay the original Apply.
+    worker = witness.directory / 'bootstrap/scripts/orbis-host-upgrade-launcher.py'
+    run([sys.executable, '-I', '-B', str(worker), 'dispatch-reconciliation', operation,
+         '--state-dir', str(STATE)], timeout=45, code='interruption-recovery-dispatch-refused')
+    deadline = time.monotonic() + 420
+    while time.monotonic() < deadline:
+        current = service.read_private(STATE / 'job.json')
+        require(current['id'] == operation and current['current'] == job['current'] and current['target'] == job['target'],
+                'interruption-recovery-job-changed')
+        if current['state'] == 'rolled-back':
+            break
+        time.sleep(0.5)
+    else:
+        raise Refused('interruption-recovery-terminal-not-observed')
+    witness.supervision.observe_quiescence(launcher.Files(), STATE, operation, witness.original_frame)
+    runtime = witness.supervision.Runtime()
+    unit = witness.supervision.reconciliation_unit_name(operation)
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        observed = runtime.unit(unit)
+        if (observed['ActiveState'] == 'inactive' and observed['MainPID'] == observed['ControlPID'] == '0'
+                and not observed['Job'] and runtime.cgroup_empty(unit)):
+            break
+        time.sleep(0.25)
+    else:
+        raise Refused('interruption-recovery-unit-not-quiescent')
+    recovered = check_host(source)
+    require(recovered['job']['id'] == operation and recovered['job']['state'] == 'rolled-back',
+            'interruption-host-terminal-refused')
+    target_body = launcher.read_file(witness.directory / 'target-set.json')
+    selected = json.loads(target_body)
+    require(selected['core']['commit'] == target[1] and selected['core']['digest'] == target[2],
+            'interruption-component-target-refused')
+    journal, terminal = component_journal(witness.directory, operation, target_body)
+    require(list(journal)[-1] == 'rolled-back' and terminal == current['componentReceiptSha256'],
+            'interruption-component-return-unverified')
+    setup = load('orbis-host-service-setup', HOST)
+    restored_host = setup.actual_copy(setup.INSTALL_DIR, setup.UNIT_FILE)
+    original_host = journal['staged']['original']['host']
+    require(restored_host['unitSha256'] == original_host['unitSha256']
+            and sha(launcher.canonical(restored_host['inventory'])) == original_host['inventorySha256'],
+            'interruption-original-host-copy-refused')
+    snapshot = Path(job['snapshot'])
+    producer = service.UPDATE.read_journal(snapshot, ROOT, 'default', job['current'], job['target'])
+    require(producer['stage'] == 'rolled-back', 'interruption-core-return-unverified')
+    cookie = session('login', credential)
+    try:
+        build(cookie, source)
+        require(app_data(identity) == original, 'interruption-data-return-refused')
+        require(run(DOCKER + ['inspect', '--format', '{{.Id}} {{.State.StartedAt}} {{.State.Running}}',
+                             'runtipi-reverse-proxy']) == proxy, 'interruption-proxy-changed')
+    finally:
+        http('POST', '/api/auth/logout', cookie=cookie, expect=(204,))
+    result.update(phase='checkpoint-recovery-complete', markerChecks=2, componentTerminalVerified=True,
+                  originalReleaseVerified=True, passed=True)
+
+
 def fixture(environment, result):
     result['phase'] = 'scope'
     target = target_pin(environment)
     mode = environment.get('STABLE_BRIDGE', 'false')
     require(mode in ('true', 'false'), 'stable-bridge-mode-refused')
     bridge = mode == 'true'
+    fault = environment.get('CHECKPOINT_RECOVERY', 'false')
+    require(fault in ('true', 'false') and not (bridge and fault == 'true'), 'checkpoint-recovery-mode-refused')
     initial = STABLE if bridge else SOURCE
     result['fixtureDefaultAclRemoved'], result['fixtureTimezoneProtected'] = preflight(environment)
     result['phase'] = 'publisher'
@@ -1018,6 +1211,20 @@ def fixture(environment, result):
     result['snapshotEstimateBytes'] = checkpoint_limit()
     result['phase'] = 'guided-target'
     fence('apply-intent', target)
+    if fault == 'true':
+        with observe_progress(target[0], result):
+            try:
+                with interrupt_at_checkpoint(target, result):
+                    launch(candidate, 'target', 1500)
+            except Refused:
+                require(result.get('checkpointInterruption', {}).get('sent') is True, 'checkpoint-interruption-not-observed')
+            else:
+                raise Refused('interruption-expected-target-refusal-not-observed')
+            result['phase'] = 'checkpoint-recovery'
+            verify_checkpoint_return(credential, identity, original, proxy, SOURCE, target, result)
+        result['targetProgress']['boundToTerminalOperation'] = (
+            result['targetProgress']['operations'] == [result['checkpointInterruption']['operation']])
+        return
     with observe_progress(target[0], result):
         launch(candidate, 'target', 1500)
     result['phase'] = 'terminal-readback'
@@ -1032,10 +1239,20 @@ def fixture(environment, result):
         require(app_data(identity) == original, 'fixture-continuity-refused')
         require(run(DOCKER + ['inspect', '--format', '{{.Id}} {{.State.StartedAt}} {{.State.Running}}',
                              'runtipi-reverse-proxy']) == proxy, 'proxy-continuity-refused')
+        result.update(coordinatedUpgradePassed=True, markerChecks=2, appAndProxyUninterrupted=True)
+        result['phase'] = 'installed-private-network'
+        verify_internal_network()
+        result['privateNetworkVerified'] = True
+        # The historical first beta.6 target predates the CLI app commands.
+        if target[0] != 'v0.9.2-beta.6':
+            result['phase'] = 'installed-app-cli'
+            verify_installed_app_backup(cookie, identity, original)
+            result['installedAppBackupVerified'] = True
     finally:
         http('POST', '/api/auth/logout', cookie=cookie, expect=(204,))
     result.update(phase='complete', source=SOURCE[0], target=target[0], targetCommit=target[1], targetDigest=target[2],
-                  runtipi=target[3], sentinel=SENTINEL['version'], markerChecks=2, appAndProxyUninterrupted=True,
+                  runtipi=target[3], sentinel=SENTINEL['version'],
+                  markerChecks=2, appAndProxyUninterrupted=True,
                   componentTerminalVerified=True, automaticBackupVerified=True, loopbackVerified=True, passed=True)
 
 

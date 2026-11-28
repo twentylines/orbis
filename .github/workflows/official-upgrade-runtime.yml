@@ -16,6 +16,11 @@ on:
         default: false
         type: boolean
 
+      checkpoint_recovery:
+        description: Deliberately interrupt this disposable backed upgrade at a verified checkpoint
+        default: false
+        type: boolean
+
 permissions:
   actions: read
   contents: read
@@ -29,6 +34,7 @@ jobs:
       TARGET_COMMIT: ${{ inputs.target_commit }}
       TARGET_DIGEST: ${{ inputs.target_digest }}
       STABLE_BRIDGE: ${{ inputs.stable_bridge }}
+      CHECKPOINT_RECOVERY: ${{ inputs.checkpoint_recovery }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -38,5 +44,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          sudo --non-interactive --preserve-env=CI,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_TOKEN,RUNNER_ENVIRONMENT,STABLE_BRIDGE,TARGET_COMMIT,TARGET_DIGEST \
+          sudo --non-interactive --preserve-env=CI,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_TOKEN,RUNNER_ENVIRONMENT,STABLE_BRIDGE,CHECKPOINT_RECOVERY,TARGET_COMMIT,TARGET_DIGEST \
             /usr/bin/python3 -I -B packages/backend/scripts/orbis-official-upgrade-runtime.py
