@@ -18,6 +18,7 @@ import stat
 import subprocess
 import sys
 import time
+import traceback
 from urllib.parse import quote
 import uuid
 
@@ -33,11 +34,15 @@ REPO = 'twentylines/orbis'
 IMAGE = 'ghcr.io/' + REPO
 SOURCE = ('v0.9.2-beta.3', '43813e77609f955c4a4cec3b647a95e780780ca6',
           'sha256:24d8ffed6dde1660b1954c445b2c67b96342b423b1042441d72c251a20d92801', '4.10.1', 46080825494)
-TARGET_TAG = 'v0.9.2-beta.5'
-TARGET_COMMIT = '9a75b406906c0d642f1fd15b0ad4553a42b9dde6'
-TARGET_RUN = 46094714979
+STABLE = ('v0.9.1', '6b627e1939e11e91fbd5c6ed419e1e90a71cf281',
+          'sha256:fcd6ddadf52d19aedc428cae04aea98f0baf4e36c12edab9a1239fa75c8248d2', '4.10.1', 44938065911)
+TARGET_TAG = 'v0.9.2-beta.6'
+TARGET_COMMIT = 'c9a0f76329e1319f6a1451fd1b8875cceb788dd8'
+TARGET_RUN = 46100282294
 SENTINEL = {'version': '0.1.0-dev.24', 'sha256': 'c9373a394c306524b2e37b76afa9eec42272507faf45657d7f46d1b9f8fb565f',
             'sourceCommit': '16b2aa6158ab38d961e0d3f6a2d489b702ab63e3'}
+STABLE_SENTINEL = {'version': '0.1.0-dev.19', 'sha256': '4a3c29039b768dbae15a562abc64086374f66af9e12b8b490d3aa4466d152f6c',
+                   'sourceCommit': '32e384d9d492d8b5cb1aea562bd86447e2cc04a0'}
 ASSETS = {'install-orbis.py': 1024 * 1024, 'orbis-installer-manifest.json': 65536,
           'orbis-installer.tar.gz': 64 * 1024 * 1024, 'release-manifest.json': 16384}
 DOCKER = ['/usr/bin/docker', '--context', 'default']
@@ -199,7 +204,8 @@ def publisher(pin, reader, boot, launcher, token):
 
     published = json.loads(fetch(f'{api}/releases/tags/{tag}', 512 * 1024))
     assets = published['assets']
-    require(published.get('tag_name') == tag and published.get('draft') is False and published.get('prerelease') is True
+    require(published.get('tag_name') == tag and published.get('draft') is False
+            and published.get('prerelease') is (pin != STABLE)
             and len(assets) == len(ASSETS) and {asset['name'] for asset in assets} == set(ASSETS), 'official-assets-mismatch')
     files = {}
     for asset in assets:
@@ -223,7 +229,7 @@ def publisher(pin, reader, boot, launcher, token):
     path = WORK / (tag + '.py')
     with path.open('xb') as output:
         output.write(files['install-orbis.py'])
-    return path, installer_signals(closure)
+    return path, installer_signals(closure), {name: (len(body), sha(body)) for name, body in closure.items()}
 
 
 def installer_failure(path, signals=()):
@@ -282,7 +288,7 @@ def installer_failure(path, signals=()):
     return 'guided-installer-refused', evidence
 
 
-def fresh_journal_phase():
+def fresh_journal_evidence(pin):
     launcher = load('orbis-host-upgrade-launcher')
     pointer = launcher.decoded(launcher.read_file(ROOT / '.orbis-installation.json', 16384))
     if (pointer.get('schema'), pointer.get('kind'), pointer.get('root'), pointer.get('dockerContext')) != (
@@ -290,24 +296,37 @@ def fresh_journal_phase():
         return None
     path = Path(pointer['journal'])
     parts = path.relative_to(WORK / 'source' / 'custody').parts
-    if (len(parts) != 4 or not re.fullmatch(re.escape(SOURCE[0]) + r'-[a-z0-9_]{8}', parts[0])
+    if (len(parts) != 4 or not re.fullmatch(re.escape(pin[0]) + r'-[a-z0-9_]{8}', parts[0])
             or parts[1] != 'transactions'
             or not re.fullmatch(r'new-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}', parts[2])
             or parts[3] != 'transaction.json'):
         return None
     journal = launcher.decoded(launcher.read_file(path, 64 * 1024))
+    identity = journal.get('manifest', {})
     if ((journal.get('schema'), journal.get('root'), journal.get('dockerContext'))
             != ('orbis.new-installation.v2', str(ROOT), 'default')
-            or journal.get('manifest', {}).get('digest') != SOURCE[2]):
+            or tuple(identity.get(field) for field in ('tag', 'commit', 'digest')) != pin[:3]
+            or 'installerStorage' in journal):
         return None
     phase = journal.get('stage')
-    return phase if phase in ('prepared', 'starting', 'enrolled', 'complete') else None
+    custody = path.parents[2]
+    executor = custody / 'scripts/orbis-install-new.py'
+    if (phase not in ('prepared', 'starting', 'enrolled', 'complete')
+            or pointer.get('executor') != str(executor)
+            or not re.fullmatch(r'[a-f0-9]{64}', pointer.get('executorSha256', ''))):
+        return None
+    return phase, custody, pointer['executorSha256']
 
 
-def fresh_startup_evidence():
+def fresh_journal_phase(pin=SOURCE):
+    evidence = fresh_journal_evidence(pin)
+    return evidence[0] if evidence is not None else None
+
+
+def fresh_startup_evidence(pin=SOURCE):
     evidence = {}
     try:
-        phase = fresh_journal_phase()
+        phase = fresh_journal_phase(pin)
         if phase:
             evidence['freshJournalPhase'] = phase
         if phase in ('starting', 'enrolled', 'complete'):
@@ -359,23 +378,148 @@ def fresh_startup_evidence():
     return evidence
 
 
-def launch(release, operation, timeout):
-    path, signals = release
+
+def proxy_startup_probe(pin, closure):
+    # Only the validated v1 pointer and journal establish the legacy layout.
+    # Unsupported or unverifiable storage does not authorize another observer.
+    try:
+        evidence = fresh_journal_evidence(pin)
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError):
+        evidence = None
+    if evidence is None or evidence[0] != 'starting':
+        return {'proxyObservation': 'layout-unverified'}
+    _, custody, executor_sha = evidence
+    # Report fixed role names and classes only.
+    roles = {
+        'fixture-parent': (ROOT.parent, False, False),
+        'installation-root': (ROOT, False, False),
+        'proxy-identity': (ROOT.parent / ('.' + ROOT.name + '.orbis-proxy-identity'), False, True),
+        'proxy-receipt': (ROOT.parent / ('.' + ROOT.name + '.orbis-proxy-identity.json'), True, True),
+        'proxy-config-directory': (ROOT / 'traefik', False, False),
+        'proxy-config': (ROOT / 'traefik' / 'traefik.yml', True, False),
+    }
+    roles_out = {}
+    for role, (path, regular, private) in roles.items():
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            roles_out[role] = 'absent'
+            continue
+        except OSError:
+            roles_out[role] = 'unavailable'
+            continue
+        expected_type = stat.S_ISREG if regular else stat.S_ISDIR
+        if not expected_type(info.st_mode):
+            roles_out[role] = 'type'
+        elif info.st_uid != 0:
+            roles_out[role] = 'owner'
+        elif stat.S_IMODE(info.st_mode) & (0o077 if private else 0o022):
+            roles_out[role] = 'permissions'
+        elif regular and info.st_nlink != 1:
+            roles_out[role] = 'link-count'
+        else:
+            roles_out[role] = 'as-expected'
+    result = {'proxyStartupLayout': 'legacy', 'proxyStartupRoles': roles_out}
+    try:
+        launcher = load('orbis-host-upgrade-launcher')
+        require(closure['scripts/orbis-install-new.py'][1] == executor_sha
+                and 'scripts/orbis-proxy-identity.py' in closure, 'proxy-executor-unverified')
+        for name, (size, digest) in closure.items():
+            body = launcher.read_file(custody / name, max(1, size))
+            require((len(body), sha(body)) == (size, digest), 'proxy-extraction-unverified')
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError):
+        result['proxyObservation'] = 'source-unverified'
+        return result
+    directory = custody / 'scripts'
+    cache = WORK / 'proxy-observer-unused-cache'
+    if os.path.lexists(cache) or not sys.dont_write_bytecode:
+        result['proxyObservation'] = 'source-unverified'
+        return result
+    previous_cache = sys.pycache_prefix
+    try:
+        # Bytecode caches in the extraction are outside the publisher inventory.
+        sys.pycache_prefix = str(cache)
+        proxy = load('orbis-proxy-identity', directory)
+        proxy.observe_current(ROOT, 'default')
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError, subprocess.SubprocessError) as error:
+        relevant = {'orbis-proxy-identity.py', 'orbis-host-retained-authority.py', 'orbis-host-layout.py'}
+        result['proxyObservation'] = 'refused'
+        result['proxyObservationSites'] = [
+            f'{Path(frame.filename).name}:{frame.lineno}'
+            for frame in traceback.extract_tb(error.__traceback__)
+            if Path(frame.filename).parent == directory and Path(frame.filename).name in relevant
+        ][-6:]
+    else:
+        result['proxyObservation'] = 'verified-after-failure'
+    finally:
+        sys.pycache_prefix = previous_cache
+    return result
+
+
+def launch(release, operation, timeout, *, channel='nightly'):
+    path, signals, closure = release
     workdir = WORK / operation
     workdir.mkdir(mode=0o700)
     log_path = workdir / 'installer.log'
     with log_path.open('xb') as log:
+        nightly = ['--accept-nightly'] if channel == 'nightly' else []
         result = subprocess.run([sys.executable, '-I', '-B', str(path), '--work-dir', str(workdir / 'custody'),
-                                 '--root', str(ROOT), '--docker-context', 'default', '--channel', 'nightly',
-                                 '--accept-nightly', '--yes', '--no-animation', '--no-color',
+                                 '--root', str(ROOT), '--docker-context', 'default', '--channel', channel,
+                                 *nightly, '--yes', '--no-animation', '--no-color',
                                  '--http-port', str(PORT), '--https-port', str(TLS_PORT)],
                                 env=ENV, cwd=WORK, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                                 check=False, timeout=timeout)
     if result.returncode:
         code, evidence = installer_failure(log_path, signals)
         if operation == 'source' and evidence.get('installerStep') == 'start-core':
-            evidence.update(fresh_startup_evidence())
+            try:
+                pin = STABLE if channel == 'stable' else SOURCE
+                evidence.update(fresh_startup_evidence(pin))
+                if any(site.startswith('orbis-host-retained-authority.py:')
+                       for site in evidence.get('installerFailureSites', [])):
+                    evidence.update(proxy_startup_probe(pin, closure))
+            except Exception:
+                # This optional follow-up must not supersede the actual installer refusal.
+                evidence['startupDiagnostic'] = 'unavailable'
         raise Refused(code, installerExitCode=result.returncode, **evidence)
+
+
+def executed_launcher(release, operation, pin):
+    launcher = load('orbis-host-upgrade-launcher')
+    path, _, _ = release
+    custody = WORK / operation / 'custody'
+    selected = list(custody.iterdir())
+    require(len(selected) == 1 and re.fullmatch(re.escape(pin[0]) + r'-[a-z0-9_]{8}', selected[0].name),
+            'launcher-extraction-not-unique')
+    directory = selected[0]
+    selected_body = launcher.read_file(directory / 'installer-source-selection.json', 16384)
+    selection = launcher.decoded(selected_body)
+    executed = launcher.decoded(launcher.read_file(directory / 'installer-source-execution.json', 16384))
+    core = launcher.read_file(directory / 'release-manifest.json', 16384)
+    expected = launcher.decoded(core)
+    source = launcher.read_file(directory / 'installer-source-launcher.py', ASSETS['install-orbis.py'])
+    require(source == launcher.read_file(path, ASSETS['install-orbis.py'], private=False)
+            and selection.get('schema') == 'orbis.installer-source-selection.v1'
+            and selection.get('mode') == 'release' and selection.get('channel') == 'nightly'
+            and selection.get('installer') == launcher.literal(source, 'EXPECTED_RELEASE')
+            and selection.get('proofs', {}).get('installer-source-launcher.py') == {'bytes': len(source), 'sha256': sha(source)}
+            and selection.get('proofs', {}).get('release-manifest.json') == {'bytes': len(core), 'sha256': sha(core)}
+            and (expected.get('tag'), expected.get('commit'), expected.get('digest')) == pin[:3]
+            and executed == {'schema': 'orbis.installer-source-execution.v1', 'selectionSha256': sha(selected_body),
+                             'launcherSha256': sha(source), 'channel': 'nightly'}, 'launcher-execution-receipt-refused')
+    return sha(selected_body)
+
+
+def fence(name, pin):
+    with (WORK / name).open('xb') as output:
+        output.write((pin[2] + '\n').encode('ascii'))
+        output.flush()
+        os.fsync(output.fileno())
+    descriptor = os.open(WORK, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def http(method, path, *, body=None, cookie=None, expect=(200,)):
@@ -415,7 +559,7 @@ def build(cookie, pin):
             == (tag, commit, digest, base), 'loopback-build-mismatch')
 
 
-def seed(cookie):
+def seed(cookie, pin=SOURCE):
     marker = secrets.token_hex(12)
     title, name = 'Official update fixture', 'orbis-ota-fixture-' + marker[:8]
     url = 'https://ota-fixture.invalid/' + marker
@@ -427,7 +571,7 @@ def seed(cookie):
     program = ("const f=require('node:fs');f.mkdirSync('/ota-data',{recursive:true});"
                f"if(!f.existsSync('/ota-data/marker'))f.writeFileSync('/ota-data/marker','{marker}',{{flag:'wx'}});"
                "setInterval(()=>{},1000)")
-    config = {'services': {'web': {'image': f'{IMAGE}@{SOURCE[2]}', 'entrypoint': ['node', '-e'], 'command': [program],
+    config = {'services': {'web': {'image': f'{IMAGE}@{pin[2]}', 'entrypoint': ['node', '-e'], 'command': [program],
                                    'network_mode': 'none', 'restart': 'no', 'healthcheck': {'disable': True},
                                    'volumes': ['${APP_DATA_DIR}/data:/ota-data'], 'labels': {'io.orbis.ota-fixture': marker},
                                    'x-runtipi': {'is_main': True, 'internal_port': 3000}}},
@@ -479,17 +623,23 @@ def app_data(identity):
 
 def check_host(pin):
     status = load('orbis-host-service-setup', HOST).read_socket_status()
+    stable = pin == STABLE
     require(status['currentTag'] == pin[0] and status['currentDigest'] == pin[2] and status['imageMatches'] is True
-            and status['enrolled'] is True and status['coreHealth'] == 'healthy' and status['serviceRole'] == 'administration'
-            and 'runtipi-412-update.v1' in status['capabilities']
+            and status['enrolled'] is True and status['coreHealth'] == 'healthy'
+            and ('release-channels.v1' in status['capabilities'] if stable else
+                 status['serviceRole'] == 'administration' and 'runtipi-412-update.v1' in status['capabilities'])
             and run(['/usr/bin/systemctl', 'is-active', 'orbis-host.service']) == 'active',
             'installed-host-refused')
-    sentinel = load('orbis-sentinel-install', HOST)
-    sentinel._installed_payload(sentinel.INSTALLED_STATE, sentinel.INSTALLED_ROOT)
-    installed = json.loads((sentinel.INSTALLED_STATE / 'installed.json').read_bytes())
+    if not stable:
+        sentinel = load('orbis-sentinel-install', HOST)
+        sentinel._installed_payload(sentinel.INSTALLED_STATE, sentinel.INSTALLED_ROOT)
+        installed = json.loads((sentinel.INSTALLED_STATE / 'installed.json').read_bytes())
+        require({key: installed[key] for key in SENTINEL} == SENTINEL, 'installed-sentinel-release-refused')
     status_sentinel = load('orbis-host-service', HOST).sentinel_component_status()
-    require({key: installed[key] for key in SENTINEL} == SENTINEL and status_sentinel['available'] is True
-            and status_sentinel['status']['components']['sentinel']['installedVersion'] == SENTINEL['version'],
+    require(status_sentinel['available'] is True, 'installed-sentinel-refused')
+    component = status_sentinel['status']['components']['sentinel']
+    require(component['installedVersion'] == (STABLE_SENTINEL if stable else SENTINEL)['version']
+            and component['state'] == 'healthy',
             'installed-sentinel-refused')
     return status
 
@@ -506,17 +656,19 @@ def checkpoint_limit():
     return estimate
 
 
-def completed(status, target):
+def verified_operation(status, source, target, policy, prior_operations):
     operation = status['job']['id']
     require(str(uuid.UUID(operation)) == operation and status['job']['state'] == 'complete'
-            and status['job']['backupPolicy'] == 'automatic', 'coordinated-job-refused')
+            and status['job']['backupPolicy'] == policy and operation not in prior_operations,
+            'coordinated-job-refused')
     job = json.loads((STATE / 'job.json').read_bytes())
     operation_dir = STATE / 'component-upgrades' / operation
-    require(list(operation_dir.parent.iterdir()) == [operation_dir], 'more-than-one-coordinated-operation')
+    require({path.name for path in operation_dir.parent.iterdir()} == {*prior_operations, operation},
+            'coordinated-operation-inventory-refused')
     target_body = (operation_dir / 'target-set.json').read_bytes()
     target_set = json.loads(target_body)
-    require(job['id'] == operation and job['state'] == 'complete' and job['backupPolicy'] == 'automatic'
-            and job['current']['digest'] == SOURCE[2] and job['target']['digest'] == target[2]
+    require(job['id'] == operation and job['state'] == 'complete' and job['backupPolicy'] == policy
+            and job['current']['digest'] == source[2] and job['target']['digest'] == target[2]
             and target_set['core']['digest'] == target[2] and target_set['sentinel']['release'] == SENTINEL,
             'authoritative-job-refused')
     previous = None
@@ -547,20 +699,12 @@ def completed(status, target):
     snapshot = Path('/var/lib/orbis/snapshots') / f'orbis-{target[0]}-{operation}'
     require(job['snapshot'] == str(snapshot), 'backed-operation-path-mismatch')
     producer = update.read_journal(snapshot, ROOT, 'default', job['current'], job['target'])
-    tools, reader = update.controller_tools('default')
-    record = tools.read_record(update.checkpoint_path(snapshot), ROOT, reader)
-    manifest = tools.STORAGE.verified_manifest(snapshot)
-    require(producer['stage'] == 'complete' and producer['backupScope'] == update.CONTROLLER.SCOPE
-            and manifest['stage'] == 'complete' and record['backupFingerprint'] == tools.APPS.digest(manifest)
-            and record['runtipiConfigurationStaging']['phase'] == 'staged'
-            and record['runtipiConfigurationStaging']['completed'] == 3, 'backed-operation-custody-refused')
-    for name, expected_hash in record['runtipiConfiguration']['stagedFileSha256'].items():
-        require(name in ('.env', 'VERSION', 'orbis-compose.yml') and sha((ROOT / name).read_bytes()) == expected_hash,
-                'installed-config-mismatch')
-    require((ROOT / 'VERSION').read_text().strip() == target[3], 'installed-base-version-mismatch')
-    require(run(DOCKER + ['inspect', '--format', '{{.State.Health.Status}}', 'runtipi-db']) == 'healthy',
-            'installed-postgres-refused')
-    run(DOCKER + ['exec', 'runtipi-queue', 'rabbitmq-diagnostics', '-q', 'check_running'], code='installed-queue-refused')
+    require(producer['stage'] == 'complete' and producer['backupScope'] == update.CONTROLLER.SCOPE,
+            'coordinated-producer-refused')
+    return operation, update, snapshot
+
+
+def quiescent(operation):
     observation = load('orbis-host-upgrade-supervision', HOST)
     units = [observation.unit_name(operation), observation.reconciliation_unit_name(operation)]
     until = time.monotonic() + 20
@@ -572,37 +716,81 @@ def completed(status, target):
     raise Refused('worker-quiescence-refused')
 
 
+def completed(status, target, prior_operations=()):
+    operation, update, snapshot = verified_operation(status, SOURCE, target, 'automatic', prior_operations)
+    tools, reader = update.controller_tools('default')
+    record = tools.read_record(update.checkpoint_path(snapshot), ROOT, reader)
+    manifest = tools.STORAGE.verified_manifest(snapshot)
+    require(manifest['stage'] == 'complete' and record['backupFingerprint'] == tools.APPS.digest(manifest)
+            and record['runtipiConfigurationStaging']['phase'] == 'staged'
+            and record['runtipiConfigurationStaging']['completed'] == 3, 'backed-operation-custody-refused')
+    for name, expected_hash in record['runtipiConfiguration']['stagedFileSha256'].items():
+        require(name in ('.env', 'VERSION', 'orbis-compose.yml') and sha((ROOT / name).read_bytes()) == expected_hash,
+                'installed-config-mismatch')
+    require((ROOT / 'VERSION').read_text().strip() == target[3], 'installed-base-version-mismatch')
+    require(run(DOCKER + ['inspect', '--format', '{{.State.Health.Status}}', 'runtipi-db']) == 'healthy',
+            'installed-postgres-refused')
+    run(DOCKER + ['exec', 'runtipi-queue', 'rabbitmq-diagnostics', '-q', 'check_running'], code='installed-queue-refused')
+    quiescent(operation)
+
+
 def fixture(environment, result):
     result['phase'] = 'scope'
     target = target_pin(environment)
+    mode = environment.get('STABLE_BRIDGE', 'false')
+    require(mode in ('true', 'false'), 'stable-bridge-mode-refused')
+    bridge = mode == 'true'
+    initial = STABLE if bridge else SOURCE
     preflight(environment)
     result['phase'] = 'publisher'
     modules = [load(name) for name in ('orbis-release-check', 'install-orbis', 'orbis-host-upgrade-launcher')]
     source, candidate = [publisher(pin, *modules, environment.get('GITHUB_TOKEN')) for pin in (SOURCE, target)]
+    bootstrap = publisher(STABLE, *modules, environment.get('GITHUB_TOKEN')) if bridge else source
     result['phase'] = 'loopback-isolation'
     isolate_dashboard()
     result['phase'] = 'guided-source'
-    launch(source, 'source', 600)
-    baseline = check_host(SOURCE)
+    if bridge:
+        fence('stable-install-intent', STABLE)
+        launch(bootstrap, 'source', 600, channel='stable')
+        require(fresh_journal_phase(STABLE) == 'complete', 'stable-install-receipt-refused')
+    else:
+        launch(bootstrap, 'source', 600)
+    baseline = check_host(initial)
     require(baseline.get('job') is None, 'fresh-source-job-refused')
     result['phase'] = 'fixture-markers'
     credential = {'username': 'ota-fixture-' + secrets.token_hex(5), 'password': secrets.token_urlsafe(32)}
     cookie = session('register', credential)
-    build(cookie, SOURCE)
-    identity = seed(cookie)
+    build(cookie, initial)
+    identity = seed(cookie, initial)
     original = app_data(identity)
+    http('POST', '/api/auth/logout', cookie=cookie, expect=(204,))
+    prior_operations = ()
+    if bridge:
+        result['phase'] = 'guided-bridge'
+        fence('bridge-intent', SOURCE)
+        launch(source, 'bridge', 900)
+        result['phase'] = 'bridge-readback'
+        bridge_receipt = executed_launcher(source, 'bridge', SOURCE)
+        operation, _, _ = verified_operation(check_host(SOURCE), STABLE, SOURCE, 'none', ())
+        quiescent(operation)
+        prior_operations = (operation,)
+        cookie = session('login', credential)
+        try:
+            build(cookie, SOURCE)
+            require(app_data(identity) == original, 'bridge-fixture-continuity-refused')
+        finally:
+            http('POST', '/api/auth/logout', cookie=cookie, expect=(204,))
+        result['stableBridgeVerified'] = True
     proxy = run(DOCKER + ['inspect', '--format', '{{.Id}} {{.State.StartedAt}} {{.State.Running}}', 'runtipi-reverse-proxy'])
     require(proxy.endswith(' true'), 'source-ingress-refused')
-    http('POST', '/api/auth/logout', cookie=cookie, expect=(204,))
     result['snapshotEstimateBytes'] = checkpoint_limit()
     result['phase'] = 'guided-target'
-    with (WORK / 'apply-intent').open('xb') as fence:
-        fence.write((target[2] + '\n').encode('ascii'))
-        fence.flush()
-        os.fsync(fence.fileno())
+    fence('apply-intent', target)
     launch(candidate, 'target', 1500)
     result['phase'] = 'terminal-readback'
-    completed(check_host(target), target)
+    if bridge:
+        require(executed_launcher(candidate, 'target', target) != bridge_receipt, 'launcher-receipt-replayed')
+    completed(check_host(target), target, prior_operations)
     cookie = session('login', credential)
     try:
         build(cookie, target)
@@ -617,15 +805,17 @@ def fixture(environment, result):
 
 
 def failure_readback(environment, result):
-    if result.get('phase') not in ('guided-target', 'terminal-readback'):
+    phase = result.get('phase')
+    if phase not in ('guided-bridge', 'bridge-readback', 'guided-target', 'terminal-readback'):
         return
     try:
-        target = target_pin(environment)
-        if (WORK / 'apply-intent').read_bytes() != (target[2] + '\n').encode('ascii'):
+        bridge = phase in ('guided-bridge', 'bridge-readback')
+        source, target, intent = (STABLE, SOURCE, 'bridge-intent') if bridge else (SOURCE, target_pin(environment), 'apply-intent')
+        if (WORK / intent).read_bytes() != (target[2] + '\n').encode('ascii'):
             return
         service = load('orbis-host-service', HOST)
         job = service.read_private(STATE / 'job.json')
-        if not job or job.get('target', {}).get('digest') != target[2] or job.get('current', {}).get('digest') != SOURCE[2]:
+        if not job or job.get('target', {}).get('digest') != target[2] or job.get('current', {}).get('digest') != source[2]:
             return
         state = job.get('state')
         if state in ('complete', 'running', 'interrupted', 'rolled-back', 'failed', 'recovering'):
@@ -636,7 +826,7 @@ def failure_readback(environment, result):
         update = service.UPDATE
         snapshot = Path('/var/lib/orbis/snapshots') / f'orbis-{target[0]}-{operation}'
         journal = service.read_private(update.journal_path(snapshot))
-        if journal and journal.get('targetDigest') == target[2] and journal.get('previousDigest') == SOURCE[2]:
+        if journal and journal.get('targetDigest') == target[2] and journal.get('previousDigest') == source[2]:
             stage = journal.get('stage')
             if stage in update.FAILURE_STAGES | update.TERMINAL_STAGES | {'rolling-back', 'rollback-failed', 'recovery-required'}:
                 result['producerStage'] = stage

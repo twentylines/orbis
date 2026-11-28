@@ -4,13 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       target_commit:
-        description: Exact verified beta.5 Core commit
+        description: Exact verified beta.6 Core commit
         required: true
         type: string
       target_digest:
-        description: Exact verified beta.5 OCI index digest
+        description: Exact verified beta.6 OCI index digest
         required: true
         type: string
+      stable_bridge:
+        description: First install Stable and upgrade to the verified beta.3 source
+        default: false
+        type: boolean
 
 permissions:
   actions: read
@@ -20,10 +24,11 @@ jobs:
   official-upgrade:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: ${{ inputs.stable_bridge && 55 || 40 }}
     env:
       TARGET_COMMIT: ${{ inputs.target_commit }}
       TARGET_DIGEST: ${{ inputs.target_digest }}
+      STABLE_BRIDGE: ${{ inputs.stable_bridge }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -33,5 +38,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          sudo --non-interactive --preserve-env=CI,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_TOKEN,RUNNER_ENVIRONMENT,TARGET_COMMIT,TARGET_DIGEST \
+          sudo --non-interactive --preserve-env=CI,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_TOKEN,RUNNER_ENVIRONMENT,STABLE_BRIDGE,TARGET_COMMIT,TARGET_DIGEST \
             /usr/bin/python3 -I -B packages/backend/scripts/orbis-official-upgrade-runtime.py
