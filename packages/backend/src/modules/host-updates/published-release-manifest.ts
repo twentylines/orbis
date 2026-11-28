@@ -1,6 +1,7 @@
 import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { isPublishedOrbisReleaseTag, isStableOrbisReleaseTag } from '@runtipi/common/schemas/orbis-release-channel';
 import { valid } from 'semver';
+import { QUALIFIED_CORE_BASE, readCoreReleaseManifest } from '../system/core-release-manifest';
 
 export const RELEASE_DIGEST = /^sha256:[a-f0-9]{64}$/;
 
@@ -54,26 +55,31 @@ export async function fetchPublishedReleaseManifest(tag: unknown): Promise<Publi
   }
   let raw: unknown;
   try {
-    const response = await fetch(`https://github.com/twentylines/orbis/releases/download/${tag}/release-manifest.json`, {
-      signal: AbortSignal.timeout(12_000),
-      headers: { 'User-Agent': 'Orbis-update-center/1' },
-    });
-    if (!response.ok || !response.body) throw new Error('Release unavailable');
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let bytes = 0;
-    try {
-      for (;;) {
-        const chunk = await reader.read();
-        if (chunk.done) break;
-        bytes += chunk.value.byteLength;
-        if (bytes > 16 * 1024) throw new Error('Release manifest exceeded its limit');
-        chunks.push(chunk.value);
+    const signal = AbortSignal.timeout(12_000);
+    const manifest = await readCoreReleaseManifest(tag, async (url) => {
+      const response = await fetch(url, { signal, headers: { 'User-Agent': 'Orbis-update-center/1' } });
+      if (response.status === 404) return null;
+      if (!response.ok || !response.body) throw new Error('Release unavailable');
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let bytes = 0;
+      try {
+        for (;;) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          bytes += chunk.value.byteLength;
+          if (bytes > 16 * 1024) throw new Error('Release manifest exceeded its limit');
+          chunks.push(chunk.value);
+        }
+      } finally {
+        await reader.cancel();
       }
-    } finally {
-      await reader.cancel();
-    }
-    raw = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      return Buffer.concat(chunks).toString('utf8');
+    });
+    if (!manifest) throw new Error('Release unavailable');
+    raw = JSON.parse(manifest.body);
+    if (manifest.qualified && (!raw || (raw as Record<string, unknown>).runtipiCompatibility !== QUALIFIED_CORE_BASE))
+      throw new Error('Qualified release compatibility did not match');
   } catch {
     throw new ServiceUnavailableException('The published release manifest could not be verified. Try again later.');
   }

@@ -14,6 +14,7 @@ SPEC.loader.exec_module(CHECK)
 
 TAG = "v0.1.0-beta.5"
 ASSET = f"https://github.com/twentylines/orbis/releases/download/{TAG}/release-manifest.json"
+QUALIFIED_ASSET = ASSET.rsplit('/', 1)[0] + '/qualified-release-manifest.json'
 
 
 class OrbisReleaseCheckTests(unittest.TestCase):
@@ -39,15 +40,45 @@ class OrbisReleaseCheckTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "annotated"):
             CHECK.tag_commit(ref)
 
+    def test_accepts_only_the_qualified_manifest_slot_for_a_coordinated_release(self):
+        legacy = {"name": "release-manifest.json", "browser_download_url": ASSET}
+        qualified = {"name": "qualified-release-manifest.json", "browser_download_url": QUALIFIED_ASSET}
+        release = {"tag_name": TAG, "draft": False, "assets": [qualified]}
+        self.assertEqual(CHECK.release_asset(release, TAG), QUALIFIED_ASSET)
+        with self.assertRaisesRegex(ValueError, "manifest asset"):
+            CHECK.release_asset({**release, "assets": [legacy, qualified]}, TAG)
+        with self.assertRaisesRegex(ValueError, "manifest asset"):
+            CHECK.release_asset({**release, "assets": [{**qualified, "browser_download_url": ASSET}]}, TAG)
+
+    def test_qualified_slot_is_only_for_the_supported_new_compatibility_base(self):
+        manifest = {"schema": "orbis.release.v1", "image": CHECK.PLAN.IMAGE, "tag": TAG,
+                    "commit": "a" * 40, "digest": "sha256:" + "c" * 64,
+                    "runtipiCompatibility": "4.12.0", "installationProtocol": "orbis.installation-state.v1"}
+        absent = HTTPError(ASSET, 404, "missing", {}, None)
+        with patch.object(CHECK, "read_json", side_effect=(absent, manifest)) as read:
+            self.assertEqual(CHECK.read_manifest(ASSET, True), manifest)
+            self.assertEqual([call.args[0] for call in read.call_args_list], [ASSET, QUALIFIED_ASSET])
+        with patch.object(CHECK, "read_json", return_value={**manifest, "runtipiCompatibility": "4.10.1"}):
+            with self.assertRaisesRegex(ValueError, "wrong compatibility base"):
+                CHECK.read_manifest(QUALIFIED_ASSET, False)
+        for status, fallback in ((404, False), (403, True), (503, True)):
+            error = HTTPError(ASSET, status, "denied or unavailable", {}, None)
+            self.addCleanup(error.close)
+            with self.subTest(status=status, fallback=fallback), patch.object(CHECK, "read_json", side_effect=error) as read:
+                with self.assertRaises(HTTPError):
+                    CHECK.read_manifest(ASSET, fallback)
+                read.assert_called_once_with(ASSET, 16 * 1024)
+
     def test_public_release_fallback_after_anonymous_api_rate_limit(self):
         with patch.object(CHECK, "read_json", side_effect=HTTPError(CHECK.GITHUB_API, 403, "rate limit", {}, None)), \
              patch.object(CHECK, "git_tag_commit", return_value="a" * 40), \
              patch.object(CHECK, "read_url", return_value=(b"# Published notes", {})):
-            asset, commit, published, notes = CHECK.published_release(TAG)
+            asset, commit, published, notes, fallback = CHECK.published_release(TAG)
         self.assertEqual(asset, ASSET)
         self.assertEqual(commit, "a" * 40)
         self.assertIsNone(published)
         self.assertEqual(notes, "# Published notes")
+        self.assertTrue(fallback)
 
     def test_temporary_api_errors_use_the_same_git_and_tagged_notes_verification(self):
         for code in (429, 500, 502, 503, 504):
@@ -55,7 +86,7 @@ class OrbisReleaseCheckTests(unittest.TestCase):
                  patch.object(CHECK, "read_json", side_effect=HTTPError(CHECK.GITHUB_API, code, "unavailable", {}, None)), \
                  patch.object(CHECK, "git_tag_commit", return_value="a" * 40) as git, \
                  patch.object(CHECK, "read_url", return_value=(b"# Published notes", {})) as notes:
-                self.assertEqual(CHECK.published_release(TAG), (ASSET, "a" * 40, None, "# Published notes"))
+                self.assertEqual(CHECK.published_release(TAG), (ASSET, "a" * 40, None, "# Published notes", True))
                 git.assert_called_once_with(TAG)
                 notes.assert_called_once_with(f"https://raw.githubusercontent.com/twentylines/orbis/{TAG}/releases/{TAG}.md", 64 * 1024)
 
@@ -83,13 +114,15 @@ class OrbisReleaseCheckTests(unittest.TestCase):
 
     def test_api_outage_does_not_turn_a_missing_public_asset_into_a_release(self):
         absent = HTTPError(ASSET, 404, "missing", {}, None)
-        self.addCleanup(absent.close)
-        with patch.object(CHECK, "read_json", side_effect=[HTTPError(CHECK.GITHUB_API, 503, "unavailable", {}, None), absent]), \
+        qualified_absent = HTTPError(QUALIFIED_ASSET, 404, "missing", {}, None)
+        self.addCleanup(qualified_absent.close)
+        with patch.object(CHECK, "read_json",
+                          side_effect=[HTTPError(CHECK.GITHUB_API, 503, "unavailable", {}, None), absent, qualified_absent]), \
              patch.object(CHECK, "git_tag_commit", return_value="a" * 40), \
              patch.object(CHECK, "read_url", return_value=(b"# Published notes", {})):
             with self.assertRaises(HTTPError) as raised:
                 CHECK.check(TAG)
-            self.assertIs(raised.exception, absent)
+            self.assertIs(raised.exception, qualified_absent)
 
     def test_checks_index_body_digest_header_and_platforms(self):
         index = {
@@ -120,7 +153,7 @@ class OrbisReleaseCheckTests(unittest.TestCase):
         manifest = {"schema": "orbis.release.v1", "image": CHECK.PLAN.IMAGE, "tag": TAG,
                     "commit": "a" * 40, "digest": digest, "runtipiCompatibility": "4.10.1",
                     "installationProtocol": CHECK.PLAN.INSTALLATION_PROTOCOL}
-        with patch.object(CHECK, "published_release", return_value=(ASSET, manifest["commit"], None, "Notes")), \
+        with patch.object(CHECK, "published_release", return_value=(ASSET, manifest["commit"], None, "Notes", False)), \
              patch.object(CHECK, "read_json", side_effect=[manifest, {"token": "public-pull-token"}]), \
              patch.object(CHECK, "read_url", return_value=(body, {"docker-content-digest": digest})):
             self.assertEqual(CHECK.check(TAG)["installationProtocol"], CHECK.PLAN.INSTALLATION_PROTOCOL)

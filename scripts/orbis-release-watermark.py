@@ -152,11 +152,12 @@ def previous_manifest(
     assets = release.get("assets")
     if not isinstance(assets, list) or len(assets) > 256:
         return None
-    asset = next(
-        (item for item in assets if isinstance(item, dict) and item.get("name") == "release-manifest.json"),
-        None,
-    )
-    if not isinstance(asset, dict) or type(asset.get("id")) is not int or asset["id"] <= 0:
+    manifests = [item for item in assets if isinstance(item, dict)
+                 and item.get("name") in (POLICY.CORE_MANIFEST, POLICY.QUALIFIED_CORE_MANIFEST)]
+    if len(manifests) != 1:
+        return None
+    asset = manifests[0]
+    if type(asset.get("id")) is not int or asset["id"] <= 0:
         return None
     manifest = github_json(
         f"https://api.github.com/repos/{repository}/releases/assets/{asset['id']}",
@@ -171,6 +172,7 @@ def previous_manifest(
         or manifest.get("image") != IMAGE
         or manifest.get("tag") != tag
         or manifest.get("commit") != tag_sha
+        or (asset["name"] == POLICY.QUALIFIED_CORE_MANIFEST and manifest.get("runtipiCompatibility") != POLICY.QUALIFIED_CORE_BASE)
         or ("releaseChannel" in manifest and manifest.get("releaseChannel") != actual_channel)
         or manifest.get("updatePriority", "normal") not in {"normal", "critical"}
     ):

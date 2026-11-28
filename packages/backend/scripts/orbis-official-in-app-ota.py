@@ -29,17 +29,28 @@ def select_nightly(runtime, cookie):
     runtime.require(get(runtime, CHANNEL, cookie).get('current') == 'nightly', 'ota-channel-write-unverified')
 
 
-def review(runtime, cookie, source, target, *, supported=True):
+def discovered_release(runtime, cookie):
+    shown = get(runtime, RELEASE + '?channel=nightly', cookie)
+    tag = shown.get('tag') if isinstance(shown, dict) else None
+    runtime.require(isinstance(tag, str) and TAG.fullmatch(tag), 'ota-no-published-target')
+    return shown, tag
+
+
+def verify_qualified_target_hidden(runtime, cookie, target):
+    shown, tag = discovered_release(runtime, cookie)
+    expected = f'https://github.com/twentylines/orbis/releases/download/{tag}/release-manifest.json'
+    runtime.require(tag != target[0] and shown.get('imageManifestUrl') == expected, 'legacy-ota-exposed-qualified-target')
+
+
+def review(runtime, cookie, source, target, *, supported=True, manifest_asset='release-manifest.json'):
     build = get(runtime, '/api/system/build', cookie)
     runtime.require(isinstance(build, dict) and build.get('version') == source[0]
                     and build.get('commit') == source[1] and build.get('imageDigest') == source[2]
                     and build.get('runtipiCompatibility') == source[3], 'ota-build-identity-invalid')
-    shown = get(runtime, RELEASE + '?channel=nightly', cookie)
-    tag = shown.get('tag') if isinstance(shown, dict) else None
-    runtime.require(isinstance(tag, str) and TAG.fullmatch(tag), 'ota-no-published-target')
+    shown, tag = discovered_release(runtime, cookie)
     if tag != target[0]:
         raise runtime.Refused('ota-discovery-skipped-required-release', shownRelease=tag)
-    expected_url = f'https://github.com/twentylines/orbis/releases/download/{tag}/release-manifest.json'
+    expected_url = f'https://github.com/twentylines/orbis/releases/download/{tag}/{manifest_asset}'
     runtime.require(shown.get('imageManifestUrl') == expected_url, 'ota-unverified-discovery-manifest')
     response = get(runtime, HOST + '/release-compatibility?tag=' + quote(target[0], safe=''), cookie)
     runtime.require(isinstance(response, dict) and response.get('tag') == target[0]

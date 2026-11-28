@@ -6,6 +6,13 @@ import {
   releaseAllowedOnChannel,
   type OrbisReleaseChannel,
 } from '@runtipi/common/schemas/orbis-release-channel';
+import {
+  CORE_RELEASE_MANIFEST,
+  QUALIFIED_CORE_RELEASE_MANIFEST,
+  QUALIFIED_CORE_BASE,
+  coreReleaseManifestUrl,
+  readCoreReleaseManifest,
+} from './core-release-manifest';
 
 const REPO = 'twentylines/orbis';
 const CACHE_MS = 60 * 1000;
@@ -107,19 +114,30 @@ function releaseFromMetadata(value: unknown): OrbisRelease | null {
     return null;
   }
   const tag = value.tag_name;
-  const manifest =
-    Array.isArray(value.assets) &&
-    value.assets.some((asset: unknown) => isRecord(asset) && asset.name === 'release-manifest.json' && asset.state === 'uploaded');
+  const manifests = Array.isArray(value.assets)
+    ? value.assets.filter(
+        (asset: unknown) => isRecord(asset) && (asset.name === CORE_RELEASE_MANIFEST || asset.name === QUALIFIED_CORE_RELEASE_MANIFEST),
+      )
+    : [];
+  const manifest = manifests.length === 1 && manifests[0]?.state === 'uploaded' ? manifests[0].name : null;
   return {
     tag,
     publishedAt: typeof value.published_at === 'string' && Number.isFinite(Date.parse(value.published_at)) ? value.published_at : null,
     ...parseOrbisReleaseNotes(typeof value.body === 'string' && value.body.length <= 64 * 1024 ? value.body : ''),
     url: `https://github.com/${REPO}/releases/tag/${tag}`,
-    imageManifestUrl: manifest ? `https://github.com/${REPO}/releases/download/${tag}/release-manifest.json` : null,
+    imageManifestUrl:
+      manifest === CORE_RELEASE_MANIFEST || (manifest === QUALIFIED_CORE_RELEASE_MANIFEST && value.draft === false)
+        ? coreReleaseManifestUrl(tag, manifest)
+        : null,
   };
 }
 
-function releaseFromManifest(value: string, tag: string, channel: OrbisReleaseChannel): Pick<OrbisRelease, 'priority' | 'criticalThrough'> | null {
+function releaseFromManifest(
+  value: string,
+  tag: string,
+  channel: OrbisReleaseChannel,
+  qualified: boolean,
+): Pick<OrbisRelease, 'priority' | 'criticalThrough'> | null {
   const releaseChannel = isStableOrbisReleaseTag(tag) ? 'stable' : 'nightly';
   let manifest: unknown;
   try {
@@ -134,6 +152,11 @@ function releaseFromManifest(value: string, tag: string, channel: OrbisReleaseCh
     manifest.tag !== tag ||
     typeof manifest.commit !== 'string' ||
     !/^[0-9a-f]{40}$/.test(manifest.commit) ||
+    (qualified &&
+      (manifest.runtipiCompatibility !== QUALIFIED_CORE_BASE ||
+        manifest.installationProtocol !== 'orbis.installation-state.v1' ||
+        typeof manifest.digest !== 'string' ||
+        !/^sha256:[0-9a-f]{64}$/.test(manifest.digest))) ||
     !releaseAllowedOnChannel(tag, channel) ||
     (manifest.releaseChannel !== undefined && manifest.releaseChannel !== releaseChannel) ||
     (manifest.updatePriority !== undefined && manifest.updatePriority !== 'normal' && manifest.updatePriority !== 'critical')
@@ -201,13 +224,27 @@ export class OrbisReleaseService {
     return body;
   }
 
+  private async optional(url: string, maxBytes: number, timeout?: number): Promise<string | null> {
+    try {
+      return await this.request(url, 'GET', maxBytes, timeout);
+    } catch (error) {
+      if (error instanceof ReleaseResourceError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
   private async load(channel: OrbisReleaseChannel): Promise<OrbisRelease | null> {
     const cached = this.cached.get(channel);
     if (channel === 'stable') {
       try {
         const metadata = JSON.parse(await this.request(`https://api.github.com/repos/${REPO}/releases/latest`, 'GET', 1024 * 1024, 3_000));
         const release = releaseFromMetadata(metadata);
-        if (release && releaseAllowedOnChannel(release.tag, channel) && release.imageManifestUrl) return release;
+        if (release && releaseAllowedOnChannel(release.tag, channel) && release.imageManifestUrl) {
+          if (release.imageManifestUrl !== coreReleaseManifestUrl(release.tag, QUALIFIED_CORE_RELEASE_MANIFEST)) return release;
+          const manifest = await this.optional(release.imageManifestUrl, 16 * 1024, 3_000);
+          const facts = manifest === null ? null : releaseFromManifest(manifest, release.tag, channel, true);
+          if (facts) return { ...release, ...facts };
+        }
       } catch (error) {
         if (error instanceof ReleaseResourceError && error.status === 404) return null;
       }
@@ -219,20 +256,14 @@ export class OrbisReleaseService {
       .sort((a, b) => rcompare(a.tag, b.tag))) {
       if (cached?.value?.tag === latest.tag && cached.value.imageManifestUrl) return cached.value;
       const { tag, publishedAt } = latest;
-      const manifestUrl = `https://github.com/${REPO}/releases/download/${tag}/release-manifest.json`;
       const notesUrl = `https://raw.githubusercontent.com/${REPO}/${tag}/releases/${tag}.md`;
-      const optional = (request: Promise<string>) =>
-        request.catch((error: unknown) => {
-          if (error instanceof ReleaseResourceError && error.status === 404) return null;
-          throw error;
-        });
       const [body, manifest] = await Promise.all([
-        optional(this.request(notesUrl, 'GET', 64 * 1024)),
-        optional(this.request(manifestUrl, 'GET', 16 * 1024)),
+        this.optional(notesUrl, 64 * 1024),
+        readCoreReleaseManifest(tag, (url) => this.optional(url, 16 * 1024)),
       ]);
       if (body === null) continue;
-      const manifestMetadata = manifest === null ? null : releaseFromManifest(manifest, tag, channel);
-      const installableManifest = manifestMetadata ? manifestUrl : null;
+      const manifestMetadata = manifest && releaseFromManifest(manifest.body, tag, channel, manifest.qualified);
+      const installableManifest = manifestMetadata && manifest ? manifest.url : null;
       const release = {
         tag,
         publishedAt,
@@ -287,24 +318,18 @@ export class OrbisReleaseService {
             releases.push(cached);
             continue;
           }
-          const manifestUrl = `https://github.com/${REPO}/releases/download/${entry.tag}/release-manifest.json`;
-          const optional = (request: Promise<string>) =>
-            request.catch((error: unknown) => {
-              if (error instanceof ReleaseResourceError && error.status === 404) return null;
-              throw error;
-            });
           const [body, manifest] = await Promise.all([
-            optional(this.request(`https://raw.githubusercontent.com/${REPO}/${entry.tag}/releases/${entry.tag}.md`, 'GET', 64 * 1024, 3_000)),
-            optional(this.request(manifestUrl, 'GET', 16 * 1024, 3_000)),
+            this.optional(`https://raw.githubusercontent.com/${REPO}/${entry.tag}/releases/${entry.tag}.md`, 64 * 1024, 3_000),
+            readCoreReleaseManifest(entry.tag, (url) => this.optional(url, 16 * 1024, 3_000)),
           ]);
           const manifestMetadata =
-            manifest === null ? null : releaseFromManifest(manifest, entry.tag, isStableOrbisReleaseTag(entry.tag) ? 'stable' : 'nightly');
+            manifest && releaseFromManifest(manifest.body, entry.tag, isStableOrbisReleaseTag(entry.tag) ? 'stable' : 'nightly', manifest.qualified);
           releases.push({
             ...entry,
             ...parseOrbisReleaseNotes(body ?? ''),
             ...(manifestMetadata?.criticalThrough ? { criticalThrough: manifestMetadata.criticalThrough } : {}),
             ...(manifestMetadata?.priority ? { priority: manifestMetadata.priority } : {}),
-            imageManifestUrl: manifestMetadata ? manifestUrl : null,
+            imageManifestUrl: manifestMetadata && manifest ? manifest.url : null,
             url: `https://github.com/${REPO}/releases/tag/${entry.tag}`,
           });
         }

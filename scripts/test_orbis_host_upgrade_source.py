@@ -92,6 +92,28 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(L.decoded(staged.descriptor)['core'],self.target)
         self.assertEqual(L.decoded(staged.descriptor)['gitTreeSha'],'f'*40)
 
+    def test_qualified_manifest_keeps_the_same_verified_installer_receipt(self):
+        from urllib.error import HTTPError
+
+        self.target['runtipiCompatibility'] = '4.12.0'
+        self.scope.target = copy.deepcopy(self.target)
+        self.build_inputs()
+        base = L.RELEASES + self.target['tag'] + '/'
+
+        def fetch(url, limit):
+            if url == base + BOOT.CORE_MANIFEST:
+                raise HTTPError(url, 404, 'unavailable to legacy clients', {}, None)
+            if url == base + BOOT.QUALIFIED_CORE_MANIFEST:
+                return self.core_body
+            return self.fetch(url, limit)
+
+        with mock.patch.object(BOOT, 'fetch', side_effect=fetch) as reads:
+            staged = self.stage()
+        staged.verify()
+        self.assertEqual(L.decoded(staged.descriptor)['core'], self.target)
+        self.assertEqual((staged.directory / BOOT.CORE_MANIFEST).read_bytes(), self.core_body)
+        reads.assert_any_call(base + BOOT.QUALIFIED_CORE_MANIFEST, 16 * 1024)
+
     def package_with_git_proof(self):
         repository = self.root / 'proof-source'
         repository.mkdir()

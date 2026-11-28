@@ -24,8 +24,13 @@ on:
         required: true
         type: choice
         options:
+          - source-selection-recovery
+          - target-custody-recovery
           - checkpoint-recovery
+          - core-commit-recovery
           - installed-cli-update
+          - updates-after-enrollment
+          - public-discovery-after-enrollment
 
 permissions:
   actions: read
@@ -35,8 +40,9 @@ jobs:
   qualify:
     if: github.repository == 'twentylines/orbis' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: ${{ (inputs.rehearsal == 'updates-after-enrollment' || inputs.rehearsal == 'public-discovery-after-enrollment') && 55 || 45 }}
     env:
+      DRAFT_UPGRADE_CASE: ${{ inputs.rehearsal }}
       DRAFT_BRIDGE_TAG: ${{ inputs.bridge_tag }}
       DRAFT_BRIDGE_RUN: ${{ inputs.bridge_run }}
       DRAFT_TARGET_TAG: ${{ inputs.target_tag }}
@@ -49,16 +55,14 @@ jobs:
       # GitHub restricts draft visibility to credentials with push access.
       # Only this acquisition step receives that token. The installed product
       # receives only the exact verified bytes on the disposable runner.
-      - name: Acquire the exact unpublished installer assets
+      - name: Acquire the exact signed release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sudo --non-interactive --preserve-env=GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_SHA,GH_TOKEN,RUNNER_ENVIRONMENT,DRAFT_BRIDGE_TAG,DRAFT_BRIDGE_RUN,DRAFT_TARGET_TAG,DRAFT_TARGET_RUN \
+          sudo --non-interactive --preserve-env=GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_SHA,GH_TOKEN,RUNNER_ENVIRONMENT,DRAFT_UPGRADE_CASE,DRAFT_BRIDGE_TAG,DRAFT_BRIDGE_RUN,DRAFT_TARGET_TAG,DRAFT_TARGET_RUN \
             /usr/bin/python3 -I -B packages/backend/scripts/orbis-official-upgrade-runtime.py --acquire-drafts
 
-      - name: Rehearse the signed draft pair without release discovery
-        env:
-          DRAFT_UPGRADE_CASE: ${{ inputs.rehearsal }}
+      - name: Rehearse the signed draft pair
         run: |
           sudo --non-interactive --preserve-env=CI,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_SHA,RUNNER_ENVIRONMENT,DRAFT_UPGRADE_CASE,DRAFT_BRIDGE_TAG,DRAFT_BRIDGE_RUN,DRAFT_TARGET_TAG,DRAFT_TARGET_RUN \
             /usr/bin/python3 -I -B packages/backend/scripts/orbis-official-upgrade-runtime.py

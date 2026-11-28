@@ -43,6 +43,31 @@ describe('Orbis release feed', () => {
     expect(latestTagFromAtom(FEED.replace(TAG, 'v0.1.0;unsafe'))).toBeNull();
   });
 
+  it('discovers a coordinated release through its qualified manifest while keeping legacy assets optional', async () => {
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/releases.atom')) return new Response(FEED);
+      if (url.endsWith(`/${TAG}.md`)) return new Response('# Coordinated release');
+      if (url.endsWith('/release-manifest.json')) return new Response(null, { status: 404 });
+      if (url.endsWith('/qualified-release-manifest.json')) {
+        return Response.json({
+          schema: 'orbis.release.v1',
+          image: 'ghcr.io/twentylines/orbis',
+          tag: TAG,
+          commit: 'b'.repeat(40),
+          digest: `sha256:${'c'.repeat(64)}`,
+          runtipiCompatibility: '4.12.0',
+          installationProtocol: 'orbis.installation-state.v1',
+        });
+      }
+      throw new Error(`unexpected release request: ${url}`);
+    });
+    const service = new OrbisReleaseService();
+    expect((await service.latest('nightly'))?.imageManifestUrl).toMatch(/\/qualified-release-manifest\.json$/);
+    await service.latest('nightly');
+    expect(request).toHaveBeenCalledTimes(4);
+  });
+
   it('keeps published beta releases in Stable and skips inactive build tags before fetching their assets', async () => {
     const excluded = ['v0.1.0-nightly.20261025', 'v0.1.0-dev.1', 'v0.1.0-alpha.1'];
     const feed = FEED.replace(
@@ -69,6 +94,7 @@ describe('Orbis release feed', () => {
       if (url.endsWith('/releases.atom')) return new Response(FEED);
       if (url.endsWith(`/${TAG}.md`)) return new Response('# Release notes');
       if (url.endsWith('/release-manifest.json')) return manifestReady ? releaseManifestResponse(url) : new Response(null, { status: 404 });
+      if (url.endsWith('/qualified-release-manifest.json')) return new Response(null, { status: 404 });
       throw new Error(`unexpected release request: ${url}`);
     });
     const service = new OrbisReleaseService();
@@ -76,14 +102,14 @@ describe('Orbis release feed', () => {
     manifestReady = true;
     vi.advanceTimersByTime(29_999);
     expect((await service.latest('nightly'))?.imageManifestUrl).toBeNull();
-    expect(request).toHaveBeenCalledTimes(3);
+    expect(request).toHaveBeenCalledTimes(4);
     vi.advanceTimersByTime(1);
     const refreshed = await Promise.all(Array.from({ length: 8 }, () => service.latest('nightly')));
     expect(refreshed.every((value) => value?.imageManifestUrl?.endsWith('/release-manifest.json'))).toBe(true);
-    expect(request).toHaveBeenCalledTimes(6);
+    expect(request).toHaveBeenCalledTimes(7);
     vi.advanceTimersByTime(60_000);
     expect((await service.latest('nightly'))?.imageManifestUrl).not.toBeNull();
-    expect(request).toHaveBeenCalledTimes(7);
+    expect(request).toHaveBeenCalledTimes(8);
   });
 
   it('finds a new release after one minute without downloading unchanged notes again', async () => {
@@ -144,21 +170,22 @@ describe('Orbis release feed', () => {
       if (url.endsWith('/release-manifest.json')) {
         return url.includes(`/${next}/`) && !ready ? new Response(null, { status: 404 }) : releaseManifestResponse(url);
       }
+      if (url.endsWith('/qualified-release-manifest.json')) return new Response(null, { status: 404 });
       throw new Error(`unexpected release request: ${url}`);
     });
     const service = new OrbisReleaseService();
     expect((await service.latest('nightly'))?.tag).toBe(TAG);
     expect((await service.latest('nightly'))?.imageManifestUrl).toContain(`/${TAG}/`);
-    expect(request).toHaveBeenCalledTimes(5);
+    expect(request).toHaveBeenCalledTimes(6);
 
     vi.advanceTimersByTime(60_000);
     expect((await service.latest('nightly'))?.tag).toBe(TAG);
-    expect(request).toHaveBeenCalledTimes(8);
+    expect(request).toHaveBeenCalledTimes(10);
     ready = true;
     vi.advanceTimersByTime(60_000);
     const updated = await Promise.all(Array.from({ length: 8 }, () => service.latest('nightly')));
     expect(updated.every((release) => release?.tag === next && release.imageManifestUrl?.includes(`/${next}/`))).toBe(true);
-    expect(request).toHaveBeenCalledTimes(11);
+    expect(request).toHaveBeenCalledTimes(13);
   });
 
   it('skips an unpublished tag whose notes are missing', async () => {

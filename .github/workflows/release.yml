@@ -171,6 +171,14 @@ jobs:
           RELEASE_SHA: ${{ github.sha }}
         run: |
           python3 scripts/release-artifact-privacy.py verify --oci "$RELEASE_DIR/image.oci.tar" --tag "$RELEASE_TAG" --commit "$RELEASE_SHA" --manifest release-manifest.json --installer installer-assets --notes release-notes.md --report "$RELEASE_DIR/privacy-receipt.json"
+          core_manifest_asset=release-manifest.json
+          if [[ "$RUNTIPI_COMPATIBILITY" == 4.12.0 ]]; then
+            # Only send the coordinated manifest under its new public filename.
+            # The older installer and Updates catalogue only read the legacy name.
+            core_manifest_asset="$RELEASE_DIR/qualified-release-manifest.json"
+            cp -- release-manifest.json "$core_manifest_asset"
+            cmp -s release-manifest.json "$core_manifest_asset"
+          fi
           flags=(--verify-tag --title "Orbis $DISPLAY_VERSION" --notes-file release-notes.md)
           if [[ "$IS_PRERELEASE" == true ]]; then
             flags+=(--prerelease)
@@ -183,7 +191,7 @@ jobs:
           else
             flags+=(--latest)
           fi
-          gh release create "$RELEASE_TAG" release-manifest.json installer-assets/install-orbis.py installer-assets/orbis-installer-manifest.json installer-assets/orbis-installer.tar.gz "${flags[@]}"
+          gh release create "$RELEASE_TAG" "$core_manifest_asset" installer-assets/install-orbis.py installer-assets/orbis-installer-manifest.json installer-assets/orbis-installer.tar.gz "${flags[@]}"
 
       - name: Verify the GitHub release is public
         if: env.CANDIDATE_ONLY == 'false' && env.RUNTIPI_COMPATIBILITY == '4.10.1'

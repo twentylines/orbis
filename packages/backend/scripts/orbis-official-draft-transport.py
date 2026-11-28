@@ -20,6 +20,8 @@ MODULE = 'orbis_official_draft_fixture_transport'
 TAG = re.compile(r'v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+')
 ASSETS = {'install-orbis.py': 1024 * 1024, 'orbis-installer-manifest.json': 65536,
           'orbis-installer.tar.gz': 64 * 1024 * 1024, 'release-manifest.json': 16384}
+CORE_MANIFEST = 'release-manifest.json'
+QUALIFIED_CORE_MANIFEST = 'qualified-release-manifest.json'
 
 
 def require(condition):
@@ -47,14 +49,19 @@ def read(path, limit):
 
 def routes(directory, tags):
     directory = private_directory(directory)
-    require(type(tags) is list and len(tags) == 2
+    require(type(tags) is list and 1 <= len(tags) <= 2
             and all(type(tag) is str and TAG.fullmatch(tag) for tag in tags)
-            and len(set(tags)) == 2)
+            and len(set(tags)) == len(tags))
     values = {}
     for tag in tags:
         release = private_directory(directory / tag)
         origin = f'https://github.com/{REPO}/releases/download/{tag}'
-        for file, limit in ASSETS.items():
+        limits = dict(ASSETS)
+        if os.path.lexists(release / QUALIFIED_CORE_MANIFEST):
+            require(not os.path.lexists(release / CORE_MANIFEST))
+            limits[QUALIFIED_CORE_MANIFEST] = limits.pop(CORE_MANIFEST)
+            values[f'{origin}/{CORE_MANIFEST}'] = None
+        for file, limit in limits.items():
             values[f'{origin}/{file}'] = (release / file, limit)
         values[f'https://api.github.com/repos/{REPO}/releases/tags/{tag}'] = (release / 'metadata.json', 65536)
     return values
@@ -63,11 +70,13 @@ def routes(directory, tags):
 def replay(original, values):
     def open_url(url, *args, **kwargs):
         address = url.full_url if isinstance(url, urllib.request.Request) else url
-        entry = values.get(address)
-        if entry is None:
+        if address not in values:
             return original(url, *args, **kwargs)
         if isinstance(url, urllib.request.Request) and url.get_method() != 'GET':
             raise HTTPError(address, 405, 'Draft fixture supports readback only', {}, None)
+        entry = values[address]
+        if entry is None:
+            raise HTTPError(address, 404, 'Draft fixture has no legacy manifest asset', {}, None)
         path, limit = entry
         return addinfourl(BytesIO(read(path, limit)), {'Content-Type': 'application/octet-stream'}, address, 200)
     return open_url
@@ -93,7 +102,7 @@ def activate():
     private_directory(WORK)
     directory = WORK / 'draft-release-responses'
     values = routes(directory, json.loads(read(directory / 'tags.json', 4096)))
-    require(all(read(path, limit) for path, limit in values.values()))
+    require(all(read(*entry) for entry in values.values() if entry is not None))
     # Use a protected system site path on disposable Ubuntu. No product source
     # or installed unit is rewritten, including units that use Python -I.
     available = [Path(path) for path in site.getsitepackages() if path.startswith(('/usr/local/lib/', '/usr/lib/'))]

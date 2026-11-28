@@ -752,6 +752,25 @@ class ArtifactTests(unittest.TestCase):
         self.assertIn('outputs: type=oci,', workflow)
         self.assertIn('DOCKER_BUILD_RECORD_UPLOAD: \'false\'', workflow)
 
+    def test_coordinated_drafts_upload_only_the_qualified_manifest_name(self):
+        workflow = (Path(__file__).resolve().parent.parent / '.github/workflows/release.yml').read_text()
+        start = workflow.index('          core_manifest_asset=release-manifest.json')
+        end = workflow.index('\n\n      - name: Verify the GitHub release is public', start)
+        shell = 'gh() { printf "%s\\n" "$@"; }\n' + workflow[start:end]
+        original = b'{"schema":"approved fixture manifest"}\n'
+        (self.root / 'release-manifest.json').write_bytes(original)
+        for base, asset in (('4.10.1', 'release-manifest.json'), ('4.12.0', 'qualified-release-manifest.json')):
+            with self.subTest(base=base):
+                result = subprocess.run(['/bin/bash', '--noprofile', '--norc', '-eu', '-c', shell],
+                                        cwd=self.root, capture_output=True, check=True, text=True,
+                                        env={**os.environ, 'RELEASE_DIR': str(self.root), 'RELEASE_TAG': TAG,
+                                             'RUNTIPI_COMPATIBILITY': base, 'DISPLAY_VERSION': TAG,
+                                             'IS_PRERELEASE': 'true', 'CANDIDATE_ONLY': 'true'})
+                filenames = [Path(line).name for line in result.stdout.splitlines() if line.endswith('release-manifest.json')]
+                self.assertEqual(filenames, [asset])
+                self.assertEqual((self.root / asset).read_bytes(), original)
+                self.assertIn('--draft', result.stdout.splitlines())
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -237,7 +237,7 @@ def stage_source(boot, plan, supervision, scope, state_directory, operation, req
             and type(identity['manifestSha256']) is str and re.fullmatch(r'[a-f0-9]{64}', identity['manifestSha256']))
     manifest_body = fetch(base + boot.MANIFEST, 65536)
     manifest = boot.verify_manifest(manifest_body, identity, required=boot.SOURCE_CUSTODY_REQUIRED)
-    core_body = fetch(base + 'release-manifest.json', 16384)
+    core_body = boot.fetch_release_manifest(base, fetch)
     require(sha(core_body) == manifest['releaseManifestSha256']
             and plan.update_identity(decoded(core_body)) == plan.update_identity(target))
     archive = fetch(base + boot.ARCHIVE, manifest['archiveBytes'])

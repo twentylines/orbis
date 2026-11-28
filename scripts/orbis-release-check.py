@@ -24,6 +24,7 @@ GITHUB_REPO = "https://github.com/twentylines/orbis.git"
 GHCR = "https://ghcr.io"
 INDEX_TYPES = {"application/vnd.oci.image.index.v1+json", "application/vnd.docker.distribution.manifest.list.v2+json"}
 USER_AGENT = "Orbis-release-check/1"
+MANIFEST_NAMES = (PLAN.POLICY.CORE_MANIFEST, PLAN.POLICY.QUALIFIED_CORE_MANIFEST)
 
 
 def read_url(url: str, limit: int, headers: dict[str, str] | None = None) -> tuple[bytes, dict[str, str]]:
@@ -46,9 +47,11 @@ def release_asset(release: object, tag: str) -> str:
     assets = release.get("assets")
     if not isinstance(assets, list):
         raise ValueError("GitHub release has no asset list")
-    expected = f"https://github.com/twentylines/orbis/releases/download/{quote(tag)}/release-manifest.json"
-    matches = [asset for asset in assets if isinstance(asset, dict) and asset.get("name") == "release-manifest.json"]
-    if len(matches) != 1 or matches[0].get("browser_download_url") != expected:
+    matches = [asset for asset in assets if isinstance(asset, dict) and asset.get("name") in MANIFEST_NAMES]
+    if len(matches) != 1:
+        raise ValueError("GitHub release has no matching Orbis manifest asset")
+    expected = f"https://github.com/twentylines/orbis/releases/download/{quote(tag)}/{matches[0]['name']}"
+    if matches[0].get("browser_download_url") != expected:
         raise ValueError("GitHub release has no matching Orbis manifest asset")
     return expected
 
@@ -81,11 +84,11 @@ def git_tag_commit(tag: str) -> str:
     return commit
 
 
-def published_release(tag: str) -> tuple[str, str, str | None, str | None]:
-    asset_url = f"https://github.com/twentylines/orbis/releases/download/{quote(tag)}/release-manifest.json"
+def published_release(tag: str) -> tuple[str, str, str | None, str | None, bool]:
+    asset_url = f"https://github.com/twentylines/orbis/releases/download/{quote(tag)}/{MANIFEST_NAMES[0]}"
     try:
         release = read_json(f"{GITHUB_API}/releases/tags/{quote(tag)}", 512 * 1024, {"Accept": "application/vnd.github+json"})
-        release_asset(release, tag)
+        asset_url = release_asset(release, tag)
         ref = read_json(f"{GITHUB_API}/git/ref/tags/{quote(tag)}", 16 * 1024, {"Accept": "application/vnd.github+json"})
         tag_object = None
         if isinstance(ref, dict) and isinstance(ref.get("object"), dict) and ref["object"].get("type") == "tag":
@@ -93,7 +96,7 @@ def published_release(tag: str) -> tuple[str, str, str | None, str | None]:
             if not isinstance(tag_sha, str) or not PLAN.COMMIT.fullmatch(tag_sha):
                 raise ValueError("GitHub annotated tag identifier is invalid")
             tag_object = read_json(f"{GITHUB_API}/git/tags/{tag_sha}", 16 * 1024, {"Accept": "application/vnd.github+json"})
-        return asset_url, tag_commit(ref, tag_object), release.get("published_at"), release.get("body")
+        return asset_url, tag_commit(ref, tag_object), release.get("published_at"), release.get("body"), False
     except HTTPError as error:
         if error.code not in {403, 429, 500, 502, 503, 504}:
             raise
@@ -103,7 +106,22 @@ def published_release(tag: str) -> tuple[str, str, str | None, str | None]:
         # its commit, and the registry digest/platform checks remain unchanged.
         commit = git_tag_commit(tag)
         notes, _ = read_url(f"https://raw.githubusercontent.com/twentylines/orbis/{quote(tag)}/releases/{quote(tag)}.md", 64 * 1024)
-        return asset_url, commit, None, notes.decode("utf-8")
+        return asset_url, commit, None, notes.decode("utf-8"), True
+
+
+def read_manifest(asset_url, allow_asset_fallback):
+    try:
+        raw = read_json(asset_url, 16 * 1024)
+    except HTTPError as error:
+        if error.code != 404 or not allow_asset_fallback or not asset_url.endswith('/' + MANIFEST_NAMES[0]):
+            raise
+        error.close()
+        asset_url = asset_url.rsplit('/', 1)[0] + '/' + MANIFEST_NAMES[1]
+        raw = read_json(asset_url, 16 * 1024)
+    manifest = PLAN.validate_manifest(raw)
+    if asset_url.endswith('/' + MANIFEST_NAMES[1]) and manifest['runtipiCompatibility'] != PLAN.POLICY.QUALIFIED_CORE_BASE:
+        raise ValueError("Qualified Core manifest has the wrong compatibility base")
+    return manifest
 
 
 def verify_index(body: bytes, header_digest: str | None, expected_digest: str) -> list[str]:
@@ -129,8 +147,8 @@ def check(tag: str) -> dict[str, object]:
         raise ValueError("release tag is invalid")
     if not PLAN.POLICY.is_published_release_tag(tag):
         raise ValueError("choose a published Stable or Nightly release")
-    asset_url, commit, published_at, notes = published_release(tag)
-    manifest = PLAN.validate_manifest(read_json(asset_url, 16 * 1024))
+    asset_url, commit, published_at, notes, allow_asset_fallback = published_release(tag)
+    manifest = read_manifest(asset_url, allow_asset_fallback)
     if manifest["tag"] != tag:
         raise ValueError("release manifest tag did not match GitHub")
     if commit != manifest["commit"]:

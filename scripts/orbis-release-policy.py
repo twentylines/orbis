@@ -5,6 +5,9 @@ import re
 
 
 MAX_SAFE_INTEGER = 9_007_199_254_740_991
+CORE_MANIFEST = "release-manifest.json"
+QUALIFIED_CORE_MANIFEST = "qualified-release-manifest.json"
+QUALIFIED_CORE_BASE = "4.12.0"
 VERSION = re.compile(r"^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(beta|rc)\.(0|[1-9][0-9]*))?$")
 PUBLISHED_TAG = re.compile(r"^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:beta|rc)\.(?:0|[1-9][0-9]*))?$")
 PRERELEASE_RANK = {"beta": 0, "rc": 1, None: 2}

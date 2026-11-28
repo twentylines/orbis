@@ -178,6 +178,27 @@ gh() {
         self.assertEqual(channel["launcherSha256"], SITE.BUILD.sha((self.output / "install").read_bytes()))
         self.assertEqual({p.name for p in self.output.iterdir()}, {"install", "latest.json", "index.html", ".nojekyll"})
 
+    def test_qualified_manifest_uses_the_original_source_bound_installer_bytes(self):
+        release = {**self.release, 'runtipiCompatibility': '4.12.0'}
+        release_body = json.dumps(release).encode()
+        name = SITE.POLICY.QUALIFIED_CORE_MANIFEST
+        assets = {**SITE.BUILD.build(self.files, release_body), name: release_body}
+        selected = copy.deepcopy(self.selected)
+        selected['assets'] = [
+            {'name': asset, 'browser_download_url': SITE.BASE + 'download/' + release['tag'] + '/' + asset,
+             'state': 'uploaded', 'size': len(body), 'digest': 'sha256:' + SITE.BUILD.sha(body)}
+            for asset, body in assets.items()
+        ]
+        self.publish([selected], assets)
+        self.assertEqual((self.output / 'install').read_bytes(), assets['install-orbis.py'])
+
+        legacy = dict(next(asset for asset in selected['assets'] if asset['name'] == name))
+        legacy['name'] = SITE.POLICY.CORE_MANIFEST
+        legacy['browser_download_url'] = legacy['browser_download_url'].replace(name, legacy['name'])
+        selected['assets'].append(legacy)
+        with self.assertRaisesRegex(ValueError, 'missing a unique release-manifest.json'):
+            self.publish([selected], {**assets, legacy['name']: release_body})
+
     def test_older_source_bound_packages_use_their_original_required_file_list(self):
         required = SITE.BUILD.REQUIRED - {"scripts/orbis-install-ui.py"}
         del self.files["scripts/orbis-install-ui.py"]

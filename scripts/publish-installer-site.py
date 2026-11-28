@@ -27,7 +27,7 @@ BOOT = load("install-orbis")
 POLICY = load("orbis-release-policy")
 BASE = "https://github.com/twentylines/orbis/releases/"
 LEGACY_CHANNEL_BOOTSTRAPS = {"v0.1.0-beta.125": "5b0a23548769d6046d12e0273e135fddbcbf1a63f2d1c537ccc7987da59d892f"}
-LIMITS = {"install-orbis.py": 1024 * 1024, "release-manifest.json": 16 * 1024, BUILD.MANIFEST: 64 * 1024, BUILD.ARCHIVE: 8 * 1024 * 1024}
+LIMITS = {"install-orbis.py": 1024 * 1024, POLICY.CORE_MANIFEST: 16 * 1024, BUILD.MANIFEST: 64 * 1024, BUILD.ARCHIVE: 8 * 1024 * 1024}
 HISTORY = 'installer-history.json'
 PAGES = 'https://twentylines.github.io/orbis/'
 
@@ -89,19 +89,24 @@ def site(repository, releases, output, fetch=BOOT.fetch, *, channel="stable"):
     if not isinstance(assets, list):
         raise ValueError("Newest release has no installer assets")
     downloaded = {}
+    qualified = False
     for name, limit in LIMITS.items():
-        matches = [item for item in assets if isinstance(item, dict) and item.get("name") == name]
+        names = (POLICY.CORE_MANIFEST, POLICY.QUALIFIED_CORE_MANIFEST) if name == POLICY.CORE_MANIFEST else (name,)
+        matches = [item for item in assets if isinstance(item, dict) and item.get("name") in names]
         if len(matches) != 1:
             raise ValueError(f"Newest release is missing a unique {name}; publication may still be running")
         asset = matches[0]
-        url = BASE + "download/" + tag + "/" + name
+        qualified = qualified or asset["name"] == POLICY.QUALIFIED_CORE_MANIFEST
+        url = BASE + "download/" + tag + "/" + asset["name"]
         if asset.get("browser_download_url") != url or asset.get("state") != "uploaded" or type(asset.get("size")) is not int or not 0 < asset["size"] <= limit or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(asset.get("digest", ""))):
             raise ValueError("Newest release has invalid or incomplete installer assets")
         content = fetch(url, limit)
         if len(content) != asset["size"] or BUILD.sha(content) != asset["digest"][7:]:
             raise ValueError("Downloaded installer asset differs from GitHub's digest")
         downloaded[name] = content
-    release = json.loads(downloaded["release-manifest.json"])
+    release = json.loads(downloaded[POLICY.CORE_MANIFEST])
+    if qualified and release.get("runtipiCompatibility") != POLICY.QUALIFIED_CORE_BASE:
+        raise ValueError("Qualified Core manifest has the wrong compatibility base")
     if release.get("tag") != tag:
         raise ValueError("Installer and selected release have different tags")
     if tag_commit(repository, tag) != release.get("commit"):
@@ -109,7 +114,7 @@ def site(repository, releases, output, fetch=BOOT.fetch, *, channel="stable"):
     source = BUILD.committed_files(repository, release.get("commit", ""))
     identity = {"tag": tag, "commit": release["commit"], "manifestSha256": BUILD.sha(downloaded[BUILD.MANIFEST])}
     manifest = BOOT.verify_manifest(downloaded[BUILD.MANIFEST], identity, required=required_sources(source))
-    if manifest["releaseManifestSha256"] != BUILD.sha(downloaded["release-manifest.json"]):
+    if manifest["releaseManifestSha256"] != BUILD.sha(downloaded[POLICY.CORE_MANIFEST]):
         raise ValueError("Installer and core image manifests do not match")
     verified = BOOT.verify_files(downloaded[BUILD.ARCHIVE], manifest)
     expected = packaged_sources(source)

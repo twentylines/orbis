@@ -64,9 +64,13 @@ PAIRED_SENTINEL = {'version': '0.1.0-dev.25', 'sha256': 'f6a90314f76a9e9367741e1
                    'sourceCommit': '79df3acbdadb35630f471a35d17cd4d6a711eccb'}
 ASSETS = {'install-orbis.py': 1024 * 1024, 'orbis-installer-manifest.json': 65536,
           'orbis-installer.tar.gz': 64 * 1024 * 1024, 'release-manifest.json': 16384}
+CORE_MANIFEST = 'release-manifest.json'
+QUALIFIED_CORE_MANIFEST = 'qualified-release-manifest.json'
 DOCKER = ['/usr/bin/docker', '--context', 'default']
 ENV = {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LC_ALL': 'C.UTF-8', 'TMPDIR': str(WORK / 'tmp')}
 DIGEST = re.compile(r'sha256:[a-f0-9]{64}')
+DRAFT_PRE_EFFECT = {'source-selection-recovery': 'source-selection', 'target-custody-recovery': 'target-custody'}
+PUBLIC_DISCOVERY_CASE = 'public-discovery-after-enrollment'
 
 
 class Refused(ValueError):
@@ -297,6 +301,15 @@ def installer_signals(files):
     return signals
 
 
+def release_asset_limits(assets, base):
+    names = [item['name'] for item in assets]
+    limits = dict(ASSETS)
+    if base == '4.12.0' and QUALIFIED_CORE_MANIFEST in names:
+        limits[QUALIFIED_CORE_MANIFEST] = limits.pop(CORE_MANIFEST)
+    require(len(names) == len(limits) and set(names) == set(limits), 'official-assets-mismatch')
+    return limits
+
+
 def publisher(pin, reader, boot, launcher, token, *, staged_draft=False):
     tag, commit, digest, base, run_id = pin
     api = reader.GITHUB_API
@@ -319,16 +332,16 @@ def publisher(pin, reader, boot, launcher, token, *, staged_draft=False):
     published = json.loads(fetch(f'{api}/releases/tags/{tag}', 512 * 1024))
     assets = published['assets']
     require(published.get('tag_name') == tag and published.get('draft') is False
-            and published.get('prerelease') is (pin != STABLE)
-            and len(assets) == len(ASSETS) and {asset['name'] for asset in assets} == set(ASSETS), 'official-assets-mismatch')
+            and published.get('prerelease') is (pin != STABLE), 'official-assets-mismatch')
+    limits = release_asset_limits(assets, base)
     files = {}
     for asset in assets:
         name = asset['name']
         url = f'https://github.com/{REPO}/releases/download/{tag}/{name}'
         require(asset['browser_download_url'] == url, 'official-asset-url-mismatch')
-        body = fetch(url, ASSETS[name])
+        body = fetch(url, limits[name])
         require(len(body) == asset['size'] and 'sha256:' + sha(body) == asset.get('digest'), 'official-asset-hash-mismatch')
-        files[name] = body
+        files[CORE_MANIFEST if name == QUALIFIED_CORE_MANIFEST else name] = body
     identity = launcher.literal(files['install-orbis.py'], 'EXPECTED_RELEASE')
     require(identity.get('tag') == tag and identity.get('commit') == commit, 'official-launcher-mismatch')
     manifest, closure = boot.verify_source_package(files[boot.MANIFEST], identity, files[boot.ARCHIVE])
@@ -1246,15 +1259,23 @@ def verify_committed_return(source, target, result):
 def fixture(environment, result, resources):
     result['phase'] = 'scope'
     draft_case = environment.get('DRAFT_UPGRADE_CASE', '')
-    require(draft_case in ('', 'checkpoint-recovery', 'installed-cli-update'), 'draft-upgrade-case-refused')
+    require(draft_case in ('', *DRAFT_PRE_EFFECT, 'checkpoint-recovery', 'core-commit-recovery',
+                           'installed-cli-update', 'updates-after-enrollment', PUBLIC_DISCOVERY_CASE),
+            'draft-upgrade-case-refused')
+    if draft_case:
+        require(not environment.keys() & {'STABLE_BRIDGE', 'CHECKPOINT_RECOVERY', 'CORE_COMMIT_RECOVERY',
+                                          'INSTALLED_CLI_UPDATE', 'PRE_EFFECT_RECOVERY', 'OTA_DELIVERY'},
+                'draft-upgrade-case-conflict')
+    public_discovery = draft_case == PUBLIC_DISCOVERY_CASE
+    paired_updates = draft_case in ('updates-after-enrollment', PUBLIC_DISCOVERY_CASE)
     target = target_pin(environment)
     predecessor = source_pin(target)
     mode = environment.get('STABLE_BRIDGE', 'false')
     require(mode in ('true', 'false'), 'stable-bridge-mode-refused')
-    bridge = mode == 'true'
+    bridge = paired_updates or mode == 'true'
     fault = 'true' if draft_case == 'checkpoint-recovery' else environment.get('CHECKPOINT_RECOVERY', 'false')
     require(fault in ('true', 'false') and not (bridge and fault == 'true'), 'checkpoint-recovery-mode-refused')
-    committed_input = environment.get('CORE_COMMIT_RECOVERY', 'false')
+    committed_input = 'true' if draft_case == 'core-commit-recovery' else environment.get('CORE_COMMIT_RECOVERY', 'false')
     require(committed_input in ('true', 'false') and not (committed_input == 'true' and (bridge or fault == 'true')),
             'commit-recovery-mode-refused')
     committed_fault = committed_input == 'true'
@@ -1264,11 +1285,11 @@ def fixture(environment, result, resources):
             'installed-cli-test-mode-refused')
     require(not committed_fault or predecessor[1] == target[1] and predecessor[2] != target[2],
             'commit-interruption-release-pair-refused')
-    pre_effect = environment.get('PRE_EFFECT_RECOVERY', 'none')
+    pre_effect = DRAFT_PRE_EFFECT.get(draft_case, environment.get('PRE_EFFECT_RECOVERY', 'none'))
     require(pre_effect in ('none', 'source-selection', 'target-custody')
             and (pre_effect == 'none' or (
                 not bridge and fault == 'false' and not committed_fault and installed_cli == 'false'
-                and (predecessor[0], target[0]) == ('v0.9.2-beta.10', 'v0.9.2-beta.11')
+                and (draft_case in DRAFT_PRE_EFFECT or (predecessor[0], target[0]) == ('v0.9.2-beta.10', 'v0.9.2-beta.11'))
             )), 'pre-effect-test-mode-refused')
     ota = environment.get('OTA_DELIVERY', 'installer')
     require(ota in ('installer', 'in-app', 'legacy-discovery') and (ota == 'installer' or (
@@ -1284,10 +1305,22 @@ def fixture(environment, result, resources):
         draft = load('orbis-official-draft-pair', directory)
         result['phase'] = 'draft-fixture-transport'
         private_input = transport.private_directory(draft.INPUT)
+        if paired_updates:
+            selected_assets = transport.routes(private_input, [predecessor[0], target[0]])
+            origin = f'https://github.com/{REPO}/releases/download/{target[0]}'
+            require(selected_assets[f'{origin}/{CORE_MANIFEST}'] is None
+                    and selected_assets.get(f'{origin}/{QUALIFIED_CORE_MANIFEST}') is not None,
+                    'draft-updates-qualified-manifest-required')
+            result['draftManifestAsset'] = QUALIFIED_CORE_MANIFEST
+        expected_replay_tags = [predecessor[0]] if public_discovery else [predecessor[0], target[0]]
+        require(json.loads(transport.read(private_input / 'tags.json', 4096)) == expected_replay_tags,
+                'draft-replay-scope-refused')
         shutil.copytree(private_input, WORK / 'draft-release-responses')
         resources.enter_context(transport.activate())
         result['draftTransport'] = True
+        result['draftRehearsal'] = draft_case
         result['draftPublisherRuns'] = [predecessor[4], target[4]]
+        result['draftSourceDigest'] = predecessor[2]
         result['draftTargetDigest'] = target[2]
     result['phase'] = 'publisher'
     modules = [load(name) for name in ('orbis-release-check', 'install-orbis', 'orbis-host-upgrade-launcher')]
@@ -1335,6 +1368,13 @@ def fixture(environment, result, resources):
     finally:
         result['registrationElapsedMs'] = round(1000 * (time.monotonic() - started))
     build(cookie, initial)
+    if public_discovery:
+        result['phase'] = 'legacy-catalogue-readback'
+        helper = load('orbis-official-in-app-ota', Path(__file__).parent)
+        runtime = sys.modules[__name__]
+        helper.select_nightly(runtime, cookie)
+        helper.verify_qualified_target_hidden(runtime, cookie, target)
+        result['legacyQualifiedTargetHiddenVerified'] = True
     if legacy_discovery:
         result['phase'] = 'legacy-ota-discovery'
         helper = load('orbis-official-in-app-ota', Path(__file__).parent)
@@ -1424,13 +1464,20 @@ def fixture(environment, result, resources):
                 verify_committed_return(predecessor, target, result)
             else:
                 raise Refused('commit-interruption-expected-target-refusal-not-observed')
-        elif ota == 'in-app':
-            result['phase'] = 'in-app-update-discovery'
+        elif ota == 'in-app' or paired_updates:
             helper = load('orbis-official-in-app-ota', Path(__file__).parent)
             runtime = sys.modules[__name__]
             cookie = session('login', credential)
             helper.select_nightly(runtime, cookie)
-            helper.review(runtime, cookie, predecessor, target)
+            if paired_updates and not public_discovery:
+                # The signed draft is replayed only for the privileged Host
+                # reader. The installed Core still sends its real API requests.
+                # Node catalogue discovery is covered by the public rehearsal.
+                build(cookie, predecessor)
+            else:
+                result['phase'] = 'in-app-update-discovery'
+                expected_manifest = QUALIFIED_CORE_MANIFEST if public_discovery else CORE_MANIFEST
+                helper.review(runtime, cookie, predecessor, target, manifest_asset=expected_manifest)
             result['phase'] = 'in-app-update-apply'
             ota_operation = helper.accept(runtime, cookie, predecessor, target)
             helper.terminal(runtime, ota_operation, predecessor, target)
@@ -1449,7 +1496,9 @@ def fixture(environment, result, resources):
         require(target_host['job']['id'] == ota_operation and progress['boundToTerminalOperation']
                 and progress['boundSamples'] > 0 and progress['missingSamplesBetweenBoundReads'] == 0,
                 'in-app-update-progress-not-verified')
-        result['updatesApiVerified'] = True
+        result['updatesPlanApplyVerified'] = True
+        if ota == 'in-app' or public_discovery:
+            result['updatesApiVerified'] = True
     if committed_fault:
         require(result['targetProgress']['boundToTerminalOperation'], 'commit-progress-operation-refused')
     cookie = session('login', credential)

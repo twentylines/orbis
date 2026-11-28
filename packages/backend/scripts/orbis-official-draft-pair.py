@@ -33,6 +33,7 @@ def acquire(runtime, environment):
             and environment.get('GH_TOKEN')
             and not os.path.lexists(runtime.WORK) and not os.path.lexists(runtime.HOST), 'draft-acquisition-scope-refused')
     commit, drafts = selection(environment)
+    public_target = environment.get('DRAFT_UPGRADE_CASE') == runtime.PUBLIC_DISCOVERY_CASE
     reader = runtime.load('orbis-release-check')
     boot = runtime.load('install-orbis')
     launcher = runtime.load('orbis-host-upgrade-launcher')
@@ -45,7 +46,8 @@ def acquire(runtime, environment):
     os.umask(0o077)
     INPUT.mkdir(mode=0o700)
     pins = []
-    for tag, base, run in drafts:
+    for index, (tag, base, run) in enumerate(drafts):
+        is_draft = not (public_target and index == 1)
         run_info = json.loads(gh('api', f'repos/{REPO}/actions/runs/{run}'))
         require((run_info.get('head_sha'), run_info.get('conclusion'), run_info.get('event'),
                  run_info.get('path', '').partition('@')[0])
@@ -53,17 +55,18 @@ def acquire(runtime, environment):
         require(reader.git_tag_commit(tag) == commit, 'draft-tag-commit-refused')
         release = json.loads(gh('release', 'view', tag, '--repo', REPO, '--json', 'tagName,isDraft,isPrerelease,assets'))
         assets = release['assets']
-        require((release['tagName'], release['isDraft'], release['isPrerelease']) == (tag, True, True)
-                and len(assets) == len(runtime.ASSETS)
-                and {item['name'] for item in assets} == set(runtime.ASSETS), 'draft-asset-metadata-refused')
+        require((release['tagName'], release['isDraft'], release['isPrerelease']) == (tag, is_draft, True),
+                'draft-asset-metadata-refused')
+        limits = runtime.release_asset_limits(assets, base)
+        require(is_draft or runtime.QUALIFIED_CORE_MANIFEST in limits, 'public-qualified-manifest-required')
         for item in assets:
             name = item['name']
-            require(type(item['size']) is int and 0 < item['size'] <= runtime.ASSETS[name]
+            require(type(item['size']) is int and 0 < item['size'] <= limits[name]
                     and runtime.DIGEST.fullmatch(item['digest']), 'draft-asset-size-refused')
         directory = INPUT / tag
         directory.mkdir()
         gh('release', 'download', tag, '--repo', REPO, '--dir', str(directory),
-           *(argument for name in sorted(runtime.ASSETS) for argument in ('--pattern', name)))
+           *(argument for name in sorted(limits) for argument in ('--pattern', name)))
         files = {}
         for item in assets:
             name = item['name']
@@ -72,7 +75,7 @@ def acquire(runtime, environment):
             body = path.read_bytes()
             require(len(body) == item['size'] and 'sha256:' + runtime.sha(body) == item['digest'],
                     'draft-asset-hash-refused')
-            files[name] = body
+            files[runtime.CORE_MANIFEST if name == runtime.QUALIFIED_CORE_MANIFEST else name] = body
         manifest = reader.PLAN.validate_manifest(json.loads(files['release-manifest.json']))
         require((manifest['image'], manifest['tag'], manifest['commit'], manifest['runtipiCompatibility'],
                  manifest['installationProtocol'])
@@ -99,7 +102,9 @@ def acquire(runtime, environment):
                 'browser_download_url': f'https://github.com/{REPO}/releases/download/{tag}/{item["name"]}'}
                 for item in assets]}))
         pins.append((tag, commit, digest, base, run))
-    (INPUT / 'tags.json').write_text(json.dumps([item[0] for item in pins]))
+    # Keep the target off the replay map so the installed Core and Host must
+    # resolve the real public release during the post-publication proof.
+    (INPUT / 'tags.json').write_text(json.dumps([item[0] for item in (pins[:1] if public_target else pins)]))
     (INPUT / 'pins.json').write_text(json.dumps(pins))
 
 

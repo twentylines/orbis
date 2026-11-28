@@ -14,6 +14,7 @@ import sys
 import tarfile
 import tempfile
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
@@ -26,6 +27,9 @@ CHANNEL_METADATA_URL = "https://twentylines.github.io/orbis/channels.json"
 INSTALLER_BASE_URL = "https://twentylines.github.io/orbis/installer/"
 ARCHIVE = "orbis-installer.tar.gz"
 MANIFEST = "orbis-installer-manifest.json"
+CORE_MANIFEST = "release-manifest.json"
+QUALIFIED_CORE_MANIFEST = "qualified-release-manifest.json"
+QUALIFIED_CORE_BASE = "4.12.0"
 SOURCE_SELECTION = "installer-source-selection.json"
 SOURCE_LAUNCHER = "installer-source-launcher.py"
 SOURCE_EXECUTION = "installer-source-execution.json"
@@ -200,6 +204,21 @@ def fetch(url, limit):
         if len(data) > limit:
             raise ValueError("Installer download exceeds its size limit")
         return data
+
+
+def fetch_release_manifest(base, download=None):
+    download = download or fetch
+    try:
+        return download(base + CORE_MANIFEST, 16 * 1024)
+    except HTTPError as error:
+        if error.code != 404:
+            raise
+        error.close()
+    body = download(base + QUALIFIED_CORE_MANIFEST, 16 * 1024)
+    release = json.loads(body)
+    if not isinstance(release, dict) or release.get("runtipiCompatibility") != QUALIFIED_CORE_BASE:
+        raise ValueError("Qualified Core manifest has the wrong compatibility base")
+    return body
 
 
 def verify_files_manifest(value, required=None):
@@ -594,7 +613,7 @@ def run_published_installer(args, remaining):
             raise ValueError("Unattended Nightly installation requires --accept-nightly")
         if prompted:
             remaining.append("--accept-nightly")
-    release_data = fetch(f"https://github.com/twentylines/orbis/releases/download/{record['tag']}/release-manifest.json", 16 * 1024)
+    release_data = fetch_release_manifest(f"https://github.com/twentylines/orbis/releases/download/{record['tag']}/")
     release = json.loads(release_data)
     if not isinstance(release, dict) or any(release.get(key) != record[key] for key in ("tag", "commit")):
         raise ValueError("The selected release does not match its published channel")
@@ -670,7 +689,7 @@ def main():
     print(f"Downloading Orbis {display_release(identity['tag'])} installer…", flush=True)
     manifest_data = fetch(base + MANIFEST, 64 * 1024)
     manifest = verify_manifest(manifest_data, identity)
-    release_data = fetch(base + "release-manifest.json", 16 * 1024)
+    release_data = fetch_release_manifest(base)
     if sha(release_data) != manifest["releaseManifestSha256"]:
         raise ValueError("Core image manifest does not match the installer release")
     release = json.loads(release_data)
