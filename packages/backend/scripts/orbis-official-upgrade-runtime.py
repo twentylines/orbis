@@ -40,6 +40,8 @@ REPO = 'twentylines/orbis'
 IMAGE = 'ghcr.io/' + REPO
 SOURCE = ('v0.9.2-beta.3', '43813e77609f955c4a4cec3b647a95e780780ca6',
           'sha256:24d8ffed6dde1660b1954c445b2c67b96342b423b1042441d72c251a20d92801', '4.10.1', 46080825494)
+BRIDGE = ('v0.9.2-beta.8', 'a5e56e900ea2022f663684e272ad6134df0cc7a0',
+          'sha256:28fe9e83c597a3b955916c53f2445b19cc3224000961ddb45b6e11018af52eb4', '4.10.1', 46117877777)
 STABLE = ('v0.9.1', '6b627e1939e11e91fbd5c6ed419e1e90a71cf281',
           'sha256:fcd6ddadf52d19aedc428cae04aea98f0baf4e36c12edab9a1239fa75c8248d2', '4.10.1', 44938065911)
 # Keep historical rehearsals reproducible. The digest is separately checked against
@@ -47,11 +49,14 @@ STABLE = ('v0.9.1', '6b627e1939e11e91fbd5c6ed419e1e90a71cf281',
 TARGET_RELEASES = {
     'c9a0f76329e1319f6a1451fd1b8875cceb788dd8': ('v0.9.2-beta.6', 46100282294),
     'f7172eaad3cc4b645bce84662948cf2fa42a18ab': ('v0.9.2-beta.7', 46106118153),
+    BRIDGE[1]: ('v0.9.2-beta.9', 46117878047),
 }
 SENTINEL = {'version': '0.1.0-dev.24', 'sha256': 'c9373a394c306524b2e37b76afa9eec42272507faf45657d7f46d1b9f8fb565f',
             'sourceCommit': '16b2aa6158ab38d961e0d3f6a2d489b702ab63e3'}
 STABLE_SENTINEL = {'version': '0.1.0-dev.19', 'sha256': '4a3c29039b768dbae15a562abc64086374f66af9e12b8b490d3aa4466d152f6c',
                    'sourceCommit': '32e384d9d492d8b5cb1aea562bd86447e2cc04a0'}
+PAIRED_SENTINEL = {'version': '0.1.0-dev.25', 'sha256': 'f6a90314f76a9e9367741e16ce55fc2bf8dd88105ac6964aea3d2c6ffb6c1f16',
+                   'sourceCommit': '79df3acbdadb35630f471a35d17cd4d6a711eccb'}
 ASSETS = {'install-orbis.py': 1024 * 1024, 'orbis-installer-manifest.json': 65536,
           'orbis-installer.tar.gz': 64 * 1024 * 1024, 'release-manifest.json': 16384}
 DOCKER = ['/usr/bin/docker', '--context', 'default']
@@ -86,6 +91,19 @@ def target_pin(environment):
     require(commit in TARGET_RELEASES and DIGEST.fullmatch(digest), 'target-pin-required')
     tag, workflow_run = TARGET_RELEASES[commit]
     return (tag, commit, digest, '4.12.0', workflow_run)
+
+
+def source_pin(target):
+    if target[1] == BRIDGE[1]:
+        require(DIGEST.fullmatch(BRIDGE[2]), 'verified-recovery-bridge-pin-required')
+        return BRIDGE
+    return SOURCE
+
+
+def sentinel_pin(pin):
+    if pin == STABLE:
+        return STABLE_SENTINEL
+    return PAIRED_SENTINEL if pin[1] == BRIDGE[1] else SENTINEL
 
 
 def run(args, *, timeout=20, allowed=(0,), code='native-command-refused'):
@@ -536,7 +554,7 @@ def proxy_startup_probe(pin, closure):
     return result
 
 
-def launch(release, operation, timeout, *, channel='nightly'):
+def launch(release, operation, timeout, *, channel='nightly', installed_pin=SOURCE):
     path, signals, closure = release
     workdir = WORK / operation
     workdir.mkdir(mode=0o700)
@@ -553,7 +571,7 @@ def launch(release, operation, timeout, *, channel='nightly'):
         code, evidence = installer_failure(log_path, signals)
         if operation == 'source' and evidence.get('installerStep') == 'start-core':
             try:
-                pin = STABLE if channel == 'stable' else SOURCE
+                pin = STABLE if channel == 'stable' else installed_pin
                 evidence.update(fresh_startup_evidence(pin))
                 if any(site.startswith('orbis-host-retained-authority.py:')
                        for site in evidence.get('installerFailureSites', [])):
@@ -818,7 +836,7 @@ def check_host(pin):
     require(re.fullmatch(r'[1-9][0-9]{0,9}', pid), 'installed-host-listener-refused')
     status = load('orbis-host-service-setup').read_socket_status(expected_pid=int(pid))
     stable = pin == STABLE
-    expected_sentinel = STABLE_SENTINEL if stable else SENTINEL
+    expected_sentinel = sentinel_pin(pin)
     require(status['currentTag'] == pin[0] and status['currentDigest'] == pin[2] and status['imageMatches'] is True
             and status['enrolled'] is True and status['coreHealth'] == 'healthy'
             and ('release-channels.v1' in status['capabilities'] if stable else
@@ -874,6 +892,7 @@ def component_journal(operation_dir, operation, target_body):
 
 
 def verified_operation(status, source, target, policy, prior_operations):
+    expected_sentinel = sentinel_pin(target)
     operation = status['job']['id']
     require(str(uuid.UUID(operation)) == operation and status['job']['state'] == 'complete'
             and status['job']['backupPolicy'] == policy and operation not in prior_operations,
@@ -886,7 +905,7 @@ def verified_operation(status, source, target, policy, prior_operations):
     target_set = json.loads(target_body)
     require(job['id'] == operation and job['state'] == 'complete' and job['backupPolicy'] == policy
             and job['current']['digest'] == source[2] and job['target']['digest'] == target[2]
-            and target_set['core']['digest'] == target[2] and target_set['sentinel']['release'] == SENTINEL,
+            and target_set['core']['digest'] == target[2] and target_set['sentinel']['release'] == expected_sentinel,
             'authoritative-job-refused')
     journal, previous = component_journal(operation_dir, operation, target_body)
     phases = list(journal)
@@ -896,7 +915,7 @@ def verified_operation(status, source, target, policy, prior_operations):
             and previous == job['componentReceiptSha256'], 'component-terminal-receipt-refused')
     terminal = journal['complete']
     require(terminal['core'] == {'commit': target[1], 'digest': target[2]}
-            and terminal['sentinel']['release'] == SENTINEL, 'component-set-mismatch')
+            and terminal['sentinel']['release'] == expected_sentinel, 'component-set-mismatch')
     setup = load('orbis-host-service-setup', HOST)
     current_host = setup.actual_copy(setup.INSTALL_DIR, setup.UNIT_FILE)
     target_host = {key: target_set['host'][key] for key in ('inventory', 'unitSha256')}
@@ -923,8 +942,8 @@ def quiescent(operation):
     raise Refused('worker-quiescence-refused')
 
 
-def completed(status, target, prior_operations=()):
-    operation, update, snapshot = verified_operation(status, SOURCE, target, 'automatic', prior_operations)
+def completed(status, source, target, prior_operations=()):
+    operation, update, snapshot = verified_operation(status, source, target, 'automatic', prior_operations)
     tools, reader = update.controller_tools('default')
     record = tools.read_record(update.checkpoint_path(snapshot), ROOT, reader)
     manifest = tools.STORAGE.verified_manifest(snapshot)
@@ -982,13 +1001,13 @@ def verify_installed_app_backup(cookie, identity, original):
             and app_data(identity)[:2] == original[:2], 'installed-cli-app-backup-archive-refused')
 
 
-def reviewed_checkpoint(target):
+def reviewed_checkpoint(source, target):
     launcher = load('orbis-host-upgrade-launcher')
     service = load('orbis-host-service')
     job = service.read_private(STATE / 'job.json')
     if not job or job.get('state') != 'running' or job.get('backupPolicy') != 'automatic':
         return None
-    require(tuple(job['current'][field] for field in ('tag', 'commit', 'digest')) == SOURCE[:3]
+    require(tuple(job['current'][field] for field in ('tag', 'commit', 'digest')) == source[:3]
             and tuple(job['target'][field] for field in ('tag', 'commit', 'digest')) == target[:3],
             'interruption-job-release-refused')
     operation = job['id']
@@ -1012,14 +1031,14 @@ def reviewed_checkpoint(target):
 
 
 @contextmanager
-def interrupt_at_checkpoint(target, result):
+def interrupt_at_checkpoint(source, target, result):
     stop = Event()
     failure = {}
     def act():
         try:
             while not stop.wait(0.15):
                 try:
-                    reviewed = reviewed_checkpoint(target)
+                    reviewed = reviewed_checkpoint(source, target)
                 except (Refused, FileNotFoundError, ProcessLookupError):
                     continue
                 if not reviewed:
@@ -1030,7 +1049,7 @@ def interrupt_at_checkpoint(target, result):
                 except ProcessLookupError:
                     continue
                 try:
-                    exact = reviewed_checkpoint(target)
+                    exact = reviewed_checkpoint(source, target)
                     if exact != reviewed or stop.is_set():
                         continue
                     # Only the pinned process descriptor can receive this one
@@ -1133,16 +1152,17 @@ def verify_checkpoint_return(credential, identity, original, proxy, source, targ
 def fixture(environment, result):
     result['phase'] = 'scope'
     target = target_pin(environment)
+    predecessor = source_pin(target)
     mode = environment.get('STABLE_BRIDGE', 'false')
     require(mode in ('true', 'false'), 'stable-bridge-mode-refused')
     bridge = mode == 'true'
     fault = environment.get('CHECKPOINT_RECOVERY', 'false')
     require(fault in ('true', 'false') and not (bridge and fault == 'true'), 'checkpoint-recovery-mode-refused')
-    initial = STABLE if bridge else SOURCE
+    initial = STABLE if bridge else predecessor
     result['fixtureDefaultAclRemoved'], result['fixtureTimezoneProtected'] = preflight(environment)
     result['phase'] = 'publisher'
     modules = [load(name) for name in ('orbis-release-check', 'install-orbis', 'orbis-host-upgrade-launcher')]
-    source, candidate = [publisher(pin, *modules, environment.get('GITHUB_TOKEN')) for pin in (SOURCE, target)]
+    source, candidate = [publisher(pin, *modules, environment.get('GITHUB_TOKEN')) for pin in (predecessor, target)]
     bootstrap = publisher(STABLE, *modules, environment.get('GITHUB_TOKEN')) if bridge else source
     result['phase'] = 'loopback-isolation'
     isolate_dashboard()
@@ -1153,7 +1173,7 @@ def fixture(environment, result):
         result['phase'] = 'stable-install-readback'
         require(fresh_journal_phase(STABLE) == 'complete', 'stable-install-receipt-refused')
     else:
-        launch(bootstrap, 'source', 600)
+        launch(bootstrap, 'source', 600, installed_pin=initial)
     result['phase'] = 'source-host-readback'
     baseline = check_host(initial)
     require(baseline.get('job') is None, 'fresh-source-job-refused')
@@ -1192,16 +1212,16 @@ def fixture(environment, result):
     prior_operations = ()
     if bridge:
         result['phase'] = 'guided-bridge'
-        fence('bridge-intent', SOURCE)
+        fence('bridge-intent', predecessor)
         launch(source, 'bridge', 900)
         result['phase'] = 'bridge-readback'
-        bridge_receipt = executed_launcher(source, 'bridge', SOURCE)
-        operation, _, _ = verified_operation(check_host(SOURCE), STABLE, SOURCE, 'none', ())
+        bridge_receipt = executed_launcher(source, 'bridge', predecessor)
+        operation, _, _ = verified_operation(check_host(predecessor), STABLE, predecessor, 'none', ())
         quiescent(operation)
         prior_operations = (operation,)
         cookie = session('login', credential)
         try:
-            build(cookie, SOURCE)
+            build(cookie, predecessor)
             require(app_data(identity) == original, 'bridge-fixture-continuity-refused')
         finally:
             http('POST', '/api/auth/logout', cookie=cookie, expect=(204,))
@@ -1214,14 +1234,14 @@ def fixture(environment, result):
     if fault == 'true':
         with observe_progress(target[0], result):
             try:
-                with interrupt_at_checkpoint(target, result):
+                with interrupt_at_checkpoint(predecessor, target, result):
                     launch(candidate, 'target', 1500)
             except Refused:
                 require(result.get('checkpointInterruption', {}).get('sent') is True, 'checkpoint-interruption-not-observed')
             else:
                 raise Refused('interruption-expected-target-refusal-not-observed')
             result['phase'] = 'checkpoint-recovery'
-            verify_checkpoint_return(credential, identity, original, proxy, SOURCE, target, result)
+            verify_checkpoint_return(credential, identity, original, proxy, predecessor, target, result)
         result['targetProgress']['boundToTerminalOperation'] = (
             result['targetProgress']['operations'] == [result['checkpointInterruption']['operation']])
         return
@@ -1231,7 +1251,7 @@ def fixture(environment, result):
     if bridge:
         require(executed_launcher(candidate, 'target', target) != bridge_receipt, 'launcher-receipt-replayed')
     target_host = check_host(target)
-    completed(target_host, target, prior_operations)
+    completed(target_host, predecessor, target, prior_operations)
     result['targetProgress']['boundToTerminalOperation'] = result['targetProgress']['operations'] == [target_host['job']['id']]
     cookie = session('login', credential)
     try:
@@ -1250,8 +1270,8 @@ def fixture(environment, result):
             result['installedAppBackupVerified'] = True
     finally:
         http('POST', '/api/auth/logout', cookie=cookie, expect=(204,))
-    result.update(phase='complete', source=SOURCE[0], target=target[0], targetCommit=target[1], targetDigest=target[2],
-                  runtipi=target[3], sentinel=SENTINEL['version'],
+    result.update(phase='complete', source=predecessor[0], target=target[0], targetCommit=target[1], targetDigest=target[2],
+                  runtipi=target[3], sentinel=sentinel_pin(target)['version'],
                   markerChecks=2, appAndProxyUninterrupted=True,
                   componentTerminalVerified=True, automaticBackupVerified=True, loopbackVerified=True, passed=True)
 
@@ -1330,11 +1350,14 @@ def bootstrap_refusal_evidence(update, job, snapshot):
 
 def failure_readback(environment, result):
     phase = result.get('phase')
-    if phase not in ('guided-bridge', 'bridge-readback', 'guided-target', 'terminal-readback'):
+    if phase not in ('guided-bridge', 'bridge-readback', 'guided-target', 'terminal-readback',
+                     'checkpoint-recovery', 'installed-private-network', 'installed-app-cli'):
         return
     try:
+        upgrade = target_pin(environment)
+        predecessor = source_pin(upgrade)
         bridge = phase in ('guided-bridge', 'bridge-readback')
-        source, target, intent = (STABLE, SOURCE, 'bridge-intent') if bridge else (SOURCE, target_pin(environment), 'apply-intent')
+        source, target, intent = (STABLE, predecessor, 'bridge-intent') if bridge else (predecessor, upgrade, 'apply-intent')
         if (WORK / intent).read_bytes() != (target[2] + '\n').encode('ascii'):
             return
         service = load('orbis-host-service', HOST)
@@ -1377,6 +1400,12 @@ def failure_readback(environment, result):
                     'diagnostic-target-mismatch')
             phases, _ = component_journal(directory, operation, target_body)
             result['componentJournalPhases'] = list(phases)
+        if phase == 'checkpoint-recovery':
+            result['reconciliationClaims'] = sum(bool(re.fullmatch(r'reconciliation-[a-f0-9]{32}\.json', name)) for name in names)
+            supervision = load('orbis-host-upgrade-supervision')
+            unit = supervision.Runtime().unit(supervision.reconciliation_unit_name(operation))
+            if unit['ActiveState'] in ('inactive', 'failed', 'active', 'activating', 'deactivating'):
+                result['reconciliationUnitState'] = unit['ActiveState']
     except Exception:
         # An incomplete stage or absent custody supplies no authority.
         return

@@ -351,7 +351,10 @@ it('retains draft identity and accepted settings when the queue refuses delivery
   const f = savedDraftFixture();
   f.appEventsQueue.publish.mockRejectedValue(new Error('Queue unavailable'));
   await f.handler.execute(f.urn, { form: { maxBackups: 9 } });
-  await vi.waitFor(() => expect(f.appRepository.deleteInstallReservation).toHaveBeenCalledOnce());
+  await vi.waitFor(() =>
+    expect(f.statusManager.emitEvent).toHaveBeenCalledWith(expect.objectContaining({ appUrn: f.urn, event: 'install_error', appStatus: 'missing' })),
+  );
+  expect(f.appRepository.deleteInstallReservation).toHaveBeenCalledOnce();
   expect(f.row()).toMatchObject({ id: 19, createdAt: 1000, status: 'missing', config: { maxBackups: 9 } });
   await expect(f.handler.requireNoInstallHold(f.urn)).resolves.toBeUndefined();
   expect(f.startAppHandler.execute).not.toHaveBeenCalled();
