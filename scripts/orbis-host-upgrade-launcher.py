@@ -6,6 +6,7 @@ writes an installer execution receipt. Execution uses the existing held-launcher
 continuation, which alone produces that receipt.
 """
 import ast
+import base64
 import hashlib
 import json
 import os
@@ -14,10 +15,13 @@ import re
 import sys
 import time
 import weakref
+import zlib
 
 PROTOCOL = 'orbis.component-upgrade-source-check.v1'
 GITHUB = 'https://api.github.com/repos/twentylines/orbis/'
 RELEASES = 'https://github.com/twentylines/orbis/releases/download/'
+GIT_PROOF_FIELD = 'gitSourceProof'
+GIT_PROOF_LIMIT = 256 * 1024
 _STAGED = weakref.WeakKeyDictionary()
 
 
@@ -71,9 +75,70 @@ def literal(body, name):
     return ast.literal_eval(declarations[0])
 
 
-def git_blob(body):
+def git_object(kind, body):
     # Git object addressing uses this fixed format, including on FIPS hosts.
-    return hashlib.sha1(b'blob ' + str(len(body)).encode('ascii') + b'\0' + body, usedforsecurity=False).hexdigest()
+    return hashlib.sha1(kind + b' ' + str(len(body)).encode('ascii') + b'\0' + body, usedforsecurity=False).hexdigest()
+
+
+def git_blob(body):
+    return git_object(b'blob', body)
+
+
+def git_tree_entries(body):
+    entries = {}
+    offset = 0
+    while offset < len(body):
+        end = body.find(b'\0', offset)
+        require(end > offset and end + 21 <= len(body))
+        mode, separator, name = body[offset:end].partition(b' ')
+        require(separator and name and name not in (b'.', b'..') and b'/' not in name and name not in entries)
+        entries[name] = mode, body[end + 1:end + 21].hex()
+        offset = end + 21
+    return entries
+
+
+def read_git_source_proof(proof):
+    require(type(proof) is str and 0 < len(proof) <= 65536)
+    try:
+        compressed = base64.b64decode(proof, validate=True)
+        stream = zlib.decompressobj()
+        body = stream.decompress(compressed, GIT_PROOF_LIMIT + 1)
+        require(len(body) <= GIT_PROOF_LIMIT and stream.eof and not stream.unused_data and not stream.unconsumed_tail)
+        decoded_proof = decoded(body)
+        require(type(decoded_proof) is dict and set(decoded_proof) == {'commit', 'trees'}
+                and type(decoded_proof['commit']) is str and type(decoded_proof['trees']) is dict
+                and 0 < len(decoded_proof['trees']) <= 64)
+        require(all(re.fullmatch(r'[a-f0-9]{40}', key) and type(value) is str for key, value in decoded_proof['trees'].items()))
+        return base64.b64decode(decoded_proof['commit'], validate=True), {
+            key: base64.b64decode(value, validate=True) for key, value in decoded_proof['trees'].items()}
+    except (ValueError, zlib.error) as error:
+        raise UpgradeSourceError() from error
+
+
+def authenticate_embedded_tree(proof, commit, files):
+    """Verify the real Git commit and the path to each installer member."""
+    commit_body, trees = read_git_source_proof(proof)
+    require(git_object(b'commit', commit_body) == commit)
+    header = re.fullmatch(rb'tree ([a-f0-9]{40})', commit_body.partition(b'\n')[0])
+    require(header is not None)
+    root = header[1].decode('ascii')
+    entries = {}
+    for name, body in files.items():
+        current = root
+        components = name.encode('utf-8').split(b'/')
+        for index, component in enumerate(components):
+            if current not in entries:
+                tree = trees.get(current)
+                require(tree is not None and git_object(b'tree', tree) == current)
+                entries[current] = git_tree_entries(tree)
+            mode, identifier = entries[current].get(component, (None, None))
+            if index == len(components) - 1:
+                require(mode in (b'100644', b'100755') and git_blob(body) == identifier)
+            else:
+                require(mode == b'40000')
+                current = identifier
+    require(entries.keys() == trees.keys())
+    return root
 
 
 def authenticate_tree(fetch, commit, files):
@@ -177,7 +242,10 @@ def stage_source(boot, plan, supervision, scope, state_directory, operation, req
             and plan.update_identity(decoded(core_body)) == plan.update_identity(target))
     archive = fetch(base + boot.ARCHIVE, manifest['archiveBytes'])
     manifest, files = boot.verify_source_package(manifest_body, identity, archive)
-    tree_sha = authenticate_tree(fetch, target['commit'], files)
+    if GIT_PROOF_FIELD in manifest:
+        tree_sha = authenticate_embedded_tree(manifest[GIT_PROOF_FIELD], target['commit'], files)
+    else:
+        tree_sha = authenticate_tree(fetch, target['commit'], files)
     protocol = source_protocol(files['scripts/orbis-install.py'], legacy=legacy)
     require(boot._custody_template(files['scripts/install-orbis.py'])
             and boot._render_installer('release', identity, files['scripts/install-orbis.py']) == launcher)

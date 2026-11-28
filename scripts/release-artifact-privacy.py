@@ -607,8 +607,20 @@ def installer_files(manifest_path, installer, notes, digest, tag, commit, budget
         reject('installer-image-identity-mismatch')
     if runtipi_bases != {release['runtipiCompatibility'].removeprefix('v')}:
         reject('image-runtipi-compatibility-mismatch')
-    source = build.committed_files(repository or Path(__file__).resolve().parent.parent, commit)
-    expected = build.build(source, release_bytes)
+    repository = repository or Path(__file__).resolve().parent.parent
+    source = build.committed_files(repository, commit)
+    expected = build.build(source, release_bytes, repository=repository)
+    proof = json.loads(expected[build.MANIFEST]).get('gitSourceProof')
+    if proof is not None:
+        launcher = load('orbis-host-upgrade-launcher')
+        schema, _ = build.source_contract(source)
+        launcher.authenticate_embedded_tree(proof, commit, build.sources(source, schema=schema))
+        commit_body, trees = launcher.read_git_source_proof(proof)
+        scan_stream(io.BytesIO(commit_body), 'installer.proof.commit', budget)
+        for body in trees.values():
+            for name in launcher.git_tree_entries(body):
+                if private_path(name.decode('utf-8')):
+                    reject('private-path', 'installer.proof.tree')
     if installer.is_symlink() or {file.name for file in installer.iterdir()} != set(expected):
         reject('unexpected-installer-assets')
     result = {}

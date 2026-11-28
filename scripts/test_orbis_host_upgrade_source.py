@@ -92,6 +92,54 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(L.decoded(staged.descriptor)['core'],self.target)
         self.assertEqual(L.decoded(staged.descriptor)['gitTreeSha'],'f'*40)
 
+    def package_with_git_proof(self):
+        repository = self.root / 'proof-source'
+        repository.mkdir()
+        def git(*args):
+            return subprocess.check_output(['git', '-c', 'init.templateDir=', '-c', 'core.hooksPath=/dev/null',
+                                            '-c', 'commit.gpgSign=false', *args], cwd=repository)
+        git('init', '--quiet')
+        for name, body in self.files.items():
+            path = repository / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(body)
+        git('add', '--all')
+        git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--quiet', '-m', 'Source proof fixture')
+        self.target['commit'] = git('rev-parse', 'HEAD').decode().strip()
+        self.scope.target = copy.deepcopy(self.target)
+        self.core_body = json.dumps(self.target).encode()
+        self.assets = BUILD.build(self.files, self.core_body, repository=repository)
+        self.launcher = self.assets[BUILD.LAUNCHER]
+        return git('rev-parse', 'HEAD^{tree}').decode().strip()
+
+    def test_published_git_proof_authenticates_archive_without_the_github_api(self):
+        tree = self.package_with_git_proof()
+        staged = self.stage()
+        self.assertEqual(len(self.calls), 4)
+        self.assertTrue(all(url.startswith(L.RELEASES) for url in self.calls))
+        self.assertEqual(L.decoded(staged.descriptor)['gitTreeSha'], tree)
+        self.assertFalse((staged.directory / BOOT.SOURCE_EXECUTION).exists())
+
+    def test_invalid_included_proof_refuses_without_api_fallback_or_selection(self):
+        self.package_with_git_proof()
+        manifest = json.loads(self.assets[BOOT.MANIFEST])
+        proof = manifest[L.GIT_PROOF_FIELD]
+        values = BUILD.sources(self.files)
+        changed = {**values, 'scripts/orbis-install.py': b'changed member bytes'}
+        with self.assertRaises(L.UpgradeSourceError):
+            L.authenticate_embedded_tree(proof, self.target['commit'], changed)
+        with self.assertRaises(L.UpgradeSourceError):
+            L.authenticate_embedded_tree(proof, 'f' * 40, values)
+        manifest[L.GIT_PROOF_FIELD] = 'attacker supplied proof'
+        self.assets[BOOT.MANIFEST] = L.canonical(manifest)
+        identity = {'tag': self.target['tag'], 'commit': self.target['commit'],
+                    'manifestSha256': BOOT.sha(self.assets[BOOT.MANIFEST])}
+        self.launcher = BOOT._render_installer('release', identity, self.files['scripts/install-orbis.py'])
+        with self.assertRaises(L.UpgradeSourceError):
+            self.stage()
+        self.assertEqual(len(self.calls), 4)
+        self.assertFalse((S.operation_directory(self.state, self.operation) / 'selection').exists())
+
     def produce_execution(self, staged, stdout):
         value=L.decoded(staged.descriptor)
         launcher=staged.directory/BOOT.SOURCE_LAUNCHER

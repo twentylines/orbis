@@ -3,6 +3,7 @@
 
 import argparse
 import ast
+import base64
 import gzip
 import hashlib
 import io
@@ -10,6 +11,7 @@ import json
 import re
 import subprocess
 import tarfile
+import zlib
 from pathlib import Path
 
 
@@ -218,7 +220,32 @@ def file_records(values):
     return {name: {"sha256": sha(data), "size": len(data)} for name, data in sorted(values.items())}
 
 
-def build(files, release_bytes):
+def git_source_proof(repository, commit, values):
+    def git(*args):
+        return subprocess.check_output(['git', *args], cwd=repository)
+
+    directories = {str(parent) for name in values for parent in Path(name).parents}
+    trees = {}
+    for directory in sorted(directories):
+        revision = f'{commit}^{{tree}}' if directory == '.' else f'{commit}:{directory}'
+        identifier = git('rev-parse', '--verify', revision).decode('ascii').strip()
+        trees[identifier] = base64.b64encode(git('cat-file', 'tree', identifier)).decode('ascii')
+    proof = json.dumps({'commit': base64.b64encode(git('cat-file', 'commit', commit)).decode('ascii'),
+                        'trees': trees}, sort_keys=True, separators=(',', ':')).encode('ascii')
+    if len(proof) > 256 * 1024 or not 0 < len(trees) <= 64:
+        raise ValueError('Installer source proof exceeds its format limits')
+    return base64.b64encode(zlib.compress(proof, level=9)).decode('ascii')
+
+
+def supports_git_source_proof(files):
+    launcher = files.get('scripts/orbis-host-upgrade-launcher.py', b'')
+    return any(isinstance(node, ast.Assign) and len(node.targets) == 1
+               and isinstance(node.targets[0], ast.Name) and node.targets[0].id == 'GIT_PROOF_FIELD'
+               and isinstance(node.value, ast.Constant) and node.value.value == 'gitSourceProof'
+               for node in ast.parse(launcher).body)
+
+
+def build(files, release_bytes, *, repository=None):
     release = json.loads(release_bytes)
     if not isinstance(release, dict) or release.get("schema") != "orbis.release.v1" or release.get("image") != "ghcr.io/twentylines/orbis":
         raise ValueError("An Orbis release manifest is required")
@@ -235,7 +262,11 @@ def build(files, release_bytes):
         "releaseManifestSha256": sha(release_bytes),
         "files": file_records(values),
     }
+    if repository is not None and supports_git_source_proof(files):
+        manifest['gitSourceProof'] = git_source_proof(repository, release['commit'], values)
     manifest_bytes = (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()
+    if len(manifest_bytes) > 65536:
+        raise ValueError('Installer release manifest exceeds its download limit')
     identity = {"tag": release["tag"], "commit": release["commit"], "manifestSha256": sha(manifest_bytes)}
     launcher = release_launcher(files.get("scripts/" + LAUNCHER, b""), identity)
     return {ARCHIVE: archive_bytes, MANIFEST: manifest_bytes, LAUNCHER: launcher}
@@ -268,7 +299,7 @@ def main():
     repository = Path(__file__).resolve().parent.parent
     commit = release.get("commit")
     files = committed_files(repository, commit)
-    assets = build(files, release_bytes)
+    assets = build(files, release_bytes, repository=repository)
     args.output.mkdir(mode=0o700)
     for name, data in assets.items():
         (args.output / name).write_bytes(data)
