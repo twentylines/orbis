@@ -721,6 +721,37 @@ class ControllerUpdateTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             C.unbacked(self.record)
 
+    def test_412_readiness_retries_the_runtime_reader_broker_startup_exit(self):
+        self.runtime.reader = C.D.APPS.Docker('fixture')
+        detect = C.D.APPS.DETECT
+        database = ['docker', '--context', 'fixture', 'exec', '4' * 64, 'pg_isready', '-U', 'tipi', '-d', 'tipi']
+        broker = ['docker', '--context', 'fixture', 'exec', '5' * 64, 'rabbitmq-diagnostics', '-q', 'check_running']
+        responses = [
+            detect.subprocess.CompletedProcess(database, 0, stdout='accepting connections'),
+            detect.subprocess.CompletedProcess(broker, 69, stdout=''),
+            detect.subprocess.CompletedProcess(broker, 0, stdout=''),
+        ]
+        with mock.patch.object(detect.subprocess, 'run', side_effect=responses) as run, \
+                mock.patch.object(C.time, 'sleep') as sleep:
+            self.updater.wait_migration_peers(self.record)
+        self.assertEqual([call.args[0] for call in run.call_args_list], [database, broker, broker])
+        sleep.assert_called_once_with(1)
+
+    def test_412_readiness_reports_timeout_when_runtime_reader_probe_still_fails(self):
+        self.runtime.reader = C.D.APPS.Docker('fixture')
+        detect = C.D.APPS.DETECT
+        responses = [
+            detect.subprocess.CompletedProcess(['pg_isready'], 0, stdout='accepting connections'),
+            detect.subprocess.CompletedProcess(['rabbitmq-diagnostics'], 69, stdout=''),
+        ]
+        with mock.patch.object(detect.subprocess, 'run', side_effect=responses), \
+                mock.patch.object(C.time, 'monotonic', side_effect=[0, 90]), \
+                mock.patch.object(C.time, 'sleep') as sleep, \
+                self.assertRaisesRegex(RuntimeError, 'database or broker did not become ready') as raised:
+            self.updater.wait_migration_peers(self.record)
+        self.assertIsInstance(raised.exception.__cause__, detect.InspectionError)
+        sleep.assert_not_called()
+
     def test_412_target_waits_for_peers_and_verifies_database_before_and_after_start(self):
         installed = {"ledger": [{"createdAt": 1, "hash": "a" * 64}], "pendingApps": 0, "postgresMajor": 15}
         migrated = {**installed, "ledger": [*installed["ledger"], {"createdAt": 2, "hash": "b" * 64}]}
@@ -1327,6 +1358,70 @@ class CoreNetworkTests(unittest.TestCase):
             self.objects[raw['Id']] = raw
             with self.assertRaisesRegex(ValueError, 'unrelated'): self.net.verify(record)
             self.objects.pop(raw['Id'])
+
+    def reconstructed_source(self):
+        self.already_isolated_source()
+        original_policy = {'Name': 'unless-stopped', 'MaximumRetryCount': 0}
+        self.record['source']['HostConfig']['RestartPolicy'] = original_policy
+        self.objects['1' * 64]['HostConfig']['RestartPolicy'] = original_policy
+        record = self.prepared()
+        self.net.move(record, 'target')
+        self.updater.plan_source_reconstruction(record)
+        retirement = record['sourceRetirement']
+        body = retirement['body']
+        raw = self.objects.pop(record['source']['Id'])
+        raw.update(Id='8' * 64, Name='/runtipi', HostConfig=copy.deepcopy(body['HostConfig']),
+                   Config=copy.deepcopy(record['source']['Config']))
+        raw['Config']['Labels'] = copy.deepcopy(body['Labels'])
+        raw['State'].update(Running=False, Status='created', StartedAt='0001-01-01T00:00:00Z')
+        raw['NetworkSettings']['Networks'][C.CORE_NETWORK]['NetworkID'] = ''
+        retirement.update(phase='reconstructed', reconstructionId=raw['Id'],
+                          reconstructionDefinition=self.runtime.definition(raw), checkpointManifestSha256='9' * 64)
+        self.objects[raw['Id']] = raw
+        self.objects.pop(record['candidateId'])
+        record.update(phase='rolling-back', candidateRetirementIntent=True)
+        return record, raw
+
+    def test_protected_reconstruction_is_allowed_before_restore_and_after_original_start(self):
+        record, raw = self.reconstructed_source()
+        before = copy.deepcopy(record)
+        self.net.verify(record)
+        self.assertEqual(record, before)
+        self.net.move(record, 'source')
+        self.assertEqual(record['coreNetwork']['goal'], 'source')
+        self.assertEqual(self.network_calls, [])
+        record['sourceRetirement']['phase'] = 'restored'
+        self.runtime.change(['start', raw['Id']])
+        raw['HostConfig']['RestartPolicy'] = record['source']['HostConfig']['RestartPolicy']
+        self.net.verify(record)
+
+    def test_reconstruction_requires_protected_receipt_definition_policy_and_endpoints(self):
+        record, source = self.reconstructed_source()
+        mutations = {
+            'unrecorded': lambda receipt, raw: receipt.pop('reconstructionId'),
+            'no-checkpoint': lambda receipt, raw: receipt.pop('checkpointManifestSha256'),
+            'invalid-checkpoint': lambda receipt, raw: receipt.update(checkpointManifestSha256='invalid'),
+            'not-reconstructed': lambda receipt, raw: receipt.update(phase='reconstructing'),
+            'body-hash': lambda receipt, raw: receipt.update(bodySha256='a' * 64),
+            'definition': lambda receipt, raw: receipt.update(reconstructionDefinition='a' * 64),
+            'image': lambda receipt, raw: raw.update(Image='sha256:' + 'a' * 64),
+            'name': lambda receipt, raw: raw.update(Name='/another'),
+            'alias': lambda receipt, raw: raw['NetworkSettings']['Networks'][C.CORE_NETWORK]['Aliases'].append('unreviewed'),
+            'network-id': lambda receipt, raw: raw['NetworkSettings']['Networks'][C.CORE_NETWORK].update(NetworkID='a' * 64),
+            'policy': lambda receipt, raw: raw['HostConfig'].update(RestartPolicy={'Name': 'always', 'MaximumRetryCount': 0}),
+            'running-before-restore': lambda receipt, raw: raw['State'].update(Running=True, Status='running'),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label):
+                attempted, raw = copy.deepcopy(record), copy.deepcopy(source)
+                mutate(attempted['sourceRetirement'], raw)
+                self.objects[raw['Id']] = raw
+                with self.assertRaises(ValueError):
+                    self.net.verify(attempted)
+        self.objects[source['Id']] = source
+        self.objects[record['source']['Id']] = record['source']
+        with self.assertRaisesRegex(ValueError, 'custody'):
+            self.net.verify(record)
 
     def test_peer_drift_and_extra_aliases_or_networks_never_become_a_new_baseline(self):
         record = self.prepared()

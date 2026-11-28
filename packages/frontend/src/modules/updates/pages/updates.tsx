@@ -652,7 +652,7 @@ function LocalUpdates() {
                 );
               })}
           </ul>
-          <Link className="desktop-update-action secondary desktop-updates-app-link" to="/apps">
+          <Link className="desktop-update-action secondary" to="/apps">
             Manage applications
           </Link>
         </section>

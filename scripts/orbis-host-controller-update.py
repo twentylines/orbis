@@ -347,6 +347,7 @@ class CoreNetwork:
         allowed = {record['source']['Id'], *(peer['Id'] for peer in record['peers'].values())}
         if record.get('candidateId'):
             allowed.add(record['candidateId'])
+        reconstruction = (record.get('sourceRetirement') or {}).get('reconstructionId')
         for row in inventory:
             if not isinstance(row, dict):
                 raise ValueError('The private network membership inventory is invalid')
@@ -355,6 +356,29 @@ class CoreNetwork:
             if plan['retirement'] is not None:
                 raise ValueError('The rollback network retirement still has attached containers')
             identifier = row.get('Id')
+            if reconstruction is not None and identifier == reconstruction:
+                retirement = self.u.validate_retirement(record)
+                checkpoint_digest = retirement.get('checkpointManifestSha256')
+                if (identifier in allowed or retirement['phase'] not in {'reconstructed', 'restored'}
+                        or not isinstance(checkpoint_digest, str) or not re.fullmatch(r'[a-f0-9]{64}', checkpoint_digest)
+                        or self.u.optional_container(record['source']['Id']) is not None):
+                    raise ValueError('The private network reconstruction lacks protected rollback custody')
+                source = self.u.verify_source(record)
+                body = retirement['body']
+                policy = source['HostConfig'].get('RestartPolicy')
+                restored = retirement['phase'] == 'restored'
+                policies = [body['HostConfig']['RestartPolicy']]
+                if restored:
+                    policies.append(record['source']['HostConfig']['RestartPolicy'])
+                if (source['Name'] not in {'/runtipi', '/' + retirement['reconstructionName']}
+                        or source['Image'] != retirement['imageId'] or policy not in policies
+                        or source['State'].get('Running') and not restored):
+                    raise ValueError('The private network reconstruction changed during rollback')
+                intent = {**body, 'HostConfig': {**body['HostConfig'], 'RestartPolicy': policy}}
+                self.r.check_intent(source, intent)
+                self.u.check_candidate_networks(
+                    {**record, 'body': body, 'candidateName': retirement['reconstructionName']}, source)
+                continue
             if identifier in allowed:
                 continue
             candidate = self.r.inspect(identifier)
@@ -1376,14 +1400,14 @@ class ControllerUpdate:
         reader = self.runtime.reader
         files = record['peers']
         checks = (('runtipi-db', ['pg_isready', '-U', 'tipi', '-d', 'tipi']),
-                  ('runtipi-queue', ['rabbitmq-diagnostics', '-q', 'ping']))
+                  ('runtipi-queue', ['rabbitmq-diagnostics', '-q', 'check_running']))
         deadline = time.monotonic() + 90
         for name, command in checks:
             while True:
                 try:
                     reader._read(['exec', files[name]['Id'], *command])
                     break
-                except TOOLS.APPS.DETECT.InspectionError as error:
+                except D.APPS.DETECT.InspectionError as error:
                     if time.monotonic() >= deadline:
                         raise RuntimeError('The backed database or broker did not become ready for the migration') from error
                     time.sleep(1)

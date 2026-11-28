@@ -252,6 +252,12 @@ body:has(.orbis-theme) .orbis-dialog-content.recovery-scene {
 .orbis-dialog-content.recovery-scene[data-state="open"] {
   animation: recovery-scene-enter 720ms linear both;
 }
+/* The workspace yields to this scene immediately. Keep its status visible while it takes over. */
+.orbis-dialog-content.recovery-scene[data-state="open"]:where([data-variant="update"], [data-variant="downgrade"]):not(
+    [data-shared-backdrop="true"]
+  ) {
+  animation: none;
+}
 .orbis-dialog-content.recovery-scene[data-state="closed"] {
   animation: recovery-scene-exit 720ms linear both;
 }
