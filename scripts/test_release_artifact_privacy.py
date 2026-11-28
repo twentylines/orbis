@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
 import struct
 import tarfile
 import tempfile
@@ -705,10 +706,38 @@ class ArtifactTests(unittest.TestCase):
         self.assertLess(workflow.index('privacy.py scan '), workflow.index('privacy.py publish '))
         self.assertLess(workflow.index('privacy.py publish '), workflow.index('gh release create'))
         self.assertLess(workflow.index('privacy.py verify '), workflow.index('gh release create'))
-        self.assertIn('--prerelease --latest=false', workflow)
         self.assertIn('workflow_dispatch:', workflow)
         self.assertIn('RELEASE_TAG: ${{ inputs.tag || github.ref_name }}', workflow)
         self.assertIn('DOCKER_BUILD_RECORD_UPLOAD: \'false\'', workflow)
+
+    def test_release_flags_keep_unqualified_updates_out_of_public_discovery(self):
+        workflow = (Path(__file__).resolve().parent.parent / '.github/workflows/release.yml').read_text()
+        start = workflow.index('          flags=(--verify-tag')
+        end = workflow.index('          gh release create', start)
+        script = workflow[start:end] + 'printf "%s\\n" "${flags[@]}"\n'
+        for base in ('4.10.1', '4.12.0'):
+            for candidate in (False, True):
+                for prerelease in (False, True):
+                    with self.subTest(base=base, candidate=candidate, prerelease=prerelease):
+                        environment = {
+                            **os.environ,
+                            'RUNTIPI_COMPATIBILITY': base,
+                            'CANDIDATE_ONLY': str(candidate).lower(),
+                            'IS_PRERELEASE': str(prerelease).lower(),
+                            'DISPLAY_VERSION': '0.9.2',
+                        }
+                        result = subprocess.run(
+                            ['/bin/bash', '--noprofile', '--norc', '-eu', '-c', script],
+                            env=environment, check=True, capture_output=True, text=True,
+                        )
+                        draft = candidate or base == '4.12.0'
+                        expected = ['--verify-tag', '--title', 'Orbis 0.9.2', '--notes-file', 'release-notes.md']
+                        if prerelease:
+                            expected.append('--prerelease')
+                        if draft:
+                            expected.append('--draft')
+                        expected.append('--latest=false' if draft or prerelease else '--latest')
+                        self.assertCountEqual(result.stdout.splitlines(), expected)
 
     def test_candidate_workflow_cannot_create_release_or_git_refs(self):
         workflow = (Path(__file__).resolve().parent.parent / '.github/workflows/candidate.yml').read_text()

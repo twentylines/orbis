@@ -3,6 +3,22 @@ name: Draft upgrade runtime
 on:
   workflow_dispatch:
     inputs:
+      bridge_tag:
+        description: Draft tag for the 4.10.1 bridge
+        required: true
+        type: string
+      bridge_run:
+        description: Successful release workflow run for the bridge
+        required: true
+        type: string
+      target_tag:
+        description: Draft tag for the 4.12.0 target
+        required: true
+        type: string
+      target_run:
+        description: Successful release workflow run for the target
+        required: true
+        type: string
       rehearsal:
         description: Qualification of the verified Orbis draft pair
         required: true
@@ -20,6 +36,11 @@ jobs:
     if: github.repository == 'twentylines/orbis' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      DRAFT_BRIDGE_TAG: ${{ inputs.bridge_tag }}
+      DRAFT_BRIDGE_RUN: ${{ inputs.bridge_run }}
+      DRAFT_TARGET_TAG: ${{ inputs.target_tag }}
+      DRAFT_TARGET_RUN: ${{ inputs.target_run }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -32,12 +53,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sudo --non-interactive --preserve-env=GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GH_TOKEN,RUNNER_ENVIRONMENT \
+          sudo --non-interactive --preserve-env=GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_SHA,GH_TOKEN,RUNNER_ENVIRONMENT,DRAFT_BRIDGE_TAG,DRAFT_BRIDGE_RUN,DRAFT_TARGET_TAG,DRAFT_TARGET_RUN \
             /usr/bin/python3 -I -B packages/backend/scripts/orbis-official-upgrade-runtime.py --acquire-drafts
 
       - name: Rehearse the signed draft pair without release discovery
         env:
           DRAFT_UPGRADE_CASE: ${{ inputs.rehearsal }}
         run: |
-          sudo --non-interactive --preserve-env=CI,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,RUNNER_ENVIRONMENT,DRAFT_UPGRADE_CASE \
+          sudo --non-interactive --preserve-env=CI,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_SHA,RUNNER_ENVIRONMENT,DRAFT_UPGRADE_CASE,DRAFT_BRIDGE_TAG,DRAFT_BRIDGE_RUN,DRAFT_TARGET_TAG,DRAFT_TARGET_RUN \
             /usr/bin/python3 -I -B packages/backend/scripts/orbis-official-upgrade-runtime.py

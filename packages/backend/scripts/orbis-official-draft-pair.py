@@ -8,12 +8,19 @@ import subprocess
 
 
 INPUT = Path('/run/orbis-official-draft-input')
-COMMIT = 'afea7dda40663f92c7c261efe9f5a0a558d19ac1'
 REPO = 'twentylines/orbis'
-DRAFTS = (
-    ('v0.9.2-beta.12', '4.10.1', 46132914399),
-    ('v0.9.2-beta.13', '4.12.0', 46132917585),
-)
+
+
+def selection(environment):
+    commit = environment.get('GITHUB_SHA', '')
+    bridge_tag, target_tag = (environment.get(f'DRAFT_{role}_TAG', '') for role in ('BRIDGE', 'TARGET'))
+    bridge_run, target_run = (environment.get(f'DRAFT_{role}_RUN', '') for role in ('BRIDGE', 'TARGET'))
+    tag_pattern = r'v[0-9]{1,5}\.[0-9]{1,5}\.[0-9]{1,5}-beta\.[0-9]{1,8}'
+    if not (re.fullmatch(r'[a-f0-9]{40}', commit) and bridge_tag != target_tag and bridge_run != target_run
+            and all(re.fullmatch(tag_pattern, tag) for tag in (bridge_tag, target_tag))
+            and all(re.fullmatch(r'[1-9][0-9]{0,19}', run) for run in (bridge_run, target_run))):
+        raise ValueError('draft-selection-refused')
+    return commit, ((bridge_tag, '4.10.1', int(bridge_run)), (target_tag, '4.12.0', int(target_run)))
 
 
 def acquire(runtime, environment):
@@ -25,24 +32,26 @@ def acquire(runtime, environment):
             and environment.get('GITHUB_REF') == 'refs/heads/main'
             and environment.get('GH_TOKEN')
             and not os.path.lexists(runtime.WORK) and not os.path.lexists(runtime.HOST), 'draft-acquisition-scope-refused')
+    commit, drafts = selection(environment)
     reader = runtime.load('orbis-release-check')
     boot = runtime.load('install-orbis')
     launcher = runtime.load('orbis-host-upgrade-launcher')
 
     def gh(*args):
-        result = subprocess.run(['gh', *args, '--repo', REPO], check=False, capture_output=True, timeout=90)
+        result = subprocess.run(['gh', *args], check=False, capture_output=True, timeout=90)
         require(result.returncode == 0 and len(result.stdout) < 1024 * 1024, 'draft-acquisition-request-refused')
         return result.stdout
 
     os.umask(0o077)
     INPUT.mkdir(mode=0o700)
     pins = []
-    for tag, base, run in DRAFTS:
-        run_info = json.loads(gh('run', 'view', str(run), '--json', 'headSha,conclusion,event,workflowName'))
-        require((run_info['headSha'], run_info['conclusion'], run_info['event'], run_info['workflowName'])
-                == (COMMIT, 'success', 'workflow_dispatch', 'Orbis release'), 'draft-publisher-proof-refused')
-        require(reader.git_tag_commit(tag) == COMMIT, 'draft-tag-commit-refused')
-        release = json.loads(gh('release', 'view', tag, '--json', 'tagName,isDraft,isPrerelease,assets'))
+    for tag, base, run in drafts:
+        run_info = json.loads(gh('api', f'repos/{REPO}/actions/runs/{run}'))
+        require((run_info.get('head_sha'), run_info.get('conclusion'), run_info.get('event'),
+                 run_info.get('path', '').partition('@')[0])
+                == (commit, 'success', 'workflow_dispatch', '.github/workflows/release.yml'), 'draft-publisher-proof-refused')
+        require(reader.git_tag_commit(tag) == commit, 'draft-tag-commit-refused')
+        release = json.loads(gh('release', 'view', tag, '--repo', REPO, '--json', 'tagName,isDraft,isPrerelease,assets'))
         assets = release['assets']
         require((release['tagName'], release['isDraft'], release['isPrerelease']) == (tag, True, True)
                 and len(assets) == len(runtime.ASSETS)
@@ -53,7 +62,7 @@ def acquire(runtime, environment):
                     and runtime.DIGEST.fullmatch(item['digest']), 'draft-asset-size-refused')
         directory = INPUT / tag
         directory.mkdir()
-        gh('release', 'download', tag, '--dir', str(directory),
+        gh('release', 'download', tag, '--repo', REPO, '--dir', str(directory),
            *(argument for name in sorted(runtime.ASSETS) for argument in ('--pattern', name)))
         files = {}
         for item in assets:
@@ -67,12 +76,12 @@ def acquire(runtime, environment):
         manifest = reader.PLAN.validate_manifest(json.loads(files['release-manifest.json']))
         require((manifest['image'], manifest['tag'], manifest['commit'], manifest['runtipiCompatibility'],
                  manifest['installationProtocol'])
-                == (runtime.IMAGE, tag, COMMIT, base, 'orbis.installation-state.v1'), 'draft-core-identity-refused')
+                == (runtime.IMAGE, tag, commit, base, 'orbis.installation-state.v1'), 'draft-core-identity-refused')
         identity = launcher.literal(files['install-orbis.py'], 'EXPECTED_RELEASE')
-        require(identity == {'tag': tag, 'commit': COMMIT, 'manifestSha256': runtime.sha(files[boot.MANIFEST])},
+        require(identity == {'tag': tag, 'commit': commit, 'manifestSha256': runtime.sha(files[boot.MANIFEST])},
                 'draft-installer-selection-refused')
         custody, closure = boot.verify_source_package(files[boot.MANIFEST], identity, files[boot.ARCHIVE])
-        launcher.authenticate_embedded_tree(custody[launcher.GIT_PROOF_FIELD], COMMIT, closure)
+        launcher.authenticate_embedded_tree(custody[launcher.GIT_PROOF_FIELD], commit, closure)
         require(custody['releaseManifestSha256'] == runtime.sha(files['release-manifest.json'])
                 and boot._render_installer('release', identity, closure['scripts/install-orbis.py']) == files['install-orbis.py'],
                 'draft-source-custody-refused')
@@ -89,17 +98,18 @@ def acquire(runtime, environment):
             'assets': [{'name': item['name'], 'size': item['size'], 'digest': item['digest'],
                 'browser_download_url': f'https://github.com/{REPO}/releases/download/{tag}/{item["name"]}'}
                 for item in assets]}))
-        pins.append((tag, COMMIT, digest, base, run))
+        pins.append((tag, commit, digest, base, run))
     (INPUT / 'tags.json').write_text(json.dumps([item[0] for item in pins]))
     (INPUT / 'pins.json').write_text(json.dumps(pins))
 
 
 def pins(transport):
+    commit, drafts = selection(os.environ)
     directory = transport.private_directory(INPUT)
     pins = json.loads(transport.read(directory / 'pins.json', 4096))
-    transport.require(type(pins) is list and len(pins) == len(DRAFTS))
-    for item, (tag, base, run) in zip(pins, DRAFTS, strict=True):
-        transport.require(type(item) is list and len(item) == 5 and item[:2] == [tag, COMMIT]
+    transport.require(type(pins) is list and len(pins) == len(drafts))
+    for item, (tag, base, run) in zip(pins, drafts, strict=True):
+        transport.require(type(item) is list and len(item) == 5 and item[:2] == [tag, commit]
                           and item[3:] == [base, run] and type(item[2]) is str
                           and re.fullmatch(r'sha256:[a-f0-9]{64}', item[2]))
     return tuple(tuple(item) for item in pins)
