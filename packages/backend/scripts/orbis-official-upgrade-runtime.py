@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Qualify one official coordinated release update on a new hosted Linux runner."""
 
+import ast
 import hashlib
 import http.client
 import importlib.util
@@ -44,7 +45,9 @@ DIGEST = re.compile(r'sha256:[a-f0-9]{64}')
 
 
 class Refused(ValueError):
-    pass
+    def __init__(self, code, **evidence):
+        super().__init__(code)
+        self.evidence = evidence
 
 
 def require(condition, code):
@@ -148,6 +151,26 @@ def isolate_dashboard():
         run(command + ['-C', 'PREROUTING', *rule], code='dashboard-isolation-unverified')
 
 
+def installer_signals(files):
+    """Index public fatal messages from the verified publisher source closure."""
+    signals = []
+    for name, body in files.items():
+        if not re.fullmatch(r'scripts/(?:install-orbis|orbis-[a-z0-9-]+)\.py', name):
+            continue
+        for node in ast.walk(ast.parse(body)):
+            if not isinstance(node, ast.Raise) or not isinstance(node.exc, ast.Call) or not node.exc.args:
+                continue
+            text = node.exc.args[0]
+            while isinstance(text, ast.BinOp) and isinstance(text.op, ast.Add):
+                text = text.left
+            exact = text is node.exc.args[0] and isinstance(text, ast.Constant)
+            if isinstance(text, ast.JoinedStr) and text.values:
+                text = text.values[0]
+            if isinstance(text, ast.Constant) and isinstance(text.value, str) and 16 <= len(text.value) <= 4096:
+                signals.append((text.value.encode(), exact, f'{name.removeprefix("scripts/")}:{node.lineno}'))
+    return signals
+
+
 def publisher(pin, reader, boot, launcher, token):
     tag, commit, digest, base, run_id = pin
     api = reader.GITHUB_API
@@ -192,10 +215,10 @@ def publisher(pin, reader, boot, launcher, token):
     path = WORK / (tag + '.py')
     with path.open('xb') as output:
         output.write(files['install-orbis.py'])
-    return path
+    return path, installer_signals(closure)
 
 
-def installer_failure(path):
+def installer_failure(path, signals=()):
     """Classify bounded launcher evidence. Raw logs stay on the runner."""
     with path.open('rb') as log:
         log.seek(max(0, path.stat().st_size - 128 * 1024))
@@ -209,16 +232,45 @@ def installer_failure(path):
         b'Host administration requires ': 'guided-systemd-prerequisite-refused',
         b'The supported local package boundary ': 'guided-docker-platform-refused',
     }
+    steps = {
+        b'Detecting existing installations': 'detect',
+        b'Checking managed-container ownership': 'ownership',
+        b'Verifying the Orbis release': 'verify-release',
+        b'Downloading the verified Orbis image': 'pull-core',
+        b'Preparing Sentinel': 'prepare-sentinel',
+        b'Enabling Sentinel': 'enable-sentinel',
+        b'Downloading postgres': 'pull-postgres',
+        b'Downloading rabbitmq': 'pull-rabbitmq',
+        b'Downloading traefik': 'pull-proxy',
+        b'Starting Orbis and checking its health': 'start-core',
+        b'Enabling system administration': 'enable-host',
+        b'Checking the release and update readiness': 'review-upgrade',
+        b'Updating Orbis and verifying server health': 'apply-upgrade',
+    }
+    evidence = {}
+    for line in tail:
+        step = re.fullmatch(rb'(?:\[[0-9]{1,3}/[0-9]{1,3}\] )?(.{1,90})\.\.\.', line)
+        if step and step[1] in steps:
+            evidence['installerStep'] = steps[step[1]]
+        elif line.startswith(b'Verified installer. Recovery files: '):
+            evidence['installerStep'] = 'verified-launcher'
     for line in reversed(tail):
         for prefix in (b'Orbis installer could not start: ', b'Orbis installation stopped: '):
             if line.startswith(prefix):
                 message = line[len(prefix):]
-                return next((code for signal, code in known.items() if message.startswith(signal)),
-                            'guided-launcher-refused' if prefix.startswith(b'Orbis installer ') else 'guided-installer-refused')
-    return 'guided-installer-refused'
+                matches = [(exact, len(text), site) for text, exact, site in signals
+                           if (message == text if exact else message.startswith(text))]
+                if matches:
+                    specificity = max((exact, length) for exact, length, _ in matches)
+                    evidence['installerFailureSites'] = sorted({site for exact, length, site in matches
+                                                               if (exact, length) == specificity})[:4]
+                fallback = 'guided-launcher-refused' if prefix.startswith(b'Orbis installer ') else 'guided-installer-refused'
+                return next((code for signal, code in known.items() if message.startswith(signal)), fallback), evidence
+    return 'guided-installer-refused', evidence
 
 
-def launch(path, operation, timeout):
+def launch(release, operation, timeout):
+    path, signals = release
     workdir = WORK / operation
     workdir.mkdir(mode=0o700)
     log_path = workdir / 'installer.log'
@@ -230,7 +282,8 @@ def launch(path, operation, timeout):
                                 env=ENV, cwd=WORK, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                                 check=False, timeout=timeout)
     if result.returncode:
-        raise Refused(installer_failure(log_path))
+        code, evidence = installer_failure(log_path, signals)
+        raise Refused(code, installerExitCode=result.returncode, **evidence)
 
 
 def http(method, path, *, body=None, cookie=None, expect=(200,)):
@@ -507,6 +560,7 @@ def main():
         fixture(os.environ, result)
     except Refused as error:
         result['error'] = str(error)
+        result.update(error.evidence)
     except Exception:
         # Installed command and API errors may contain the fixture's credentials.
         result['error'] = 'fixture-step-failed'
