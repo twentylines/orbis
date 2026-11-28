@@ -1,26 +1,15 @@
 name: Orbis installer endpoint
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/installer-site.yml'
-      - 'scripts/publish-installer-site.py'
-      - 'scripts/install-orbis.py'
-      - 'scripts/orbis-*'
-      - 'scripts/migration-preflight.py'
-      - 'packaging/systemd/orbis-host.service'
-      - 'scripts/test_orbis_installer_site.py'
-      - 'scripts/test_orbis_installer_bundle.py'
-      - 'scripts/test_orbis_installer_contract.py'
-      - 'scripts/test_orbis_host_dependency_closure.py'
-      - 'scripts/test_orbis_host_observer_profile.py'
-      - 'scripts/test_orbis_host_service_upgrade.py'
-      - 'scripts/test_orbis_install_ui.py'
   workflow_run:
     workflows: ['Orbis release']
     types: [completed]
   workflow_dispatch:
+    inputs:
+      public_release_run:
+        description: Successful public release workflow run to verify
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -30,17 +19,46 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  release-admission:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      publish: ${{ steps.public.outputs.publish }}
+    steps:
+      - name: Require a verified public release
+        id: public
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_RUN: ${{ inputs.public_release_run || github.event.workflow_run.id }}
+        run: |
+          [[ "$UPSTREAM_RUN" =~ ^[0-9]+$ ]]
+          run_path="repos/$GITHUB_REPOSITORY/actions/runs/$UPSTREAM_RUN"
+          gh api "$run_path" --jq '[.path, .conclusion, .head_repository.full_name] | join(" ")' |
+            { read -r workflow conclusion repository
+              [[ "${workflow%@*}" == ".github/workflows/release.yml" && "$conclusion" == success && "$repository" == "$GITHUB_REPOSITORY" ]]
+            }
+          published="$(gh api "$run_path/jobs" --jq '
+            [.jobs[] | select(.name == "publish" and .conclusion == "success") |
+              .steps[] | select(.name == "Verify the GitHub release is public" and .conclusion == "success")] | length == 1
+          ')"
+          echo "publish=$published" >> "$GITHUB_OUTPUT"
+
   verify:
-    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository)
+    needs: release-admission
+    if: needs.release-admission.outputs.publish == 'true'
     uses: ./.github/workflows/ci.yml
 
   integration:
-    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository)
+    needs: release-admission
+    if: needs.release-admission.outputs.publish == 'true'
     uses: ./.github/workflows/integration-tests.yml
 
   publish:
-    needs: [verify, integration]
-    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository)
+    needs: [release-admission, verify, integration]
+    if: needs.release-admission.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read

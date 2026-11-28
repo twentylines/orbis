@@ -184,3 +184,11 @@ jobs:
             flags+=(--latest)
           fi
           gh release create "$RELEASE_TAG" release-manifest.json installer-assets/install-orbis.py installer-assets/orbis-installer-manifest.json installer-assets/orbis-installer.tar.gz "${flags[@]}"
+
+      - name: Verify the GitHub release is public
+        if: env.CANDIDATE_ONLY == 'false' && env.RUNTIPI_COMPATIBILITY == '4.10.1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$RELEASE_TAG" --json tagName,isDraft,publishedAt |
+            jq -e --arg tag "$RELEASE_TAG" '.tagName == $tag and .isDraft == false and .publishedAt != null' > /dev/null
