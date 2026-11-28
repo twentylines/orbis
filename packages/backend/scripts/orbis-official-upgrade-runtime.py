@@ -1143,6 +1143,8 @@ def reconcile_interruption(source, target, fault, expected_state, *, before_disp
     worker = witness.directory / 'bootstrap/scripts/orbis-host-upgrade-launcher.py'
     run([sys.executable, '-I', '-B', str(worker), 'dispatch-reconciliation', operation,
          '--state-dir', str(STATE)], timeout=45, code='interruption-recovery-dispatch-refused')
+    runtime = witness.supervision.Runtime()
+    unit = witness.supervision.reconciliation_unit_name(operation)
     deadline = time.monotonic() + 420
     while time.monotonic() < deadline:
         current = service.read_private(STATE / 'job.json')
@@ -1150,12 +1152,18 @@ def reconcile_interruption(source, target, fault, expected_state, *, before_disp
                 'interruption-recovery-job-changed')
         if current['state'] == expected_state:
             break
+        if expected_state == 'rolled-back':
+            try:
+                observed = runtime.unit(unit)
+            except witness.supervision.UpgradeSupervisionError:
+                observed = None
+            if (observed and observed['ActiveState'] == 'failed' and observed['MainPID'] == observed['ControlPID'] == '0'
+                    and not observed['Job'] and runtime.cgroup_empty(unit)):
+                raise Refused('interruption-recovery-unit-failed')
         time.sleep(0.5)
     else:
         raise Refused('interruption-recovery-terminal-not-observed')
     witness.supervision.observe_quiescence(launcher.Files(), STATE, operation, witness.original_frame)
-    runtime = witness.supervision.Runtime()
-    unit = witness.supervision.reconciliation_unit_name(operation)
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
         observed = runtime.unit(unit)
@@ -1522,6 +1530,34 @@ def public_source_readback(target):
     return {'stage': 'complete', 'outcome': 'verified', 'members': len(files)}
 
 
+def checkpoint_custody(update, job, snapshot, saved, result):
+    try:
+        runtime = update.CONTROLLER.ControllerUpdate(update.HOST, ROOT, 'default', snapshot,
+                                                       job['current'], job['target'], STATE)
+        record = runtime.read()
+        require(record.get('checkpoint') == saved['review'], 'checkpoint-controller-binding-refused')
+        retirement = runtime.validate_retirement(record) if 'sourceRetirement' in record else {}
+        evidence = {
+            'sourceEnablementRequired': record.get('sourceBootstrapEnablement') is not None,
+            'sourceRetirementPhase': retirement.get('phase'),
+            'retirementCheckpointRecorded': bool(retirement.get('checkpointManifestSha256')),
+            'checkpointFingerprintRecorded': bool(saved.get('backupFingerprint')),
+        }
+        result['checkpointControllerCustody'] = evidence
+        tools, _ = update.controller_tools('default')
+        try:
+            manifest = tools.RESTORE.private_json(snapshot / 'storage.json')
+        except FileNotFoundError:
+            evidence['storageManifestStage'] = 'absent'
+        else:
+            stage = manifest.get('stage')
+            evidence['storageManifestStage'] = (
+                stage if manifest.get('plan') == saved['review']['storage']
+                and stage in ('copying', 'verifying', 'complete') else 'unverified')
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError):
+        result.setdefault('checkpointControllerCustody', {})['readback'] = 'unverified'
+
+
 def failure_readback(environment, result):
     phase = result.get('phase')
     if phase not in ('guided-bridge', 'bridge-readback', 'guided-target', 'terminal-readback',
@@ -1560,6 +1596,8 @@ def failure_readback(environment, result):
                     reviewed = tools.read_record(update.checkpoint_path(snapshot), ROOT, reader)
                     if reviewed.get('review') == journal.get('checkpoint'):
                         result['checkpointStage'] = reviewed['stage']
+                        if phase == 'checkpoint-recovery':
+                            checkpoint_custody(update, job, snapshot, reviewed, result)
                     else:
                         result['checkpointStage'] = 'binding-refused'
                 except FileNotFoundError:
