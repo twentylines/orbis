@@ -6,7 +6,8 @@ import type { AddressInfo } from 'node:net';
 import jwt from 'jsonwebtoken';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { getCliSecret } from '@/common/helpers/permissions-helpers';
-import { resetOperatorPassword } from '@/orbis-cli';
+import { resetOperatorPassword, runAppJob } from '@/orbis-cli';
+import type { AppJob } from '@runtipi/common/schemas/app-job';
 
 let directory: string;
 let server: ReturnType<typeof createServer> | undefined;
@@ -109,4 +110,154 @@ it.each([
   await expect(operation).rejects.not.toThrow(password);
   expect(calls).toBe(1);
   expect(Number(await readFile(marker(), 'utf8'))).toBeGreaterThan(0);
+});
+
+const app = 'notes:private_store';
+const requestId = '00000000-0000-4000-8000-000000000001';
+const encodedApp = encodeURIComponent(app);
+const statusRoute = `/api/app-lifecycle/${encodedApp}/job?requestId=${requestId}`;
+const observation = (status: AppJob['status']) => ({
+  requestId,
+  appUrn: app,
+  command: 'backup',
+  status,
+  phase: 'copying',
+  startedAt: 1,
+  updatedAt: 2,
+  cancellable: true,
+  message: password,
+});
+
+it.each([
+  ['backup', true, 'POST', `/api/backups/${encodedApp}/backup`, 201],
+  ['update', undefined, 'PATCH', `/api/app-lifecycle/${encodedApp}/update`, 200],
+  ['update', false, 'PATCH', `/api/app-lifecycle/${encodedApp}/update`, 200],
+] as const)('submits one %s and waits for its exact terminal status (backup setting %s)', async (action, performBackup, method, route, code) => {
+  const secret = await getCliSecret(directory);
+  const lines: string[] = [];
+  let mutations = 0;
+  let reads = 0;
+  const port = await listen(async (incoming, response) => {
+    jwt.verify(incoming.headers.authorization?.slice('Bearer '.length) ?? '', secret, { algorithms: ['HS256'], subject: 'cli' });
+    if (incoming.method === method && incoming.url === route) {
+      mutations++;
+      const chunks = [];
+      for await (const chunk of incoming) chunks.push(chunk);
+      const body = Buffer.concat(chunks).toString();
+      expect(body).toBe(action === 'update' ? JSON.stringify({ performBackup: performBackup ?? true }) : '');
+      response.writeHead(code).end(JSON.stringify({ requestId }));
+      return;
+    }
+    expect(incoming.method).toBe('GET');
+    expect(incoming.url).toBe(statusRoute);
+    reads++;
+    if (reads === 1) response.writeHead(503).end();
+    else {
+      const state = reads === 3 ? 'running' : reads === 4 ? 'unconfirmed' : 'succeeded';
+      response.writeHead(200).end(JSON.stringify({ job: reads === 2 ? null : { ...observation(state), command: action } }));
+    }
+  });
+  await runAppJob({
+    dataDir: directory,
+    action,
+    app,
+    performBackup,
+    port,
+    pollIntervalMs: 1,
+    signal: new AbortController().signal,
+    write: (line) => lines.push(line),
+  });
+  expect(mutations).toBe(1);
+  expect(reads).toBe(5);
+  expect(lines[0]).toContain(requestId);
+  expect(lines[1]).toContain('running: copying');
+  expect(lines[2]).toContain('unconfirmed');
+  expect(lines[3]).toContain(`completed for ${app}`);
+  expect(lines.join(' ')).not.toContain(password);
+  expect(await readdir(stateDirectory())).toEqual([]);
+});
+
+it.each([
+  ['failed', observation('failed')],
+  ['cancelled', observation('cancelled')],
+  ['interrupted', observation('interrupted')],
+  ['different job', { ...observation('succeeded'), appUrn: 'notes:another_store' }],
+  ['different job', { ...observation('succeeded'), command: 'update' }],
+  ['different job', { ...observation('succeeded'), requestId: '00000000-0000-4000-8000-000000000002' }],
+  ['invalid job status', { ...observation('succeeded'), status: 'done' }],
+])('reports %s as a non-success, without replay or raw server output', async (message, job) => {
+  await getCliSecret(directory);
+  const calls: string[] = [];
+  const lines: string[] = [];
+  const port = await listen((incoming, response) => {
+    calls.push(incoming.method ?? '');
+    response.writeHead(incoming.method === 'POST' ? 201 : 200).end(JSON.stringify(incoming.method === 'POST' ? { requestId } : { job }));
+  });
+  const pending = runAppJob({
+    dataDir: directory,
+    action: 'backup',
+    app,
+    port,
+    signal: new AbortController().signal,
+    write: (line) => lines.push(line),
+  });
+  await expect(pending).rejects.toThrow(message);
+  await expect(pending).rejects.not.toThrow(password);
+  expect(calls).toEqual(['POST', 'GET']);
+  expect(lines).toHaveLength(1);
+});
+
+it.each([303, 401, 409, 500])('does not replay unaccepted or ambiguous admission responses (%d)', async (status) => {
+  await getCliSecret(directory);
+  const calls: string[] = [];
+  const lines: string[] = [];
+  const port = await listen((incoming, response) => {
+    calls.push(incoming.method ?? '');
+    response.writeHead(status, { Location: '/another-route' }).end(JSON.stringify({ debug: password }));
+  });
+  const pending = runAppJob({
+    dataDir: directory,
+    action: 'backup',
+    app,
+    port,
+    signal: new AbortController().signal,
+    write: (line) => lines.push(line),
+  });
+  await expect(pending).rejects.toThrow(/could not confirm|did not authorize|reported a conflict/);
+  await expect(pending).rejects.not.toThrow(password);
+  expect(calls).toEqual(['POST']);
+  expect(lines).toEqual([]);
+});
+
+it('stops waiting for the exact accepted job after an interrupt without issuing a cancellation or replay', async () => {
+  await getCliSecret(directory);
+  const quit = new AbortController();
+  const calls: string[] = [];
+  const lines: string[] = [];
+  const port = await listen((incoming, response) => {
+    calls.push(incoming.method ?? '');
+    response
+      .writeHead(incoming.method === 'POST' ? 201 : 200)
+      .end(JSON.stringify(incoming.method === 'POST' ? { requestId } : { job: observation('running') }));
+  });
+  await expect(
+    runAppJob({
+      dataDir: directory,
+      action: 'backup',
+      app,
+      port,
+      signal: quit.signal,
+      write: (line) => {
+        lines.push(line);
+        if (lines.length === 2) quit.abort();
+      },
+    }),
+  ).rejects.toThrow(`Stopped waiting for the job. Check Tasks for ${requestId}.`);
+  expect(calls).toEqual(['POST', 'GET']);
+});
+
+it('requires an exact namespaced app ID and a local CLI key before dispatch', async () => {
+  const options = { dataDir: directory, action: 'backup' as const, signal: new AbortController().signal, write: () => undefined };
+  await expect(runAppJob({ ...options, app: '../anything:local' })).rejects.toThrow('Specify the app as');
+  await expect(runAppJob({ ...options, app })).rejects.toThrow('CLI key is unavailable');
 });

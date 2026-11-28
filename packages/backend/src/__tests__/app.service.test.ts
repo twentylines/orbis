@@ -397,6 +397,8 @@ describe('AppService', () => {
       [path.join(APP_DIR, 'assets', 'traefik', 'traefik.yml')]: TRAEFIK_CONFIG,
       [path.join(APP_DIR, 'assets', 'traefik', 'dynamic', 'dynamic.yml')]: 'ordinary generated dynamic configuration',
     });
+    const staticConfig = path.join(DATA_DIR, 'traefik', 'traefik.yml');
+    await fs.promises.chmod(staticConfig, 0o640);
     configurationService.getConfig.mockReturnValue(
       fromPartial({
         version: '4.10.1',
@@ -424,7 +426,8 @@ describe('AppService', () => {
         expect(pruneNetworks).not.toHaveBeenCalled();
       } else {
         expect(created).toContain(path.join(DATA_DIR, 'traefik', 'tls'));
-        expect(textWrites).toHaveBeenCalledWith(path.join(DATA_DIR, 'traefik', 'traefik.yml'), expect.any(String));
+        expect(textWrites).toHaveBeenCalledWith(staticConfig, expect.any(String), 0o644);
+        expect((await fs.promises.stat(staticConfig)).mode & 0o777).toBe(0o640);
         expect(copies).toHaveBeenCalledWith(
           path.join(APP_DIR, 'assets', 'traefik', 'dynamic', 'dynamic.yml'),
           path.join(DATA_DIR, 'traefik', 'dynamic', 'dynamic.yml'),
@@ -631,7 +634,9 @@ describe('AppService', () => {
 
       await appService.copyAssets();
 
-      const output = await fs.promises.readFile(path.join(DATA_DIR, 'traefik', 'traefik.yml'), 'utf8');
+      const destination = path.join(DATA_DIR, 'traefik', 'traefik.yml');
+      const output = await fs.promises.readFile(destination, 'utf8');
+      expect((await fs.promises.stat(destination)).mode & 0o022).toBe(0);
       const parsed = YAML.parse(output);
       expect(parsed.entryPoints.web.forwardedHeaders.insecure).toBe(true);
       expect(parsed.entryPoints.web.forwardedHeaders.trustedIPs).toEqual(['203.0.113.10/32', '2001:db8::/32']);

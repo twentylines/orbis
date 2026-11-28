@@ -615,6 +615,40 @@ class NewInstallationTests(unittest.TestCase):
         with self.assertRaises(subprocess.TimeoutExpired):
             GUIDE.UI.retry_download(mock.Mock(side_effect=subprocess.TimeoutExpired("docker pull", 900)))
 
+    def test_fresh_proxy_directory_caps_group_and_other_permissions_at_creation(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            previous = os.umask(0)
+            try:
+                NEW.prepare_proxy_directory(root)
+            finally:
+                os.umask(previous)
+            directory = root / "traefik"
+            self.assertEqual(directory.stat().st_mode & 0o777, 0o755)
+
+    def test_existing_proxy_directory_is_verified_without_changing_its_mode(self):
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder) / "traefik"
+            directory.mkdir(mode=0o700)
+            NEW.prepare_proxy_directory(directory.parent)
+            self.assertEqual(directory.stat().st_mode & 0o777, 0o700)
+            directory.chmod(0o775)
+            with self.assertRaisesRegex(ValueError, "proxy configuration directory"):
+                NEW.prepare_proxy_directory(directory.parent)
+            self.assertEqual(directory.stat().st_mode & 0o777, 0o775)
+
+    def test_proxy_directory_link_does_not_change_its_target(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            target = root / "other"
+            target.mkdir(mode=0o700)
+            directory = root / "traefik"
+            directory.symlink_to(target, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "proxy configuration directory"):
+                NEW.prepare_proxy_directory(root)
+            self.assertEqual(directory.readlink(), target)
+            self.assertEqual(target.stat().st_mode & 0o777, 0o700)
+
     def test_fresh_install_stages_both_version_files_from_the_same_release(self):
         for base in ("4.10.1", "4.12.0"):
             with self.subTest(base=base), tempfile.TemporaryDirectory() as folder, contextlib.ExitStack() as stack:

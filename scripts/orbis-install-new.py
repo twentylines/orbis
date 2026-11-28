@@ -161,6 +161,16 @@ def verify_reset(root, record, reader):
     return RESET.verify(root, binding)
 
 
+def prepare_proxy_directory(root):
+    directory = root / "traefik"
+    # Explicitly create this leaf before its children. Intermediate mkdir
+    # components otherwise get the default mode and can inherit write ACLs.
+    directory.mkdir(mode=0o755, exist_ok=True)
+    info = directory.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o022:
+        raise ValueError("The proxy configuration directory requires protected ownership and permissions")
+
+
 def finish(record, reader, journal):
     root = Path(record["root"])
     storage = OWNERSHIP.verify_installer_storage(HOST, root, record.get('installerStorage'), reader.context)
@@ -199,6 +209,7 @@ def finish(record, reader, journal):
                      if storage is not None else PROXY.initialize(root))
         record["proxyHostIdentitySha256"] = hashlib.sha256(PROXY.P.canonical(ownership)).hexdigest()
         APPS.write_journal(journal, record)
+        prepare_proxy_directory(root)
         for name in ["media", "state", "repos", "apps", "logs", "traefik/dynamic", "traefik/tls", "user-config", "backups", "app-data", "cache", "data/postgres", "data/rabbitmq", ".secrets"]:
             target = root / name
             target.mkdir(mode=0o700, parents=True, exist_ok=True)

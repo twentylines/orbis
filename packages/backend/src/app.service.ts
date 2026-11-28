@@ -311,7 +311,7 @@ export class AppService {
       forwardedHeaders.trustedIPs = [...new Set(trustedProxyIps)];
     }
 
-    await this.filesystem.writeTextFile(dest, YAML.stringify(parsed));
+    await this.filesystem.writeTextFile(dest, YAML.stringify(parsed), 0o644);
   }
 
   /**

@@ -106,10 +106,10 @@ export class FilesystemService {
     }
   }
 
-  async writeTextFile(filePath: string, content: string): Promise<boolean> {
+  async writeTextFile(filePath: string, content: string, mode?: number): Promise<boolean> {
     try {
       await fs.promises.mkdir(this.getSafeFilePath(filePath.split('/').slice(0, -1).join('/')), { recursive: true });
-      await fs.promises.writeFile(this.getSafeFilePath(filePath), `${content}${EOL}`, 'utf8');
+      await fs.promises.writeFile(this.getSafeFilePath(filePath), `${content}${EOL}`, { encoding: 'utf8', mode });
       return true;
     } catch (error) {
       this.logger.error(`Error writing file ${filePath}:`, error);
