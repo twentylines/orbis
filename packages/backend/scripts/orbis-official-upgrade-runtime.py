@@ -774,9 +774,11 @@ def fixture(environment, result):
     if bridge:
         fence('stable-install-intent', STABLE)
         launch(bootstrap, 'source', 600, channel='stable')
+        result['phase'] = 'stable-install-readback'
         require(fresh_journal_phase(STABLE) == 'complete', 'stable-install-receipt-refused')
     else:
         launch(bootstrap, 'source', 600)
+    result['phase'] = 'source-host-readback'
     baseline = check_host(initial)
     require(baseline.get('job') is None, 'fresh-source-job-refused')
     result['phase'] = 'fixture-markers'
@@ -865,9 +867,15 @@ def main():
     except Refused as error:
         result['error'] = str(error)
         result.update(error.evidence)
-    except Exception:
-        # Installed command and API errors may contain the fixture's credentials.
+    except Exception as error:
+        # Emit the exact fixture source coordinate and a fixed exception class
+        # only. Installed process and API messages may contain credentials.
         result['error'] = 'fixture-step-failed'
+        classes = (OSError, ValueError, RuntimeError, KeyError, TypeError, AttributeError,
+                   subprocess.SubprocessError)
+        result['failureKind'] = next((kind.__name__ for kind in classes if isinstance(error, kind)), 'other')
+        result['fixtureFailureLine'] = next((frame.lineno for frame in reversed(traceback.extract_tb(error.__traceback__))
+                                             if Path(frame.filename) == Path(__file__)), None)
     if not result['passed']:
         failure_readback(os.environ, result)
     print(json.dumps(result, sort_keys=True))
