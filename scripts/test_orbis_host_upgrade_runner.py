@@ -345,6 +345,56 @@ class RunnerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             R.read_progress(self.service, self.job)
 
+    def test_progress_retries_a_real_protected_read_after_atomic_journal_replacement(self):
+        observed = threading.Event()
+        saved = {'stage': 'downloading', 'targetDigest': self.target['digest']}
+        update = SERVICE.UPDATE
+        snapshot = Path(self.job['snapshot'])
+        update.write_journal(snapshot, saved)
+        authority = SERVICE.HOST.AUTHORITY
+        original = authority.protected_file
+        rotated = False
+
+        @contextmanager
+        def replace_during_read(directory, name, maximum):
+            nonlocal rotated
+            with original(directory, name, maximum) as body:
+                if not rotated:
+                    rotated = True
+                    update.write_journal(snapshot, {**saved, 'stage': 'complete'})
+                yield body
+
+        self.service.read_core_operation_record = MethodType(SERVICE.HostService.read_core_operation_record, self.service)
+        progress = R.Progress(self.launcher, self.service, self.boot, OBSERVER)
+        progress.value = {'job': {'state': 'running'}}
+        with (mock.patch.object(authority, 'OWNER', os.geteuid()),
+              mock.patch.object(authority, 'protected_file', side_effect=replace_during_read),
+              mock.patch.object(progress, 'publish', side_effect=lambda *args, **kwargs: observed.set()) as publish):
+            with progress.follow_core(update, self.job):
+                self.assertTrue(observed.wait(3))
+            self.assertTrue(rotated)
+            publish.assert_called_once_with('installing', state='running', download=None)
+
+    def test_progress_refuses_a_persistently_unreadable_or_foreign_journal(self):
+        for invalid in (ValueError('unreadable protected journal'), {'stage': 'complete', 'targetDigest': 'foreign'}):
+            with self.subTest(invalid=invalid):
+                progress = R.Progress(self.launcher, self.service, self.boot, OBSERVER)
+                progress.value = {'job': {'state': 'running'}}
+                read = threading.Event()
+
+                def refuse(*args, **kwargs):
+                    read.set()
+                    if isinstance(invalid, Exception):
+                        raise invalid
+                    return invalid
+
+                with (mock.patch.object(self.service, 'read_core_operation_record', side_effect=refuse) as reader,
+                      mock.patch.object(progress, 'publish') as publish, self.assertRaises(ValueError)):
+                    with progress.follow_core(self.update, self.job):
+                        self.assertTrue(read.wait(2))
+                publish.assert_not_called()
+                self.assertEqual(reader.call_count, 3 if isinstance(invalid, Exception) else 1)
+
     def test_reconciliation_reclaims_only_a_disconnected_socket_with_the_same_inode(self):
         # The fixture binds a real stream socket. Systemd proof of the caller
         # is tested separately and required before browser endpoint recovery.

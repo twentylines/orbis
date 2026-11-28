@@ -375,10 +375,27 @@ class Progress:
         """Observe the real Core journal without changing the accepted job."""
         stop, errors = threading.Event(), []
         state = self.value['job']['state']
+        path = update.journal_path(Path(job['snapshot']))
+
+        def read_snapshot():
+            # A protected read can overlap the producer's atomic replacement.
+            # Retry the whole read. Never publish bytes rejected by its seal.
+            for attempt in range(3):
+                try:
+                    current = self.service.read_core_operation_record(path, optional=True)
+                except (OSError, ValueError):
+                    if attempt == 2:
+                        raise
+                    stop.wait(0.015)
+                else:
+                    if attempt:
+                        require(current is not None)
+                    return current
+
         def observe():
             try:
                 while not stop.wait(0.1):
-                    value = self.service.read_core_operation_record(update.journal_path(Path(job['snapshot'])), optional=True)
+                    value = read_snapshot()
                     if value is None:
                         continue
                     require(self.service.update_journal_matches(job, value))
