@@ -12,12 +12,22 @@ on:
         required: true
         type: string
       stable_bridge:
-        description: First install Stable and upgrade to the verified beta.3 source
+        description: First install Stable and upgrade to the verified bridge source
         default: false
         type: boolean
 
       checkpoint_recovery:
         description: Deliberately interrupt this disposable backed upgrade at a verified checkpoint
+        default: false
+        type: boolean
+
+      core_commit_recovery:
+        description: Interrupt after verified Core commit and before the coordinated terminal record
+        default: false
+        type: boolean
+
+      installed_cli_update:
+        description: Install and update an app via the real CLI and a disposable two-revision store
         default: false
         type: boolean
 
@@ -35,6 +45,8 @@ jobs:
       TARGET_DIGEST: ${{ inputs.target_digest }}
       STABLE_BRIDGE: ${{ inputs.stable_bridge }}
       CHECKPOINT_RECOVERY: ${{ inputs.checkpoint_recovery }}
+      CORE_COMMIT_RECOVERY: ${{ inputs.core_commit_recovery }}
+      INSTALLED_CLI_UPDATE: ${{ inputs.installed_cli_update }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -44,5 +56,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          sudo --non-interactive --preserve-env=CI,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_TOKEN,RUNNER_ENVIRONMENT,STABLE_BRIDGE,CHECKPOINT_RECOVERY,TARGET_COMMIT,TARGET_DIGEST \
+          sudo --non-interactive --preserve-env=CI,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_TOKEN,RUNNER_ENVIRONMENT,STABLE_BRIDGE,CHECKPOINT_RECOVERY,CORE_COMMIT_RECOVERY,INSTALLED_CLI_UPDATE,TARGET_COMMIT,TARGET_DIGEST \
             /usr/bin/python3 -I -B packages/backend/scripts/orbis-official-upgrade-runtime.py

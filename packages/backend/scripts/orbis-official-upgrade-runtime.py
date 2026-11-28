@@ -1001,7 +1001,29 @@ def verify_installed_app_backup(cookie, identity, original):
             and app_data(identity)[:2] == original[:2], 'installed-cli-app-backup-archive-refused')
 
 
-def reviewed_checkpoint(source, target):
+def committed_boundary(job, snapshot, update, target):
+    # A healthy target alone does not establish that the data commit is durable.
+    runtime = update.CONTROLLER.ControllerUpdate(update.HOST, ROOT, 'default', snapshot,
+                                                   job['current'], job['target'], STATE)
+    if runtime.read().get('phase') != 'committed':
+        return None
+    launcher = load('orbis-host-upgrade-launcher')
+    directory = STATE / 'component-upgrades' / job['id']
+    target_body = launcher.read_file(directory / 'target-set.json')
+    selected = json.loads(target_body)
+    require(selected['core']['digest'] == target[2] and selected['core']['commit'] == target[1]
+            and selected['sentinel']['release'] == sentinel_pin(target), 'commit-window-target-refused')
+    journal, receipt = component_journal(directory, job['id'], target_body)
+    phases = list(journal)
+    required = ('integration-ready', 'host-ready', 'core-intent', 'core-ready')
+    if phases[-1:] != ['core-ready'] or any(phase not in journal for phase in required):
+        return None
+    require([phases.index(phase) for phase in required] == sorted(phases.index(phase) for phase in required)
+            and journal['core-ready']['result'] == 'healthy', 'commit-window-component-order-refused')
+    return receipt
+
+
+def reviewed_checkpoint(source, target, committed=False):
     launcher = load('orbis-host-upgrade-launcher')
     service = load('orbis-host-service')
     job = service.read_private(STATE / 'job.json')
@@ -1016,10 +1038,14 @@ def reviewed_checkpoint(source, target):
     require(str(snapshot) == job['snapshot'], 'interruption-checkpoint-path-refused')
     update = service.UPDATE
     observation = service.read_private(update.journal_path(snapshot))
-    if not observation or observation['stage'] not in ('stopped', 'snapshotting', 'snapshot-ready'):
+    stages = ('complete',) if committed else ('stopped', 'snapshotting', 'snapshot-ready')
+    if not observation or observation['stage'] not in stages:
         return None
     producer = update.read_journal(snapshot, ROOT, 'default', job['current'], job['target'])
     if producer['stage'] != observation['stage'] or producer['backupScope'] != update.CONTROLLER.SCOPE:
+        return None
+    receipt = committed_boundary(job, snapshot, update, target) if committed else None
+    if committed and receipt is None:
         return None
     witness = launcher.Bootstrap(STATE, operation, job['worker'])
     frame = witness.verify_bootstrap(current=False)
@@ -1027,37 +1053,41 @@ def reviewed_checkpoint(source, target):
     require(claim == {'schema': 'orbis.host-upgrade-claim.v1',
                       'requestSha256': witness.reference['requestSha256'], **frame},
             'interruption-generation-refused')
-    return job, producer['stage'], frame
+    return job, producer['stage'], frame, receipt
 
 
 @contextmanager
-def interrupt_at_checkpoint(source, target, result):
+def interrupt_at_checkpoint(source, target, result, committed=False):
     stop = Event()
     failure = {}
+    evidence_key = 'coreCommitInterruption' if committed else 'checkpointInterruption'
+    intent = 'core-commit-interruption-intent' if committed else 'checkpoint-interruption-intent'
     def act():
         try:
-            while not stop.wait(0.15):
+            while not stop.wait(0.05 if committed else 0.15):
                 try:
-                    reviewed = reviewed_checkpoint(source, target)
+                    reviewed = reviewed_checkpoint(source, target, committed)
                 except (Refused, FileNotFoundError, ProcessLookupError):
                     continue
                 if not reviewed:
                     continue
-                job, stage, frame = reviewed
+                job, stage, frame, receipt = reviewed
                 try:
                     pid = os.pidfd_open(frame['pid'])
                 except ProcessLookupError:
                     continue
                 try:
-                    exact = reviewed_checkpoint(source, target)
+                    exact = reviewed_checkpoint(source, target, committed)
                     if exact != reviewed or stop.is_set():
                         continue
                     # Only the pinned process descriptor can receive this one
                     # deliberate test fault. The product checks quiescence.
-                    fence('checkpoint-interruption-intent', target)
-                    result['checkpointInterruption'] = {'operation': job['id'], 'stage': stage, 'sent': False}
+                    fence(intent, target)
+                    result[evidence_key] = {'operation': job['id'], 'stage': stage, 'sent': False}
+                    if committed:
+                        result[evidence_key]['coreReadyReceiptSha256'] = receipt
                     signal.pidfd_send_signal(pid, signal.SIGKILL)
-                    result['checkpointInterruption']['sent'] = True
+                    result[evidence_key]['sent'] = True
                     return
                 finally:
                     os.close(pid)
@@ -1073,8 +1103,8 @@ def interrupt_at_checkpoint(source, target, result):
         result.update(failure)
 
 
-def verify_checkpoint_return(credential, identity, original, proxy, source, target, result):
-    operation = result['checkpointInterruption']['operation']
+def reconcile_interruption(source, target, fault, expected_state):
+    operation = fault['operation']
     launcher = load('orbis-host-upgrade-launcher')
     service = load('orbis-host-service')
     job = service.read_private(STATE / 'job.json')
@@ -1091,6 +1121,9 @@ def verify_checkpoint_return(credential, identity, original, proxy, source, targ
         except witness.supervision.UpgradeSupervisionError:
             require(time.monotonic() < deadline, 'interruption-original-unit-not-quiescent')
             time.sleep(0.25)
+    if expected_state == 'complete':
+        require(committed_boundary(job, Path(job['snapshot']), service.UPDATE, target)
+                == fault['coreReadyReceiptSha256'], 'commit-window-closed-before-interruption')
     # This fixed entry point rechecks the installed bootstrap and is the only
     # dispatcher used here. It does not replay the original Apply.
     worker = witness.directory / 'bootstrap/scripts/orbis-host-upgrade-launcher.py'
@@ -1101,7 +1134,7 @@ def verify_checkpoint_return(credential, identity, original, proxy, source, targ
         current = service.read_private(STATE / 'job.json')
         require(current['id'] == operation and current['current'] == job['current'] and current['target'] == job['target'],
                 'interruption-recovery-job-changed')
-        if current['state'] == 'rolled-back':
+        if current['state'] == expected_state:
             break
         time.sleep(0.5)
     else:
@@ -1118,14 +1151,23 @@ def verify_checkpoint_return(credential, identity, original, proxy, source, targ
         time.sleep(0.25)
     else:
         raise Refused('interruption-recovery-unit-not-quiescent')
+    return job, current, witness.directory
+
+
+def verify_checkpoint_return(credential, identity, original, proxy, source, target, result):
+    fault = result['checkpointInterruption']
+    operation = fault['operation']
+    job, current, directory = reconcile_interruption(source, target, fault, 'rolled-back')
+    launcher = load('orbis-host-upgrade-launcher')
+    service = load('orbis-host-service')
     recovered = check_host(source)
     require(recovered['job']['id'] == operation and recovered['job']['state'] == 'rolled-back',
             'interruption-host-terminal-refused')
-    target_body = launcher.read_file(witness.directory / 'target-set.json')
+    target_body = launcher.read_file(directory / 'target-set.json')
     selected = json.loads(target_body)
     require(selected['core']['commit'] == target[1] and selected['core']['digest'] == target[2],
             'interruption-component-target-refused')
-    journal, terminal = component_journal(witness.directory, operation, target_body)
+    journal, terminal = component_journal(directory, operation, target_body)
     require(list(journal)[-1] == 'rolled-back' and terminal == current['componentReceiptSha256'],
             'interruption-component-return-unverified')
     setup = load('orbis-host-service-setup', HOST)
@@ -1149,6 +1191,21 @@ def verify_checkpoint_return(credential, identity, original, proxy, source, targ
                   originalReleaseVerified=True, passed=True)
 
 
+def verify_committed_return(source, target, result):
+    fault = result['coreCommitInterruption']
+    operation = fault['operation']
+    _, current, directory = reconcile_interruption(source, target, fault, 'complete')
+    launcher = load('orbis-host-upgrade-launcher')
+    target_body = launcher.read_file(directory / 'target-set.json')
+    journal, terminal = component_journal(directory, operation, target_body)
+    phases = list(journal)
+    require(phases[-2:] == ['core-ready', 'complete'] and terminal == current['componentReceiptSha256'],
+            'committed-reconciliation-terminal-unverified')
+    before = directory / 'component-journal' / f'{phases.index("core-ready"):02d}-core-ready.json'
+    require(sha(launcher.read_file(before)) == fault['coreReadyReceiptSha256'], 'commit-receipt-rewritten')
+    result['committedReconciliationVerified'] = True
+
+
 def fixture(environment, result):
     result['phase'] = 'scope'
     target = target_pin(environment)
@@ -1158,6 +1215,16 @@ def fixture(environment, result):
     bridge = mode == 'true'
     fault = environment.get('CHECKPOINT_RECOVERY', 'false')
     require(fault in ('true', 'false') and not (bridge and fault == 'true'), 'checkpoint-recovery-mode-refused')
+    committed_input = environment.get('CORE_COMMIT_RECOVERY', 'false')
+    require(committed_input in ('true', 'false') and not (committed_input == 'true' and (bridge or fault == 'true')),
+            'commit-recovery-mode-refused')
+    committed_fault = committed_input == 'true'
+    installed_cli = environment.get('INSTALLED_CLI_UPDATE', 'false')
+    require(installed_cli in ('true', 'false')
+            and not (installed_cli == 'true' and (bridge or fault == 'true' or committed_fault)),
+            'installed-cli-test-mode-refused')
+    require(not committed_fault or (predecessor[0], target[0]) == ('v0.9.2-beta.8', 'v0.9.2-beta.9'),
+            'commit-interruption-release-pair-refused')
     initial = STABLE if bridge else predecessor
     result['fixtureDefaultAclRemoved'], result['fixtureTimezoneProtected'] = preflight(environment)
     result['phase'] = 'publisher'
@@ -1246,13 +1313,28 @@ def fixture(environment, result):
             result['targetProgress']['operations'] == [result['checkpointInterruption']['operation']])
         return
     with observe_progress(target[0], result):
-        launch(candidate, 'target', 1500)
+        if committed_fault:
+            try:
+                with interrupt_at_checkpoint(predecessor, target, result, committed=True):
+                    launch(candidate, 'target', 1500)
+            except Refused:
+                require(result.get('coreCommitInterruption', {}).get('sent') is True, 'commit-interruption-not-observed')
+                result['phase'] = 'committed-recovery'
+                verify_committed_return(predecessor, target, result)
+            else:
+                raise Refused('commit-interruption-expected-target-refusal-not-observed')
+        else:
+            launch(candidate, 'target', 1500)
     result['phase'] = 'terminal-readback'
     if bridge:
         require(executed_launcher(candidate, 'target', target) != bridge_receipt, 'launcher-receipt-replayed')
     target_host = check_host(target)
     completed(target_host, predecessor, target, prior_operations)
+    if committed_fault:
+        require(target_host['job']['id'] == result['coreCommitInterruption']['operation'], 'commit-operation-changed')
     result['targetProgress']['boundToTerminalOperation'] = result['targetProgress']['operations'] == [target_host['job']['id']]
+    if committed_fault:
+        require(result['targetProgress']['boundToTerminalOperation'], 'commit-progress-operation-refused')
     cookie = session('login', credential)
     try:
         build(cookie, target)
@@ -1268,6 +1350,12 @@ def fixture(environment, result):
             result['phase'] = 'installed-app-cli'
             verify_installed_app_backup(cookie, identity, original)
             result['installedAppBackupVerified'] = True
+        if installed_cli == 'true':
+            result['phase'] = 'installed-store-cli-update'
+            module = load('orbis-official-store-cli', Path(__file__).parent)
+            module.installed_cli_update(sys.modules[__name__], cookie, predecessor, target)
+            require(app_data(identity) == original, 'installed-cli-update-changed-ota-markers')
+            result['installedAppUpdateVerified'] = True
     finally:
         http('POST', '/api/auth/logout', cookie=cookie, expect=(204,))
     result.update(phase='complete', source=predecessor[0], target=target[0], targetCommit=target[1], targetDigest=target[2],
