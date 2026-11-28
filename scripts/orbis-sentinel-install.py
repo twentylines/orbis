@@ -25,15 +25,15 @@ PYTHON = Path('/usr/bin/python3')
 INSTALLED_ROOT = Path('/opt/orbis-sentinel')
 INSTALLED_STATE = Path('/var/lib/orbis-sentinel')
 HOST_SOURCE_PLAN = 'orbis.host-source-publication-plan.v2'
-TOOLKIT_COMMIT = '16b2aa6158ab38d961e0d3f6a2d489b702ab63e3'
+TOOLKIT_COMMIT = '79df3acbdadb35630f471a35d17cd4d6a711eccb'
 TOOLKIT = {
-    'activate_release.py': (74274, '4441b23930193edf184756a6de12350a8aadff4685ecebe1792229ce9ab080a2'),
+    'activate_release.py': (74445, 'd296f5969569d894976345f66d38247e04948bed5acc82d655e12eac8d88b147'),
     'verify_release.py': (14462, '9461fb041d055bbae13cc3ce48f3daf09ff8835ceedb8a77c4bf15c237137629'),
     'stage_release.py': (23385, '4d4d52bfbfcc5891d6b1d17da9e14c7ff6c1559aa59e19db7aec5ae28adc50b2'),
     'bootstrap_verifier.py': (13977, '965002f855e940446951d27a2bd44a37043efa692d3e4ba56473bd5525de6e6c'),
     'LICENSE': (35149, '3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986'),
 }
-RELEASE = {'version': '0.1.0-dev.24', 'sha256': 'c9373a394c306524b2e37b76afa9eec42272507faf45657d7f46d1b9f8fb565f', 'sourceCommit': '16b2aa6158ab38d961e0d3f6a2d489b702ab63e3'}
+RELEASE = {'version': '0.1.0-dev.25', 'sha256': 'f6a90314f76a9e9367741e16ce55fc2bf8dd88105ac6964aea3d2c6ffb6c1f16', 'sourceCommit': TOOLKIT_COMMIT}
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 _PREPARATIONS = weakref.WeakKeyDictionary()
 _RETENTIONS = weakref.WeakKeyDictionary()
@@ -1208,7 +1208,8 @@ try:
                     raise api['RecoveryRequired']('The retained observer loaded profile changed')
                 if record['phase']=='complete':
                     host=api['_observer_host'](systemd,desired)
-                    api['_observer_socket'](systemd,admission['originalProfile'] is not None or host!=admission['originalHost'])
+                    deferred=admission['originalProfile'] is None or admission.get('originalSocketDeferred') is True
+                    api['_observer_socket'](systemd,not deferred or host!=admission['originalHost'])
                     expected_files={role:body.hex() for role,body in api['_observer_bodies'](installed['version']).items()}
                 else:
                     expected_files=admission['originalFiles']
