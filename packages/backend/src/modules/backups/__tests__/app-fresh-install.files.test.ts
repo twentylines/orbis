@@ -842,24 +842,33 @@ it('finishes a never-started skip-run install after preparation restart without 
   expect(f.sql.ids()).toEqual(['001-first', '002-current']);
 });
 
-it('finishes an interrupted metadata move using the saved package while the installed package is temporarily absent', async () => {
+it('resumes an interrupted metadata rename when installed apps and control state are on separate mounts', async () => {
   const f = await fixture({ named: true, hidden: true });
   const rename = fs.rename.bind(fs);
   let interrupted = false;
+  let retained: string | undefined;
+  const metadataMount = path.dirname(f.metadata) + path.sep;
   vi.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+    if (String(from).startsWith(metadataMount) !== String(to).startsWith(metadataMount)) {
+      throw Object.assign(new Error('Simulated cross-mount rename'), { code: 'EXDEV' });
+    }
     await rename(from, to);
     if (!interrupted && String(from) === f.metadata && String(to).endsWith('/previous-live')) {
       interrupted = true;
+      retained = path.dirname(String(to));
       throw new Error('Synthetic interrupted metadata move');
     }
   });
   expect((await f.execute()).success).toBe(false);
   expect(interrupted).toBe(true);
+  if (!retained) throw new Error('Missing retained app metadata');
+  expect((await fs.stat(retained)).mode & 0o777).toBe(0o700);
   await expect(fs.lstat(f.metadata)).rejects.toMatchObject({ code: 'ENOENT' });
   expect((await f.redeliver()).reply).toMatchObject({ success: true, alreadyCompleted: true });
   expect(f.creates()).toBe(1);
   expect(f.starts()).toBe(1);
   expect(await fs.readFile(path.join(f.data, 'data/version'), 'utf8')).toBe('seed=prepared');
+  await expect(fs.lstat(retained)).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
 it.each(['target', 'selected', 'downloaded', 'bound'] as const)('resumes the same sealed fresh request before context after %s', async (point) => {

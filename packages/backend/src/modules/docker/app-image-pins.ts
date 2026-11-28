@@ -225,10 +225,11 @@ export type MetadataState = { entries: MetadataEntry[]; envSha256: string | null
 const recovery = () => new Error('Retained app update requires explicit recovery. Its metadata and any new app writes were preserved.');
 const updatePath = (directory: string, appUrn: string) => location(directory, appUrn).replace(/\.json$/, '.update.json');
 
-function stagedPaths(directory: string, id: string) {
+function stagedPaths(directory: string, id: string, metadata?: string) {
   const staging = path.join(directory, `update-${id}`);
-  const target = path.join(staging, 'target');
-  return { staging, target, compose: path.join(target, APP_GENERATED_COMPOSE_FILENAME), env: path.join(staging, 'target.env') };
+  const swap = metadata ? path.join(path.dirname(metadata), `.orbis-update-${id}`) : staging;
+  const target = path.join(swap, 'target');
+  return { staging, swap, target, compose: path.join(target, APP_GENERATED_COMPOSE_FILENAME), env: path.join(staging, 'target.env') };
 }
 
 const sameDirectory = (actual: Stats, expected: unknown) =>
@@ -481,10 +482,21 @@ export const appUpdateStorage = {
 export async function readStagedAppUpdate(directory: string, appUrn: string, id: string) {
   const guard = await requireAppImagePinUpdate(directory, appUrn, id);
   if (guard?.phase !== 'target-ready') throw recovery();
-  const paths = stagedPaths(directory, id);
+  let paths = stagedPaths(directory, id);
   if (!(await directorySafe(paths.staging, false))) throw recovery();
   const journal = await readUpdateJournal(paths.staging, guard);
   if (!record(journal) || journal.id !== id || journal.appUrn !== appUrn || journal.phase !== guard.phase || !journal.prepared) throw recovery();
+  if (guard.version === 2 && journal.swapIdentity !== undefined) {
+    if (typeof journal.metadata !== 'string' || !path.isAbsolute(journal.metadata) || path.normalize(journal.metadata) !== journal.metadata)
+      throw recovery();
+    paths = stagedPaths(directory, id, journal.metadata);
+    if (
+      !(await directorySafe(paths.swap, false)) ||
+      !sameDirectory(await fs.lstat(path.dirname(journal.metadata)), journal.metadataParent) ||
+      !sameDirectory(await fs.lstat(paths.swap), journal.swapIdentity)
+    )
+      throw recovery();
+  }
   if (
     !sameDirectory(await fs.lstat(paths.target), journal.targetIdentity) ||
     JSON.stringify(await metadataState(paths.target, paths.env)) !== JSON.stringify(journal.prepared)

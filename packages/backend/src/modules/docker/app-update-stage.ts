@@ -186,6 +186,7 @@ const stateSchema = type({
   metadataParent: identity,
   environmentParent: identity,
   stagingIdentity: identity,
+  'swapIdentity?': identity,
   controlIdentity: identity,
   retainedPinsSha256: hash.or('null'),
   baseline: metadata,
@@ -430,13 +431,13 @@ export class AppUpdateStage implements StagedAppImageUpdate {
     return this.state.id;
   }
   get targetDirectory() {
-    return files.stagedPaths(this.input.directory, this.id).target;
+    return this.paths.target;
   }
   private get paths() {
-    return files.stagedPaths(this.input.directory, this.id);
+    return files.stagedPaths(this.input.directory, this.id, this.state.swapIdentity ? this.state.metadata : undefined);
   }
   private get previous() {
-    return path.join(this.paths.staging, 'previous-live');
+    return path.join(this.paths.swap, 'previous-live');
   }
   private get guardPath() {
     return files.updatePath(this.input.directory, this.state.appUrn);
@@ -466,11 +467,20 @@ export class AppUpdateStage implements StagedAppImageUpdate {
       const capacity = await fs.statfs(input.directory);
       if (capacity.bavail * capacity.bsize < 390 * 1024 * 1024) throw failed();
       const id = randomUUID();
-      const paths = files.stagedPaths(input.directory, id);
+      const paths = files.stagedPaths(input.directory, id, input.metadata);
+      const metadataDirectory = path.dirname(input.metadata);
+      await files.noSymlinkParents(metadataDirectory);
+      const metadataParent = files.directoryIdentity(await fs.lstat(metadataDirectory));
+      const originalIdentity = files.directoryIdentity(await fs.lstat(input.metadata));
+      if (metadataParent.dev !== originalIdentity.dev) throw failed();
+      const swapCapacity = await fs.statfs(metadataDirectory);
+      if (swapCapacity.bavail * swapCapacity.bsize < 65 * 1024 * 1024) throw failed();
       await fs.mkdir(paths.staging, { mode: 0o700 });
       await files.syncDirectory(input.directory);
-      const originalIdentity = files.directoryIdentity(await fs.lstat(input.metadata));
-      const metadataParent = files.directoryIdentity(await fs.lstat(path.dirname(input.metadata)));
+      // Linux rejects rename across separate bind mounts, even when st_dev is the same.
+      await fs.mkdir(paths.swap, { mode: 0o700 });
+      const swapIdentity = files.directoryIdentity(await fs.lstat(paths.swap));
+      await files.syncDirectory(metadataDirectory);
       const environmentParent = files.directoryIdentity(await fs.lstat(path.dirname(input.env)));
       const baseline = await files.metadataState(input.metadata, input.env, paths.staging);
       if (
@@ -505,6 +515,7 @@ export class AppUpdateStage implements StagedAppImageUpdate {
         metadataParent,
         environmentParent,
         stagingIdentity: files.directoryIdentity(await fs.lstat(paths.staging)),
+        swapIdentity,
         controlIdentity: files.directoryIdentity(await fs.lstat(input.directory)),
         retainedPinsSha256: pinBytes ? digest(pinBytes) : null,
         baseline,
@@ -602,6 +613,11 @@ export class AppUpdateStage implements StagedAppImageUpdate {
       await files.noSymlinkParents(name);
       if (!files.sameDirectory(await fs.lstat(name), expected)) throw failed();
     }
+    if (
+      this.state.swapIdentity &&
+      (!(await files.directorySafe(this.paths.swap, false)) || !files.sameDirectory(await fs.lstat(this.paths.swap), this.state.swapIdentity))
+    )
+      throw failed();
   }
   private async check() {
     await this.checkParents();
@@ -832,6 +848,7 @@ export class AppUpdateStage implements StagedAppImageUpdate {
       await files.replaceUpdateFile(this.paths.env, environment, 0o600);
       const prepared = await files.metadataState(this.paths.target, this.paths.env);
       await syncTree(this.paths.target, prepared, this.paths.env);
+      await files.syncDirectory(this.paths.swap);
       await this.save({ phase: 'target-ready', prepared, targetIdentity: files.directoryIdentity(target) });
     });
   }
@@ -923,14 +940,14 @@ export class AppUpdateStage implements StagedAppImageUpdate {
         await this.save({ phase: 'switching', intent: 'move-original' });
         await fs.rename(this.state.metadata, this.previous);
         await files.syncDirectory(path.dirname(this.state.metadata));
-        await files.syncDirectory(this.paths.staging);
+        await files.syncDirectory(this.paths.swap);
       }
       position = await this.positions();
       if (!position.targetLive) {
         await this.save({ phase: 'switching', intent: 'move-target' });
         await fs.rename(this.paths.target, this.state.metadata);
         await files.syncDirectory(path.dirname(this.state.metadata));
-        await files.syncDirectory(this.paths.staging);
+        await files.syncDirectory(this.paths.swap);
       }
       await this.positions();
       await this.save({ phase: 'switching', intent: 'replace-env' });
@@ -1205,14 +1222,14 @@ export class AppUpdateStage implements StagedAppImageUpdate {
         await this.save({ phase: 'rolling-back', intent: 'rollback-target' });
         await fs.rename(this.state.metadata, this.paths.target);
         await files.syncDirectory(path.dirname(this.state.metadata));
-        await files.syncDirectory(this.paths.staging);
+        await files.syncDirectory(this.paths.swap);
       }
       position = await this.positions();
       if (!position.oldLive) {
         await this.save({ phase: 'rolling-back', intent: 'rollback-original' });
         await fs.rename(this.previous, this.state.metadata);
         await files.syncDirectory(path.dirname(this.state.metadata));
-        await files.syncDirectory(this.paths.staging);
+        await files.syncDirectory(this.paths.swap);
       }
       await this.save({ phase: 'rolling-back', intent: 'restore-env' });
       await this.positions();
@@ -1338,6 +1355,11 @@ export class AppUpdateStage implements StagedAppImageUpdate {
     // Publish terminal custody before releasing the app barrier; orphaned terminal staging stays private on interruption.
     await fs.unlink(this.guardPath);
     await files.syncDirectory(this.input.directory);
+    if (this.state.swapIdentity) {
+      if (!files.sameDirectory(await fs.lstat(this.paths.swap), this.state.swapIdentity)) throw failed();
+      await fs.rm(this.paths.swap, { recursive: true });
+      await files.syncDirectory(path.dirname(this.paths.swap));
+    }
     if (!files.sameDirectory(await fs.lstat(this.paths.staging), this.state.stagingIdentity)) throw failed();
     await fs.rm(this.paths.staging, { recursive: true });
     await files.syncDirectory(this.input.directory);
