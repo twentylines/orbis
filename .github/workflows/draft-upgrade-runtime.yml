@@ -19,6 +19,10 @@ on:
         description: Successful release workflow run for the target
         required: true
         type: string
+      release_commit:
+        description: Exact source commit from both publishers when testing an earlier pair
+        required: false
+        type: string
       rehearsal:
         description: Qualification of the verified Orbis draft pair
         required: true
@@ -47,10 +51,12 @@ jobs:
       DRAFT_BRIDGE_RUN: ${{ inputs.bridge_run }}
       DRAFT_TARGET_TAG: ${{ inputs.target_tag }}
       DRAFT_TARGET_RUN: ${{ inputs.target_run }}
+      DRAFT_RELEASE_COMMIT: ${{ inputs.release_commit }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       # GitHub restricts draft visibility to credentials with push access.
       # Only this acquisition step receives that token. The installed product
@@ -59,10 +65,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sudo --non-interactive --preserve-env=GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_SHA,GH_TOKEN,RUNNER_ENVIRONMENT,DRAFT_UPGRADE_CASE,DRAFT_BRIDGE_TAG,DRAFT_BRIDGE_RUN,DRAFT_TARGET_TAG,DRAFT_TARGET_RUN \
+          sudo --non-interactive --preserve-env=GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_SHA,GH_TOKEN,RUNNER_ENVIRONMENT,DRAFT_UPGRADE_CASE,DRAFT_BRIDGE_TAG,DRAFT_BRIDGE_RUN,DRAFT_TARGET_TAG,DRAFT_TARGET_RUN,DRAFT_RELEASE_COMMIT \
             /usr/bin/python3 -I -B packages/backend/scripts/orbis-official-upgrade-runtime.py --acquire-drafts
 
       - name: Rehearse the signed draft pair
         run: |
-          sudo --non-interactive --preserve-env=CI,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_SHA,RUNNER_ENVIRONMENT,DRAFT_UPGRADE_CASE,DRAFT_BRIDGE_TAG,DRAFT_BRIDGE_RUN,DRAFT_TARGET_TAG,DRAFT_TARGET_RUN \
+          sudo --non-interactive --preserve-env=CI,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_SHA,RUNNER_ENVIRONMENT,DRAFT_UPGRADE_CASE,DRAFT_BRIDGE_TAG,DRAFT_BRIDGE_RUN,DRAFT_TARGET_TAG,DRAFT_TARGET_RUN,DRAFT_RELEASE_COMMIT \
             /usr/bin/python3 -I -B packages/backend/scripts/orbis-official-upgrade-runtime.py

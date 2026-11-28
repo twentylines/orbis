@@ -92,9 +92,11 @@ try {
   const fresh = journal.freshInstall;
   if (!fresh || !freshPhases.has(fresh.phase) || typeof fresh.createAttempted !== 'boolean' ||
       !Array.isArray(fresh.containers) || fresh.containers.length > 256) throw new Error();
+  const imageId = journal.pulledImages?.imageIds?.web;
+  const binding = /^sha256:[a-f0-9]{64}$/.test(imageId) ? {stageId: guard.id, imageId} : null;
   process.stdout.write(JSON.stringify({readback: 'bound', stage: guard.phase, freshPhase: fresh.phase,
     createAttempted: fresh.createAttempted, recordedContainers: fresh.containers.length,
-    pinnedImages: Boolean(fresh.imagePinsSha256), ...publicationReadback(journal, staging)}));
+    pinnedImages: Boolean(fresh.imagePinsSha256), binding, ...publicationReadback(journal, staging)}));
 } catch (error) {
   process.stdout.write(JSON.stringify({readback: error.code === 'ENOENT' ? 'absent' : 'unverified'}));
 }
@@ -165,12 +167,36 @@ def install_readback(runtime, request):
         evidence = json.loads(output)
     except (OSError, ValueError):
         evidence = {'readback': 'unavailable'}
+    binding = evidence.pop('binding', None)
     try:
         states = runtime.run(runtime.DOCKER + ['ps', '-a', '--filter', f'label=runtipi.appurn={URN}',
                              '--format', '{{.State}}'], timeout=10).splitlines()
         if len(states) <= 256 and all(row in ('created', 'running', 'exited', 'dead', 'paused', 'restarting', 'removing') for row in states):
             evidence['observedContainerStates'] = {state: states.count(state) for state in sorted(set(states))}
-    except (OSError, ValueError):
+        if binding is not None and states == ['created']:
+            containers = runtime.run(runtime.DOCKER + ['ps', '-aq', '--no-trunc',
+                '--filter', f'label=runtipi.appurn={URN}'], timeout=10)
+            if re.fullmatch(r'[a-f0-9]{64}', containers):
+                observed = json.loads(runtime.run(runtime.DOCKER + ['inspect', '--format', '{{json .}}', containers], timeout=10))
+                state, labels = observed['State'], observed['Config']['Labels']
+                mounts = observed['Mounts']
+                expected_source = str(runtime.ROOT / 'app-data' / STORE / APP / 'data')
+                image = json.loads(runtime.run(runtime.DOCKER + ['image', 'inspect', '--format', '{{json .Config.Volumes}}',
+                                                  binding['imageId']], timeout=10))
+                evidence['createdContainerChecks'] = {
+                    'ownedProject': labels.get('com.docker.compose.project') == URN.replace(':', '_'),
+                    'service': labels.get('com.docker.compose.service') == 'web',
+                    'managed': labels.get('runtipi.managed') == 'true',
+                    'stage': labels.get('io.orbis.app-update.stage') == binding['stageId'],
+                    'image': observed['Image'] == binding['imageId'],
+                    'stopped': state['Pid'] == 0 and all(state[key] is False for key in ('Running', 'Paused', 'Restarting', 'Dead')),
+                    'neverStarted': bool(re.fullmatch(r'0001-01-01T00:00:00(?:\.0+)?Z', state['StartedAt'])),
+                    'dataMount': any(item.get('Type') == 'bind' and item.get('Destination') == '/ota-data'
+                                     and item.get('Source') == expected_source and item.get('RW') is True for item in mounts),
+                    'mountCount': len(mounts),
+                    'imageVolumeCount': len(image or {}),
+                }
+    except (OSError, ValueError, TypeError, KeyError):
         pass
     return evidence
 

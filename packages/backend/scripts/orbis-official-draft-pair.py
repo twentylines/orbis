@@ -12,11 +12,13 @@ REPO = 'twentylines/orbis'
 
 
 def selection(environment):
-    commit = environment.get('GITHUB_SHA', '')
+    harness = environment.get('GITHUB_SHA', '')
+    commit = environment.get('DRAFT_RELEASE_COMMIT') or harness
     bridge_tag, target_tag = (environment.get(f'DRAFT_{role}_TAG', '') for role in ('BRIDGE', 'TARGET'))
     bridge_run, target_run = (environment.get(f'DRAFT_{role}_RUN', '') for role in ('BRIDGE', 'TARGET'))
     tag_pattern = r'v[0-9]{1,5}\.[0-9]{1,5}\.[0-9]{1,5}-beta\.[0-9]{1,8}'
-    if not (re.fullmatch(r'[a-f0-9]{40}', commit) and bridge_tag != target_tag and bridge_run != target_run
+    if not (re.fullmatch(r'[a-f0-9]{40}', harness) and re.fullmatch(r'[a-f0-9]{40}', commit)
+            and bridge_tag != target_tag and bridge_run != target_run
             and all(re.fullmatch(tag_pattern, tag) for tag in (bridge_tag, target_tag))
             and all(re.fullmatch(r'[1-9][0-9]{0,19}', run) for run in (bridge_run, target_run))):
         raise ValueError('draft-selection-refused')
@@ -33,6 +35,12 @@ def acquire(runtime, environment):
             and environment.get('GH_TOKEN')
             and not os.path.lexists(runtime.WORK) and not os.path.lexists(runtime.HOST), 'draft-acquisition-scope-refused')
     commit, drafts = selection(environment)
+    if commit != environment['GITHUB_SHA']:
+        checkout = Path(__file__).resolve().parents[3]
+        history = subprocess.run(['/usr/bin/git', '-c', f'safe.directory={checkout}', 'merge-base',
+                                 '--is-ancestor', commit, environment['GITHUB_SHA']],
+                                 cwd=checkout, check=False, capture_output=True, timeout=15)
+        require(history.returncode == 0, 'draft-source-is-not-harness-ancestor')
     public_target = environment.get('DRAFT_UPGRADE_CASE') == runtime.PUBLIC_DISCOVERY_CASE
     reader = runtime.load('orbis-release-check')
     boot = runtime.load('install-orbis')

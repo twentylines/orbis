@@ -1672,6 +1672,42 @@ def checkpoint_custody(update, job, snapshot, saved, result):
         result.setdefault('checkpointControllerCustody', {})['readback'] = 'unverified'
 
 
+def observer_return_readback(launcher, directory, operation):
+    # These transcripts remain in the private operation namespace. Only fixed
+    # states and line numbers in the authenticated toolkit reach the CI result.
+    evidence = {}
+    try:
+        record = launcher.decoded(launcher.read_file(Path('/var/lib/orbis-sentinel/observer-change.json'), 32768))
+        if (record.get('ticket', {}).get('binding', {}).get('operationId') == operation
+                and record.get('phase') in ('prepared', 'installed', 'complete', 'returning', 'returned', 'recovery-required')):
+            evidence['phase'] = record['phase']
+    except (OSError, ValueError, KeyError, AttributeError):
+        pass
+    with launcher.directory(directory) as fd:
+        preparations = sorted(name for name in os.listdir(fd) if re.fullmatch(r'sentinel-install-[a-f0-9]{32}', name))
+    attempts = []
+    if len(preparations) > 16:
+        return {**evidence, 'readback': 'many-preparations'}
+    for name in preparations:
+        scope = directory / name
+        with launcher.directory(scope) as fd:
+            returns = sorted(name for name in os.listdir(fd) if re.fullmatch(r'observer-return-[a-f0-9]{32}', name))
+        if len(returns) > 16:
+            return {**evidence, 'readback': 'many-returns'}
+        for name in returns:
+            path = scope / name
+            try:
+                stderr = launcher.read_file(path / 'observer-return.stderr', 16384)
+                stdout = launcher.read_file(path / 'observer-return.stdout', 65536)
+            except FileNotFoundError:
+                attempts.append({'transcript': 'missing'})
+                continue
+            frames = re.findall(rb'File "[^"\r\n]*/activate_release\.py", line ([1-9][0-9]{0,4}), in [a-zA-Z_]+', stderr)
+            attempts.append({'transcript': 'complete', 'hasStdout': bool(stdout), 'hasStderr': bool(stderr),
+                             'toolkitLines': sorted({int(line) for line in frames})})
+    return {**evidence, 'attempts': attempts}
+
+
 def failure_readback(environment, result):
     phase = result.get('phase')
     if phase not in ('guided-bridge', 'bridge-readback', 'guided-target', 'terminal-readback',
@@ -1748,6 +1784,8 @@ def failure_readback(environment, result):
             unit = supervision.Runtime().unit(supervision.reconciliation_unit_name(operation))
             if unit['ActiveState'] in ('inactive', 'failed', 'active', 'activating', 'deactivating'):
                 result['reconciliationUnitState'] = unit['ActiveState']
+            if 'integration-return-intent' in result.get('componentJournalPhases', []):
+                result['observerReturnReadback'] = observer_return_readback(launcher, directory, operation)
     except Exception:
         # An incomplete stage or absent custody supplies no authority.
         return
