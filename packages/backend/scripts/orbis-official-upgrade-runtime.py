@@ -697,26 +697,43 @@ def http(method, path, *, body=None, cookie=None, expect=(200,), timeout=8, maxi
 def sample_progress(target):
     # The browser polls this same loopback route. Do not pass an operator cookie
     # or keep the raw response, including file or download metadata.
+    host = ['/usr/bin/systemctl', 'show', '--property=MainPID', '--value', 'orbis-host.service']
+
+    def host_pid():
+        try:
+            return run(host, timeout=1)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return None
+
+    before = host_pid()
     try:
-        host = ['/usr/bin/systemctl', 'show', '--property=MainPID', '--value', 'orbis-host.service']
-        host_pid = run(host, timeout=1)
         body, _ = http('GET', '/api/system/core-update-progress', timeout=2, maximum=16 * 1024)
         require(type(body) is dict and set(body) == {'version', 'job'}
                 and type(body['version']) is int and body['version'] == 1, 'progress-fixture-shape-refused')
         job = body.get('job')
         if job is None or job.get('targetTag') != target:
-            return host_pid, None
+            return before, None, 'no-matching-job'
         require(re.fullmatch(r'[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}', job['id'])
                 and job.get('state') in
                 ('queued', 'running', 'recovering', 'complete', 'failed', 'interrupted')
                 and job.get('phase') in (None, 'downloading', 'installing', 'restarting', 'verifying', 'recovering'),
                 'progress-fixture-job-refused')
         # Only count a Host observation when both reads bracket this HTTP response.
-        after = run(host, timeout=1)
-        stable_pid = host_pid if host_pid == after and re.fullmatch(r'[0-9]{1,10}', host_pid) else None
-        return stable_pid, (job['id'], job.get('phase'))
+        after = host_pid()
+        stable_pid = before if before and before == after and re.fullmatch(r'[0-9]{1,10}', before) else None
+        return stable_pid, (job['id'], job.get('phase')), None
+    except Refused as error:
+        status = error.evidence.get('loopbackStatus')
+        transport = error.evidence.get('loopbackTransport')
+        if type(status) is int and 100 <= status <= 599:
+            reason = f'http-{status}'
+        elif transport in ('timeout', 'connection-reset', 'connection-refused', 'invalid-http', 'transport-unavailable'):
+            reason = transport
+        else:
+            reason = 'unverified-progress-response'
+        return None, None, reason
     except (OSError, ValueError, TypeError, AttributeError, KeyError, subprocess.SubprocessError):
-        return None, None
+        return None, None, 'unverified-progress-response'
 
 
 @contextmanager
@@ -725,8 +742,8 @@ def observe_progress(target, result):
     samples = []
     def collect():
         while not stop.is_set() and len(samples) < 6000:
-            host_pid, work = sample_progress(target)
-            samples.append((time.monotonic(), host_pid, work))
+            host_pid, work, missing_reason = sample_progress(target)
+            samples.append((time.monotonic(), host_pid, work, missing_reason))
             stop.wait(0.25)
     observer = Thread(target=collect, name='native-progress-readback')
     observer.start()
@@ -735,11 +752,13 @@ def observe_progress(target, result):
     finally:
         stop.set()
         observer.join()
-        valid = [(observed, pid, job) for observed, pid, job in samples if job is not None]
+        valid = [(observed, pid, job) for observed, pid, job, _ in samples if job is not None]
         operations = {job[0] for _, _, job in valid}
         gaps = [b[0] - a[0] for a, b in zip(valid, valid[1:]) if a[2][0] == b[2][0]]
-        after_start = sum(job is None for observed, _, job in samples
-                          if valid and valid[0][0] <= observed <= valid[-1][0])
+        missing = {}
+        for observed, _, job, reason in samples:
+            if job is None and valid and valid[0][0] <= observed <= valid[-1][0]:
+                missing[reason] = missing.get(reason, 0) + 1
         result['targetProgress'] = {
             'samples': len(samples),
             'boundSamples': len(valid),
@@ -747,7 +766,8 @@ def observe_progress(target, result):
             'phases': sorted({job[1] for _, _, job in valid if job[1] is not None}),
             'hostPidsDuringBoundSamples': len({pid for _, pid, _ in valid if pid not in (None, '0')}),
             'boundSampleWithHostStopped': any(pid == '0' for _, pid, _ in valid),
-            'missingSamplesBetweenBoundReads': after_start,
+            'missingSamplesBetweenBoundReads': sum(missing.values()),
+            'missingSampleReasonsBetweenBoundReads': missing,
             'longestBetweenBoundReadsMs': round(1000 * max(gaps)) if gaps else None,
         }
 
