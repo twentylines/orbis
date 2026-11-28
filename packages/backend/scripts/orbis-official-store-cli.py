@@ -226,9 +226,16 @@ def deployment(runtime, cookie, version, latest, image, token):
                     and selected['metadata']['latestVersion'] == latest, 'cli-update-version-or-state-refused')
     containers = runtime.run(runtime.DOCKER + ['ps', '-q', '--no-trunc', '--filter', f'label=runtipi.appurn={URN}'])
     runtime.require(re.fullmatch(r'[a-f0-9]{64}', containers), 'cli-update-active-container-refused')
-    fields = '{{json .Config.Image}} {{json .State.Running}} {{json (index .Config.Labels "io.orbis.cli-update-revision")}}'
+    # Orbis resolves the registry reference before starting the frozen Compose plan.
+    image_fields = '{"id":{{json .Id}},"digests":{{json .RepoDigests}}}'
+    expected = json.loads(runtime.run(runtime.DOCKER + ['image', 'inspect', '--format', image_fields, image]))
+    expected_id = expected.get('id')
+    repo_digests = expected.get('digests')
+    runtime.require(isinstance(expected_id, str) and re.fullmatch(r'sha256:[a-f0-9]{64}', expected_id)
+                    and isinstance(repo_digests, list) and image in repo_digests, 'cli-update-expected-image-refused')
+    fields = '{{json .Image}} {{json .State.Running}} {{json (index .Config.Labels "io.orbis.cli-update-revision")}}'
     inspected = runtime.run(runtime.DOCKER + ['inspect', '--format', fields, containers])
-    runtime.require(inspected == f'"{image}" true "{version}"', 'cli-update-runtime-image-refused')
+    runtime.require(inspected == f'"{expected_id}" true "{version}"', 'cli-update-runtime-image-refused')
     marker = runtime.run(runtime.DOCKER + ['exec', containers, 'cat', '/ota-data/marker'])
     runtime.require(marker == token, 'cli-update-original-marker-refused')
     return containers
