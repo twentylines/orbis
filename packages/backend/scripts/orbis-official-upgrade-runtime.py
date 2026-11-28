@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import pwd
 import re
 import secrets
 import shutil
@@ -75,6 +76,36 @@ def run(args, *, timeout=20, allowed=(0,), code='native-command-refused'):
     return result.stdout.strip()
 
 
+def protect_installer_parent(environment):
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    root_fd = os.open('/', flags)
+    try:
+        root = os.fstat(root_fd)
+        require(root.st_uid == 0 and not root.st_mode & 0o022, 'installer-root-ancestor-refused')
+        opt_fd = os.open('opt', flags, dir_fd=root_fd)
+        try:
+            before = os.fstat(opt_fd)
+            mode = stat.S_IMODE(before.st_mode)
+            if before.st_uid != 0 or mode & 0o022:
+                # Orbis fixes Host and Sentinel paths under /opt. Restore only
+                # the runner image's top-level directory to their normal policy.
+                uid = environment.get('SUDO_UID', '')
+                require(re.fullmatch(r'[1-9][0-9]{0,9}', uid) and pwd.getpwuid(int(uid)).pw_name == 'runner'
+                        and before.st_uid in (0, int(uid)), 'installer-opt-ancestor-refused')
+                if before.st_uid != 0:
+                    os.fchown(opt_fd, 0, 0)
+                if mode & 0o022:
+                    os.fchmod(opt_fd, mode & ~0o022)
+            after = os.stat('opt', dir_fd=root_fd, follow_symlinks=False)
+            require((after.st_dev, after.st_ino) == (before.st_dev, before.st_ino)
+                    and after.st_uid == 0 and after.st_mode & 0o022 == 0,
+                    'installer-opt-ancestor-unverified')
+        finally:
+            os.close(opt_fd)
+    finally:
+        os.close(root_fd)
+
+
 def preflight(environment):
     require(os.getuid() == os.geteuid() == 0 and sys.platform == 'linux' and platform.machine() == 'x86_64'
             and environment.get('GITHUB_ACTIONS') == 'true' and environment.get('RUNNER_ENVIRONMENT') == 'github-hosted'
@@ -86,8 +117,6 @@ def preflight(environment):
     require(all(not os.path.lexists(path) for path in (WORK, HOST, Path('/var/lib/orbis'), Path('/opt/orbis-sentinel'),
                 Path('/var/lib/orbis-sentinel'), Path('/run/orbis'), Path('/etc/systemd/system/orbis-host.service'))),
             'existing-installation-refused')
-    require(all(path.resolve(strict=True) == path and path.stat().st_uid == 0 and not path.stat().st_mode & 0o022
-                for path in WORK.parents), 'installer-parent-refused')
     prerequisites = load('orbis-install-prerequisites')
     try:
         ready = prerequisites.inspect('default')['kind'] == 'ready'
@@ -103,6 +132,7 @@ def preflight(environment):
     docker_root = Path(run(DOCKER + ['info', '--format', '{{.DockerRootDir}}']))
     require(docker_root.is_absolute() and all(shutil.disk_usage(path).free >= 4 * 1024**3
             for path in (WORK.parent, docker_root, Path('/var/lib'))), 'disposable-space-required')
+    protect_installer_parent(environment)
     WORK.mkdir(mode=0o700)
     (WORK / 'tmp').mkdir(mode=0o700)
 
