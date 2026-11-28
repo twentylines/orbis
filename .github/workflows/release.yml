@@ -8,7 +8,11 @@ on:
         required: true
         type: string
       runtipi_412:
-        description: 'Build a qualified Nightly release on the Runtipi 4.12 base'
+        description: 'Build a draft on the Runtipi 4.12 base for in-app upgrade verification'
+        type: boolean
+        default: false
+      candidate_only:
+        description: 'Keep this build out of the public update catalogue while it is being verified'
         type: boolean
         default: false
   push:
@@ -42,6 +46,7 @@ jobs:
       DOCKER_BUILD_SUMMARY: 'false'
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
       RUNTIPI_COMPATIBILITY: ${{ inputs.runtipi_412 && '4.12.0' || '4.10.1' }}
+      CANDIDATE_ONLY: ${{ inputs.candidate_only && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -158,7 +163,7 @@ jobs:
           fi
           python3 scripts/release-artifact-privacy.py publish --oci "$RELEASE_DIR/image.oci.tar" --tag "$RELEASE_TAG" --commit "$RELEASE_SHA" --manifest release-manifest.json --installer installer-assets --notes release-notes.md --report "$RELEASE_DIR/privacy-receipt.json" --registry-auth "$DOCKER_CONFIG/config.json" "${flags[@]}"
 
-      - name: Publish GitHub release
+      - name: Create GitHub release or unpublished update candidate
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DISPLAY_VERSION: ${{ steps.metadata.outputs.displayVersion }}
@@ -168,7 +173,13 @@ jobs:
           python3 scripts/release-artifact-privacy.py verify --oci "$RELEASE_DIR/image.oci.tar" --tag "$RELEASE_TAG" --commit "$RELEASE_SHA" --manifest release-manifest.json --installer installer-assets --notes release-notes.md --report "$RELEASE_DIR/privacy-receipt.json"
           flags=(--verify-tag --title "Orbis $DISPLAY_VERSION" --notes-file release-notes.md)
           if [[ "$IS_PRERELEASE" == true ]]; then
-            flags+=(--prerelease --latest=false)
+            flags+=(--prerelease)
+          fi
+          if [[ "$CANDIDATE_ONLY" == true || "$RUNTIPI_COMPATIBILITY" == 4.12.0 ]]; then
+            # Legacy updaters discover public releases before checking compatibility.
+            flags+=(--draft --latest=false)
+          elif [[ "$IS_PRERELEASE" == true ]]; then
+            flags+=(--latest=false)
           else
             flags+=(--latest)
           fi
