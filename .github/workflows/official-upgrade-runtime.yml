@@ -1,0 +1,37 @@
+name: Official upgrade runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_commit:
+        description: Exact verified beta.5 Core commit
+        required: true
+        type: string
+      target_digest:
+        description: Exact verified beta.5 OCI index digest
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  official-upgrade:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      TARGET_COMMIT: ${{ inputs.target_commit }}
+      TARGET_DIGEST: ${{ inputs.target_digest }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Verify the coordinated update on a disposable Linux runner
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          sudo --non-interactive --preserve-env=CI,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_TOKEN,RUNNER_ENVIRONMENT,TARGET_COMMIT,TARGET_DIGEST \
+            /usr/bin/python3 -I -B packages/backend/scripts/orbis-official-upgrade-runtime.py
