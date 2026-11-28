@@ -25,16 +25,16 @@ PYTHON = Path('/usr/bin/python3')
 INSTALLED_ROOT = Path('/opt/orbis-sentinel')
 INSTALLED_STATE = Path('/var/lib/orbis-sentinel')
 HOST_SOURCE_PLAN = 'orbis.host-source-publication-plan.v2'
-TOOLKIT_COMMIT = '79df3acbdadb35630f471a35d17cd4d6a711eccb'
+TOOLKIT_COMMIT = '090d1ae1b880490c2e61bfff32e025a79f43ecce'
 TOOLKIT = {
-    'activate_release.py': (74445, 'd296f5969569d894976345f66d38247e04948bed5acc82d655e12eac8d88b147'),
+    'activate_release.py': (74801, 'd14e979d3fa7ead73ca836472e72d58c1cda573b38a1e371ff69fb5b781d4772'),
     'verify_release.py': (14462, '9461fb041d055bbae13cc3ce48f3daf09ff8835ceedb8a77c4bf15c237137629'),
     'stage_release.py': (23385, '4d4d52bfbfcc5891d6b1d17da9e14c7ff6c1559aa59e19db7aec5ae28adc50b2'),
     'bootstrap_verifier.py': (13977, '965002f855e940446951d27a2bd44a37043efa692d3e4ba56473bd5525de6e6c'),
     'LICENSE': (35149, '3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986'),
 }
 # The coordinated updater reads this identity without importing the target script.
-RELEASE = {'version': '0.1.0-dev.25', 'sha256': 'f6a90314f76a9e9367741e16ce55fc2bf8dd88105ac6964aea3d2c6ffb6c1f16', 'sourceCommit': '79df3acbdadb35630f471a35d17cd4d6a711eccb'}
+RELEASE = {'version': '0.1.0-dev.26', 'sha256': 'e8e3fc3e1c86378d3a190b8a90f88cfb32cd5dd87c010cd745f4be983fe64f91', 'sourceCommit': '090d1ae1b880490c2e61bfff32e025a79f43ecce'}
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 _PREPARATIONS = weakref.WeakKeyDictionary()
 _RETENTIONS = weakref.WeakKeyDictionary()

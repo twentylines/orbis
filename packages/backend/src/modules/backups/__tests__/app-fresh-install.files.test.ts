@@ -76,6 +76,7 @@ async function fixture(
     readonlyVolume?: boolean;
     profiles?: boolean;
     links?: boolean;
+    unseededBind?: { createHostPath: boolean };
   } = {},
 ) {
   const data = path.join(root, 'app-data/store/demo');
@@ -87,8 +88,10 @@ async function fixture(
   const source = convertLegacyToYaml({ schemaVersion: 2, services: [{ name: 'web', image: 'example.test/demo:1', isMain: true, internalPort: 80 }] });
   await fs.writeFile(path.join(catalogue, 'config.json'), JSON.stringify(info), { mode: 0o640 });
   await fs.writeFile(path.join(catalogue, 'source.json'), JSON.stringify(source), { mode: 0o640 });
-  await fs.mkdir(path.join(catalogue, 'data'), { mode: 0o750 });
-  await fs.writeFile(path.join(catalogue, 'data/version.template'), 'seed={{VALUE}}', { mode: 0o640 });
+  if (!options.unseededBind) {
+    await fs.mkdir(path.join(catalogue, 'data'), { mode: 0o750 });
+    await fs.writeFile(path.join(catalogue, 'data/version.template'), 'seed={{VALUE}}', { mode: 0o640 });
+  }
   if (options.links) {
     await fs.symlink('version.template', path.join(catalogue, 'data/alias'));
     await fs.symlink('future-file', path.join(catalogue, 'data/dangling'));
@@ -202,7 +205,15 @@ async function fixture(
       close: async () => {},
     } as unknown as AppStorageWitness;
   });
-  const mountDefinitions: Record<string, unknown>[] = [{ type: 'bind', source: host + '/data', target: '/config', read_only: false }];
+  const mountDefinitions: Record<string, unknown>[] = [
+    {
+      type: 'bind',
+      source: host + '/data',
+      target: '/config',
+      read_only: false,
+      ...(options.unseededBind ? { bind: { create_host_path: options.unseededBind.createHostPath } } : {}),
+    },
+  ];
   if (options.named || options.oldVolume || options.readonlyVolume)
     mountDefinitions.push({ type: 'volume', source: 'db', target: '/database', read_only: !!options.readonlyVolume });
   const effective = {
@@ -415,6 +426,22 @@ async function fixture(
     claim,
   };
 }
+it.each([false, true])('prepares an unseeded Compose bind source before activation, skipRun=%s', async (skipRun) => {
+  const f = await fixture({ skipRun, unseededBind: { createHostPath: true } });
+  await expect(fs.lstat(path.join(f.data, 'data'))).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(await f.execute()).toMatchObject({ success: true, updateStatus: skipRun ? 'stopped' : 'running' });
+  expect((await fs.lstat(path.join(f.data, 'data'))).isDirectory()).toBe(true);
+  expect(f.starts()).toBe(skipRun ? 0 : 1);
+});
+
+it('keeps a missing bind source absent when the Compose configuration forbids creation', async () => {
+  const f = await fixture({ unseededBind: { createHostPath: false } });
+  expect(await f.execute()).toMatchObject({ success: false });
+  await expect(fs.lstat(path.join(f.data, 'data'))).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(f.starts()).toBe(0);
+  expect(f.sql.row().migrations_baselined).toBe(false);
+});
+
 it.each([false, true])('runs the real fresh install and atomic baseline with historical IDs, skipRun=%s', async (skipRun) => {
   const f = await fixture({ skipRun });
   expect(await f.execute()).toMatchObject({ success: true, updateStatus: skipRun ? 'stopped' : 'running' });

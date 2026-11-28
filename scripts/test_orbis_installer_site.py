@@ -32,7 +32,7 @@ class InstallerEndpointTests(unittest.TestCase):
         self.assertIn("workflows: ['Orbis release']", triggers)
         self.assertIn('public_release_run:', triggers)
         start = workflow.index('          [[ "$UPSTREAM_RUN"')
-        end = workflow.index('\n  verify:', start)
+        end = workflow.index('\n      - name: Require the verified public upgrade', start)
         admission = textwrap.dedent(workflow[start:end])
         # Run the production filter against synthetic API responses. This
         # invokes jq with the workflow's actual expressions and never calls GitHub.
@@ -84,6 +84,88 @@ gh() {
         self.assertIn('ref: ${{ github.sha }}', workflow)
         self.assertNotIn('ref: main', workflow)
         self.assertLess(workflow.index('git/ref/heads/main'), workflow.index('scripts/publish-installer-site.py "$INSTALLER_WORK/'))
+
+    def test_coordinated_installer_requires_the_current_hosted_public_ota_receipt(self):
+        workflow = (Path(__file__).resolve().parent.parent / '.github/workflows/installer-site.yml').read_text()
+        step = workflow.split('      - name: Require the verified public upgrade\n', 1)[1].split('\n  verify:', 1)[0]
+        admission = textwrap.dedent(step.split('        run: |\n', 1)[1])
+        gh = '''
+gh() {
+  case "$*" in
+    "api repos/$GITHUB_REPOSITORY/actions/runs/123") printf '%s\n' "$FIXTURE_RUN" ;;
+    "api repos/$GITHUB_REPOSITORY/actions/runs/123/artifacts") printf '%s\n' "$FIXTURE_ARTIFACTS" ;;
+    "run download 123 --repo $GITHUB_REPOSITORY --name orbis-qualified-public-ota-123-2 --dir "*)
+      printf '%s\n' "$FIXTURE_APPROVAL" > "${!#}/approval.json" ;;
+    *) return 2 ;;
+  esac
+}
+'''
+        repo = 'twentylines/orbis'
+        head = 'a' * 40
+        run = {'path': '.github/workflows/draft-upgrade-runtime.yml', 'event': 'workflow_dispatch', 'status': 'completed',
+               'conclusion': 'success', 'head_repository': {'full_name': repo}, 'head_branch': 'main', 'head_sha': head, 'run_attempt': 2}
+        artifact = {'name': 'orbis-qualified-public-ota-123-2', 'expired': False, 'size_in_bytes': 400}
+        approval = {'schema': 'orbis.installer-qualified-approval.v1', 'tag': 'v0.9.2-beta.17', 'commit': head, 'digest': 'sha256:' + 'b' * 64}
+        cases = [
+            ('exact', run, [artifact], approval, True),
+            ('wrong-source', {**run, 'head_sha': 'c' * 40}, [artifact], approval, False),
+            ('wrong-workflow', {**run, 'path': '.github/workflows/release.yml'}, [artifact], approval, False),
+            ('failed-runtime', {**run, 'conclusion': 'failure'}, [artifact], approval, False),
+            ('old-attempt', run, [{**artifact, 'name': 'orbis-qualified-public-ota-123-1'}], approval, False),
+            ('duplicate', run, [artifact, artifact], approval, False),
+            ('invalid-digest', run, [artifact], {**approval, 'digest': 'invalid'}, False),
+        ]
+        for name, metadata, artifacts, receipt, accepted in cases:
+            with self.subTest(name=name):
+                output = Path(self.temp.name) / name
+                result = subprocess.run(['/bin/bash', '--noprofile', '--norc', '-euo', 'pipefail', '-c', gh + admission],
+                    env={**os.environ, 'GITHUB_OUTPUT': str(output), 'GITHUB_REPOSITORY': repo, 'GITHUB_SHA': head, 'UPSTREAM_RUN': '123',
+                         'GITHUB_WORKSPACE': self.temp.name, 'FIXTURE_RUN': json.dumps(metadata),
+                         'FIXTURE_ARTIFACTS': json.dumps({'artifacts': artifacts}), 'FIXTURE_APPROVAL': json.dumps(receipt)},
+                    capture_output=True, check=False, text=True)
+                self.assertEqual(result.returncode == 0, accepted, result.stderr)
+                if accepted:
+                    identity, status = output.read_text().splitlines()
+                    self.assertEqual(json.loads(identity.removeprefix('approval=')), approval)
+                    self.assertEqual(status, 'publish=true')
+                else:
+                    self.assertFalse(output.exists())
+
+    def test_public_ota_receipt_requires_completion_and_continuous_progress(self):
+        workflow = (Path(__file__).resolve().parent.parent / '.github/workflows/draft-upgrade-runtime.yml').read_text()
+        step = workflow.split('      - name: Seal verified public OTA identity\n', 1)[1].split('\n      - name:', 1)[0]
+        seal = textwrap.dedent(step.split('        run: |\n', 1)[1])
+        directory = Path(self.temp.name) / '.orbis-upgrade-qualification'
+        directory.mkdir()
+        tag = 'v0.9.2-beta.17'
+        commit = 'a' * 40
+        digest = 'sha256:' + 'b' * 64
+        receipt = {'schema': 'orbis.official-upgrade-runtime.v1', 'phase': 'complete', 'passed': True,
+                   'draftRehearsal': 'public-discovery-after-enrollment', 'runtipi': '4.12.0',
+                   'draftManifestAsset': 'qualified-release-manifest.json', 'legacyQualifiedTargetHiddenVerified': True,
+                   'stableBridgeVerified': True, 'updatesPlanApplyVerified': True, 'updatesApiVerified': True,
+                   'componentTerminalVerified': True, 'markerChecks': 2, 'target': tag, 'targetCommit': commit,
+                   'targetDigest': digest, 'draftTargetDigest': digest,
+                   'targetProgress': {'boundToTerminalOperation': True, 'boundSamples': 40, 'missingSamplesBetweenBoundReads': 0}}
+        for name, changes, accepted in [
+            ('exact', {}, True),
+            ('draft-only', {'draftRehearsal': 'updates-after-enrollment'}, False),
+            ('wrong-target', {'draftTargetDigest': 'sha256:' + 'c' * 64}, False),
+            ('progress-gap', {'targetProgress': {**receipt['targetProgress'], 'missingSamplesBetweenBoundReads': 1}}, False),
+            ('interrupted', {'phase': 'in-app-update-apply', 'passed': False}, False),
+        ]:
+            with self.subTest(name=name):
+                (directory / 'result.json').write_text(json.dumps({**receipt, **changes}))
+                result = subprocess.run(['/bin/bash', '--noprofile', '--norc', '-euo', 'pipefail', '-c', seal],
+                    cwd=self.temp.name, env={**os.environ, 'DRAFT_TARGET_TAG': tag, 'DRAFT_RELEASE_COMMIT': commit},
+                    capture_output=True, check=False, text=True)
+                self.assertEqual(result.returncode == 0, accepted, result.stderr)
+                approval = (directory / 'approval.json').read_text()
+                if accepted:
+                    self.assertEqual(json.loads(approval), {'schema': 'orbis.installer-qualified-approval.v1',
+                                                           'tag': tag, 'commit': commit, 'digest': digest})
+                else:
+                    self.assertEqual(approval, '')
 
     def setUp(self):
         self.release = {"schema": "orbis.release.v1", "image": "ghcr.io/twentylines/orbis", "tag": "v1.0.0", "commit": "a" * 40, "digest": "sha256:" + "b" * 64, "installationProtocol": "orbis.installation-state.v1", "runtipiCompatibility": "4.10.1"}
@@ -277,14 +359,58 @@ gh() {
 class CombinedChannelEndpointTests(unittest.TestCase):
     setUp = InstallerEndpointTests.setUp
     record = InstallerEndpointTests.record
-    def combined(self, rows=None, assets=None):
+    def combined(self, rows=None, assets=None, **options):
         assets = self.assets if assets is None else assets
         def fetch(url, limit):
             content = assets[url.rsplit("/", 1)[1]]
             self.assertLessEqual(len(content), limit)
             return content
         with mock.patch.object(SITE, "head_commit", return_value="b" * 40), mock.patch.object(SITE, "tag_commit", return_value=self.release["commit"]), mock.patch.object(SITE.BUILD, "committed_files", return_value=self.files):
-            return SITE.channel_site(Path(self.temp.name), rows or [self.selected], self.output, fetch)
+            return SITE.channel_site(Path(self.temp.name), rows or [self.selected], self.output, fetch, **options)
+
+    def coordinated_candidate(self, manifest=SITE.POLICY.QUALIFIED_CORE_MANIFEST):
+        self.release.update(tag="v1.0.1-beta.2", runtipiCompatibility=SITE.POLICY.QUALIFIED_CORE_BASE)
+        body = json.dumps(self.release).encode()
+        self.assets = {**SITE.BUILD.build(self.files, body), manifest: body}
+        self.selected = self.record(self.release["tag"])
+        self.selected["assets"] = [
+            {"name": name, "browser_download_url": SITE.BASE + "download/" + self.release["tag"] + "/" + name,
+             "state": "uploaded", "size": len(data), "digest": "sha256:" + SITE.BUILD.sha(data)}
+            for name, data in self.assets.items()
+        ]
+        return SITE.approved_installation({"schema": "orbis.installer-qualified-approval.v1",
+            **{key: self.release[key] for key in ("tag", "commit", "digest")}})
+
+    def test_public_coordinated_target_remains_off_pages_until_approved(self):
+        approval = self.coordinated_candidate()
+        for value in (None, {**approval, "tag": "v1.0.1-beta.1"}, {**approval, "digest": "sha256:" + "0" * 64}):
+            with self.subTest(approval=value), self.assertRaisesRegex(SITE.NoPublishedRelease, "awaits verified rollout"):
+                self.combined(approval=value)
+            self.assertFalse(self.output.exists())
+        result = self.combined(approval=approval)
+        self.assertEqual(result["channels"]["nightly"]["tag"], self.release["tag"])
+        self.assertIsNone(result["channels"]["stable"])
+
+    def test_previously_deployed_coordinated_channels_are_bound_to_the_launcher_bytes(self):
+        self.coordinated_candidate()
+        record = {"tag": self.release["tag"], "commit": self.release["commit"], "launcherSha256": "0" * 64}
+        channels = {"schema": "orbis.installer-channels.v1", "channels": {"stable": None, "nightly": record}}
+        def previous(url, _):
+            if url.endswith("/channels.json"):
+                return json.dumps(channels).encode()
+            self.assertTrue(url.endswith("/" + SITE.HISTORY))
+            return b'{"schema":"orbis.installer-history.v1","installers":{}}'
+        with self.assertRaisesRegex(SITE.NoPublishedRelease, "awaits verified rollout"):
+            self.combined(previous_fetch=previous)
+        self.assertFalse(self.output.exists())
+        record["launcherSha256"] = SITE.BUILD.sha(self.assets["install-orbis.py"])
+        self.assertEqual(self.combined(previous_fetch=previous)["channels"]["nightly"], record)
+
+    def test_old_coordinated_manifest_cannot_be_placed_on_pages(self):
+        approval = self.coordinated_candidate(SITE.POLICY.CORE_MANIFEST)
+        with self.assertRaisesRegex(SITE.NoPublishedRelease, "awaits verified rollout"):
+            self.combined(approval=approval)
+        self.assertFalse(self.output.exists())
 
     run_cli = InstallerEndpointTests.run_cli
 

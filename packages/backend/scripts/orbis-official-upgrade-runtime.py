@@ -62,6 +62,7 @@ STABLE_SENTINEL = {'version': '0.1.0-dev.19', 'sha256': '4a3c29039b768dbae15a562
                    'sourceCommit': '32e384d9d492d8b5cb1aea562bd86447e2cc04a0'}
 PAIRED_SENTINEL = {'version': '0.1.0-dev.25', 'sha256': 'f6a90314f76a9e9367741e16ce55fc2bf8dd88105ac6964aea3d2c6ffb6c1f16',
                    'sourceCommit': '79df3acbdadb35630f471a35d17cd4d6a711eccb'}
+DRAFT_SENTINEL_PINS = {}
 ASSETS = {'install-orbis.py': 1024 * 1024, 'orbis-installer-manifest.json': 65536,
           'orbis-installer.tar.gz': 64 * 1024 * 1024, 'release-manifest.json': 16384}
 CORE_MANIFEST = 'release-manifest.json'
@@ -120,6 +121,8 @@ def source_pin(target):
 
 
 def sentinel_pin(pin):
+    if pin in DRAFT_SENTINEL_PINS:
+        return DRAFT_SENTINEL_PINS[pin]
     if pin == STABLE:
         return STABLE_SENTINEL
     return PAIRED_SENTINEL if pin[1] in BRIDGES else SENTINEL
@@ -354,6 +357,7 @@ def publisher(pin, reader, boot, launcher, token, *, staged_draft=False):
             'official-source-closure-mismatch')
     if staged_draft:
         launcher.authenticate_embedded_tree(manifest[launcher.GIT_PROOF_FIELD], commit, closure)
+        DRAFT_SENTINEL_PINS[pin] = load('orbis-host-upgrade-target').sentinel_identity(closure['scripts/orbis-sentinel-install.py'])['release']
     else:
         launcher.authenticate_tree(fetch, commit, closure)
     path = WORK / (tag + '.py')

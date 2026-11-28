@@ -69,6 +69,36 @@ jobs:
             /usr/bin/python3 -I -B packages/backend/scripts/orbis-official-upgrade-runtime.py --acquire-drafts
 
       - name: Rehearse the signed draft pair
+        shell: bash
         run: |
+          umask 077
+          mkdir .orbis-upgrade-qualification
           sudo --non-interactive --preserve-env=CI,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_REF,GITHUB_SHA,RUNNER_ENVIRONMENT,DRAFT_UPGRADE_CASE,DRAFT_BRIDGE_TAG,DRAFT_BRIDGE_RUN,DRAFT_TARGET_TAG,DRAFT_TARGET_RUN,DRAFT_RELEASE_COMMIT \
-            /usr/bin/python3 -I -B packages/backend/scripts/orbis-official-upgrade-runtime.py
+            /usr/bin/python3 -I -B packages/backend/scripts/orbis-official-upgrade-runtime.py | tee .orbis-upgrade-qualification/result.json
+
+      - name: Seal verified public OTA identity
+        if: inputs.rehearsal == 'public-discovery-after-enrollment'
+        run: |
+          jq -e --arg tag "$DRAFT_TARGET_TAG" --arg commit "${DRAFT_RELEASE_COMMIT:-$GITHUB_SHA}" '
+            select(.schema == "orbis.official-upgrade-runtime.v1" and .phase == "complete" and .passed == true
+              and .draftRehearsal == "public-discovery-after-enrollment"
+              and .runtipi == "4.12.0" and .draftManifestAsset == "qualified-release-manifest.json"
+              and .legacyQualifiedTargetHiddenVerified == true and .stableBridgeVerified == true
+              and .updatesPlanApplyVerified == true and .updatesApiVerified == true
+              and .componentTerminalVerified == true and .markerChecks == 2
+              and .targetProgress.boundToTerminalOperation == true and .targetProgress.boundSamples > 0
+              and .targetProgress.missingSamplesBetweenBoundReads == 0
+              and .target == $tag and .targetCommit == $commit and .targetDigest == .draftTargetDigest
+              and (.targetDigest | test("^sha256:[0-9a-f]{64}$")))
+            | {schema:"orbis.installer-qualified-approval.v1",tag:.target,commit:.targetCommit,digest:.targetDigest}
+          ' .orbis-upgrade-qualification/result.json > .orbis-upgrade-qualification/approval.json
+
+      - name: Retain verified public OTA identity
+        if: inputs.rehearsal == 'public-discovery-after-enrollment'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: orbis-qualified-public-ota-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .orbis-upgrade-qualification/approval.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30

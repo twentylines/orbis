@@ -29,6 +29,42 @@ const absolute = (value: unknown): value is string =>
   !/[\0\r\n\\]/.test(value);
 const neverStarted = (state: unknown) =>
   migrationStopped(state) && record(state) && typeof state.StartedAt === 'string' && /^0001-01-01T00:00:00(?:\.0+)?Z$/.test(state.StartedAt);
+
+async function prepareWritableBind(root: string, relative: string, createHostPath: boolean) {
+  const directoryFlags = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+  let handle = await fs.open(root, directoryFlags);
+  let name = root;
+  const parts = relative.split('/').filter(Boolean);
+  try {
+    for (const [index, part] of parts.entries()) {
+      name = path.join(name, part);
+      // Anchor child operations to the open parent on the Linux host.
+      const child = process.platform === 'linux' ? `/proc/self/fd/${handle.fd}/${part}` : name;
+      const last = index === parts.length - 1;
+      let before = await fs.lstat(child).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT' && createHostPath) return null;
+        throw error;
+      });
+      if (!before) {
+        await fs.mkdir(child, { mode: 0o755 });
+        await handle.sync();
+        before = await fs.lstat(child);
+      }
+      if (!before.isDirectory() && !(last && before.isFile())) throw fail();
+      const next = await fs.open(child, last ? constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK : directoryFlags);
+      const parent = handle;
+      handle = next;
+      await parent.close();
+      const actual = await handle.stat();
+      if (before.dev !== actual.dev || before.ino !== actual.ino) throw fail();
+    }
+    await handle.chmod(0o777);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
 async function empty(directory: string) {
   const entries = await fs.opendir(directory);
   try {
@@ -412,6 +448,7 @@ export class FreshAppStorage {
       const ids = new Set<string>();
       const rows: FreshInstallState['containers'] = [];
       const ownVolumes = new Set(Object.keys(fresh.allocations));
+      const writableBinds: { relative: string; createHostPath: boolean }[] = [];
       for (const value of owned) {
         if (typeof value.Id !== 'string' || !id.test(value.Id) || !record(value.Config) || !record(value.Config.Labels) || !neverStarted(value.State))
           throw fail();
@@ -459,16 +496,11 @@ export class FreshAppStorage {
               (mount.writable && !(mount.source === observed.hostPath || mount.source.startsWith(observed.hostPath + '/')))
             )
               throw fail();
-            if (mount.writable) {
-              const local = this.localDirectory + mount.source.slice(observed.hostPath.length);
-              let current = this.localDirectory;
-              for (const part of path.relative(this.localDirectory, local).split('/').filter(Boolean)) {
-                current = path.join(current, part);
-                const stat = await fs.lstat(current);
-                if (stat.isSymbolicLink() || (!stat.isDirectory() && current !== local)) throw fail();
-              }
-              await fs.chmod(local, 0o777);
-            }
+            if (mount.writable)
+              writableBinds.push({
+                relative: mount.source.slice(observed.hostPath.length),
+                createHostPath: record(configured.bind) && configured.bind.create_host_path === true,
+              });
           } else if (mount.type === 'volume') {
             if (typeof mount.name !== 'string' || !volumeName.test(mount.name)) throw fail();
             if (configured?.source !== undefined) {
@@ -510,6 +542,7 @@ export class FreshAppStorage {
         });
       }
       await noForeignWriters(docker, observed, ids, ownVolumes);
+      for (const { relative, createHostPath } of writableBinds) await prepareWritableBind(this.localDirectory, relative, createHostPath);
       await stage.preparedFreshStorage(rows);
     });
   }

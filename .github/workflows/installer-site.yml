@@ -8,7 +8,11 @@ on:
     inputs:
       public_release_run:
         description: Successful public release workflow run to verify
-        required: true
+        required: false
+        type: string
+      qualified_runtime_run:
+        description: Successful public discovery and update rehearsal to verify
+        required: false
         type: string
 
 permissions:
@@ -25,9 +29,23 @@ jobs:
     permissions:
       actions: read
     outputs:
-      publish: ${{ steps.public.outputs.publish }}
+      publish: ${{ steps.public.outputs.publish || steps.qualified.outputs.publish }}
+      approval: ${{ steps.qualified.outputs.approval }}
     steps:
+      - name: Choose a single release verification
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          PUBLIC_RUN: ${{ inputs.public_release_run }}
+          QUALIFIED_RUN: ${{ inputs.qualified_runtime_run }}
+        run: |
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          if [[ -n "$QUALIFIED_RUN" ]]; then
+            [[ -z "$PUBLIC_RUN" ]]
+          else
+            [[ -n "$PUBLIC_RUN" ]]
+          fi
       - name: Require a verified public release
+        if: github.event_name == 'workflow_run' || inputs.qualified_runtime_run == ''
         id: public
         shell: bash
         env:
@@ -45,6 +63,40 @@ jobs:
               .steps[] | select(.name == "Verify the GitHub release is public" and .conclusion == "success")] | length == 1
           ')"
           echo "publish=$published" >> "$GITHUB_OUTPUT"
+
+      - name: Require the verified public upgrade
+        if: github.event_name == 'workflow_dispatch' && inputs.qualified_runtime_run != ''
+        id: qualified
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_RUN: ${{ inputs.qualified_runtime_run }}
+        run: |
+          [[ "$UPSTREAM_RUN" =~ ^[1-9][0-9]{0,19}$ ]]
+          run_path="repos/$GITHUB_REPOSITORY/actions/runs/$UPSTREAM_RUN"
+          run="$(gh api "$run_path")"
+          attempt="$(jq -er --arg repo "$GITHUB_REPOSITORY" --arg sha "$GITHUB_SHA" '
+            select((.path | split("@")[0]) == ".github/workflows/draft-upgrade-runtime.yml"
+              and .event == "workflow_dispatch" and .status == "completed" and .conclusion == "success"
+              and .head_repository.full_name == $repo and .head_branch == "main" and .head_sha == $sha)
+            | .run_attempt | select(type == "number" and . >= 1 and floor == .)
+          ' <<< "$run")"
+          name="orbis-qualified-public-ota-$UPSTREAM_RUN-$attempt"
+          gh api "$run_path/artifacts" | jq -e --arg name "$name" '
+            [.artifacts[] | select(.name == $name and .expired == false and .size_in_bytes > 0 and .size_in_bytes <= 4096)] | length == 1
+          ' > /dev/null
+          umask 077
+          proof="$(mktemp -d "$GITHUB_WORKSPACE/.orbis-qualified-proof.XXXXXX")"
+          gh run download "$UPSTREAM_RUN" --repo "$GITHUB_REPOSITORY" --name "$name" --dir "$proof"
+          approval="$(jq -cse '
+            select(length == 1) | .[0] | select(type == "object"
+              and keys == ["commit", "digest", "schema", "tag"]
+              and .schema == "orbis.installer-qualified-approval.v1"
+              and (.tag | test("^v[0-9]{1,5}\\.[0-9]{1,5}\\.[0-9]{1,5}-beta\\.[0-9]{1,8}$"))
+              and (.commit | test("^[0-9a-f]{40}$"))
+              and (.digest | test("^sha256:[0-9a-f]{64}$")))
+          ' "$proof/approval.json")"
+          printf 'approval=%s\npublish=true\n' "$approval" >> "$GITHUB_OUTPUT"
 
   verify:
     needs: release-admission
@@ -93,9 +145,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TMPDIR: ${{ github.workspace }}/.orbis-installer-endpoint/tmp
+          QUALIFIED_APPROVAL: ${{ needs.release-admission.outputs.approval }}
         run: |
           gh api 'repos/twentylines/orbis/releases?per_page=100' > "$INSTALLER_WORK/releases.json"
-          python3 scripts/publish-installer-site.py "$INSTALLER_WORK/releases.json" "$INSTALLER_WORK/public" --channels --preserve-installers --if-available --github-output "$GITHUB_OUTPUT"
+          approval=()
+          if [[ -n "$QUALIFIED_APPROVAL" ]]; then
+            printf '%s\n' "$QUALIFIED_APPROVAL" > "$INSTALLER_WORK/qualification.json"
+            approval+=(--qualified-approval "$INSTALLER_WORK/qualification.json")
+          fi
+          python3 scripts/publish-installer-site.py "$INSTALLER_WORK/releases.json" "$INSTALLER_WORK/public" --channels --preserve-installers --if-available --github-output "$GITHUB_OUTPUT" "${approval[@]}"
       - uses: actions/configure-pages@v6
         if: steps.installer.outputs.available == 'true'
       - uses: actions/upload-pages-artifact@v5

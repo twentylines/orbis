@@ -105,8 +105,9 @@ def site(repository, releases, output, fetch=BOOT.fetch, *, channel="stable"):
             raise ValueError("Downloaded installer asset differs from GitHub's digest")
         downloaded[name] = content
     release = json.loads(downloaded[POLICY.CORE_MANIFEST])
-    if qualified and release.get("runtipiCompatibility") != POLICY.QUALIFIED_CORE_BASE:
-        raise ValueError("Qualified Core manifest has the wrong compatibility base")
+    if qualified and (release.get("runtipiCompatibility") != POLICY.QUALIFIED_CORE_BASE
+                      or not re.fullmatch(r"sha256:[a-f0-9]{64}", str(release.get("digest")))):
+        raise ValueError("Qualified Core manifest has an invalid base or image identity")
     if release.get("tag") != tag:
         raise ValueError("Installer and selected release have different tags")
     if tag_commit(repository, tag) != release.get("commit"):
@@ -126,7 +127,11 @@ def site(repository, releases, output, fetch=BOOT.fetch, *, channel="stable"):
     (output / "latest.json").write_text(json.dumps({"schema": "orbis.installer-channel.v1", "channel": channel, "tag": tag, "commit": release["commit"], "launcherSha256": BUILD.sha(downloaded[BUILD.LAUNCHER]), "releaseUrl": selected["html_url"]}, indent=2) + "\n")
     (output / ".nojekyll").touch()
     (output / "index.html").write_text('<!doctype html><meta charset="utf-8"><title>Orbis</title><meta http-equiv="refresh" content="0;url=' + selected["html_url"] + '"><a href="' + selected["html_url"] + '">Orbis releases</a>\n')
-    return {"channel": channel, "tag": tag, "commit": release["commit"], "launcherSha256": BUILD.sha(downloaded[BUILD.LAUNCHER])}
+    result = {"channel": channel, "tag": tag, "commit": release["commit"], "launcherSha256": BUILD.sha(downloaded[BUILD.LAUNCHER])}
+    if release.get("runtipiCompatibility") == POLICY.QUALIFIED_CORE_BASE:
+        result["qualification"] = ({"tag": tag, "commit": release["commit"], "digest": release.get("digest")}
+                                   if qualified else None)
+    return result
 
 
 def previous_installers(fetch):
@@ -202,7 +207,33 @@ def preserve_installers(repository, staged, records, fetch):
             destination.write_bytes(body)
 
 
-def channel_site(repository, releases, output, fetch=BOOT.fetch, *, previous_fetch=None):
+def approved_installation(value):
+    if (not isinstance(value, dict) or set(value) != {"schema", "tag", "commit", "digest"}
+            or value["schema"] != "orbis.installer-qualified-approval.v1"
+            or not POLICY.is_published_release_tag(value["tag"])
+            or not re.fullmatch(r"[a-f0-9]{40}", str(value["commit"]))
+            or not re.fullmatch(r"sha256:[a-f0-9]{64}", str(value["digest"]))):
+        raise ValueError("The coordinated installer approval is invalid")
+    return {key: value[key] for key in ("tag", "commit", "digest")}
+
+
+def previously_deployed_channel(previous_fetch, channel, record):
+    if previous_fetch is None:
+        return False
+    try:
+        value = json.loads(previous_fetch(PAGES + "channels.json", 16 * 1024))
+    except HTTPError as error:
+        if error.code != 404:
+            raise
+        error.close()
+        return False
+    channels = value.get("channels") if isinstance(value, dict) else None
+    if isinstance(channels, dict) and channels.get(channel) == record:
+        return BOOT.select_channel(value, requested=channel)[1] == record
+    return False
+
+
+def channel_site(repository, releases, output, fetch=BOOT.fetch, *, previous_fetch=None, approval=None):
     catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": None, "nightly": None}}
     with tempfile.TemporaryDirectory(prefix="orbis-channel-site-") as folder:
         staged = Path(folder) / "public"
@@ -213,7 +244,12 @@ def channel_site(repository, releases, output, fetch=BOOT.fetch, *, previous_fet
             except NoPublishedRelease:
                 continue
             checked = site(repository, releases, staged / channel, fetch, channel=channel)
-            catalog["channels"][channel] = {key: checked[key] for key in ("tag", "commit", "launcherSha256")}
+            record = {key: checked[key] for key in ("tag", "commit", "launcherSha256")}
+            if "qualification" in checked:
+                required = checked["qualification"]
+                if (required is None or (required != approval and not previously_deployed_channel(previous_fetch, channel, record))):
+                    raise NoPublishedRelease(f"The coordinated {channel.title()} installer awaits verified rollout")
+            catalog["channels"][channel] = record
         record = catalog["channels"]["nightly"]
         if record is None:
             raise NoPublishedRelease("No published Orbis release is available")
@@ -269,6 +305,7 @@ def main(argv=None):
     parser.add_argument("--channels", action="store_true", help="publish one interactive installer and both verified channel endpoints")
     parser.add_argument("--preserve-installers", action="store_true", help="verify and retain URLs pinned by existing independent installers")
     parser.add_argument("--if-available", action="store_true", help="preserve the deployed endpoint when this channel has no release yet")
+    parser.add_argument("--qualified-approval", type=Path, help="exact coordinated release approved by rollout verification")
     parser.add_argument("--github-output", type=Path, help="append the verified availability flag to a workflow output file")
     args = parser.parse_args(argv)
     try:
@@ -276,8 +313,14 @@ def main(argv=None):
         releases = json.loads(args.releases.read_text())
         if args.preserve_installers and not args.channels:
             raise ValueError('Installer preservation requires the combined endpoint')
-        checked = (channel_site(repository, releases, args.output, previous_fetch=BOOT.fetch) if args.preserve_installers
-                   else channel_site(repository, releases, args.output)) if args.channels else site(repository, releases, args.output, channel=args.channel)
+        options = {}
+        if args.preserve_installers:
+            options["previous_fetch"] = BOOT.fetch
+        if args.qualified_approval:
+            if not args.channels:
+                raise ValueError("Coordinated installer approval requires the combined endpoint")
+            options["approval"] = approved_installation(json.loads(args.qualified_approval.read_text()))
+        checked = channel_site(repository, releases, args.output, **options) if args.channels else site(repository, releases, args.output, channel=args.channel)
         result = {"available": True, **checked}
     except NoPublishedRelease as error:
         if not args.if_available:
