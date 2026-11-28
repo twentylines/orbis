@@ -241,7 +241,13 @@ export class UpdateAppCommand extends AppLifecycleCommand {
         await migrations?.activationAttempted();
         await update.activationAttempted();
         await this.reportProgress('starting');
-        await plan.activate();
+        try {
+          await plan.activate();
+        } catch (error) {
+          if (migrations || !(update instanceof AppUpdateStage) || this.job?.signal.aborted) throw error;
+          // Compose can lose its reply after starting the target. The recorded
+          // stage must pass the runtime proof below before the update can commit.
+        }
         await this.reportProgress('verifying');
         const ready = await captureRuntime(this.docker, appUrn);
         if (

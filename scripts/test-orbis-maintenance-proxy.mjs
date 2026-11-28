@@ -29,6 +29,34 @@ async function forwardingServer(upstreamPort) {
   );
 }
 
+test('a draining responder remains available for the bound update', async () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  const tag = 'v0.9.2-beta.19';
+  const progress = { version: 1, job: { id, targetTag: tag, state: 'running', phase: 'verifying' } };
+  const gateway = await listen(
+    createMaintenanceServer({
+      coreProgressBinding: `${id}:${tag}:${'a'.repeat(64)}`,
+      readProgress: async () => progress,
+    }),
+  );
+  const base = `http://127.0.0.1:${gateway}`;
+  const readiness = `${base}/_orbis/responder-readiness`;
+  assert.equal((await fetch(readiness)).status, 204);
+  assert.equal((await fetch(`${readiness}?state=draining`, { method: 'POST' })).status, 204);
+  assert.equal((await fetch(readiness)).status, 503);
+  const response = await fetch(`${base}/api/system/core-update-progress`);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), progress);
+  assert.equal((await fetch(`${readiness}?state=ready`, { method: 'POST' })).status, 204);
+  assert.equal((await fetch(readiness)).status, 204);
+});
+
+test('an unbound responder cannot be put into drain mode', async () => {
+  const gateway = await listen(createMaintenanceServer());
+  const response = await fetch(`http://127.0.0.1:${gateway}/_orbis/responder-readiness?state=draining`, { method: 'POST' });
+  assert.equal(response.status, 404);
+});
+
 test('idle SSE outlives the ordinary timeout and client disconnect closes upstream', { timeout: 3000 }, async () => {
   let finish;
   const closed = new Promise((resolve) => {

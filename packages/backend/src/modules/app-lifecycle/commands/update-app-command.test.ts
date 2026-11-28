@@ -6,6 +6,7 @@ import { AppHelpers } from '@/modules/apps/app.helpers';
 import { AppsRepository } from '@/modules/apps/apps.repository';
 import { BackupManager } from '@/modules/backups/backup.manager';
 import type { StagedAppImageUpdate } from '@/modules/docker/app-image-pins';
+import { AppUpdateStage, type AppUpdateContext } from '@/modules/docker/app-update-stage';
 import { DockerService } from '@/modules/docker/docker.service';
 import { MarketplaceService } from '@/modules/marketplace/marketplace.service';
 import { SubnetManagerService } from '@/modules/network/subnet-manager.service';
@@ -204,6 +205,61 @@ const fixture = ({
 };
 
 describe('staged app update', () => {
+  it.each(['exact', 'foreign stage'])('reconciles a failed Compose reply only for the %s runtime', async (runtime) => {
+    const f = fixture({ states: [{ Running: true }, { Running: true }] });
+    const original = f.containers.map(({ container, labels }) => ({
+      id: container.id,
+      imageId: previousImageId,
+      service: labels['com.docker.compose.service'],
+      running: true,
+      paused: false,
+      restarting: false,
+    }));
+    const commitOrdinary = vi.fn();
+    const writtenContext = vi.fn<(context: AppUpdateContext) => Promise<void>>();
+    const stage = Object.assign(
+      Object.create(AppUpdateStage.prototype, {
+        id: { value: f.transaction.id },
+        targetDirectory: { value: f.transaction.targetDirectory },
+      }) as AppUpdateStage,
+      {
+        stageTarget: f.transaction.stageTarget,
+        publishTarget: f.transaction.publishTarget,
+        recordPulledImages: f.transaction.recordPulledImages,
+        activationAttempted: f.transaction.activationAttempted,
+        recordUpdateSettings: vi.fn(),
+        recordContext: writtenContext,
+        read: async () => ({ context: writtenContext.mock.calls[0]?.[0] }),
+        commitOrdinary,
+        close: async () => {},
+      },
+    );
+    f.dockerService.beginStagedAppUpdate.mockResolvedValue({ transaction: stage, retained: false });
+    f.apps.getMigrationLedger.mockResolvedValue({ baselined: true, migrationIds: [] });
+    f.plan.activate.mockImplementationOnce(async () => {
+      for (const [index, entry] of f.containers.entries()) {
+        Object.defineProperty(entry.container, 'id', { value: (index + 1).toString().repeat(64) });
+        Object.assign(entry.state, { Running: true, Dead: false, Pid: 42 });
+        Object.assign(entry.labels, { 'io.orbis.app-update.stage': runtime === 'exact' ? stage.id : 'other' });
+        entry.identity.image = capturedImageId;
+      }
+      throw new Error('Synthetic lost Compose reply');
+    });
+    Object.assign(f.docker, {
+      modem: {
+        dial: async (options: { path: string }, complete: (error: null, value: unknown) => void) => {
+          if (options.path === '/containers/json?') complete(null, await f.docker.listContainers());
+          else complete(null, await f.docker.getContainer(options.path.slice('/containers/'.length, -'/json'.length)).inspect());
+        },
+      },
+    });
+    const result = await f.command.execute(appUrn, {});
+    expect(result.success, result.message).toBe(runtime === 'exact');
+    expect(writtenContext).toHaveBeenCalledWith(expect.objectContaining({ originalContainers: original }));
+    expect(f.plan.activate).toHaveBeenCalledOnce();
+    expect(commitOrdinary).toHaveBeenCalledTimes(runtime === 'exact' ? 1 : 0);
+  });
+
   function controlled(f: ReturnType<typeof fixture>) {
     const controller = new AbortController();
     const original = f.containers[0];

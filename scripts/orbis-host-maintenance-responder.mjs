@@ -371,9 +371,20 @@ export function createMaintenanceServer(options = {}) {
   const binding = progressBinding(options.coreProgressBinding);
   const hostProgress = options.readProgress ?? readRootCoreProgress;
   const workerProgress = options.readWorkerProgress ?? readRootCoreProgress;
+  let draining = false;
   return http.createServer(async (request, response) => {
     try {
-      const pathname = new URL(request.url, 'http://localhost').pathname;
+      const url = new URL(request.url, 'http://localhost');
+      const pathname = url.pathname;
+      if (pathname === '/_orbis/responder-readiness') {
+        if (!binding || request.socket.remoteAddress !== '127.0.0.1') return json(response, 404, { code: 'NOT_FOUND' });
+        if (request.method === 'POST' && ['ready', 'draining'].includes(url.searchParams.get('state'))) {
+          draining = url.searchParams.get('state') === 'draining';
+          return response.writeHead(204).end();
+        }
+        if (request.method === 'GET') return response.writeHead(draining ? 503 : 204).end();
+        return response.writeHead(405).end();
+      }
       if (pathname === '/sentinel' || pathname.startsWith('/sentinel/')) {
         if (request.method !== 'GET' || !sentinelCaptureRoute(request.url)) return json(response, 404, { code: 'SENTINEL_UNAVAILABLE' });
         try {

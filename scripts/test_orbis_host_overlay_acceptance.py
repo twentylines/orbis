@@ -418,6 +418,23 @@ class OverlayAcceptanceTests(unittest.TestCase):
             self.overlay.finish(job)
         self.assertTrue(self.overlay.settled(job))
         self.assertEqual(self.events, [['update', '--restart', 'no', self.responder['Id']], ['stop', self.responder['Id']]])
+        self.runtime.drain_core_overlay.assert_not_called()
+
+    def test_health_based_responder_is_not_stopped_before_topology_converges(self):
+        job = self.terminal_dns_fixture()
+        self.responder['State']['Running'] = True
+        self.current = copy.deepcopy(self.target)
+        record = self.overlay.read(job['id'])
+        record['intents']['responder']['body']['Healthcheck'] = {'Test': ['CMD', 'fixture']}
+        self.overlay.save(record)
+        self.runtime.drain_core_overlay.side_effect = ValueError('Routes still active')
+        with mock.patch.object(H, 'current_core', return_value={'state': 'running', 'health': 'healthy'}):
+            with self.assertRaisesRegex(ValueError, 'Routes still active'):
+                self.overlay.finish(job)
+            self.assertFalse(self.events)
+            self.runtime.drain_core_overlay.side_effect = lambda *_: self.events.append('routes drained')
+            self.overlay.finish(job)
+        self.assertEqual(self.events, ['routes drained', ['update', '--restart', 'no', self.responder['Id']], ['stop', self.responder['Id']]])
 
     def test_dns_rewritten_terminal_responder_is_untouched_when_health_or_publication_changed(self):
         job = self.terminal_dns_fixture()
@@ -443,6 +460,46 @@ class OverlayAcceptanceTests(unittest.TestCase):
                 with mock.patch.object(H, 'current_core', return_value={'state': 'running', 'health': 'healthy'}):
                     self.overlay.finish(terminal)
                 self.assertTrue(self.overlay.settled(terminal))
+
+
+class CoreOverlayDrainTests(unittest.TestCase):
+    def test_transition_preserves_the_responder_while_waiting_for_both_routes(self):
+        for converge in (True, False):
+            with self.subTest(converge=converge):
+                runtime = mock.Mock(context='fixture')
+                proxy = {'Id': 'proxy'}
+                runtime.inspect.return_value = proxy
+                runtime.controller_proxy_policy.return_value = {'sealed': 'proxy'}
+                responder = {'Id': 'responder'}
+                identifier = str(uuid.uuid4())
+                names = {'dashboard': ('web', False), 'dashboard-secure': ('websecure', True)}
+                router_names = {'orbis-maintenance-' + identifier.replace('-', '') + '-' + name + '@docker': {} for name in names}
+                routes = {name + '@docker': {'status': 'enabled', 'rule': 'PathPrefix(`/`)', 'entryPoints': [entry],
+                                             'service': 'dashboard', **({'tls': {}} if tls else {})}
+                          for name, (entry, tls) in names.items()}
+                record = {'id': identifier, 'source': {'overlay': {
+                    'proxyId': 'proxy', 'network': 'network', 'controllerProxyPolicy': {'sealed': 'proxy'},
+                    'routers': {name: {'rule': 'PathPrefix(`/`)', 'entrypoint': entry, 'tls': tls}
+                                for name, (entry, tls) in names.items()},
+                }}}
+                runtime.proxy_routers.side_effect = [{**routes, **router_names}, {**routes, **router_names}, routes, routes] if converge else None
+                runtime.proxy_routers.return_value = {**routes, **router_names}
+                tick = iter(range(100))
+                clock = mock.Mock(monotonic=lambda: next(tick))
+                with mock.patch.object(D, 'time', clock):
+                    if converge:
+                        D.DockerRestoreRuntime.drain_core_overlay(runtime, record, responder)
+                    else:
+                        with self.assertRaises((RuntimeError, ValueError)):
+                            D.DockerRestoreRuntime.drain_core_overlay(runtime, record, responder)
+                commands = [call.args[0][-1] for call in runtime.bounded_output.call_args_list]
+                self.assertIn('state=draining', commands[0])
+                if converge:
+                    self.assertEqual(len(commands), 1)
+                    clock.sleep.assert_any_call(2)
+                else:
+                    self.assertEqual(len(commands), 2)
+                    self.assertIn('state=ready', commands[1])
 
 
 class DockerSocketIdentityTests(unittest.TestCase):

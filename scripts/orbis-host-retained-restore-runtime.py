@@ -713,6 +713,7 @@ class DockerRestoreRuntime:
             with self.a.protected_file(directory, code_file.name, 32768, private=False) as code:
                 code = code.decode('utf8')
         environment = ['NODE_ENV=production', 'ORBIS_MAINTENANCE_RESPONDER=1']
+        health = {'Test': ['NONE']}
         if record.get('componentProgress') == 'orbis.component-browser-progress.v1':
             source, target = record['current'], record['target']
             operation, target_tag = record['id'], target['tag']
@@ -724,9 +725,13 @@ class DockerRestoreRuntime:
                 raise fail()
             binding = '\n'.join((operation, source['digest'], target['digest'])).encode('ascii')
             environment.append(f'ORBIS_CORE_PROGRESS_BINDING={operation}:{target_tag}:{hashlib.sha256(binding).hexdigest()}')
+            health = {'Test': ['CMD', 'node', '--input-type=module', '-e',
+                               "const r=await fetch('http://127.0.0.1:3000/_orbis/responder-readiness',"
+                               "{signal:AbortSignal.timeout(1000)});if(r.status!==204)process.exit(1);"],
+                      'Interval': 1_000_000_000, 'Timeout': 2_000_000_000, 'Retries': 1}
         return {'Image': record['source']['imageId'], 'Entrypoint': ['node'], 'Cmd': ['--input-type=module', '-e', code], 'User': '0',
                 'Env': environment, 'WorkingDir': '/app', 'Labels': labels,
-                'Healthcheck': {'Test': ['NONE']},
+                'Healthcheck': health,
                 'HostConfig': {'NetworkMode': configuration['network'], 'RestartPolicy': {'Name': 'unless-stopped', 'MaximumRetryCount': 0},
                                'ReadonlyRootfs': True, 'Privileged': False, 'AutoRemove': False, 'PublishAllPorts': False, 'PortBindings': {},
                                'CapDrop': ['ALL'], 'CapAdd': [], 'SecurityOpt': ['no-new-privileges:true'], 'Memory': 256 * 1024 * 1024,
@@ -777,6 +782,53 @@ class DockerRestoreRuntime:
             except (ValueError, RuntimeError):
                 time.sleep(0.5)
         raise fail()
+
+    def drain_core_overlay(self, record, responder):
+        # Leave the responder live until the Docker provider removes its routers.
+        configuration = record['source']['overlay']
+        identifier = responder['Id']
+        proxy = self.inspect(configuration['proxyId'])
+        self.verify_networks(record, responder)
+        if (proxy['Id'] != configuration['proxyId'] or
+                self.controller_proxy_policy(proxy) != configuration['controllerProxyPolicy']):
+            raise fail()
+        service = 'orbis-maintenance-' + record['id'].replace('-', '')
+        def set_state(state):
+            url = f'http://127.0.0.1:3000/_orbis/responder-readiness?state={state}'
+            code = (f'const r=await fetch({json.dumps(url)},{{method:"POST",signal:AbortSignal.timeout(1000)}});'
+                    'if(r.status!==204)process.exit(1);')
+            self.bounded_output(['docker', '--context', self.context, 'exec', identifier,
+                                 'node', '--input-type=module', '-e', code], 1024, 5)
+
+        def wait_for_routes(*, drained):
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                routes = self.proxy_routers(identifier, proxy, configuration['network'])
+                if all(
+                    (route := routes.get(name + '@docker', {})).get('status') == 'enabled'
+                    and route.get('rule') == details['rule']
+                    and route.get('entryPoints') == [details['entrypoint']]
+                    and route.get('service') == 'dashboard'
+                    and (isinstance(route.get('tls'), dict)) == details['tls']
+                    and (not drained or service + '-' + name + '@docker' not in routes)
+                    for name, details in configuration['routers'].items()
+                ):
+                    return
+                time.sleep(0.25)
+            raise fail()
+
+        wait_for_routes(drained=False)
+        try:
+            set_state('draining')
+            wait_for_routes(drained=True)
+            # The old routing table may still have requests in flight.
+            time.sleep(2)
+            wait_for_routes(drained=True)
+            if self.controller_proxy_policy(self.inspect(configuration['proxyId'])) != configuration['controllerProxyPolicy']:
+                raise fail()
+        except Exception:
+            set_state('ready')
+            raise
 
     def finish_overlay(self, record):
         if self.manager.read(record['id'])['phase'] not in {'complete', 'rolled-back'}:

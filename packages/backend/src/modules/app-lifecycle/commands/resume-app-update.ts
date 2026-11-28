@@ -102,7 +102,9 @@ export async function resumeAppUpdate(input: {
       if (context.updateStatus === 'running') {
         await stage.activationAttempted();
         await input.report('starting');
-        await plan.activate();
+        // The activation intent is durable. Verify the exact target below even
+        // if Compose loses its reply, without sending another activation.
+        await plan.activate().catch(() => undefined);
       }
     }
     await input.report('verifying');

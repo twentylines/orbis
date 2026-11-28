@@ -177,6 +177,16 @@ it('finishes a positively healthy lost activation reply without issuing another 
   expect(activate).not.toHaveBeenCalled();
   expect(update).toHaveBeenCalledOnce();
 });
+it.each([true, false])('verifies the target after the first resumed activation loses its reply, healthy=%s', async (healthy) => {
+  activate.mockImplementationOnce(async () => {
+    expect((await active?.read())?.phase).toBe('activation-attempted');
+    if (healthy) values = [container(true)];
+    throw new Error('Synthetic lost Compose reply');
+  });
+  expect((await factory.resumeUpdate(event())).success).toBe(healthy);
+  expect(activate).toHaveBeenCalledOnce();
+  expect(update).toHaveBeenCalledTimes(healthy ? 1 : 0);
+});
 it.each(['missing', 'old-container', 'wrong-image', 'wrong-stage', 'extra-service', 'unhealthy', 'paused', 'restarting', 'dead', 'pid-zero'])(
   'keeps an uncertain %s target without new writes, restarts or SQL',
   async (change) => {
