@@ -115,6 +115,29 @@ def protect_installer_parent(environment):
         os.close(root_fd)
 
 
+
+def prepare_fixture_workspace():
+    # The runner image owns /opt. Its default ACL can survive chmod and be
+    # inherited by a new directory. Clear it only on our empty fixture so the
+    # stock installers and containers receive ordinary creation permissions.
+    os.umask(0o022)
+    WORK.mkdir(mode=0o700)
+    descriptor = os.open(WORK, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(descriptor)
+        require(info.st_uid == 0 and stat.S_IMODE(info.st_mode) == 0o700,
+                'fixture-workspace-permissions-refused')
+        name = 'system.posix_acl_default'
+        inherited = name in os.listxattr(descriptor)
+        if inherited:
+            os.removexattr(descriptor, name)
+        require(name not in os.listxattr(descriptor), 'fixture-default-acl-unverified')
+    finally:
+        os.close(descriptor)
+    (WORK / 'tmp').mkdir(mode=0o700)
+    return inherited
+
+
 def preflight(environment):
     require(os.getuid() == os.geteuid() == 0 and sys.platform == 'linux' and platform.machine() == 'x86_64'
             and environment.get('GITHUB_ACTIONS') == 'true' and environment.get('RUNNER_ENVIRONMENT') == 'github-hosted'
@@ -142,8 +165,7 @@ def preflight(environment):
     require(docker_root.is_absolute() and all(shutil.disk_usage(path).free >= 4 * 1024**3
             for path in (WORK.parent, docker_root, Path('/var/lib'))), 'disposable-space-required')
     protect_installer_parent(environment)
-    WORK.mkdir(mode=0o700)
-    (WORK / 'tmp').mkdir(mode=0o700)
+    return prepare_fixture_workspace()
 
 
 def isolate_dashboard():
@@ -741,7 +763,7 @@ def fixture(environment, result):
     require(mode in ('true', 'false'), 'stable-bridge-mode-refused')
     bridge = mode == 'true'
     initial = STABLE if bridge else SOURCE
-    preflight(environment)
+    result['fixtureDefaultAclRemoved'] = preflight(environment)
     result['phase'] = 'publisher'
     modules = [load(name) for name in ('orbis-release-check', 'install-orbis', 'orbis-host-upgrade-launcher')]
     source, candidate = [publisher(pin, *modules, environment.get('GITHUB_TOKEN')) for pin in (SOURCE, target)]
