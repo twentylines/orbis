@@ -644,7 +644,11 @@ def app_data(identity):
 
 
 def check_host(pin):
-    status = load('orbis-host-service-setup', HOST).read_socket_status()
+    # Older installed helpers omit the setup module from their runtime closure.
+    # The release-neutral socket reader verifies the actual systemd listener.
+    pid = run(['/usr/bin/systemctl', 'show', '--property=MainPID', '--value', 'orbis-host.service'])
+    require(re.fullmatch(r'[1-9][0-9]{0,9}', pid), 'installed-host-listener-refused')
+    status = load('orbis-host-service-setup').read_socket_status(expected_pid=int(pid))
     stable = pin == STABLE
     require(status['currentTag'] == pin[0] and status['currentDigest'] == pin[2] and status['imageMatches'] is True
             and status['enrolled'] is True and status['coreHealth'] == 'healthy'
