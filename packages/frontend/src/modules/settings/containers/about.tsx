@@ -65,7 +65,7 @@ function RecoveryAccess({ active, operator }: { active: boolean; operator: boole
           <div className="settings-recovery-actions">
             <Button asChild variant="outline">
               <a href={configured.portalUrl} target="_blank" rel="noopener noreferrer">
-                Open recovery
+                Open Sentinel
               </a>
             </Button>
             {stage === 'activated' && configured.unitState === 'active' ? (
@@ -168,7 +168,6 @@ export function About() {
 
   return (
     <div className="settings-about">
-      <RecoveryAccess active={visible} operator={user?.operator === true} />
       <div className="settings-about-sections">
         <section className="settings-group" aria-labelledby="about-software-title">
           <h3 id="about-software-title">Installed software</h3>
@@ -217,6 +216,7 @@ export function About() {
         </Button>
       </footer>
       {user?.operator === true ? <SystemResetPanel /> : null}
+      <RecoveryAccess active={visible} operator={user?.operator === true} />
     </div>
   );
 }

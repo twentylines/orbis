@@ -87,7 +87,7 @@ export function SentinelControllerHandoff({ active, portalUrl }: { active: boole
         onClick={() => void review()}
       >
         {stage === 'reviewing' ? null : <IconShield size={18} aria-hidden="true" />}
-        {stage === 'reviewing' ? 'Reviewing recovery…' : 'Enter recovery'}
+        {stage === 'reviewing' ? 'Reviewing recovery…' : 'Pause Orbis'}
       </Button>
       {message ? <p role="alert">{message}</p> : null}
       <Dialog
@@ -101,7 +101,7 @@ export function SentinelControllerHandoff({ active, portalUrl }: { active: boole
       >
         <DialogContent closeDisabled={stage === 'entering'} restoreFocusTo={trigger}>
           <DialogHeader>
-            <DialogTitle>{stage === 'uncertain' ? 'Check recovery in Sentinel' : 'Enter recovery?'}</DialogTitle>
+            <DialogTitle>{stage === 'uncertain' ? 'Check recovery in Sentinel' : 'Pause Orbis for recovery?'}</DialogTitle>
             <DialogDescription>
               {stage === 'uncertain'
                 ? 'The handoff may have started. Open Sentinel to check its status before trying again.'
@@ -127,7 +127,7 @@ export function SentinelControllerHandoff({ active, portalUrl }: { active: boole
                   Cancel
                 </Button>
                 <Button type="button" intent="primary" disabled={pending} onClick={() => void enter()}>
-                  {stage === 'entering' ? 'Opening recovery…' : 'Continue to Sentinel'}
+                  {stage === 'entering' ? 'Opening recovery…' : 'Pause Orbis and open Sentinel'}
                 </Button>
               </>
             )}

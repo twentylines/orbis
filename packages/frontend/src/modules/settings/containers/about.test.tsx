@@ -96,24 +96,25 @@ test('shows the staged operator the next human step without claiming emergency k
   expect(render({ access })).not.toContain('Emergency key prepared.');
 });
 
-test('places recovery first and links directly to the independent portal for the reported unit state', () => {
+test('places recovery below Reset Orbis and links directly to the independent portal', () => {
   for (const unitState of ['active', 'inactive', 'unknown'] as const) {
-    const markup = render({ access: { state: 'configured', portalUrl, unitState } });
-    expect(markup.indexOf('>Recovery</h3>')).toBeGreaterThan(0);
-    expect(markup.indexOf('>Recovery</h3>')).toBeLessThan(markup.indexOf('>Installed software</h3>'));
+    const markup = render({ operator: true, access: { state: 'configured', portalUrl, unitState } });
+    const reset = markup.indexOf('>Reset Orbis</h3>');
+    expect(reset).toBeGreaterThan(0);
+    expect(markup.indexOf('>Recovery</h3>')).toBeGreaterThan(reset);
     expect(markup).toMatch(
-      /<a[^>]*href="https:\/\/independent\.example:8443\/sentinel\/recovery\/"[^>]*target="_blank"[^>]*rel="noopener noreferrer"[^>]*>Open recovery<\/a>/,
+      /<a[^>]*href="https:\/\/independent\.example:8443\/sentinel\/recovery\/"[^>]*target="_blank"[^>]*rel="noopener noreferrer"[^>]*>Open Sentinel<\/a>/,
     );
     expect(markup).toContain(unitState === 'unknown' ? 'Recovery service status unknown.' : `Recovery service ${unitState}.`);
     expect(markup).toContain('Open the portal to check sign-in availability.');
-    expect(markup).not.toContain('Enter recovery');
+    expect(markup).not.toContain('Pause Orbis');
   }
 });
 
 test('healthy Sentinel and stale access after authentication failure cannot fabricate recovery access', () => {
   const missing = render({ status: sentinel, access: { state: 'missing', portalUrl: null, unitState: null } });
   expect(missing).toContain('Recovery portal setup required.');
-  expect(missing).not.toContain('Open recovery');
+  expect(missing).not.toContain('Open Sentinel');
   const stale = render({
     status: sentinel,
     operator: true,
@@ -123,24 +124,24 @@ test('healthy Sentinel and stale access after authentication failure cannot fabr
   expect(stale).toContain('Sign in again to check recovery access.');
   expect(stale).not.toContain(portalUrl);
   expect(stale).not.toContain('Recovery service active.');
-  expect(stale).not.toContain('Enter recovery');
+  expect(stale).not.toContain('Pause Orbis');
   const unknownEnrollment = render({ operator: true, access: { state: 'configured', portalUrl, unitState: 'active' } });
   expect(unknownEnrollment).toContain('Enrollment progress could not be verified.');
-  expect(unknownEnrollment).not.toContain('Enter recovery');
+  expect(unknownEnrollment).not.toContain('Pause Orbis');
   const unavailable = render({ status: sentinel, access: { state: 'unavailable', portalUrl: null, unitState: null } });
   expect(unavailable).toContain('Recovery access could not be verified.');
-  expect(unavailable).not.toContain('Open recovery');
+  expect(unavailable).not.toContain('Open Sentinel');
 });
 
 test('recovery entry is offered only to an active, activated operator and cannot run from a hidden section', () => {
   const access = { state: 'configured', portalUrl, unitState: 'active', enrollment: 'activated' } as const;
   const operator = render({ operator: true, access });
   expect(operator).not.toContain('test sign-in while Orbis is still available');
-  expect(operator).toMatch(/<button[^>]*aria-disabled="false"[^>]*><svg[\s\S]*?<\/svg>Enter recovery<\/button>/);
-  expect(render({ access })).not.toContain('Enter recovery');
-  expect(render({ operator: true, access: { ...access, unitState: 'inactive' } })).not.toContain('Enter recovery');
-  expect(render({ operator: true, access: { ...access, enrollment: 'operator-staged' } })).not.toContain('Enter recovery');
-  expect(render({ operator: true, access, visible: false })).toMatch(/<button[^>]*\sdisabled=""[^>]*><svg[\s\S]*?<\/svg>Enter recovery<\/button>/);
+  expect(operator).toMatch(/<button[^>]*aria-disabled="false"[^>]*><svg[\s\S]*?<\/svg>Pause Orbis<\/button>/);
+  expect(render({ access })).not.toContain('Pause Orbis');
+  expect(render({ operator: true, access: { ...access, unitState: 'inactive' } })).not.toContain('Pause Orbis');
+  expect(render({ operator: true, access: { ...access, enrollment: 'operator-staged' } })).not.toContain('Pause Orbis');
+  expect(render({ operator: true, access, visible: false })).toMatch(/<button[^>]*\sdisabled=""[^>]*><svg[\s\S]*?<\/svg>Pause Orbis<\/button>/);
 });
 
 test('About includes a separately reported OS version and identifies the Docker Desktop host', () => {

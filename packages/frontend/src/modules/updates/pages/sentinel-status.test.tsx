@@ -181,6 +181,6 @@ test('the Sentinel card keeps the Host connection and excludes recovery controls
   expect(markup).toContain('Sentinel update');
   expect(markup).toContain('System connection');
   expect(markup).not.toContain('>Recovery</h3>');
-  expect(markup).not.toContain('Open recovery');
-  expect(markup).not.toContain('Enter recovery');
+  expect(markup).not.toContain('Open Sentinel');
+  expect(markup).not.toContain('Pause Orbis');
 });
