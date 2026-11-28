@@ -43,6 +43,9 @@ SOURCE = ('v0.9.2-beta.3', '43813e77609f955c4a4cec3b647a95e780780ca6',
           'sha256:24d8ffed6dde1660b1954c445b2c67b96342b423b1042441d72c251a20d92801', '4.10.1', 46080825494)
 BRIDGE = ('v0.9.2-beta.8', 'a5e56e900ea2022f663684e272ad6134df0cc7a0',
           'sha256:28fe9e83c597a3b955916c53f2445b19cc3224000961ddb45b6e11018af52eb4', '4.10.1', 46117877777)
+PROOF_BRIDGE = ('v0.9.2-beta.10', '688e5e3f02510710b7857bfe467f0dbe2f639cea',
+                'sha256:9aff2814800c9f75fa2bb2294f76403f23d411b94a3d80c34017a7ea08033ffc', '4.10.1', 46124433026)
+BRIDGES = {item[1]: item for item in (BRIDGE, PROOF_BRIDGE)}
 STABLE = ('v0.9.1', '6b627e1939e11e91fbd5c6ed419e1e90a71cf281',
           'sha256:fcd6ddadf52d19aedc428cae04aea98f0baf4e36c12edab9a1239fa75c8248d2', '4.10.1', 44938065911)
 # Keep historical rehearsals reproducible. The digest is separately checked against
@@ -51,6 +54,7 @@ TARGET_RELEASES = {
     'c9a0f76329e1319f6a1451fd1b8875cceb788dd8': ('v0.9.2-beta.6', 46100282294),
     'f7172eaad3cc4b645bce84662948cf2fa42a18ab': ('v0.9.2-beta.7', 46106118153),
     BRIDGE[1]: ('v0.9.2-beta.9', 46117878047),
+    PROOF_BRIDGE[1]: ('v0.9.2-beta.11', 46124437509),
 }
 SENTINEL = {'version': '0.1.0-dev.24', 'sha256': 'c9373a394c306524b2e37b76afa9eec42272507faf45657d7f46d1b9f8fb565f',
             'sourceCommit': '16b2aa6158ab38d961e0d3f6a2d489b702ab63e3'}
@@ -95,16 +99,15 @@ def target_pin(environment):
 
 
 def source_pin(target):
-    if target[1] == BRIDGE[1]:
-        require(DIGEST.fullmatch(BRIDGE[2]), 'verified-recovery-bridge-pin-required')
-        return BRIDGE
-    return SOURCE
+    branch = BRIDGES.get(target[1], SOURCE)
+    require(DIGEST.fullmatch(branch[2]), 'verified-recovery-bridge-pin-required')
+    return branch
 
 
 def sentinel_pin(pin):
     if pin == STABLE:
         return STABLE_SENTINEL
-    return PAIRED_SENTINEL if pin[1] == BRIDGE[1] else SENTINEL
+    return PAIRED_SENTINEL if pin[1] in BRIDGES else SENTINEL
 
 
 def run(args, *, timeout=20, allowed=(0,), code='native-command-refused'):
@@ -1227,7 +1230,7 @@ def fixture(environment, result):
     require(installed_cli in ('true', 'false')
             and not (installed_cli == 'true' and (bridge or fault == 'true' or committed_fault)),
             'installed-cli-test-mode-refused')
-    require(not committed_fault or (predecessor[0], target[0]) == ('v0.9.2-beta.8', 'v0.9.2-beta.9'),
+    require(not committed_fault or predecessor[1] == target[1] and predecessor[2] != target[2],
             'commit-interruption-release-pair-refused')
     initial = STABLE if bridge else predecessor
     result['fixtureDefaultAclRemoved'], result['fixtureTimezoneProtected'] = preflight(environment)
@@ -1465,8 +1468,12 @@ def public_source_readback(target):
         stage = 'installer-archive'
         archive = boot.fetch(prefix + boot.ARCHIVE, manifest['archiveBytes'])
         _, files = boot.verify_source_package(body, identity, archive)
-        stage = 'git-tree'
-        launcher.authenticate_tree(boot.fetch, target[1], files)
+        if 'gitSourceProof' in manifest:
+            stage = 'embedded-git-tree'
+            launcher.authenticate_embedded_tree(manifest['gitSourceProof'], target[1], files)
+        else:
+            stage = 'git-tree'
+            launcher.authenticate_tree(boot.fetch, target[1], files)
         stage = 'source-protocol'
         require(launcher.source_protocol(files['scripts/orbis-install.py'], legacy=True) == launcher.PROTOCOL
                 and boot._render_installer('release', identity, files['scripts/install-orbis.py']) == wrapper,
@@ -1483,7 +1490,8 @@ def public_source_readback(target):
 def failure_readback(environment, result):
     phase = result.get('phase')
     if phase not in ('guided-bridge', 'bridge-readback', 'guided-target', 'terminal-readback',
-                     'checkpoint-recovery', 'installed-private-network', 'installed-app-cli'):
+                     'checkpoint-recovery', 'committed-recovery', 'installed-private-network',
+                     'installed-app-cli', 'installed-store-cli-update'):
         return
     try:
         upgrade = target_pin(environment)
@@ -1511,6 +1519,19 @@ def failure_readback(environment, result):
                 result['producerStage'] = stage
             failure = update.safe_failure(journal)
             result.update(failure)
+            if journal.get('backupScope') == update.CONTROLLER.SCOPE:
+                try:
+                    tools, reader = update.controller_tools('default')
+                    reviewed = tools.read_record(update.checkpoint_path(snapshot), ROOT, reader)
+                    if reviewed.get('review') == journal.get('checkpoint'):
+                        result['checkpointStage'] = reviewed['stage']
+                    else:
+                        result['checkpointStage'] = 'binding-refused'
+                except FileNotFoundError:
+                    result['checkpointStage'] = 'absent'
+                except (OSError, ValueError, RuntimeError, TypeError, KeyError):
+                    result['checkpointStage'] = 'unverified'
+
             if stage == 'aborted' and failure.get('failureCode') == 'source-bootstrap-preservation-unsupported':
                 result.update(bootstrap_refusal_evidence(update, job, snapshot))
     except Exception:

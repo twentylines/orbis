@@ -147,7 +147,7 @@ def git_server_image(runtime, target_image):
 
 
 def installed_cli_update(runtime, cookie, source, target):
-    runtime.require((source[0], target[0]) == ('v0.9.2-beta.8', 'v0.9.2-beta.9') and source[2] != target[2],
+    runtime.require(runtime.source_pin(target) == source and source[1] == target[1] and source[2] != target[2],
                     'cli-update-release-pair-refused')
     token = secrets.token_hex(12)
     source_image, target_image = (f'{runtime.IMAGE}@{pin[2]}' for pin in (source, target))
