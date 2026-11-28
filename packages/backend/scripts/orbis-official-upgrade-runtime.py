@@ -642,7 +642,9 @@ def seed(cookie, pin=SOURCE):
         tasks, _ = http('GET', '/api/tasks', cookie=cookie)
         selected = [task for task in tasks['tasks'] if task['id'] == request_id]
         if selected:
-            require(len(selected) == 1 and selected[0]['appUrn'] == urn and selected[0]['action'] == 'install',
+            # Creating a custom app reserves its record. The install endpoint
+            # can dispatch Start for that record on the published source.
+            require(len(selected) == 1 and selected[0]['appUrn'] == urn and selected[0]['action'] in ('install', 'start'),
                     'fixture-app-task-identity-refused')
             status = selected[0]['status']
             if status == 'succeeded':
