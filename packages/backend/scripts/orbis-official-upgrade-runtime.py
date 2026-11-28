@@ -2,6 +2,7 @@
 """Qualify one official coordinated release update on a new hosted Linux runner."""
 
 import ast
+from contextlib import contextmanager
 import errno
 import hashlib
 from http.client import HTTPConnection, HTTPException
@@ -9,6 +10,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 import platform
 import pwd
 import re
@@ -17,6 +19,7 @@ import shutil
 import stat
 import subprocess
 import sys
+from threading import Event, Thread
 import time
 import traceback
 from urllib.parse import quote
@@ -36,9 +39,12 @@ SOURCE = ('v0.9.2-beta.3', '43813e77609f955c4a4cec3b647a95e780780ca6',
           'sha256:24d8ffed6dde1660b1954c445b2c67b96342b423b1042441d72c251a20d92801', '4.10.1', 46080825494)
 STABLE = ('v0.9.1', '6b627e1939e11e91fbd5c6ed419e1e90a71cf281',
           'sha256:fcd6ddadf52d19aedc428cae04aea98f0baf4e36c12edab9a1239fa75c8248d2', '4.10.1', 44938065911)
-TARGET_TAG = 'v0.9.2-beta.6'
-TARGET_COMMIT = 'c9a0f76329e1319f6a1451fd1b8875cceb788dd8'
-TARGET_RUN = 46100282294
+# Keep historical rehearsals reproducible. The digest is separately checked against
+# the exact successful publisher, source-bound release manifest and registry index.
+TARGET_RELEASES = {
+    'c9a0f76329e1319f6a1451fd1b8875cceb788dd8': ('v0.9.2-beta.6', 46100282294),
+    'f7172eaad3cc4b645bce84662948cf2fa42a18ab': ('v0.9.2-beta.7', 46106118153),
+}
 SENTINEL = {'version': '0.1.0-dev.24', 'sha256': 'c9373a394c306524b2e37b76afa9eec42272507faf45657d7f46d1b9f8fb565f',
             'sourceCommit': '16b2aa6158ab38d961e0d3f6a2d489b702ab63e3'}
 STABLE_SENTINEL = {'version': '0.1.0-dev.19', 'sha256': '4a3c29039b768dbae15a562abc64086374f66af9e12b8b490d3aa4466d152f6c',
@@ -74,8 +80,9 @@ def sha(body):
 
 def target_pin(environment):
     commit, digest = environment.get('TARGET_COMMIT'), environment.get('TARGET_DIGEST', '')
-    require(commit == TARGET_COMMIT and DIGEST.fullmatch(digest), 'target-pin-required')
-    return (TARGET_TAG, commit, digest, '4.12.0', TARGET_RUN)
+    require(commit in TARGET_RELEASES and DIGEST.fullmatch(digest), 'target-pin-required')
+    tag, workflow_run = TARGET_RELEASES[commit]
+    return (tag, commit, digest, '4.12.0', workflow_run)
 
 
 def run(args, *, timeout=20, allowed=(0,), code='native-command-refused'):
@@ -544,8 +551,13 @@ def fence(name, pin):
         os.close(descriptor)
 
 
-def http(method, path, *, body=None, cookie=None, expect=(200,)):
-    connection = HTTPConnection('127.0.0.1', PORT, timeout=8)
+def http(method, path, *, body=None, cookie=None, expect=(200,), timeout=8, maximum=2 * 1024 * 1024):
+    routes = {'/api/health': 'health', '/api/user-context': 'setup-context', '/api/auth/register': 'register',
+              '/api/auth/login': 'login', '/api/auth/logout': 'logout', '/api/system/build': 'build',
+              '/login': 'login-page', '/api/links': 'links', '/api/custom-apps': 'custom-app', '/api/tasks': 'tasks',
+              '/api/system/core-update-progress': 'core-update-progress'}
+    kind = routes.get(path, 'app-install' if path.startswith('/api/app-lifecycle/') else 'other')
+    connection = HTTPConnection('127.0.0.1', PORT, timeout=timeout)
     headers = {'Accept': 'application/json', 'Origin': f'http://127.0.0.1:{PORT}'}
     if cookie:
         headers['Cookie'] = cookie
@@ -555,18 +567,84 @@ def http(method, path, *, body=None, cookie=None, expect=(200,)):
     try:
         connection.request(method, path, body, headers)
         response = connection.getresponse()
-        data = response.read(2 * 1024 * 1024 + 1)
-        if response.status not in expect or len(data) > 2 * 1024 * 1024:
-            routes = {'/api/health': 'health', '/api/user-context': 'setup-context', '/api/auth/register': 'register',
-                      '/api/auth/login': 'login', '/api/auth/logout': 'logout', '/api/system/build': 'build',
-                      '/login': 'login-page', '/api/links': 'links', '/api/custom-apps': 'custom-app', '/api/tasks': 'tasks'}
-            kind = routes.get(path, 'app-install' if path.startswith('/api/app-lifecycle/') else 'other')
+        data = response.read(maximum + 1)
+        if response.status not in expect or len(data) > maximum:
             raise Refused('loopback-api-refused', loopbackRoute=kind, loopbackStatus=response.status)
         mime = (response.getheader('Content-Type') or '').split(';')[0]
         return (json.loads(data) if data and mime == 'application/json' else None,
                 [value for name, value in response.getheaders() if name.lower() == 'set-cookie'])
+    except (OSError, HTTPException) as error:
+        if isinstance(error, TimeoutError):
+            outcome = 'timeout'
+        elif isinstance(error, ConnectionResetError):
+            outcome = 'connection-reset'
+        elif isinstance(error, ConnectionRefusedError):
+            outcome = 'connection-refused'
+        elif isinstance(error, HTTPException):
+            outcome = 'invalid-http'
+        else:
+            outcome = 'transport-unavailable'
+        raise Refused('loopback-transport-refused', loopbackRoute=kind, loopbackTransport=outcome) from None
     finally:
         connection.close()
+
+
+def sample_progress(target):
+    # The browser polls this same loopback route. Do not pass an operator cookie
+    # or keep the raw response, including file or download metadata.
+    try:
+        host = ['/usr/bin/systemctl', 'show', '--property=MainPID', '--value', 'orbis-host.service']
+        host_pid = run(host, timeout=1)
+        body, _ = http('GET', '/api/system/core-update-progress', timeout=2, maximum=16 * 1024)
+        require(type(body) is dict and set(body) == {'version', 'job'}
+                and type(body['version']) is int and body['version'] == 1, 'progress-fixture-shape-refused')
+        job = body.get('job')
+        if job is None or job.get('targetTag') != target:
+            return host_pid, None
+        require(re.fullmatch(r'[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}', job['id'])
+                and job.get('state') in
+                ('queued', 'running', 'recovering', 'complete', 'failed', 'interrupted')
+                and job.get('phase') in (None, 'downloading', 'installing', 'restarting', 'verifying', 'recovering'),
+                'progress-fixture-job-refused')
+        # Only count a Host observation when both reads bracket this HTTP response.
+        after = run(host, timeout=1)
+        stable_pid = host_pid if host_pid == after and re.fullmatch(r'[0-9]{1,10}', host_pid) else None
+        return stable_pid, (job['id'], job.get('phase'))
+    except (OSError, ValueError, TypeError, AttributeError, KeyError, subprocess.SubprocessError):
+        return None, None
+
+
+@contextmanager
+def observe_progress(target, result):
+    stop = Event()
+    samples = []
+    def collect():
+        while not stop.is_set() and len(samples) < 6000:
+            host_pid, work = sample_progress(target)
+            samples.append((time.monotonic(), host_pid, work))
+            stop.wait(0.25)
+    observer = Thread(target=collect, name='native-progress-readback')
+    observer.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        observer.join()
+        valid = [(observed, pid, job) for observed, pid, job in samples if job is not None]
+        operations = {job[0] for _, _, job in valid}
+        gaps = [b[0] - a[0] for a, b in zip(valid, valid[1:]) if a[2][0] == b[2][0]]
+        after_start = sum(job is None for observed, _, job in samples
+                          if valid and valid[0][0] <= observed <= valid[-1][0])
+        result['targetProgress'] = {
+            'samples': len(samples),
+            'boundSamples': len(valid),
+            'operations': sorted(operations),
+            'phases': sorted({job[1] for _, _, job in valid if job[1] is not None}),
+            'hostPidsDuringBoundSamples': len({pid for _, pid, _ in valid if pid not in (None, '0')}),
+            'boundSampleWithHostStopped': any(pid == '0' for _, pid, _ in valid),
+            'missingSamplesBetweenBoundReads': after_start,
+            'longestBetweenBoundReadsMs': round(1000 * max(gaps)) if gaps else None,
+        }
 
 
 def session(operation, credential):
@@ -863,11 +941,14 @@ def fixture(environment, result):
     result['snapshotEstimateBytes'] = checkpoint_limit()
     result['phase'] = 'guided-target'
     fence('apply-intent', target)
-    launch(candidate, 'target', 1500)
+    with observe_progress(target[0], result):
+        launch(candidate, 'target', 1500)
     result['phase'] = 'terminal-readback'
     if bridge:
         require(executed_launcher(candidate, 'target', target) != bridge_receipt, 'launcher-receipt-replayed')
-    completed(check_host(target), target, prior_operations)
+    target_host = check_host(target)
+    completed(target_host, target, prior_operations)
+    result['targetProgress']['boundToTerminalOperation'] = result['targetProgress']['operations'] == [target_host['job']['id']]
     cookie = session('login', credential)
     try:
         build(cookie, target)
@@ -879,6 +960,52 @@ def fixture(environment, result):
     result.update(phase='complete', source=SOURCE[0], target=target[0], targetCommit=target[1], targetDigest=target[2],
                   runtipi=target[3], sentinel=SENTINEL['version'], markerChecks=2, appAndProxyUninterrupted=True,
                   componentTerminalVerified=True, automaticBackupVerified=True, loopbackVerified=True, passed=True)
+
+
+def bootstrap_refusal_evidence(update, job, snapshot):
+    # The exact protected operation is settled before this diagnostic is used.
+    # Observe the failed proof from the existing read-only Engine interface.
+    host, controller = update.HOST, update.CONTROLLER
+    authority, publication = host.AUTHORITY, host.IDENTITY.PUBLICATION
+    record_path = STATE / 'controller-updates' / sha(str(snapshot).encode())
+    with authority.protected_directory(record_path) as directory:
+        with authority.protected_file(directory, 'runtime.json', 16 * 1024 * 1024) as body:
+            record = publication.metadata(body, byte_limit=16 * 1024 * 1024, string_limit=2 * 1024 * 1024)
+    require(record['snapshot'] == str(snapshot) and record['root'] == str(ROOT) and record['context'] == 'default'
+            and record['current'] == job['current'] and record['target'] == job['target'], 'bootstrap-record-identity')
+    manager = SimpleNamespace(host=host, authority=authority, root=ROOT, context='default')
+    runtime = controller.D.DockerRestoreRuntime(manager)
+    source = runtime.inspect('runtipi')
+    require(source['Id'] == record['source']['Id'] and source['Image'] == record['source']['Image']
+            and source['State']['Running'] is True, 'bootstrap-source-changed')
+    result = {
+        'bootstrapEnablementRecorded': isinstance(record.get('sourceBootstrapEnablement'), dict),
+        'bootstrapProofRecorded': isinstance(record.get('sourceBootstrapProfile'), dict),
+        'bootstrapProbePhase': 'unavailable',
+    }
+    entry = record.get('bootstrapProbes', {}).get('review', {})
+    phase = entry.get('phase')
+    if phase in ('allocating', 'created', 'starting', 'observed', 'retired'):
+        result['bootstrapProbePhase'] = phase
+    if phase is None:
+        probe = controller.BOOTSTRAP
+        try:
+            probe.require_image_startup(SimpleNamespace(runtime=runtime, P=publication), {'source': source})
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+            origin = Path(probe.__file__)
+            result['bootstrapStartupSites'] = [frame.lineno for frame in traceback.extract_tb(error.__traceback__)
+                                                if Path(frame.filename) == origin][-4:]
+            result['bootstrapStartupChecked'] = False
+        else:
+            result['bootstrapStartupChecked'] = True
+    identifier = entry.get('id')
+    if phase in ('created', 'starting') and isinstance(identifier, str) and re.fullmatch(r'[a-f0-9]{64}', identifier):
+        inspected = runtime.inspect(identifier)
+        status = inspected['State'].get('Status')
+        exit_code = inspected['State'].get('ExitCode')
+        result['bootstrapProbeExited'] = status in ('exited', 'dead')
+        result['bootstrapProbeExitCode'] = exit_code if type(exit_code) is int and 0 <= exit_code <= 255 else None
+    return result
 
 
 def failure_readback(environment, result):
@@ -907,7 +1034,10 @@ def failure_readback(environment, result):
             stage = journal.get('stage')
             if stage in update.FAILURE_STAGES | update.TERMINAL_STAGES | {'rolling-back', 'rollback-failed', 'recovery-required'}:
                 result['producerStage'] = stage
-            result.update(update.safe_failure(journal))
+            failure = update.safe_failure(journal)
+            result.update(failure)
+            if stage == 'aborted' and failure.get('failureCode') == 'source-bootstrap-preservation-unsupported':
+                result.update(bootstrap_refusal_evidence(update, job, snapshot))
     except Exception:
         # Secondary readback never changes an outcome or reveals raw state.
         return

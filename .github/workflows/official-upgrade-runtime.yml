@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       target_commit:
-        description: Exact verified beta.6 Core commit
+        description: Exact Core commit from a verified publisher run
         required: true
         type: string
       target_digest:
-        description: Exact verified beta.6 OCI index digest
+        description: Exact verified OCI index digest
         required: true
         type: string
       stable_bridge:
